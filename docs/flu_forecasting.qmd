@@ -26,6 +26,7 @@ library(gratia)
 library(plotly)
 library(data.table)
 library(MMWRweek)
+library(gt)
 library(flualign)
 
 source("../R/retro_estimation.R")
@@ -194,7 +195,7 @@ ggplotly(
 
 ```{r}
 #| echo: false
-knitr::kable(allD %>% head(20))
+allD %>% head(20) %>% gt()
 ```
 
 :::
@@ -593,7 +594,10 @@ tuned<- loso_M0v2(
 } 
 
 tuned$runtime
-knitr::kable(unlist(tuned$best_params))
+data.frame(Parameter = names(unlist(tuned$best_params)),
+           Value     = unlist(tuned$best_params), row.names = NULL) |>
+  gt() |>
+  tab_header(title = "Best M0 parameters (LOSO tuned)")
 # Note: tuned$best_params is the median (continuous params) / mode (integer params)
 # of fold-specific best parameters across all LOSO folds.
 
@@ -603,7 +607,12 @@ knitr::kable(unlist(tuned$best_params))
 ### LOSO tuned ignition detection
 ```{r, eval = T}
 det_all <- detect_ignition_from_tuning(tuned, alignedD)
-knitr::kable(det_all$compare)
+det_all$compare |>
+  gt() |>
+  tab_header(title = "Ignition detection: predicted vs truth") |>
+  cols_label(iWeek_hat = "Detected week", iWeek_true = "True week", diff = "Diff") |>
+  tab_style(style = cell_fill(color = "#fff3cd"),
+            locations = cells_body(rows = abs(diff) > 2))
 ```
 
 
@@ -890,7 +899,7 @@ tuned2 <- tune_stage2_loso_spec_grid_parallel(
   saveRDS(tuned2, "../data/stage2_tuning.rds")
 }
 
-best_mean_nll <- tuned2$best[["mean_nll"]]
+
 
 ggplotly(plot_tune_stage2_heatmap(tuned2, metric="mean_nll", normalize01=TRUE,
                           norm_scope="facet", agg=TRUE, base_size=10))
@@ -902,6 +911,14 @@ ggplotly(plot_tune_stage2_heatmap(tuned2, metric="mean_nll", normalize01=TRUE,
 
 ```{r, eval = T, echo = T}
 spec_stage2_best <- stage2_spec_from_tuning(tuned2)
+
+data.frame(
+  Specification = names(spec_stage2_best),
+  Value = sapply(spec_stage2_best, function(x) {
+    if (inherits(x, "formula")) deparse(x) else paste(as.character(x), collapse = ", ")
+  }),
+  row.names = NULL
+) |> gt() |> tab_header(title = "Best Stage-2 spec")
 
 joint_out <- train_stage2_joint(
   dat         = alignedD_prosp,
