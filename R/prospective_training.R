@@ -642,6 +642,41 @@ train_stage2_joint_prepped <- function(d_all,
   list(fit = fit, train_data = d_train, tuned = best_mean_nll, spec = spec)
 }
 
+#' Extract best Stage-2 spec from a tuning result
+#'
+#' Convenience wrapper: given the list returned by
+#' \code{tune_stage2_loso_spec_grid_parallel()}, finds the best row in
+#' \code{tuned2$by_spec_grid} and calls \code{stage2_make_spec()} with the
+#' appropriate column mappings (\code{Kr} -> \code{K}, \code{Kb} ->
+#' \code{pre_buffer}).
+#'
+#' @param tuned2 List with at least \code{$best} (1-row data frame with
+#'   \code{spec_id}) and \code{$by_spec_grid} (full grid with hyperparameters).
+#' @return A spec list as returned by \code{stage2_make_spec()}.
+#' @export
+stage2_spec_from_tuning <- function(tuned2) {
+  stopifnot(is.list(tuned2), !is.null(tuned2$best), !is.null(tuned2$by_spec_grid))
+  best_id  <- tuned2$best$spec_id[[1L]]
+  best_row <- tuned2$by_spec_grid[tuned2$by_spec_grid$spec_id == best_id, , drop = FALSE]
+  if (nrow(best_row) == 0L) stop("spec_id '", best_id, "' not found in by_spec_grid")
+  stage2_make_spec(
+    delta          = best_row$delta,
+    K              = best_row$Kr,
+    k_f            = best_row$k_f,
+    alpha_state    = best_row$alpha_state,
+    T              = best_row$T,
+    k_e            = best_row$k_e,
+    k_n            = best_row$k_n,
+    k_1            = best_row$k_1,
+    k_2            = best_row$k_2,
+    k_w            = best_row$k_w,
+    k_s            = best_row$k_s,
+    pre_buffer     = best_row$Kb,
+    bs_week        = best_row$bs_week,
+    bs_fs_marginal = best_row$bs_fs_marginal
+  )
+}
+
 #' Train Stage-2 joint model
 #'
 #' Preferred usage: pass only \code{spec}. The function will use \code{spec$best_row}

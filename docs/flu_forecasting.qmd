@@ -907,16 +907,6 @@ tuned2 <- tune_stage2_loso_spec_grid_parallel(
 }
 
 best_mean_nll <- tuned2$best[["mean_nll"]]
-best_mean_nll
-
-```
-
-
-
-
-### Tuning plot
-
-```{r, eval = T, echo = T}
 
 ggplotly(plot_tune_stage2_heatmap(tuned2$by_spec_grid, metric="mean_nll", normalize01=TRUE,
                           norm_scope="facet", agg=TRUE, base_size=10))
@@ -924,35 +914,11 @@ ggplotly(plot_tune_stage2_heatmap(tuned2$by_spec_grid, metric="mean_nll", normal
 
 
 
-```{r, eval = T, echo = T}
-# Build spec_stage2_best from the best row of the tuned grid
-best_row <- tuned2$by_spec_grid[tuned2$by_spec_grid$spec_id == tuned2$best$spec_id[1], ]
-spec_stage2_best <- stage2_make_spec(
-  delta          = best_row$delta,
-  K              = best_row$Kr,   # Kr in grid -> K in spec
-  k_f            = best_row$k_f,
-  alpha_state    = best_row$alpha_state,
-  T              = best_row$T,
-  k_e            = best_row$k_e,
-  k_n            = best_row$k_n,
-  k_1            = best_row$k_1,
-  k_2            = best_row$k_2,
-  k_w            = best_row$k_w,
-  k_s            = best_row$k_s,
-  pre_buffer     = best_row$Kb,
-  bs_week        = best_row$bs_week,
-  bs_fs_marginal = best_row$bs_fs_marginal
-)
-# det_out: wrap det_all$compare so downstream code can use det_out$by_season
-det_out <- list(by_season = det_all$compare)
-```
-
 ### Traning results (true ingnition week)
 
 ```{r, eval = T, echo = T}
+spec_stage2_best <- stage2_spec_from_tuning(tuned2)
 
-## align
-# pick best overall by mean_nll
 joint_out <- train_stage2_joint(
   dat         = alignedD_prosp,
   template_df = template_df,
@@ -962,7 +928,7 @@ joint_out <- train_stage2_joint(
 ggplotly(plot_stage2_joint_fit_by_season(
   joint_out   = joint_out,
   dat_raw     = alignedD_prosp,
-  ign_hat_df  = det_out$by_season,
+  ign_hat_df  = det_all$compare,
   template_df = template_df
 ))
 ```
@@ -972,8 +938,7 @@ ggplotly(plot_stage2_joint_fit_by_season(
 ```{r, eval = T, echo = T}
 summary(joint_out$fit)
 ```
-
-
+:::
 
 ### Real-time calibration (online updater)
 
