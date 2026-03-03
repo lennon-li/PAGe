@@ -602,23 +602,7 @@ knitr::kable(unlist(tuned$best_params))
 
 ### LOSO tuned ignition detection
 ```{r, eval = T}
-ign_fit_all <- fitIgnition(
-  dat = alignedD,
-  fit_base = TRUE, fit_slope = FALSE, fit_fs = FALSE,
-  event_k = 1L, lead = 1L, A_pre = 6L, B_post = 6L,
-  k_week = 6L, k_p = 8L,
-  verbose = TRUE
-)
-
-det_all <- detectIgnitionBySeason_M0v2(
-  ign_fit = ign_fit_all,
-  params  = tuned$best_params,
-  score_col = "p_cls_p",
-  keep_signals = TRUE,
-  iWeek = TRUE,
-  verbose = TRUE
-)
-
+det_all <- detect_ignition_from_tuning(tuned, alignedD)
 knitr::kable(det_all$compare)
 ```
 
@@ -908,7 +892,7 @@ tuned2 <- tune_stage2_loso_spec_grid_parallel(
 
 best_mean_nll <- tuned2$best[["mean_nll"]]
 
-ggplotly(plot_tune_stage2_heatmap(tuned2$by_spec_grid, metric="mean_nll", normalize01=TRUE,
+ggplotly(plot_tune_stage2_heatmap(tuned2, metric="mean_nll", normalize01=TRUE,
                           norm_scope="facet", agg=TRUE, base_size=10))
 ```
 

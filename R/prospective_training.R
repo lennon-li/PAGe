@@ -1094,6 +1094,10 @@ plot_tune_stage2_heatmap <- function(df,
   center <- match.arg(center)
   score_transform <- match.arg(score_transform)
 
+  # Accept full tuned2 list: auto-extract by_spec_grid
+  if (is.list(df) && !is.data.frame(df) && !is.null(df$by_spec_grid))
+    df <- df$by_spec_grid
+
   stopifnot(is.data.frame(df), metric %in% names(df))
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Please install ggplot2.")

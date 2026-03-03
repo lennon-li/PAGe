@@ -1056,3 +1056,52 @@ loso_M0v2 <- function(dat,
     }
     p
   }
+
+#' Fit ignition classifier and run detection using tuned parameters
+#'
+#' Convenience pipeline: calls \code{fitIgnition()} on all seasons and then
+#' \code{detectIgnitionBySeason_M0v2()} with \code{tuned$best_params}.
+#'
+#' @param tuned Output of \code{loso_M0v2()}, must contain \code{$best_params}.
+#' @param alignedD Aligned data frame (output of \code{alignIgnition()}).
+#' @param score_col Classifier score column. Default \code{"p_cls_p"}.
+#' @param keep_signals Passed to \code{detectIgnitionBySeason_M0v2()}. Default \code{TRUE}.
+#' @param iWeek Passed to \code{detectIgnitionBySeason_M0v2()}. Default \code{TRUE}.
+#' @param verbose Logical; controls verbosity for both internal calls.
+#' @param fit_base,fit_slope,fit_fs,event_k,lead,A_pre,B_post,k_week,k_p
+#'   Passed directly to \code{fitIgnition()}.
+#' @return The list returned by \code{detectIgnitionBySeason_M0v2()}.
+#' @export
+detect_ignition_from_tuning <- function(tuned,
+                                        alignedD,
+                                        score_col    = "p_cls_p",
+                                        keep_signals = TRUE,
+                                        iWeek        = TRUE,
+                                        verbose      = TRUE,
+                                        fit_base     = TRUE,
+                                        fit_slope    = FALSE,
+                                        fit_fs       = FALSE,
+                                        event_k      = 1L,
+                                        lead         = 1L,
+                                        A_pre        = 6L,
+                                        B_post       = 6L,
+                                        k_week       = 6L,
+                                        k_p          = 8L) {
+  stopifnot(is.list(tuned), !is.null(tuned$best_params))
+  ign_fit <- fitIgnition(
+    dat       = alignedD,
+    fit_base  = fit_base,  fit_slope = fit_slope, fit_fs = fit_fs,
+    event_k   = event_k,   lead      = lead,
+    A_pre     = A_pre,     B_post    = B_post,
+    k_week    = k_week,    k_p       = k_p,
+    verbose   = verbose
+  )
+  detectIgnitionBySeason_M0v2(
+    ign_fit      = ign_fit,
+    params       = tuned$best_params,
+    score_col    = score_col,
+    keep_signals = keep_signals,
+    iWeek        = iWeek,
+    verbose      = verbose
+  )
+}
