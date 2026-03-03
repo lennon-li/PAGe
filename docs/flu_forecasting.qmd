@@ -28,9 +28,10 @@ library(data.table)
 library(MMWRweek)
 library(flualign)
 
-source("~/Desktop/FLU-module/flualign/R/retro_estimation.R")
-source("~/Desktop/FLU-module/flualign/R/ignitionTraining.R")
-source("~/Desktop/FLU-module/flualign/R/prospective_running.R")
+source("../R/retro_estimation.R")
+source("../R/ignitionTraining.R")
+source("../R/prospective_training.R")
+source("../R/prospective_running.R")
 
 # ---- Settings ----
 startWeek   <- 27     # MMWR week number that defines weekF = 1
@@ -46,7 +47,7 @@ n_weeks_in_start_year <- function(start_year) {
 
 
 # NOTE: replace with your real file path or a project-relative path
-allD <- read.csv("flu_testing_data.csv") %>%
+allD <- read.csv("../data/flu_testing_data.csv") %>%
   select(
     season,
     week,
@@ -535,8 +536,8 @@ The tuned $\hat\theta$ is then applied prospectively in real time to determine i
 
 ### LOSO tuning results
 ```{r, eval = T}
-if(file.exists("stage1_tuning.rds")) { 
-  tuned <- readRDS("stage1_tuning.rds")
+if(file.exists("../data/stage1_tuning.rds")) { 
+  tuned <- readRDS("../data/stage1_tuning.rds")
 } else { 
  
 grid_loso <- CJ(
@@ -588,7 +589,7 @@ tuned<- loso_M0v2(
   verbose = TRUE
 )
 
-  saveRDS(tuned, "stage1_tuning.rds") 
+  saveRDS(tuned, "../data/stage1_tuning.rds") 
 } 
 
 tuned$runtime
@@ -865,10 +866,10 @@ $$
 \qquad
 \mathrm{RMSE}(p)=\sqrt{\mathrm{Brier}}.
 $$
-```{r, eval = F}
+```{r, eval = T}
 
-if (file.exists("stage2_tuning.rds")) {
-  tuned2 <- readRDS("stage2_tuning.rds")
+if (file.exists("../data/stage2_tuning.rds")) {
+  tuned2 <- readRDS("../data/stage2_tuning.rds")
 } else {
   
 
@@ -902,21 +903,76 @@ tuned2 <- tune_stage2_loso_spec_grid_parallel(
   nthreads       = 1L,       # keep 1 when parallel
   verbose        = TRUE
 )
-  saveRDS(tuned2, "stage2_tuning.rds")
+  saveRDS(tuned2, "../data/stage2_tuning.rds")
 }
 
-best_mean_nll <- tuned2$best_overall[["mean_nll"]]
+best_mean_nll <- tuned2$best[["mean_nll"]]
 best_mean_nll
 
 ```
 
 
-### Traning results (true ingnition week) 
+
+
+### Tuning plot
+
+```{r, eval = T, echo = T}
+
+ggplotly(plot_tune_stage2_heatmap(tuned2$by_spec_grid, metric="mean_nll", normalize01=TRUE,
+                          norm_scope="facet", agg=TRUE, base_size=10))
+```
+
+
+
+```{r, eval = T, echo = T}
+# Build spec_stage2_best from the best row of the tuned grid
+best_row <- tuned2$by_spec_grid[tuned2$by_spec_grid$spec_id == tuned2$best$spec_id[1], ]
+spec_stage2_best <- stage2_make_spec(
+  delta          = best_row$delta,
+  K              = best_row$Kr,   # Kr in grid -> K in spec
+  k_f            = best_row$k_f,
+  alpha_state    = best_row$alpha_state,
+  T              = best_row$T,
+  k_e            = best_row$k_e,
+  k_n            = best_row$k_n,
+  k_1            = best_row$k_1,
+  k_2            = best_row$k_2,
+  k_w            = best_row$k_w,
+  k_s            = best_row$k_s,
+  pre_buffer     = best_row$Kb,
+  bs_week        = best_row$bs_week,
+  bs_fs_marginal = best_row$bs_fs_marginal
+)
+# det_out: wrap det_all$compare so downstream code can use det_out$by_season
+det_out <- list(by_season = det_all$compare)
+```
+
+### Traning results (true ingnition week)
+
+```{r, eval = T, echo = T}
+
+## align
+# pick best overall by mean_nll
+joint_out <- train_stage2_joint(
+  dat         = alignedD_prosp,
+  template_df = template_df,
+  spec        = spec_stage2_best
+)
+
+ggplotly(plot_stage2_joint_fit_by_season(
+  joint_out   = joint_out,
+  dat_raw     = alignedD_prosp,
+  ign_hat_df  = det_out$by_season,
+  template_df = template_df
+))
+```
 
 
 ### Fit Summary
+```{r, eval = T, echo = T}
+summary(joint_out$fit)
+```
 
-:::
 
 
 ### Real-time calibration (online updater)

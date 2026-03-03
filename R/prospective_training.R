@@ -1058,12 +1058,22 @@ plot_tune_stage2_heatmap <- function(df,
   norm_scope <- match.arg(norm_scope)
   center <- match.arg(center)
   score_transform <- match.arg(score_transform)
-  
+
   stopifnot(is.data.frame(df), metric %in% names(df))
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Please install ggplot2.")
   if (!requireNamespace("scales", quietly = TRUE)) stop("Please install scales.")
-  
+
+  # Normalize column names: Kr -> K (new tuning output structure)
+  if ("Kr" %in% names(df) && !"K" %in% names(df))
+    df <- dplyr::rename(df, K = Kr)
+  # Normalize season column: season_out -> test_season
+  if ("season_out" %in% names(df) && !"test_season" %in% names(df))
+    df <- dplyr::rename(df, test_season = season_out)
+  # If already aggregated (no test_season col) and agg=TRUE, add dummy season
+  if (!"test_season" %in% names(df) && isTRUE(agg))
+    df$test_season <- "pooled"
+
   need <- c("test_season", "delta", "K", "k_f", "alpha_state", metric)
   miss <- setdiff(need, names(df))
   if (length(miss)) stop("Missing cols: ", paste(miss, collapse = ", "))
