@@ -911,14 +911,16 @@ ggplotly(plot_tune_stage2_heatmap(tuned2, metric="mean_nll", normalize01=TRUE,
 
 ```{r, eval = T, echo = T}
 spec_stage2_best <- stage2_spec_from_tuning(tuned2)
-
+spec_display <- within(spec_stage2_best, rm(best_row))
 data.frame(
-  Specification = names(spec_stage2_best),
-  Value = sapply(spec_stage2_best, function(x) {
-    if (inherits(x, "formula")) deparse(x) else paste(as.character(x), collapse = ", ")
+  Specification = names(spec_display),
+  Value = sapply(spec_display, function(x) {
+    if (inherits(x, "formula")) paste(deparse(x), collapse = " ") else paste(as.character(x), collapse = ", ")
   }),
   row.names = NULL
 ) |> gt() |> tab_header(title = "Best Stage-2 spec")
+
+
 
 joint_out <- train_stage2_joint(
   dat         = alignedD_prosp,
