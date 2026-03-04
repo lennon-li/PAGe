@@ -703,8 +703,8 @@ Below, each term in Eq. (@eq-mod1) has (i) an interpretation, (ii) its hyperpara
   - `T="S"`: include a smooth of the template covariate;
   - `T="O"`: include the template covariate as an offset (no extra smooth);
   - `T="N"`: omit the template term entirely.  
-- **Toggle (feature-level off):** set `delta = NA` **or** `K = NA` to force `logit_f_eff = 0`.  
-- **R (feature):** `logit_f_eff` computed in `prep_stage2_joint()` from `delta` and `K`.  
+- **Toggle (feature-level off):** set `delta = NA` **or** `Kr = NA` to force `logit_f_eff = 0`.
+- **R (feature):** `logit_f_eff` computed in `prep_stage2_joint()` from `delta` and `Kr`.
 - **R (model):**
   - `T="S"`: `s(logit_f_eff, by=lead, bs="ts", k=k_f)`  
   - `T="O"`: `offset(logit_f_eff)`  
@@ -715,13 +715,13 @@ Below, each term in Eq. (@eq-mod1) has (i) an interpretation, (ii) its hyperpara
   - Global aligned-time correction, allows the model to “self-align” in real time with observed data
   - **Hyperparams:** $k_w$ (basis dimension).  
   - **Toggle:** on if $k_w>0$; off if $k_w=0$.  
-  - **R:** `s(newWeek, by=lead, bs="ts", k=k_week)`.
+  - **R:** `s(newWeek, by=lead, bs="ts", k=k_w)`.
 
 ### $S^{h}_{3,s}(w^a_{s,w};S,k_s)$  
   - Season-specific deviation over aligned time, allow each season deviate smoothly from the global aligned-time pattern.  
   - **Hyperparams:** $k_s$ (basis dimension).  
   - **Toggle:** on if $k_s>0$; off if $k_s=0$.  
-  - **R:** `s(newWeek,  by=interaction(season,lead), bs="fs", k=k_fs, xt=...)`.  
+  - **R:** `s(newWeek, by=interaction(season,lead), bs="fs", k=k_s, xt=...)`.  
   - **New-season prediction:** typically excluded because a brand-new season has an unseen factor level.
 
 ### $S_{4}^{h}(z^{(\mathrm{ema})}_{s,w};k_e)$  
@@ -729,28 +729,28 @@ Below, each term in Eq. (@eq-mod1) has (i) an interpretation, (ii) its hyperpara
   - **Hyperparams:** $\alpha_{\text{state}}\in(0,1)$ (EWMA decay) and $k_e$ (basis dimension).  
   - **Toggle:** on if $k_e>0$; off if $k_e=0$.  
   - **R (feature):** `z_ema` computed in `prep_stage2_joint()` using `alpha_state`.  
-  - **R (model):** `s(z_ema, by=lead, bs="ts", k=k_zema)`.
+  - **R (model):** `s(z_ema, by=lead, bs="ts", k=k_e)`.
 
 ### $S_{5}^{h}(\log n_{s,w};k_n)$  
   - Testing volume effect , allows dependence on current testing intensity.  
   - **Hyperparams:** $k_n$ (basis dimension).  
   - **Toggle:** on if $k_n>0$; off if $k_n=0$.  
   - **R (feature):** `logN_now`.  
-  - **R (model):** `s(logN_now, by=lead, bs="ts", k=k_logN)`.
+  - **R (model):** `s(logN_now, by=lead, bs="ts", k=k_n)`.
 
 ### $S_{6}^{h}(d1_{s,w};k_1)$  
   - Prospective derivative (slope), captures local growth/decline momentum on the logit scale, estimated in real time  
   - **Hyperparams:** $k_1$ (basis dimension).  
   - **Toggle:** on if $k_1>0$; off if $k_1=0$.  
   - **R (feature):** `d1_now`.  
-  - **R (model):** `s(d1_now, by=lead, bs="ts", k=k_d1)`.
+  - **R (model):** `s(d1_now, by=lead, bs="ts", k=k_1)`.
 
 ###  $S_{7}^{h}(d2_{s,w};k_2)$  
   - Prospective derivative (curvature), captures acceleration/curvature on the logit scale (often the noisiest term), estimated in real time
   - **Hyperparams:** $k_2$ (basis dimension).  
   - **Toggle:** on if $k_2>0$; off if $k_2=0$ (recommended if noisy).  
   - **R (feature):** `d2_now`.  
-  - **R (model):** `s(d2_now, by=lead, bs="ts", k=k_d2)`.
+  - **R (model):** `s(d2_now, by=lead, bs="ts", k=k_2)`.
 
 
 
@@ -818,11 +818,11 @@ For each candidate spec (from `expand_grid_specs()`), we repeatedly:
 
 - **$\delta$ (template shift):** integer weeks (typically $\{-3,\ldots,3\}$). Set `delta=NA` to disable the template covariate at the feature level.
 - **`T` (template entry mode):** one of `{"S","O","N"}` (smooth, offset, none). *(In code: `template_mode ∈ {"smooth","offset","none"}`.)*
-- **$Kr$ (ramp length):** integer with $Kr \ge 1$. Use $Kr =1$ for “no ramp” (immediate template effect). Set `K=NA` to disable the template covariate at the feature level.
+- **$Kr$ (ramp length):** integer with $Kr \ge 1$. Use $Kr=1$ for “no ramp” (immediate template effect). Set `Kr=NA` to disable the template covariate at the feature level.
 - **$k_f$ (template smooth basis):** integer $\ge 1$ used only when `T="S"` (typical 4–12).
 - **$k_w,k_s,k_e,k_n,k_1,k_2$ (basis dimensions):** integers $\ge 0$ with the on/off rule: **0 disables the term**; typical values 4–12.
 - **$\alpha_{\text{state}}$ (EWMA decay):** real number in $(0,1)$ (typical grid 0.15–0.50),only relevant when $k_e>0$.
-- **$Kb$** integer $\ge 0$ (commonly 0–2), defines $M_1$ training start as `weekF >= iWeek_used - pre_buffer`.
+- **$Kb$** integer $\ge 0$ (commonly 0–2), defines $M_1$ training start as `weekF >= iWeek_used - Kb`.
 
 **Primary selection metric: NLL**
 
