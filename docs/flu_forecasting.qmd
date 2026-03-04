@@ -945,58 +945,41 @@ summary(joint_out$fit)
 
 ### Real-time calibration (online updater)
 
-In prospective deployment, the current season may exhibit a systematic level shift relative to historical seasons. Rather than refitting the full Stage-2 model, we introduce a simple **logit-scale intercept adjustment** that is re-estimated as new data arrive.
+> **Note:** This component is planned but not yet implemented in code.
+
+In prospective deployment, the current season may exhibit a systematic level shift relative to historical seasons. Rather than refitting the full Stage-2 model, we introduce a simple **logit-scale intercept adjustment** $c$ that is re-estimated as a scalar each week as new data arrive.
 
 Let $\eta^{h}_{s,w}$ denote the Stage-2 linear predictor from Eq. (@eq-mod1) (without calibration). The calibrated predictor is defined as
 
 $$
 \mathrm{logit}\!\left(\tilde\pi^{h}_{s,w}\right)
 \;=\;
-\text{offset}\!\left(\eta^{h}_{s,w}\right)
+\eta^{h}_{s,w}
 \;+\;
 c_{s,w},
 $$
 
-where:
+where $\eta^{h}_{s,w}$ is treated as a fixed offset and the scalar $c_{s,w}$ — the value of $c$ estimated at week $w$ for season $s$ — is applied identically to both horizons $h\in\{1,2\}$.
 
-- $\eta^{h}_{s,w}$ is treated as a fixed offset,
-- $c_{s,w}$ is a season–week specific intercept adjustment,
-- the same $c_{s,w}$ is applied to both horizons $h\in\{1,2\}$.
-
-
-
-We estimate $c_{s,w}$ using a penalized binomial GLM using $M_1$ linear predictor as an offset since $w_s^{(\mathrm{ign})} - k_p$, and $c_{s,w}$ as the only free parameter.
-$$
-x_{s,u+h} \mid n_{s,u+h}
-\sim
-\mathrm{Binomial}
-\!\left(
-n_{s,u+h},
-\tilde\pi^{h}_{s,u}
-\right).
-$$
-
-with quadratic penalty
-
-$$
-\lambda_c \, c_{s,w}^2.
-$$
-
-The penalty parameter $\lambda_c \ge 0$ controls shrinkage toward zero (no calibration). Larger $\lambda_c$ yields more conservative updates.
-$c_{s,w}$ is then estimated by maximizing a (regularized) binomial log-likelihood over post ignition window, treating $c$ as a single scalar parameter:
+At each week $w$ (after ignition), $c_{s,w}$ is estimated by maximizing a penalized binomial log-likelihood over all post-ignition observations up to and including week $w$, with $c$ as the only free parameter:
 
 $$
 \hat c_{s,w}
 =
 \arg\max_{c\in\mathbb{R}}
 \left[
-\sum_{u>w_s^{(\mathrm{ign})}-k_p}^{w}
-\sum_{h\in\{1,2\}}
+\sum_{\substack{u\,=\,w_s^{(\mathrm{ign})}-k_{\mathrm{pre}}}}^{w}
+\;\sum_{h\in\{1,2\}}
 \log \Pr\!\Big(x_{s,u+h}\,\big|\, n_{s,u+h},\ \mathrm{logit}^{-1}\!\left(\eta^{h}_{s,u}+c\right)\Big)
 \;-\;
-\lambda_c \, c_{s,w}^2
-\right]
+\lambda_c \, c^2
+\right],
 $$
+
+where:
+
+- $k_{\mathrm{pre}} \ge 0$ is the number of weeks before ignition included in the calibration window (allows the updater to use data slightly before the declared ignition point),
+- $\lambda_c \ge 0$ is a penalty that shrinks $c$ toward zero (no calibration); larger $\lambda_c$ yields more conservative updates.
 
 
 
