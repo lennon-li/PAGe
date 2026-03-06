@@ -1067,6 +1067,7 @@ plot_fit_obs_cal_online_by_season(
 Data from 2025-26 season are used prospectively, taking each week start at a given week as a snapshot, we produce a forecast at each week and evaluate how the forecast evolves as more data become available and the season unfolds. The workflow is as follows:with the following workflow:
 
 In deployment, we apply these layers sequentially: 
+
 - Ignition detection ($M_0$) produces an estimated ignition week $w^{(\mathrm{ign})}_s$ for the current season $s$.
 - Forecast base model ($M_1$) produces $\hat\pi^{h}_{s,w}$ 
 - Offline calibration maps it to $\pi^{h,\mathrm{cal}}_{s,w}$
@@ -1074,54 +1075,19 @@ In deployment, we apply these layers sequentially:
 
 
 
-## Pre-trained model needed 
+## Pre-trained model needed
 
-To simplify prospective deployment, we store all trained components and fixed settings in a single object, denoted `kit`. This bundle contains Stage-1 ignition detection, Stage-2 forecasting, offline calibration, and the online intercept updater configuration.
+To simplify prospective deployment, all trained components and fixed settings are bundled into a single object `kit` via `make_prospective_kit()`. The table below describes each variable passed into that function.
 
-- Stage-1 ignition detection (`kit$stage1`)
-
-  - `kit$stage1$gam_cls`  
-  A trained classifier model (e.g., an `mgcv::gam`/`bam`) that produces the weekly ignition probability score used by the ignition detector.
-
-  - `kit$stage1$params`  
-  The tuned rule/threshold parameters for ignition detection (e.g., classifier threshold, positivity thresholds, consecutive-week requirements, and allowable ignition window). These parameters   are used by the detector to convert classifier scores and observed positivity into an ignition week estimate.
-
-- Stage-2 forecasting (`kit$stage2`)
-
-  - `kit$stage2$template_df`  
-    The reference/template curve used to construct Stage-2 covariates, typically containing `newWeek` and a fitted reference positivity `fit`.
-
-  - `kit$stage2$spec`  
-    The tuned Stage-2 hyperparameters (e.g., shift $\delta$, ramp parameter $K$, and the set of horizons), which define how covariates such as template shifts, weights, and derivative features     are constructed for training and prospective prediction.
-
-  - `kit$stage2$fit`  
-      The final Stage-2 model fit (trained on all historical seasons) used to generate the prospective linear predictor $\eta^{h}_{s,w}$ and the corresponding raw probabilities         $\hat\pi^{h}_{s,w}=\mathrm{logit}^{-1}(\eta^{h}_{s,w})$.
-
-  - `kit$stage2$train_data`  
-    The Stage-2 training design table used to preserve factor levels (e.g., season levels) and to support safe prediction under “new-season” settings (such as excluding season-specific terms).
-
-- Offline calibration (`kit$calib`)
-
-  - `kit$calib$cal_off`  
-    The offline Platt calibration map, trained on leave-one-season-out (LOSO) out-of-sample predictions. For each horizon $h\in\{1,2\}$ it defines
-    $$
-    \mathrm{logit}\!\left(\pi^{h,\mathrm{cal}}_{s,w}\right)
-    =
-    a_h + b_h\,\mathrm{logit}\!\left(\hat\pi^{h}_{s,w}\right),
-    $$
-    where $a_h$ corrects bias and $b_h$ rescales confidence. This map is held fixed during deployment.
-
-- Online intercept updating (`kit$online`)
-
-  - `kit$online$lambda_c`  
-    The ridge penalty strength $\lambda_c\ge 0$ used when re-estimating the online intercept shift $c_{s,w}$ from accumulating current-season data. Larger values yield more conservative updates.
-
-  - `kit$online$k_pre`  
-    The number of pre-ignition weeks $k_{\mathrm{pre}}\ge 0$ included in the online update window.
-
-- Deployment defaults (`kit$defaults`)
-
-  `kit$defaults` stores run-time defaults used by the prospective pipeline (e.g., alignment toggle, anchor week, pre-buffer for fitting eligibility, and derivative window size). These are not   learned parameters but ensure consistent prospective execution.
+| Variable | Source | Description |
+|---|---|---|
+| `template_df` | `ref$pred_df` | Smoothed reference positivity curve over aligned week index `newWeek`. Used to construct the template-shift covariate $x^{\delta}_{s,w}$ and ramp weight in Stage-2. |
+| `ign_fit` | `fitIgnition()` | Full Stage-1 model object. Contains the fitted GAM classifier (`ign_fit$fits$base$gam`) and the scored training data. `make_prospective_kit` extracts the classifier automatically. |
+| `tuned$best_params` | `loso_M0v2()` | LOSO-tuned threshold parameters for the Stage-1 ignition detector — positivity thresholds (`p_thr`, `prev_thr`, `p_sum_thr`), trend requirement (`n_consec`), minimum vote count (`N_req`), and allowable ignition window (`w_min`, `w_max`). |
+| `joint_out` | `train_stage2_joint()` | Joint Stage-2 training output. Contains the tuned hyperparameter spec (`joint_out$spec`), the final fitted model (`joint_out$fit`), and the training design table (`joint_out$train_data`) used for safe prospective prediction. |
+| `cal_off` | `train_calib_platt()` | Offline Platt calibration map trained on LOSO out-of-sample predictions. For each horizon $h$ it applies $\mathrm{logit}(\pi^{h,\mathrm{cal}}) = a_h + b_h\,\mathrm{logit}(\hat\pi^h)$ to correct bias and rescale confidence. Held fixed during deployment. |
+| `res_lambda$best$lambda_c` | `tune_lambda_c()` | Ridge penalty $\lambda_c \ge 0$ for online intercept updating. `res_lambda` is the output of `tune_lambda_c()`; `$best$lambda_c` extracts the cross-validated optimal scalar. Larger values yield more conservative within-season updates. |
+| `spec_stage2_best$pre_buffer` | `stage2_spec_from_tuning()` | Number of pre-ignition weeks $k_{\mathrm{pre}} \ge 0$ included in the online update window. Extracted from the best Stage-2 specification object. |
 
 In deployment, Stage-2 produces $\hat\pi^{h}_{s,w}$, offline calibration maps it to $\pi^{h,\mathrm{cal}}_{s,w}$, and the online updater optionally applies a season-specific intercept shift so that
 $$
