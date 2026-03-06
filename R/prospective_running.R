@@ -49,12 +49,13 @@ logit_stable <- function(p, eps = 1e-6) qlogis(pmin(pmax(p, eps), 1 - eps))
 
 #' Extract a classifier GAM from various container objects
 #'
-#' Convenience helper that accepts either:
+#' Convenience helper that accepts:
 #' \itemize{
-#' \item an \pkg{mgcv} \code{gam}/\code{bam} object;
+#' \item an \pkg{mgcv} \code{gam}/\code{bam} object directly;
 #' \item a \code{gamm4} fit list with component \code{$gam};
-#' \item a list returned by your \code{fitIgnition()} that contains
-#'   \code{$fits$p_only_week_p$gam}.
+#' \item the output of \code{fitIgnition()}: tries \code{$fits$base$gam},
+#'   then \code{$fits$slope$gam}, then \code{$fits$fs} (bam), in that order;
+#' \item legacy: a list with \code{$fits$p_only_week_p$gam}.
 #' }
 #'
 #' @param ign_fit_or_gam A trained classifier model or a container holding one.
@@ -64,28 +65,37 @@ logit_stable <- function(p, eps = 1e-6) qlogis(pmin(pmax(p, eps), 1 - eps))
 #'
 #' @examples
 #' \dontrun{
-#' gam_cls <- get_gam_cls(ign_fit)                        # fitIgnition() output
-#' gam_cls <- get_gam_cls(ign_fit$fits$p_only_week_p$gam) # direct
+#' gam_cls <- get_gam_cls(ign_fit)              # fitIgnition() output
+#' gam_cls <- get_gam_cls(ign_fit$fits$base)    # gamm4 sub-list
+#' gam_cls <- get_gam_cls(ign_fit$fits$base$gam) # direct
 #' }
 get_gam_cls <- function(ign_fit_or_gam) {
   if (inherits(ign_fit_or_gam, c("gam", "bam"))) return(ign_fit_or_gam)
-  
-  # gamm4 style list
+
+  # gamm4 style list (single fit with $gam)
   if (is.list(ign_fit_or_gam) &&
       "gam" %in% names(ign_fit_or_gam) &&
       inherits(ign_fit_or_gam$gam, c("gam", "bam"))) {
     return(ign_fit_or_gam$gam)
   }
-  
-  # fitIgnition style list
-  if (is.list(ign_fit_or_gam) &&
-      "fits" %in% names(ign_fit_or_gam) &&
-      "p_only_week_p" %in% names(ign_fit_or_gam$fits) &&
-      "gam" %in% names(ign_fit_or_gam$fits$p_only_week_p) &&
-      inherits(ign_fit_or_gam$fits$p_only_week_p$gam, c("gam", "bam"))) {
-    return(ign_fit_or_gam$fits$p_only_week_p$gam)
+
+  # fitIgnition() output: $fits is a named list of fit objects
+  if (is.list(ign_fit_or_gam) && "fits" %in% names(ign_fit_or_gam)) {
+    fits <- ign_fit_or_gam$fits
+
+    # Try each named slot in priority order: base > slope > fs > p_only_week_p
+    for (nm in c("base", "slope", "fs", "p_only_week_p")) {
+      if (!nm %in% names(fits)) next
+      f <- fits[[nm]]
+      # gamm4 sub-list
+      if (is.list(f) && "gam" %in% names(f) && inherits(f$gam, c("gam", "bam")))
+        return(f$gam)
+      # direct gam/bam
+      if (inherits(f, c("gam", "bam")))
+        return(f)
+    }
   }
-  
+
   stop("Could not extract a GAM classifier. Pass a mgcv::gam/bam, a gamm4 list with $gam, or your full fitIgnition() output.")
 }
 
@@ -185,10 +195,10 @@ run_ignition_weekly <- function(currentSeason,
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   if (!requireNamespace("tibble", quietly = TRUE)) stop("Please install tibble.")
   
-  if (!exists("detectIgnition_oneSeason", mode = "function")) {
-    stop("detectIgnition_oneSeason() was not found. Source your Stage-1 file before calling this function.")
+  if (!exists("detectIgnitionBySeason_M0v2", mode = "function")) {
+    stop("detectIgnitionBySeason_M0v2() was not found. Source your Stage-1 file before calling this function.")
   }
-  
+
   gam_cls <- get_gam_cls(ign_fit_or_gam)
   
   d0 <- dplyr::as_tibble(currentSeason) %>%
@@ -229,31 +239,37 @@ run_ignition_weekly <- function(currentSeason,
       dplyr::filter(.data$weekF <= w) %>%
       dplyr::mutate(p_cls_p = as.numeric(stats::predict(gam_cls, newdata = ., type = "response")))
     
-    det <- detectIgnition_oneSeason(as.data.frame(d_now), params = params)
-    now <- det$now %||% data.frame()
-    
-    p_now_fallback       <- tail(d_now$p, 1)
-    cum_p_now_fallback   <- sum(d_now$p, na.rm = TRUE)
-    prev_now_fallback    <- sum(d_now$y, na.rm = TRUE) / pmax(sum(d_now$N, na.rm = TRUE), 1)
-    p_cls_p_now_fallback <- tail(d_now$p_cls_p, 1)
-    
-    p_now       <- now$p_now       %||% p_now_fallback
-    cum_p_now   <- now$cum_p_now   %||% cum_p_now_fallback
-    prev_now    <- now$prev_now    %||% prev_now_fallback
-    p_cls_p_now <- now$p_cls_p_now %||% p_cls_p_now_fallback
-    n_hit_now   <- now$n_hit_now   %||% NA_integer_
-    
-    d1_last <- now$d1_last %||% NA_real_
-    d2_last <- now$d2_last %||% NA_real_
-    
-    ok_w_inrange <- now$cond_win  %||% NA
-    ok_cls       <- now$cond_cls  %||% NA
-    ok_cum_p     <- now$cond_cum  %||% NA
-    ok_p         <- now$cond_p    %||% NA
-    ok_prev      <- now$cond_prev %||% NA
-    ok_nconsec   <- now$cond_inc  %||% NA
-    
-    ignite_ok_now <- now$ignite_ok_now %||% NA
+    det <- detectIgnitionBySeason_M0v2(
+      ign_fit      = as.data.frame(d_now),
+      params       = params,
+      score_col    = "p_cls_p",
+      keep_signals = TRUE,
+      iWeek        = FALSE,
+      verbose      = FALSE
+    )
+    # current-week row from signals
+    now <- if (!is.null(det$data) && nrow(det$data) > 0L)
+      det$data[nrow(det$data), , drop = FALSE]
+    else
+      data.frame()
+
+    p_now       <- now$p       %||% tail(d_now$p, 1)
+    cum_p_now   <- if ("p_sumK" %in% names(now)) now$p_sumK else sum(d_now$p, na.rm = TRUE)
+    prev_now    <- now$prev    %||% (sum(d_now$y, na.rm=TRUE) / pmax(sum(d_now$N, na.rm=TRUE), 1))
+    p_cls_p_now <- if ("p_cls_p" %in% names(d_now)) tail(d_now$p_cls_p, 1) else NA_real_
+    n_hit_now   <- now$n_hit   %||% NA_integer_
+
+    d1_last <- NA_real_
+    d2_last <- NA_real_
+
+    ok_w_inrange  <- now$cond_win  %||% NA
+    ok_cls        <- now$cond_cls  %||% NA
+    ok_cum_p      <- now$cond_sum  %||% NA   # rolling-sum gate (was cond_cum)
+    ok_p          <- now$cond_p    %||% NA
+    ok_prev       <- now$cond_prev %||% NA
+    ok_nconsec    <- now$cond_inc  %||% NA
+
+    ignite_ok_now <- now$ignite_ok %||% NA
     
     tibble::tibble(
       weekF = as.integer(w),
@@ -271,7 +287,7 @@ run_ignition_weekly <- function(currentSeason,
       ok_prev = as.logical(ok_prev),
       ok_n_consec = as.logical(ok_nconsec),
       ignite_ok_now = as.logical(ignite_ok_now),
-      iWeek_hat_dynamic = if (is.null(det$iWeek_hat)) NA_integer_ else as.integer(det$iWeek_hat)
+      iWeek_hat_dynamic = as.integer(det$by_season$iWeek_hat[1L] %||% NA_integer_)
     )
   })
   
@@ -1433,4 +1449,46 @@ plot_ignition_weekly_snapshots <- function(ign_out,
     names(out) <- paste0("asof_", w_seq)
     out
   }
+}
+
+
+update_c_online <- function(d_obs, w_now,
+                            week_col = "newWeek",
+                            lead_col = "lead",
+                            y_col = "y_lead",
+                            N_col = "N_lead",
+                            eta_col = "eta_cal",   # logit(p_cal) per row
+                            k_pre = 0L,
+                            w_ign = NULL,
+                            lambda_c = 0,
+                            eps = 1e-6) {
+  stopifnot(requireNamespace("data.table", TRUE))
+  d <- data.table::as.data.table(d_obs)
+  
+  if (is.null(w_ign)) stop("Provide w_ign (ignition week) for the current season.")
+  w_start <- (w_ign - as.integer(k_pre))
+  
+  # use rows whose outcomes are known by w_now:
+  # for lead 1, need week <= w_now-1; for lead 2 need week <= w_now-2, etc.
+  lead_num <- if (is.numeric(d[[lead_col]])) d[[lead_col]] else ifelse(d[[lead_col]] == "h1", 1L, 2L)
+  d[, lead_num := lead_num]
+  
+  d <- d[get(week_col) >= w_start & get(week_col) <= w_now - lead_num]
+  d <- d[!is.na(get(y_col)) & !is.na(get(N_col)) & get(N_col) > 0 & !is.na(get(eta_col))]
+  
+  if (nrow(d) == 0L) return(0)  # no info yet -> no shift
+  
+  y  <- d[[y_col]]
+  N  <- d[[N_col]]
+  eta <- d[[eta_col]]
+  
+  # objective: negative penalized log-lik
+  obj <- function(c) {
+    p <- plogis(eta + c)
+    p <- pmin(pmax(p, eps), 1 - eps)
+    -sum(dbinom(y, size = N, prob = p, log = TRUE)) + lambda_c * c^2
+  }
+  
+  opt <- optim(par = 0, fn = obj, method = "BFGS")
+  unname(opt$par)
 }

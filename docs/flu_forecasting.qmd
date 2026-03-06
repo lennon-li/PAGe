@@ -308,64 +308,7 @@ g_{\mathrm{win}}(s,w)=\mathbf{1}\{w_{\min}\le w^f_{s,w}\le w_{\max}\}.
 $$
 
 
-We define five prospective gates:
-
-::: panel-tabset
-
-### Classifier gate
-
-Let $\hat p_{\mathrm{cls}}(s,w)\in[0,1]$ denote the Stage-1 classifier score for season $s$ at week $w$. We fit a smooth probabilistic classifier with a season random intercept:
-
-$$
-\hat p_{\mathrm{cls}}(s,w)=
-\mathrm{logit}^{-1}\!\left(
-\alpha_0 + s_0(w^f_{s,w}) + s_1(p_{s,w}) + b_s
-\right),
-\qquad b_s \sim \mathcal{N}(0,\sigma_b^2).
-$$
-
-For each season $s$, let $w_s^{(\mathrm{ign})}$ be the reference ignition week (e.g., the first week with $P(s,w)=1$). We train the classifier using a symmetric (or approximately symmetric) window around ignition:
-
-$$
-\mathcal{T}_s(A,B)
-=
-\left\{
-w:\ 
-w_s^{(\mathrm{ign})}-A \le w^f_{s,w}\le w_s^{(\mathrm{ign})}+B
-\right\},
-\qquad A,B \ge 0.
-$$
-
-Here $A$ controls how many weeks **before** ignition are included as negative context, and $B$ controls how many weeks **after** ignition are included to represent early post-ignition behavior. In practice we choose $A$ and $B$ to be comparable (e.g., $A=B$ or $A\approx B$) so the classifier is trained on weeks near the ignition boundary on both sides, while still avoiding late-season dynamics far after ignition. To shift the classifier signal earlier for prospective triggering, we label the event window to end one week before the reference ignition week. Let $k_{\mathrm{event}}\ge 0$ control the width of the event window. The training label is
-
-$$
-\mathrm{event}(s,w)=
-\mathbf{1}\left\{
-w_s^{(\mathrm{ign})}-1-k_{\mathrm{event}}
-\le w^f_{s,w}\le
-w_s^{(\mathrm{ign})}-1
-\right\}.
-$$
-
-This shifts the classifier signal earlier to better support prospective triggering.For prospective use we rely on the population-level score (excluding the season effect):
-
-$$
-\hat p_{\mathrm{cls}}^{(\mathrm{pop})}(s,w)=
-\mathrm{logit}^{-1}\!\left(
-\alpha_0 + s_0(w^f_{s,w}) + s_1(p_{s,w})
-\right).
-$$
-
-The classifier gate is then
-
-$$
-g_{\mathrm{cls}}(s,w)=
-\mathbf{1}\left\{
-\hat p_{\mathrm{cls}}^{(\mathrm{pop})}(s,w)\ge \tau_{\mathrm{cls}}
-\right\}.
-$$
-
-```{r, eval = T}
+```{r, eval = T, echo = F, include = F}
 ign_fit <- fitIgnition(
   dat = alignedD,
   event_k = 1L,
@@ -376,12 +319,13 @@ ign_fit <- fitIgnition(
   k_p = 8L,
   k_fs = 4L,
   fit_base = TRUE,
-  verbose = TRUE
+  verbose = FALSE
 )
-
-plot_cls_models_by_season(ign_fit, thr = seq(0.05, 0.30, 0.05), ncol = 4, y_max = 0.5)
-
 ```
+
+We define four epidemiological gates:
+
+::: panel-tabset
 
 ### Rolling-sum evidence gate
 
@@ -452,46 +396,45 @@ This allows at most one small dip (up to $\epsilon$) over the last $k$ differenc
 
 :::
 
-### Ignition rule: $N_{\mathrm{req}}$-of-5 voting
+### Ignition rule: $N_{\mathrm{req}}$-of-4 voting
 
-Define the total number of satisfied gates:
+Define the vote count over the four epidemiological gates:
 
 $$
 H(s,w)=
-g_{\mathrm{cls}}(s,w)+
 g_{\mathrm{sum}}(s,w)+
 g_{p}(s,w)+
 g_{\mathrm{prev}}(s,w)+
 g_{\mathrm{inc}}(s,w).
 $$
 
-Ignition is declared at the earliest week that is within the eligible window and satisfies at least $N_{\mathrm{req}}$ of the five gates:
+Ignition is declared at the earliest week within the eligible window where all $N_{\mathrm{req}}=4$ gates agree:
 
 $$
 \hat w_s^{(\mathrm{ign})}=
 \min\left\{
-w:\ 
-g_{\mathrm{win}}(s,w)=1,\ 
+w:\
+g_{\mathrm{win}}(s,w)=1,\
 H(s,w)\ge N_{\mathrm{req}}
 \right\},
 $$
 
-with $\hat w_s^{(\mathrm{ign})}=\mathrm{NA}$ if no week satisfies the rule.
+with $\hat w_s^{(\mathrm{ign})}=\mathrm{NA}$ if no week satisfies the rule. Requiring all four gates simultaneously prevents false triggers from transient positivity spikes: a week with elevated rolling sum but no sustained rising trend (or vice versa) will not trigger ignition.
 
 ---
 
 ### Leave One Season Out (LOSO) training of thresholds
 
-To assess how well the ignition detector transfers to an unseen season, we use **leave-one-season-out (LOSO)** cross-validation. For each season $s$, we refit the classifier and tune the rule thresholds using all seasons except $s$, then run the detector **prospectively** on the held-out season to obtain $\hat w_s^{(\mathrm{ign})}$. We summarize performance by aggregating the per-season ignition timing errors across folds, and select hyperparameters that minimize the chosen LOSO objective. This procedure reduces overfitting to idiosyncratic seasons and better reflects real deployment, where ignition must be detected for a new season without access to its future trajectory.
+To assess how well the ignition detector transfers to an unseen season, we use **leave-one-season-out (LOSO)** cross-validation. For each season $s$, we tune the rule thresholds using all seasons except $s$, then run the detector **prospectively** on the held-out season to obtain $\hat w_s^{(\mathrm{ign})}$. We summarize performance by aggregating the per-season ignition timing errors across folds, and select hyperparameters that minimize the chosen LOSO objective. This procedure reduces overfitting to idiosyncratic seasons and better reflects real deployment, where ignition must be detected for a new season without access to its future trajectory.
 
 
 Let $w_s^{(\mathrm{ign})}$ be the ignition week for season $s$, $\theta$ denote the full set of thresholds and rule hyperparameters. 
 
 $$
-\theta = (\tau_{\mathrm{cls}},\tau_{\mathrm{sum}},K_{\mathrm{sum}},\tau_p,\tau_{\mathrm{prev}}, n_{\mathrm{consec}}, L, \epsilon, N_{\mathrm{req}}, w_{\min}, w_{\max})
+\theta = (\tau_{\mathrm{sum}},K_{\mathrm{sum}},\tau_p,\tau_{\mathrm{prev}}, n_{\mathrm{consec}}, L, \epsilon, N_{\mathrm{req}}, w_{\min}, w_{\max})
 $$
 
-then detection error is
+Detection error for season $s$ under parameter set $\theta$ is
 
 $$
 \mathrm{diff}_s(\theta)=\hat w_s^{(\mathrm{ign})}(\theta)-w_s^{(\mathrm{ign})}.
@@ -541,24 +484,21 @@ if(file.exists("../data/stage1_tuning.rds")) {
   tuned <- readRDS("../data/stage1_tuning.rds")
 } else { 
  
-grid_loso <- CJ(
-  # thresholds (tight neighborhood around best)
-  cls_thr   = c(0.20, 0.22, 0.24, 0.26, 0.28),
-  p_thr     = c(0.008, 0.009, 0.010),
-  prev_thr  = c(0.005, 0.006, 0.007),
-  # trend / smoothing (best says L=2, eps=0; keep fixed; vary n_consec lightly)
-  n_consec  = c(4L, 5L, 6L),
-  L         = 2L,
-  eps       = 0,
-  # rolling-sum evidence (best says K_sum=5, p_sum_thr=0.05; vary locally)
-  K_sum     = c(4L, 5L, 6L),
-  p_sum_thr = c(0.045, 0.050, 0.055, 0.060),
-  # voting + window (best says N_req=4; keep fixed to avoid NA explosions)
-  N_req     = 4L,
+grid_loso <- data.table::CJ(
+  # classifier gate excluded from vote (use_cls=FALSE); cls_thr kept for display only
+  cls_thr   = 0.26,                     # fixed (display only)
+  use_cls   = FALSE,                    # 4-gate voting: cond_sum, cond_p, cond_prev, cond_inc
+  p_thr     = c(0.008, 0.009, 0.010),  # smoothed-level threshold
+  prev_thr  = c(0.005, 0.006, 0.007),  # cumulative prevalence threshold
+  n_consec  = c(3L, 4L, 5L),           # trend gate window
+  L         = 2L,                       # fixed at best
+  eps       = 0,                        # fixed at best
+  K_sum     = 5L,                       # fixed at best
+  p_sum_thr = c(0.045, 0.050, 0.055),  # rolling-sum threshold (N_req=4 reinstates ~0.050)
+  N_req     = 4L,                       # require all 4 epi gates (prevents false positives)
   w_min     = 13L,
   w_max     = 30L,
-
-  sorted = FALSE
+  sorted    = FALSE
 )
   
 tuned<- loso_M0v2(
@@ -612,7 +552,11 @@ det_all$compare |>
   tab_header(title = "Ignition detection: predicted vs truth") |>
   cols_label(iWeek_hat = "Detected week", iWeek_true = "True week", diff = "Diff") |>
   tab_style(style = cell_fill(color = "#fff3cd"),
-            locations = cells_body(rows = abs(diff) > 2))
+            locations = cells_body(rows = abs(diff) > 2)) |>
+  tab_footnote(
+    footnote = "True week is the retrospective label from flagIgnition() fitted to the full available season data (smoothed positivity + derivative criteria). It is algorithm-defined, not an externally validated ground truth. For the current season (2025-26) this label is provisional and uses all data available at render time.",
+    locations = cells_column_labels(columns = iWeek_true)
+  )
 ```
 
 
@@ -621,6 +565,28 @@ det_all$compare |>
 ```{r, eval = T}
 
 plot_ignition_detect_vs_truth(det_all, x_max = 30, y_max = 0.3, ncol = 4)
+```
+
+### Per-season detection
+
+```{r}
+#| results: asis
+#| echo: false
+seasons_in_data <- sort(unique(det_all$data$season))
+for (s in seasons_in_data) {
+  cat(knitr::knit_child(
+    text = c(
+      paste0("#### ", s),
+      "",
+      "```{r echo=FALSE}",
+      sprintf("plot_season_detection_table(det_all, %s)", deparse(s)),
+      "```",
+      ""
+    ),
+    envir = environment(),
+    quiet = TRUE
+  ), sep = "\n")
+}
 ```
 :::
 
@@ -918,7 +884,7 @@ data.frame(
     if (inherits(x, "formula")) paste(deparse(x), collapse = " ") else paste(as.character(x), collapse = ", ")
   }),
   row.names = NULL
-) |> gt() |> tab_header(title = "Best Stage-2 spec")
+) |> gt() |> tab_header(title = "Best M1 spec")
 
 
 
@@ -943,283 +909,338 @@ summary(joint_out$fit)
 ```
 :::
 
-### Real-time calibration (online updater)
 
-> **Note:** This component is planned but not yet implemented in code.
+### Offline calibration for prospective probability accuracy
 
-In prospective deployment, the current season may exhibit a systematic level shift relative to historical seasons. Rather than refitting the full Stage-2 model, we introduce a simple **logit-scale intercept adjustment** $c$ that is re-estimated as a scalar each week as new data arrive.
+::: panel-tabset
 
-Let $\eta^{h}_{s,w}$ denote the Stage-2 linear predictor from Eq. (@eq-mod1) (without calibration). The calibrated predictor is defined as
+### Description
+The Stage-2 model is trained on historical seasons and produces a linear predictor $\eta^{h}_{s,w}$ (equivalently a raw probability $\hat\pi^{h}_{s,w}=\mathrm{logit}^{-1}(\eta^{h}_{s,w})$). However, strong in-sample likelihood fit does not guarantee that $\hat\pi^{h}_{s,w}$ is well calibrated when applied to a **new season**. In particular, predicted probabilities can be systematically biased or overly confident even when point forecasts appear reasonable.
 
+To improve new-season probability accuracy, we learn an **offline calibration map** from **out-of-sample** predictions. For each horizon $h\in\{1,2\}$, we apply Platt scaling on the logit scale:
+$$
+\mathrm{logit}\!\left(\pi^{h,\mathrm{cal}}_{s,w}\right)
+\;=\;
+a_h \;+\; b_h\,\mathrm{logit}\!\left(\hat\pi^{h}_{s,w}\right),
+$$
+where $a_h$ adjusts an overall bias and $b_h$ rescales confidence (values $b_h<1$ shrink extreme probabilities toward $0.5$; values $b_h>1$ sharpen them).
+
+### $(a_h,b_h)$ training using LOSO 
+
+A key point is that $(a_h,b_h)$ are *not* estimated from in-sample fitted values. Instead, we construct a calibration training set using leave-one-season-out (LOSO) cross-fitting:
+
+1. Hold out season $s$.
+2. Fit the Stage-2 model on seasons $\{s'\neq s\}$ (with Stage-2 hyperparameters fixed).
+3. Predict $\hat\pi^{h}_{s,w}$ for all weeks $w$ in the held-out season and both horizons $h$.
+4. Pair each prediction with the observed outcome $(x_{s,w+h},n_{s,w+h})$.
+
+Stacking the held-out predictions across seasons yields a single out-of-sample dataset
+$$
+\mathcal{D}_{\mathrm{cal}}^{\mathrm{LOSO}}
+=
+\bigcup_{s\in\mathcal{S}}
+\Big\{(s,w,h,x_{s,w+h},n_{s,w+h},\hat\pi^{h}_{s,w})\Big\},
+$$
+on which $(a_h,b_h)$ are estimated. Because each $\hat\pi^{h}_{s,w}$ is generated by a Stage-2 model trained **without** season $s$, this calibration map directly targets the prospective setting where the season is unknown at training time.
+
+Offline calibration $(a_h,b_h)$ is estimated once from $\mathcal{D}_{\mathrm{cal}}^{\mathrm{LOSO}}$ and then held fixed during deployment, providing an immediate adjustment to probability scale even before substantial current-season outcomes are available.
+
+
+```{r}
+
+if(file.exists("../data/stage2_calib_loso.rds")) {
+  d_calib_oos <- readRDS("../data/stage2_calib_loso.rds")
+} else {
+d_calib_oos <- make_calib_train_loso(joint_out, parallel = TRUE, workers = 12)
+saveRDS(d_calib_oos, "../data/stage2_calib_loso.rds")
+}
+
+
+# 2) train calibrator
+cal_off <- train_calib_platt(d_calib_oos)
+plot_fit_obs_cal_by_season(joint_out = joint_out, cal = cal_off, interactive = TRUE)
+
+```
+:::
+
+
+### Online calibration for real time adaption
+
+::: panel-tabset
+
+### Description
+
+In prospective deployment, the current season can be systematically higher or lower than historical seasons even after phase alignment and gating. Rather than refitting the full Stage-2 model online, we introduce a lightweight **logit-scale intercept shift** that adapts as new data arrive.
+
+Let $\eta^{h,\mathrm{cal}}_{s,w} = a_h + b_h\,\eta^{h}_{s,w}$ denote the offline-calibrated linear predictor (equivalently, $\eta^{h,\mathrm{cal}}_{s,w} = \mathrm{logit}(\pi^{h,\mathrm{cal}}_{s,w})$), where $\eta^{h}_{s,w}$ is the raw Stage-2 linear predictor from Eq. (@eq-mod1) evaluated prospectively (e.g., excluding season-specific effects). We define the online-adjusted predictor
 $$
 \mathrm{logit}\!\left(\tilde\pi^{h}_{s,w}\right)
 \;=\;
-\eta^{h}_{s,w}
+\eta^{h,\mathrm{cal}}_{s,w}
 \;+\;
 c_{s,w},
 $$
+where $c_{s,w}\in\mathbb{R}$ is a scalar estimated at within-season week $w$ for season $s$. The same $c_{s,w}$ is applied to both horizons $h\in\{1,2\}$, so the updater corrects a **level shift** on top of the already-calibrated predictor, without altering Stage-2 shape or lead-specific dynamics.
 
-where $\eta^{h}_{s,w}$ is treated as a fixed offset and the scalar $c_{s,w}$ — the value of $c$ estimated at week $w$ for season $s$ — is applied identically to both horizons $h\in\{1,2\}$.
-
-At each week $w$ (after ignition), $c_{s,w}$ is estimated by maximizing a penalized binomial log-likelihood over all post-ignition observations up to and including week $w$, with $c$ as the only free parameter:
-
+At each week $w$ (once outcomes become available), we re-estimate $c_{s,w}$ using an expanding window of origins $u\le w$, starting at $w_s^{(\mathrm{ign})}-k_{\mathrm{pre}}$ to allow up to $k_{\mathrm{pre}}\ge 0$ pre-ignition weeks. Treating $\eta^{h,\mathrm{cal}}_{s,u}$ as a fixed offset, we estimate $c_{s,w}$ by maximizing a penalized binomial log-likelihood over all outcomes already observed by week $w$:
 $$
 \hat c_{s,w}
 =
 \arg\max_{c\in\mathbb{R}}
-\left[
-\sum_{\substack{u\,=\,w_s^{(\mathrm{ign})}-k_{\mathrm{pre}}}}^{w}
-\;\sum_{h\in\{1,2\}}
-\log \Pr\!\Big(x_{s,u+h}\,\big|\, n_{s,u+h},\ \mathrm{logit}^{-1}\!\left(\eta^{h}_{s,u}+c\right)\Big)
+\left\{
+\sum_{u\,=\,w_s^{(\mathrm{ign})}-k_{\mathrm{pre}}}^{w}
+\ \sum_{h\in\{1,2\}}
+\mathbf{1}\{u+h\le w\}\;
+\log \Pr\!\Big(x_{s,u+h}\,\big|\, n_{s,u+h},\ \mathrm{logit}^{-1}\!\left(\eta^{h,\mathrm{cal}}_{s,u}+c\right)\Big)
 \;-\;
 \lambda_c \, c^2
-\right],
+\right\},
 $$
+where $x_{s,u+h}$ and $n_{s,u+h}$ are the observed positives and totals at week $u+h$, and $\lambda_c\ge 0$ shrinks $c$ toward $0$ for stability (especially early in the season). The Stage-2 model and offline calibration map $(a_h,b_h)$ are both fixed during deployment.
 
-where:
+### Penalty $\lambda_c$ tuning
 
-- $k_{\mathrm{pre}} \ge 0$ is the number of weeks before ignition included in the calibration window (allows the updater to use data slightly before the declared ignition point),
-- $\lambda_c \ge 0$ is a penalty that shrinks $c$ toward zero (no calibration); larger $\lambda_c$ yields more conservative updates.
+We choose $\lambda_c$ offline via LOSO by *replaying* the online updating procedure under the same information constraints as deployment. The LOSO out-of-sample predictions $\mathcal{D}_{\mathrm{cal}}^{\mathrm{LOSO}}$ and offline calibration map $(a_h,b_h)$ are pre-computed by `make_calib_train_loso` and `train_calib_platt` respectively; `tune_lambda_c` only performs the simulation below. For each candidate $\lambda_c\in\Lambda$ and each held-out season $s$:
 
+1. Form the calibrated linear predictor for season $s$ using the pre-computed offline calibration map,
+   $$
+   \eta^{h,\mathrm{cal}}_{s,w}
+   \;=\;
+   a_h + b_h\,\mathrm{logit}\!\left(\hat\pi^{h}_{s,w}\right),
+   $$
+   where $\hat\pi^{h}_{s,w}$ are the LOSO out-of-sample predictions from $\mathcal{D}_{\mathrm{cal}}^{\mathrm{LOSO}}$.
 
+2. For each week $w$ in season $s$, estimate $c_{s,w}$ using only outcomes already observed by week $w$ (i.e., include an origin $u$ only if $u+h\le w$):
+   $$
+   \hat c_{s,w}(\lambda_c)
+   =
+   \arg\max_{c\in\mathbb{R}}
+   \left[
+   \sum_{u=w_s^{(\mathrm{ign})}-k_{\mathrm{pre}}}^{w}
+   \ \sum_{h\in\{1,2\}}
+   \mathbf{1}\{u+h\le w\}\;
+   \log \Pr\!\Big(x_{s,u+h}\,\big|\,
+   n_{s,u+h},\ \mathrm{logit}^{-1}(\eta^{h,\mathrm{cal}}_{s,u}+c)\Big)
+   \;-\;
+   \lambda_c\,c^2
+   \right].
+   $$
 
+3. Score the resulting forecasts
+   $$
+   \tilde\pi^{h}_{s,w}(\lambda_c)
+   =
+   \mathrm{logit}^{-1}\!\left(\eta^{h,\mathrm{cal}}_{s,w}+\hat c_{s,w}(\lambda_c)\right)
+   $$
+   using binomial negative log-likelihood aggregated over $w$ and $h$.
 
-<!-- ### LOSO tuning and  model training (on true ignition week) -->
+We repeat across all seasons and select the $\lambda_c$ that minimizes the average held-out score.
 
-<!-- ```{r, eval = T,echo = T} -->
+```{r, eval = T}
 
-<!-- options(error = function() { traceback(2); quit(status = 1) }) -->
+res_lambda <- tune_lambda_c(
+  d_calib_oos = d_calib_oos,
+  cal_off     = cal_off,
+  ign_df      = ign_fit$iWeek_by_season,
+  time_col    = "newWeek",
+  k_pre       = spec_stage2_best$pre_buffer,
+  lambda_grid = c(500, 800, 1000, 1250, 1600, 2000), 
+  parallel    = TRUE,
+  workers     = 12
+)
 
-<!-- # ---- Stage-2 model specification (framework) ---- -->
-<!-- # This spec turns ON all currently supported Stage-2 terms. -->
-<!-- # The tuning step will still search over (delta, K, k_f, alpha_state), -->
-<!-- # but the *model structure* (which terms are included) is controlled here. -->
-<!-- spec_stage2_struct <- stage2_make_spec( -->
-<!--   delta       = 0L, -->
-<!--   K           = 3L, -->
-<!--   k_f         = 6L, -->
-<!--   alpha_state = 0.30, -->
-<!--   pre_buffer  = 1L, -->
-<!--   leads       = c(1L, 2L), -->
-<!--   use_ramp    = TRUE, -->
+res_lambda$best$lambda_c
 
-<!--   template_mode = "smooth", -->
+plot_fit_obs_cal_online_by_season(
+  joint_out    = joint_out,
+  cal          = cal_off,
+  lambda_c     = res_lambda$best$lambda_c,   # your best lambda
+  k_pre        =  spec_stage2_best$pre_buffer,  # whatever you selected already
+  interactive  = TRUE
+)
 
-<!--   # ---- all terms ON ---- -->
-<!--   k_week = 8L, -->
-<!--   k_fs   = 0L, -->
-<!--   k_zema = 6L, -->
-<!--   k_logN = 6L, -->
-<!--   k_d1   = 6L, -->
-<!--   k_d2   = 6L, -->
-<!--   use_season_re = TRUE -->
-<!-- ) -->
-
-<!-- # Optional: a *fully turned-on* spec (includes season-specific fs term). -->
-<!-- # This is useful for training diagnostics, but for prospective prediction on a brand-new season -->
-<!-- # you should exclude both s(season) and s(newWeek,season) (see spec$exclude_newseason). -->
-<!-- spec_stage2_full <- stage2_make_spec( -->
-<!--   delta       = 0L, -->
-<!--   K           = 3L, -->
-<!--   k_f         = 6L, -->
-<!--   alpha_state = 0.30, -->
-<!--   pre_buffer  = 1L, -->
-<!--   leads       = c(1L, 2L), -->
-<!--   use_ramp    = TRUE, -->
-<!--   template_mode = "smooth", -->
-<!--   k_week = 8L, -->
-<!--   k_fs   = 6L, -->
-<!--   k_zema = 6L, -->
-<!--   k_logN = 6L, -->
-<!--   k_d1   = 6L, -->
-<!--   k_d2   = 6L, -->
-<!--   use_season_re = TRUE -->
-<!-- ) -->
-<!-- # spec_stage2_full$formula -->
-
-<!-- if (file.exists("stage2_tuning.rds")) { -->
-<!--   tuned2 <- readRDS("stage2_tuning.rds") -->
-<!-- } else { -->
-<!--   tuned2 <- tune_stage2_loso_shift_template( -->
-<!--     dat         = alignedD_prosp, -->
-<!--     template_df = template_df, -->
-<!--     spec        = spec_stage2_struct, -->
-<!--     ign_hat_df  = det_out$by_season, -->
-<!--     shift_grid  = -3:3, -->
-<!--     K_grid      = 2:6, -->
-<!--     k_f_grid    = c(6L, 8L, 10L), -->
-<!--     alpha_grid  = c(0.15, 0.25, 0.35, 0.50), -->
-<!--     pre_buffer  = spec_stage2_struct$pre_buffer, -->
-<!--     leads       = spec_stage2_struct$leads, -->
-<!--     num.cores   = 14L -->
-<!--   ) -->
-<!--   saveRDS(tuned2, "stage2_tuning.rds") -->
-<!-- } -->
-
-<!-- best_mean_nll <- tuned2$best_overall[["mean_nll"]] -->
-<!-- best_mean_nll -->
-
-<!-- # ---- Final Stage-2 spec used for training/deployment ---- -->
-<!-- spec_stage2_best <- stage2_make_spec( -->
-<!--   delta       = best_mean_nll$delta, -->
-<!--   K           = best_mean_nll$K, -->
-<!--   k_f         = best_mean_nll$k_f, -->
-<!--   alpha_state = best_mean_nll$alpha_state, -->
-<!--   pre_buffer  = spec_stage2_struct$pre_buffer, -->
-<!--   leads       = spec_stage2_struct$leads, -->
-<!--   use_ramp    = spec_stage2_struct$use_ramp, -->
-
-<!--   template_mode = spec_stage2_struct$template_mode, -->
-
-<!--   k_week = spec_stage2_struct$k_week, -->
-<!--   k_fs   = spec_stage2_struct$k_fs, -->
-<!--   k_zema = spec_stage2_struct$k_zema, -->
-<!--   k_logN = spec_stage2_struct$k_logN, -->
-<!--   k_d1   = spec_stage2_struct$k_d1, -->
-<!--   k_d2   = spec_stage2_struct$k_d2, -->
-<!--   use_season_re = spec_stage2_struct$use_season_re -->
-<!-- ) -->
-
-<!-- # quick visibility -->
-<!-- spec_stage2_best$formula -->
-<!-- spec_stage2_best$exclude_newseason -->
-
-<!-- ``` -->
-
-<!-- ::: panel-tabset -->
-
-<!-- ### Tuning plot  -->
-
-<!-- ```{r, eval = T, echo = T} -->
-
-<!-- ggplotly(plot_tune_stage2_heatmap(tuned2$results, metric="mean_nll", normalize01=TRUE, -->
-<!--                           norm_scope="facet", agg=TRUE, base_size=10)) -->
-<!-- ``` -->
-
-
-
-<!-- ### Traning results (true ingnition week) -->
-
-<!-- ```{r, eval = T, echo = T} -->
-
-<!-- ## align -->
-<!-- # pick best overall by mean_nll -->
-<!-- joint_out <- train_stage2_joint( -->
-<!--   dat         = alignedD_prosp, -->
-<!--   template_df = template_df, -->
-<!--   spec        = spec_stage2_best -->
-<!-- ) -->
-
-<!-- ggplotly(plot_stage2_joint_fit_by_season( -->
-<!--   joint_out = joint_out, -->
-<!--   dat_raw   = alignedD_prosp, -->
-<!--   ign_hat_df =  det_out$by_season -->
-<!-- )) -->
-<!-- ``` -->
-
-
-<!-- ### Fit Summary -->
-<!-- ```{r, eval = F, echo = T} -->
-<!-- summary(joint_out$fit) -->
-<!-- ``` -->
-
-<!-- ::: -->
-
+```
+:::
 
 # Prospective deployment and forecasting 
 
-<!-- This section demostrates the process of real time forecasting for a new season as data arrives week by week. -->
+Data from 2025-26 season are used prospectively, taking each week start at a given week as a snapshot, we produce a forecast at each week and evaluate how the forecast evolves as more data become available and the season unfolds. The workflow is as follows:with the following workflow:
+
+In deployment, we apply these layers sequentially: 
+- Ignition detection ($M_0$) produces an estimated ignition week $w^{(\mathrm{ign})}_s$ for the current season $s$.
+- Forecast base model ($M_1$) produces $\hat\pi^{h}_{s,w}$ 
+- Offline calibration maps it to $\pi^{h,\mathrm{cal}}_{s,w}$
+- Online updater optionally adds a week-specific intercept shift $c_{s,w}$ to correct a current-season level offset.
+
+
 
 ## Pre-trained model needed 
 
-<!-- **Offline objects (fit/tuned once; reused prospectively).** Create short aliases: -->
+To simplify prospective deployment, we store all trained components and fixed settings in a single object, denoted `kit`. This bundle contains Stage-1 ignition detection, Stage-2 forecasting, offline calibration, and the online intercept updater configuration.
 
-<!-- ```{r} -->
-<!-- #| label: prospective-required-objects -->
-<!-- #| eval: true -->
-<!-- #| echo: true -->
+- Stage-1 ignition detection (`kit$stage1`)
 
-<!-- gam_cls         <- out$fits$p_only_week_p$gam -->
-<!-- params_stage1   <- tuned$best_params -->
+  - `kit$stage1$gam_cls`  
+  A trained classifier model (e.g., an `mgcv::gam`/`bam`) that produces the weekly ignition probability score used by the ignition detector.
 
-<!-- # Stage-2 spec (single source of truth: hyperparams + terms + formula) -->
-<!-- spec_stage2     <- spec_stage2_best -->
-<!-- stage2_fit      <- joint_out$fit -->
+  - `kit$stage1$params`  
+  The tuned rule/threshold parameters for ignition detection (e.g., classifier threshold, positivity thresholds, consecutive-week requirements, and allowable ignition window). These parameters   are used by the detector to convert classifier scores and observed positivity into an ignition week estimate.
 
-<!-- # Back-compat for helpers that expect "best_mean_nll" (delta/K/k_f/alpha_state) -->
-<!-- best_mean_nll   <- spec_stage2$best_row -->
+- Stage-2 forecasting (`kit$stage2`)
 
-<!-- # Terms to exclude when predicting for a brand-new season -->
-<!-- exclude_stage2  <- spec_stage2$exclude_newseason -->
+  - `kit$stage2$template_df`  
+    The reference/template curve used to construct Stage-2 covariates, typically containing `newWeek` and a fitted reference positivity `fit`.
+
+  - `kit$stage2$spec`  
+    The tuned Stage-2 hyperparameters (e.g., shift $\delta$, ramp parameter $K$, and the set of horizons), which define how covariates such as template shifts, weights, and derivative features     are constructed for training and prospective prediction.
+
+  - `kit$stage2$fit`  
+      The final Stage-2 model fit (trained on all historical seasons) used to generate the prospective linear predictor $\eta^{h}_{s,w}$ and the corresponding raw probabilities         $\hat\pi^{h}_{s,w}=\mathrm{logit}^{-1}(\eta^{h}_{s,w})$.
+
+  - `kit$stage2$train_data`  
+    The Stage-2 training design table used to preserve factor levels (e.g., season levels) and to support safe prediction under “new-season” settings (such as excluding season-specific terms).
+
+- Offline calibration (`kit$calib`)
+
+  - `kit$calib$cal_off`  
+    The offline Platt calibration map, trained on leave-one-season-out (LOSO) out-of-sample predictions. For each horizon $h\in\{1,2\}$ it defines
+    $$
+    \mathrm{logit}\!\left(\pi^{h,\mathrm{cal}}_{s,w}\right)
+    =
+    a_h + b_h\,\mathrm{logit}\!\left(\hat\pi^{h}_{s,w}\right),
+    $$
+    where $a_h$ corrects bias and $b_h$ rescales confidence. This map is held fixed during deployment.
+
+- Online intercept updating (`kit$online`)
+
+  - `kit$online$lambda_c`  
+    The ridge penalty strength $\lambda_c\ge 0$ used when re-estimating the online intercept shift $c_{s,w}$ from accumulating current-season data. Larger values yield more conservative updates.
+
+  - `kit$online$k_pre`  
+    The number of pre-ignition weeks $k_{\mathrm{pre}}\ge 0$ included in the online update window.
+
+- Deployment defaults (`kit$defaults`)
+
+  `kit$defaults` stores run-time defaults used by the prospective pipeline (e.g., alignment toggle, anchor week, pre-buffer for fitting eligibility, and derivative window size). These are not   learned parameters but ensure consistent prospective execution.
+
+In deployment, Stage-2 produces $\hat\pi^{h}_{s,w}$, offline calibration maps it to $\pi^{h,\mathrm{cal}}_{s,w}$, and the online updater optionally applies a season-specific intercept shift so that
+$$
+\mathrm{logit}\!\left(\tilde\pi^{h}_{s,w}\right)
+=
+\mathrm{logit}\!\left(\pi^{h,\mathrm{cal}}_{s,w}\right)
++
+c_{s,w}.
+$$
+```{r}
+
+kit <- make_prospective_kit(
+  template_df   = template_df,
+  ign_fit       = ign_fit,               # extracts gam_cls automatically
+  params_stage1 = tuned$best_params,     # tuned Stage-1 threshold parameters
+  joint_out     = joint_out,             # extracts spec, fit, train_data automatically
+  cal_off       = cal_off,               # can be NULL if not trained yet
+  lambda_c      = res_lambda$best$lambda_c,
+  k_pre         = spec_stage2_best$pre_buffer
+)
 
 
-<!-- ``` -->
-<!-- - `template_df` is the estimated common template curve (code: `ref$pred_df`) -->
-<!-- - `gam_cls` is the fitted GAM object for the ignition classifier (code: `out$fits$p_only_week_p$gam`). -->
-<!-- - `params_stage1` is the list of tuned parameters for the ignition detection (code: `tuned$best_params`). -->
-<!-- - `anchorWeek` is the aligned week index corresponding to ignition (code: `attr(alignedD, "anchorWeek")`). -->
-<!-- - `spec_stage2` is the Stage-2 specification object (hyperparameters + terms + formula; code: `spec_stage2_best`). -->
-<!-- - `best_mean_nll` is a 1-row back-compat view of `spec_stage2` (delta/K/k_f/alpha_state) used by helper functions. -->
-<!-- - `exclude_stage2` lists the smooth terms to exclude when predicting for a brand-new season. -->
-<!-- - `stage2_fit` is the fitted GAM/BAM object for Stage-2 forecasting (code: `joint_out$fit`). -->
-
+saveRDS(kit, file = "prospective_kit.rds")
+```
 
 ## Current season snapshot 
 
-<!-- `currentSeason` should include only weeks observed so far and contain at least: -->
-<!-- `season, weekF, y, N, neg, p` (if `p` is missing, your Stage-1 code can compute `p=y/N`). -->
+`currentSeason` should include only weeks observed so far and contain at least:
+`season, weekF, y, N, neg, p` (if `p` is missing, your Stage-1 code can compute `p=y/N`).
 
-<!-- ```{r} -->
-<!-- #| label: prospective-current-season -->
-<!-- #| eval: true -->
-<!-- #| echo: true -->
+```{r}
+#| label: prospective-current-season
+#| eval: true
+#| echo: true
 
-<!-- currentSeason <- getCurrentD() |>dplyr::select(-newWeek, -season)  -->
-<!-- knitr::kable(currentSeason) -->
-<!-- ``` -->
+currentSeason <- getCurrentD() |>dplyr::select(-newWeek, -season)
+```
+
+::: panel-tabset
+
+### Plot
+
+```{r}
+#| echo: false
+ggplotly(
+  ggplot(currentSeason, aes(x = weekF, y = p)) +
+    geom_point() +
+    geom_line() +
+    labs(x = "weekF", y = "Positivity (p)")
+)
+```
+
+### Data
+
+```{r}
+#| echo: false
+DT::datatable(currentSeason, options = list(pageLength = 25, scrollX = TRUE))
+```
+
+:::
 
 ## $M_0$: Ignition week estimation 
 
-<!-- This function takes the current season, starting at `start_week` (weekF),  it returns a detection result for each week after. -->
-<!-- ```{r} -->
-<!-- #| label: prospective-stage1 -->
-<!-- #| eval: true -->
-<!-- #| echo: true -->
-
-<!-- ign_out <- run_ignition_weekly(currentSeason  = currentSeason,ign_fit_or_gam = gam_cls,params = params_stage1,start_week= 5L) -->
-<!-- plots_facet <- plot_ignition_weekly_snapshots(ign_out, currentSeason, ncol = 4,start_week = 5L,maxWeek = 20) -->
-<!-- plots <- plot_ignition_weekly_snapshots(ign_out, currentSeason,facet = F, ncol = 4,start_week = 5L,maxWeek = 20) -->
-<!-- knitr::kable(ign_out$df) -->
-<!-- print(iWeek_hat_locked <- ign_out$iWeek_hat_locked) -->
-<!-- #ggplotly(plots_facet) -->
-
-<!-- ``` -->
-<!-- ::: panel-tabset -->
+This function takes the current season, starting at `start_week` (weekF),  it returns a detection result for each week after.
 
 
-<!-- ```{r} -->
-<!-- #| results: asis -->
-<!-- #| echo: false -->
-<!-- library(knitr) -->
-<!-- library(plotly) -->
+```{r}
+#| label: prospective-stage1
+#| eval: true
+#| echo: true
 
-<!-- for (nm in names(plots)) { -->
-<!--   cat(knitr::knit_child( -->
-<!--     text = c( -->
-<!--       paste0("### ", nm), -->
-<!--       "", -->
-<!--       "```{r echo=FALSE}", -->
-<!--       sprintf("plotly::ggplotly(plots[[%s]])", deparse(nm)), -->
-<!--       "```", -->
-<!--       "" -->
-<!--     ), -->
-<!--     envir = environment(), -->
-<!--     quiet = TRUE -->
-<!--   ), sep = "\n") -->
-<!-- } -->
-<!-- ``` -->
+ign_out <- run_ignition_weekly(
+  currentSeason  = currentSeason,
+  ign_fit_or_gam = kit$stage1$gam_cls,
+  params         = kit$stage1$params,
+  start_week     = 5L
+)
+plots <- plot_ignition_weekly_snapshots(
+  ign_out, currentSeason,
+  facet = FALSE, start_week = 5L, maxWeek = 20
+)
+iWeek_hat_locked <- ign_out$iWeek_hat_locked
+```
 
-<!-- ::: -->
+::: panel-tabset
+
+```{r}
+#| results: asis
+#| echo: false
+
+for (nm in names(plots)) {
+  cat(knitr::knit_child(
+    text = c(
+      paste0("### ", nm),
+      "",
+      "```{r echo=FALSE}",
+      sprintf("plotly::ggplotly(plots[[%s]])", deparse(nm)),
+      "```",
+      ""
+    ),
+    envir = environment(),
+    quiet = TRUE
+  ), sep = "\n")
+}
+```
+
+### Detection table
+
+```{r}
+#| echo: false
+DT::datatable(ign_out$df, options = list(pageLength = 25, scrollX = TRUE))
+```
+
+:::
+
+```{r}
+#| echo: false
+cat("Locked ignition week:", iWeek_hat_locked)
+```
 
 
 
@@ -1238,7 +1259,10 @@ where:
 
 <!-- If ignition has not triggered yet (`iWeek_used` is `NA`), **stop here**. -->
 
-## $M1$ real time forecast
+## $M_1$ real time forecast
+
+
+
 
 ### Forcasting model data prep
 

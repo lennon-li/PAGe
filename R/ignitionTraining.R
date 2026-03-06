@@ -352,18 +352,19 @@ plot_cls_models_by_season <- function(ign_fit,
 
 #' Prospective ignition detection (M0v2) across seasons
 #'
-#' Applies a prospective-safe ignition detector across all seasons. The detector uses five gates:
+#' Applies a prospective-safe ignition detector across all seasons. The detector uses four
+#' epidemiological gates (and optionally a fifth classifier gate):
 #' \enumerate{
-#'   \item classifier score gate: \code{score_col >= cls_thr}
 #'   \item rolling-sum evidence gate: \code{p_sumK >= p_sum_thr} where \code{p_sumK = rollsum(p, K_sum)}
 #'   \item smoothed positivity level gate: \code{p_sm >= p_thr} where \code{p_sm = rollmean(p, L)}
 #'   \item cumulative prevalence gate: \code{prev >= prev_thr} where \code{prev = cumsum(y)/cumsum(N)}
 #'   \item noise-tolerant trend gate on \code{p_sm} requiring sustained increases with tolerance \code{eps}
+#'   \item (optional) classifier score gate: \code{score_col >= cls_thr}, included only when \code{use_cls=TRUE}
 #' }
 #'
 #' Within the eligible window \code{w_min <= week <= w_max}, ignition is declared at the earliest
-#' week where at least \code{N_req} of the five gates are satisfied (N-of-5 voting). The classifier
-#' gate is a vote (not mandatory).
+#' week where at least \code{N_req} of the active gates are satisfied. By default \code{use_cls=FALSE}
+#' (4-gate N-of-4 voting); set \code{use_cls=TRUE} to revert to the original 5-gate N-of-5 voting.
 #'
 #' @param ign_fit Either a list returned by [fitIgnition()] containing \code{$data}, or a data.frame/data.table.
 #' @param params Named list of thresholds/hyperparameters.
@@ -419,40 +420,43 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
   K_sum     <- as.integer(params$K_sum %||% 4L)
   p_sum_thr <- params$p_sum_thr %||% 0.04
   
-  N_req <- as.integer(params$N_req %||% params$N %||% 3L)
-  
+  N_req   <- as.integer(params$N_req %||% params$N %||% 3L)
+  use_cls <- isTRUE(params$use_cls %||% FALSE)
+
   w_min <- as.integer(params$w_min %||% 13L)
   w_max <- as.integer(params$w_max %||% 30L)
-  
+
   data.table::setorderv(DT, c(season_col, week_col))
-  
+
   # prevalence evidence
   DT[, cum_y := cumsum(get(y_col)), by = season_col]
   DT[, cum_N := cumsum(get(N_col)), by = season_col]
   DT[, prev  := data.table::fifelse(cum_N > 0, cum_y / cum_N, NA_real_)]
-  
+
   # rolling-sum evidence (prospective)
   DT[, p0 := data.table::fifelse(is.na(p), 0, p)]
   DT[, p_sumK := data.table::frollsum(p0, n = K_sum, align = "right", fill = NA_real_), by = season_col]
-  
+
   # smoothed level + trend (prospective)
   DT[, p_sm := data.table::frollmean(p, n = L, align = "right", fill = NA_real_), by = season_col]
   DT[, dp   := p_sm - data.table::shift(p_sm, 1L, type = "lag"), by = season_col]
-  
+
   k_inc <- max(1L, n_consec - 1L)
   DT[, inc := dp > -eps]
   need_inc <- max(1L, k_inc - 1L)
   DT[, cond_inc := data.table::frollsum(as.integer(inc), n = k_inc, align = "right", fill = NA_integer_) >= need_inc,
      by = season_col]
-  
-  # gates + vote count
+
+  # gates (always compute cond_cls for display; include in vote only when use_cls=TRUE)
   DT[, cond_win  := get(week_col) >= w_min & get(week_col) <= w_max]
   DT[, cond_cls  := get(score_col) >= cls_thr]
   DT[, cond_sum  := p_sumK >= p_sum_thr]
   DT[, cond_p    := p_sm >= p_thr]
   DT[, cond_prev := prev >= prev_thr]
-  
-  DT[, n_hit := rowSums(cbind(cond_cls, cond_sum, cond_p, cond_prev, cond_inc), na.rm = FALSE)]
+
+  vote_cols <- if (use_cls) c("cond_cls", "cond_sum", "cond_p", "cond_prev", "cond_inc") else
+                             c(            "cond_sum", "cond_p", "cond_prev", "cond_inc")
+  DT[, n_hit := rowSums(.SD, na.rm = FALSE), .SDcols = vote_cols]
   DT[, ignite_ok := cond_win & (n_hit >= N_req)]
   
   by_hat <- DT[ignite_ok %in% TRUE, .(iWeek_hat = min(get(week_col), na.rm = TRUE)), by = season_col]
@@ -1104,4 +1108,58 @@ detect_ignition_from_tuning <- function(tuned,
     iWeek        = iWeek,
     verbose      = verbose
   )
+}
+
+#' Per-season ignition detection signal table
+#'
+#' Filters the full detection data to a single season and returns an interactive
+#' \code{DT::datatable} showing the week-by-week gate conditions and ignition
+#' flags, with row highlighting: green for the detected ignition week
+#' (\code{ignite_flag == TRUE}) and yellow for weeks where all conditions passed
+#' (\code{ignite_ok == TRUE}).
+#'
+#' @param det_all List returned by \code{detect_ignition_from_tuning()} or
+#'   \code{detectIgnitionBySeason_M0v2()} with \code{keep_signals = TRUE}.
+#'   Must contain a \code{$data} data frame with columns \code{season},
+#'   \code{weekF}, \code{p}, \code{cond_win}, \code{cond_cls}, \code{cond_sum},
+#'   \code{cond_p}, \code{cond_prev}, \code{cond_inc}, \code{n_hit},
+#'   \code{ignite_ok}, and \code{ignite_flag}.
+#' @param season Character string identifying the season to display (e.g.
+#'   \code{"2019-20"}).
+#' @return A \code{DT::datatable} object with conditional row highlighting.
+#' @examples
+#' \dontrun{
+#' det_all <- detect_ignition_from_tuning(tuned, alignedD)
+#' plot_season_detection_table(det_all, "2019-20")
+#' }
+#' @export
+plot_season_detection_table <- function(det_all, season) {
+  stopifnot(is.list(det_all), !is.null(det_all$data))
+  cols <- c("weekF", "p", "cond_win", "cond_cls", "cond_sum",
+            "cond_p", "cond_prev", "cond_inc", "n_hit", "ignite_ok", "ignite_flag")
+  df <- det_all$data[det_all$data$season == season, ]
+  # keep only columns that actually exist
+  cols <- intersect(cols, names(df))
+  df <- df[, cols, drop = FALSE]
+  df$p <- round(df$p, 4)
+
+  flag_rows <- which(isTRUE(df$ignite_flag) | df$ignite_flag %in% TRUE)
+  ok_rows   <- which(isTRUE(df$ignite_ok)   | df$ignite_ok   %in% TRUE)
+  # ignite_flag rows take priority: remove from ok_rows
+  ok_rows   <- setdiff(ok_rows, flag_rows)
+
+  DT::datatable(
+    df,
+    rownames  = FALSE,
+    options   = list(pageLength = 30, scrollX = TRUE, dom = "t")
+  ) |>
+    DT::formatStyle(
+      columns    = names(df),
+      target     = "row",
+      backgroundColor = DT::styleRow(
+        rows   = c(flag_rows, ok_rows),
+        values = c(rep("#d4edda", length(flag_rows)),   # green
+                   rep("#fff3cd", length(ok_rows)))     # yellow
+      )
+    )
 }
