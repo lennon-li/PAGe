@@ -323,11 +323,15 @@ ign_fit <- fitIgnition(
 )
 ```
 
-We define four epidemiological gates:
+We define four epidemiological gates used in voting. A fifth signal, the velocity gate (`cond_dp`), is computed and shown in the detection table for diagnostics but does not contribute to the vote.
 
 ::: panel-tabset
 
 ### Rolling-sum evidence gate
+
+*Gate: `cond_sum` · Signal: `p_sumK` = $S_K(s,w)$ · Parameters: `K_sum` = $K_{\mathrm{sum}}$, `p_sum_thr` = $\tau_{\mathrm{sum}}$*
+
+**Purpose.** A single elevated week could be a sampling artefact. Requiring the *sum* of positivity over several consecutive weeks to exceed a threshold filters out isolated spikes and demands that elevated signal be sustained across multiple observations before contributing a vote.
 
 Let $K_{\mathrm{sum}}\ge 1$ and define a short rolling sum of weekly positivity:
 
@@ -343,6 +347,10 @@ g_{\mathrm{sum}}(s,w)=
 $$
 
 ### Smoothed positivity level gate
+
+*Gate: `cond_p` · Signal: `p_sm` = $\tilde{p}_{s,w}$ · Parameters: `L` = $L$, `p_thr` = $\tau_p$*
+
+**Purpose.** The raw weekly positivity $p_{s,w}$ is noisy. Smoothing over $L$ weeks suppresses week-to-week noise and confirms that the *current level* of positivity is meaningfully elevated rather than a transient fluctuation.
 
 Let $\tilde p_{s,w}$ be a short rolling mean of weekly positivity with window length $L$:
 
@@ -361,6 +369,10 @@ $$
 
 ### Cumulative prevalence gate
 
+*Gate: `cond_prev` · Signal: `prev` = $\mathrm{Prv}_{s,w}$ · Parameter: `prev_thr` = $\tau_{\mathrm{prev}}$*
+
+**Purpose.** A short burst of positive tests in a small sample can transiently elevate weekly positivity without representing a true population-level signal. The cumulative prevalence gate integrates evidence *across the entire season so far*, making it resistant to brief noise episodes: the season-wide test burden must reveal a meaningfully infected fraction of specimens.
+
 Define cumulative prevalence evidence:
 
 $$
@@ -375,15 +387,13 @@ g_{\mathrm{prev}}(s,w)=
 \mathbf{1}\left\{\mathrm{Prv}_{s,w}\ge \tau_{\mathrm{prev}}\right\}.
 $$
 
-### Trend confirmation gate (noise-tolerant)
+### Trend confirmation gate
 
-Let $k=n_{\mathrm{consec}}-1$ and $\epsilon \ge 0$ be a tolerance. Define the week-to-week change in smoothed positivity:
+*Gate: `cond_inc` · Signal: `dp` = $\Delta\tilde{p}_{s,w} = \tilde{p}_{s,w}-\tilde{p}_{s,w-1}$ · Parameters: `n_consec` = $n_{\mathrm{consec}}$, `eps` = $\epsilon$*
 
-$$
-\Delta \tilde p_{s,w}=\tilde p_{s,w}-\tilde p_{s,w-1}.
-$$
+**Purpose.** Elevated positivity that is already declining is not ignition — it could be a receding false alarm. This gate requires that the smoothed signal has not been *sustainedly falling* over recent weeks, confirming that the elevated level is part of an ongoing rise rather than a peak already past. The noise tolerance $\epsilon$ allows one minor dip without disqualifying a genuine uptrend.
 
-We declare a sustained upward trend if at least $k-1$ of the last $k$ differences exceed $-\epsilon$:
+Let $k=n_{\mathrm{consec}}-1$ and $\epsilon \ge 0$ be a tolerance. We declare a sustained upward trend if at least $k-1$ of the last $k$ differences of `dp` exceed $-\epsilon$:
 
 $$
 g_{\mathrm{inc}}(s,w)=
@@ -392,7 +402,26 @@ g_{\mathrm{inc}}(s,w)=
 \right\}.
 $$
 
-This allows at most one small dip (up to $\epsilon$) over the last $k$ differences.
+Note that `cond_inc` checks *local direction* (week-to-week signs) but not magnitude. It passes as soon as positivity stops falling — even if it has been flat for weeks at a moderate level.
+
+### Velocity gate (display only)
+
+*Gate: `cond_dp` · Signal: `p_sm` lagged difference over `K_dp` weeks = $\tilde{p}_{s,w}-\tilde{p}_{s,w-K_{\mathrm{dp}}}$ · Parameters: `K_dp` = $K_{\mathrm{dp}}$, `dp_thr` = $\tau_{\mathrm{dp}}$*
+
+**Note.** This gate is computed and included in the per-season detection table for diagnostic purposes, but it does **not** contribute to the $N_{\mathrm{req}}$-of-4 vote.
+
+**Purpose.** The four voting gates can all be satisfied by a flat, moderately elevated signal. The velocity gate demands a *net displacement* of at least $\tau_{\mathrm{dp}}$ over the past $K_{\mathrm{dp}}$ weeks, distinguishing a genuinely rising epidemic from a flat signal sitting at a moderate level.
+
+Let $K_{\mathrm{dp}}\ge 1$ be a look-back lag. The velocity gate is
+
+$$
+g_{\mathrm{dp}}(s,w)=
+\mathbf{1}\left\{
+\tilde p_{s,w}-\tilde p_{s,w-K_{\mathrm{dp}}}\ge \tau_{\mathrm{dp}}
+\right\}.
+$$
+
+Unlike `cond_inc`, which checks whether each step is non-negative, `cond_dp` measures the *total rise* over the window.
 
 :::
 
@@ -408,7 +437,7 @@ g_{\mathrm{prev}}(s,w)+
 g_{\mathrm{inc}}(s,w).
 $$
 
-Ignition is declared at the earliest week within the eligible window where all $N_{\mathrm{req}}=4$ gates agree:
+Ignition is declared at the earliest week within the eligible window where all $N_{\mathrm{req}}$ gates agree:
 
 $$
 \hat w_s^{(\mathrm{ign})}=
@@ -419,7 +448,7 @@ H(s,w)\ge N_{\mathrm{req}}
 \right\},
 $$
 
-with $\hat w_s^{(\mathrm{ign})}=\mathrm{NA}$ if no week satisfies the rule. Requiring all four gates simultaneously prevents false triggers from transient positivity spikes: a week with elevated rolling sum but no sustained rising trend (or vice versa) will not trigger ignition.
+with $\hat w_s^{(\mathrm{ign})}=\mathrm{NA}$ if no week satisfies the rule. With $N_{\mathrm{req}}=4$, all four gates must agree simultaneously, ensuring that no single gate can trigger detection on its own.
 
 ---
 
@@ -475,10 +504,6 @@ The tuned $\hat\theta$ is then applied prospectively in real time to determine i
 
 
 
-
-::: panel-tabset
-
-### LOSO tuning results
 ```{r, eval = T}
 if(file.exists("../data/stage1_tuning.rds")) { 
   tuned <- readRDS("../data/stage1_tuning.rds")
@@ -494,8 +519,8 @@ grid_loso <- data.table::CJ(
   L         = 2L,                       # fixed at best
   eps       = 0,                        # fixed at best
   K_sum     = 5L,                       # fixed at best
-  p_sum_thr = c(0.045, 0.050, 0.055),  # rolling-sum threshold (N_req=4 reinstates ~0.050)
-  N_req     = 4L,                       # require all 4 epi gates (prevents false positives)
+  p_sum_thr = c(0.045, 0.050, 0.055),  # rolling-sum threshold
+  N_req     = 4L,                       # require all 4 gates
   w_min     = 13L,
   w_max     = 30L,
   sorted    = FALSE
@@ -533,19 +558,26 @@ tuned<- loso_M0v2(
   saveRDS(tuned, "../data/stage1_tuning.rds") 
 } 
 
-tuned$runtime
-data.frame(Parameter = names(unlist(tuned$best_params)),
-           Value     = unlist(tuned$best_params), row.names = NULL) |>
-  gt() |>
-  tab_header(title = "Best M0 parameters (LOSO tuned)")
-# Note: tuned$best_params is the median (continuous params) / mode (integer params)
-# of fold-specific best parameters across all LOSO folds.
+
+
 
 ```
 
 
-### LOSO tuned ignition detection
+
+::: panel-tabset
+
+### LOSO results
 ```{r, eval = T}
+tuned$runtime
+keep_params <- c("p_thr","prev_thr","p_sum_thr","eps","dp_thr",
+                 "n_consec","L","K_sum","N_req","w_min","w_max","K_dp")
+bp_display  <- tuned$best_params[names(tuned$best_params) %in% keep_params]
+data.frame(Parameter = names(unlist(bp_display)),
+           Value     = unlist(bp_display), row.names = NULL) |>
+  gt() |>
+  tab_header(title = "Best M0 parameters (LOSO tuned)")
+
 det_all <- detect_ignition_from_tuning(tuned, alignedD)
 det_all$compare |>
   gt() |>
@@ -560,15 +592,6 @@ det_all$compare |>
 ```
 
 
-### Plot
-
-```{r, eval = T}
-
-plot_ignition_detect_vs_truth(det_all, x_max = 30, y_max = 0.3, ncol = 4)
-```
-
-### Per-season detection
-
 ```{r}
 #| results: asis
 #| echo: false
@@ -576,7 +599,7 @@ seasons_in_data <- sort(unique(det_all$data$season))
 for (s in seasons_in_data) {
   cat(knitr::knit_child(
     text = c(
-      paste0("#### ", s),
+      paste0("### ", s),
       "",
       "```{r echo=FALSE}",
       sprintf("plot_season_detection_table(det_all, %s)", deparse(s)),
@@ -1083,7 +1106,7 @@ To simplify prospective deployment, all trained components and fixed settings ar
 |---|---|---|
 | `template_df` | `ref$pred_df` | Smoothed reference positivity curve over aligned week index `newWeek`. Used to construct the template-shift covariate $x^{\delta}_{s,w}$ and ramp weight in Stage-2. |
 | `ign_fit` | `fitIgnition()` | Full Stage-1 model object. Contains the fitted GAM classifier (`ign_fit$fits$base$gam`) and the scored training data. `make_prospective_kit` extracts the classifier automatically. |
-| `tuned$best_params` | `loso_M0v2()` | LOSO-tuned threshold parameters for the Stage-1 ignition detector — positivity thresholds (`p_thr`, `prev_thr`, `p_sum_thr`), trend requirement (`n_consec`), minimum vote count (`N_req`), and allowable ignition window (`w_min`, `w_max`). |
+| `tuned$best_params` | `loso_M0v2()` | LOSO-tuned threshold parameters for the Stage-1 ignition detector — positivity thresholds (`p_thr`, `prev_thr`, `p_sum_thr`), trend requirement (`n_consec`), velocity gate (`K_dp`, `dp_thr`), minimum vote count (`N_req`), and allowable ignition window (`w_min`, `w_max`). |
 | `joint_out` | `train_stage2_joint()` | Joint Stage-2 training output. Contains the tuned hyperparameter spec (`joint_out$spec`), the final fitted model (`joint_out$fit`), and the training design table (`joint_out$train_data`) used for safe prospective prediction. |
 | `cal_off` | `train_calib_platt()` | Offline Platt calibration map trained on LOSO out-of-sample predictions. For each horizon $h$ it applies $\mathrm{logit}(\pi^{h,\mathrm{cal}}) = a_h + b_h\,\mathrm{logit}(\hat\pi^h)$ to correct bias and rescale confidence. Held fixed during deployment. |
 | `res_lambda$best$lambda_c` | `tune_lambda_c()` | Ridge penalty $\lambda_c \ge 0$ for online intercept updating. `res_lambda` is the output of `tune_lambda_c()`; `$best$lambda_c` extracts the cross-validated optimal scalar. Larger values yield more conservative within-season updates. |
@@ -1198,7 +1221,38 @@ for (nm in names(plots)) {
 
 ```{r}
 #| echo: false
-DT::datatable(ign_out$df, options = list(pageLength = 25, scrollX = TRUE))
+local({
+  df <- ign_out$df
+  fmt_val <- function(val, flag) {
+    v <- ifelse(is.na(val), "", sprintf("%.4f", as.numeric(val)))
+    ifelse(flag %in% TRUE,
+           paste0('<span style="color:red;font-weight:bold">', v, "</span>"), v)
+  }
+  disp <- data.frame(
+    Week     = df$weekF,
+    p        = round(df$p_now, 4),
+    Sum5w    = fmt_val(df$cum_p_now, df$ok_cum_p  %in% TRUE),
+    Prev     = fmt_val(df$prev_now,  df$ok_prev   %in% TRUE),
+    Inc      = {
+      v    <- ifelse(is.na(df$n_hit_now), "", as.character(as.integer(df$n_hit_now)))
+      flag <- df$ok_n_consec %in% TRUE
+      ifelse(flag, paste0('<span style="color:red;font-weight:bold">', v, "</span>"), v)
+    },
+    iWeek_hat = df$iWeek_hat_dynamic,
+    stringsAsFactors = FALSE
+  )
+  highlight_rows <- which(df$ignite_ok_now %in% TRUE)
+  DT::datatable(
+    disp, rownames = FALSE, escape = FALSE,
+    options = list(pageLength = 30, scrollX = TRUE, dom = "t")
+  ) |>
+    DT::formatStyle(
+      columns         = "Week",
+      target          = "row",
+      backgroundColor = DT::styleRow(rows   = highlight_rows,
+                                     values = rep("#fff3cd", length(highlight_rows)))
+    )
+})
 ```
 
 :::

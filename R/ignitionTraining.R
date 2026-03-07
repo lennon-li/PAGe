@@ -352,23 +352,34 @@ plot_cls_models_by_season <- function(ign_fit,
 
 #' Prospective ignition detection (M0v2) across seasons
 #'
-#' Applies a prospective-safe ignition detector across all seasons. The detector uses four
-#' epidemiological gates (and optionally a fifth classifier gate):
+#' Applies a prospective-safe ignition detector across all seasons. The detector uses five
+#' epidemiological gates (and optionally a sixth classifier gate):
 #' \enumerate{
 #'   \item rolling-sum evidence gate: \code{p_sumK >= p_sum_thr} where \code{p_sumK = rollsum(p, K_sum)}
 #'   \item smoothed positivity level gate: \code{p_sm >= p_thr} where \code{p_sm = rollmean(p, L)}
 #'   \item cumulative prevalence gate: \code{prev >= prev_thr} where \code{prev = cumsum(y)/cumsum(N)}
 #'   \item noise-tolerant trend gate on \code{p_sm} requiring sustained increases with tolerance \code{eps}
+#'   \item velocity gate: \code{p_sm[w] - p_sm[w - K_dp] >= dp_thr} — smoothed positivity rose by at least \code{dp_thr} over the last \code{K_dp} weeks
 #'   \item (optional) classifier score gate: \code{score_col >= cls_thr}, included only when \code{use_cls=TRUE}
 #' }
 #'
 #' Within the eligible window \code{w_min <= week <= w_max}, ignition is declared at the earliest
-#' week where at least \code{N_req} of the active gates are satisfied. By default \code{use_cls=FALSE}
-#' (4-gate N-of-4 voting); set \code{use_cls=TRUE} to revert to the original 5-gate N-of-5 voting.
+#' week where the gate score meets the threshold. Two voting modes are supported:
+#' \itemize{
+#'   \item \strong{Unweighted} (default): \code{N_req} of the active gates must be TRUE (binary N-of-k voting).
+#'   \item \strong{Weighted}: each gate contributes a fixed weight; fire when \code{sum(w_i * gate_i) >= score_thr}.
+#'     Pass \code{gate_weights} (named numeric vector) and \code{score_thr} in \code{params} to activate.
+#' }
+#' By default \code{use_cls=FALSE} (5-gate voting); set \code{use_cls=TRUE} to add the classifier as a sixth gate.
 #'
 #' @param ign_fit Either a list returned by [fitIgnition()] containing \code{$data}, or a data.frame/data.table.
-#' @param params Named list of thresholds/hyperparameters.
+#' @param params Named list of thresholds/hyperparameters. Weighted mode: include \code{gate_weights} (named
+#'   numeric vector with names matching gate columns, e.g. \code{c(cond_dp=2, cond_sum=1, cond_p=0.8,
+#'   cond_prev=0.8, cond_inc=0.4)}) and \code{score_thr} (numeric threshold). Unweighted mode: include
+#'   \code{N_req} (integer, gates required).
 #' @param score_col Character. Name of classifier score column. Default \code{"p_cls_p"}.
+#' @param K_dp Integer. Lag (in weeks) for velocity gate. Default 3.
+#' @param dp_thr Numeric. Minimum rise in \code{p_sm} over \code{K_dp} weeks to pass velocity gate. Default 0.01.
 #' @param season_col,week_col Column names for season and within-season week.
 #' @param y_col,N_col Column names for positives and totals.
 #' @param phase_col Column name for phase indicator (used for truth if \code{truth_col} missing).
@@ -419,9 +430,14 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
   
   K_sum     <- as.integer(params$K_sum %||% 4L)
   p_sum_thr <- params$p_sum_thr %||% 0.04
-  
-  N_req   <- as.integer(params$N_req %||% params$N %||% 3L)
-  use_cls <- isTRUE(params$use_cls %||% FALSE)
+
+  K_dp   <- as.integer(params$K_dp   %||% 3L)
+  dp_thr <- params$dp_thr %||% 0.01
+
+  N_req        <- as.integer(params$N_req %||% params$N %||% 3L)
+  use_cls      <- isTRUE(params$use_cls %||% FALSE)
+  gate_weights <- params$gate_weights   # NULL = unweighted mode
+  score_thr    <- params$score_thr %||% NULL
 
   w_min <- as.integer(params$w_min %||% 13L)
   w_max <- as.integer(params$w_max %||% 30L)
@@ -441,6 +457,9 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
   DT[, p_sm := data.table::frollmean(p, n = L, align = "right", fill = NA_real_), by = season_col]
   DT[, dp   := p_sm - data.table::shift(p_sm, 1L, type = "lag"), by = season_col]
 
+  DT[, p_sm_lag := data.table::shift(p_sm, K_dp, type = "lag"), by = season_col]
+  DT[, cond_dp  := !is.na(p_sm_lag) & ((p_sm - p_sm_lag) >= dp_thr)]
+
   k_inc <- max(1L, n_consec - 1L)
   DT[, inc := dp > -eps]
   need_inc <- max(1L, k_inc - 1L)
@@ -457,7 +476,18 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
   vote_cols <- if (use_cls) c("cond_cls", "cond_sum", "cond_p", "cond_prev", "cond_inc") else
                              c(            "cond_sum", "cond_p", "cond_prev", "cond_inc")
   DT[, n_hit := rowSums(.SD, na.rm = FALSE), .SDcols = vote_cols]
-  DT[, ignite_ok := cond_win & (n_hit >= N_req)]
+
+  if (!is.null(gate_weights) && !is.null(score_thr)) {
+    # Weighted mode: score = sum(w_i * gate_i), fire when score >= score_thr
+    w_vec <- gate_weights[vote_cols]
+    w_vec[is.na(w_vec)] <- 0
+    DT[, score := as.numeric(as.matrix(.SD) %*% w_vec), .SDcols = vote_cols]
+    DT[, ignite_ok := cond_win & !is.na(score) & (score >= score_thr)]
+  } else {
+    # Unweighted mode: fire when n_hit >= N_req
+    DT[, score := as.numeric(n_hit)]
+    DT[, ignite_ok := cond_win & (n_hit >= N_req)]
+  }
   
   by_hat <- DT[ignite_ok %in% TRUE, .(iWeek_hat = min(get(week_col), na.rm = TRUE)), by = season_col]
   all_s  <- DT[, .(season = unique(get(season_col)))]
@@ -596,7 +626,9 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
     p_sum_thr = 0.04,
     N_req     = 3L,
     w_min     = 13L,
-    w_max     = 30L
+    w_max     = 30L,
+    K_dp      = 3L,
+    dp_thr    = 0.01,
   )
   for (nm in names(defaults)) if (!nm %in% names(grid)) grid[[nm]] <- defaults[[nm]]
   
@@ -694,9 +726,9 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
   o <- with(res, order(n_over2, n_late_over2, max_abs, n_miss, score))
   best_row <- res[o[1], , drop = FALSE]
   
-  best_params <- as.list(best_row[, c(
-    "cls_thr","p_thr","prev_thr","n_consec","L","eps","K_sum","p_sum_thr","N_req","w_min","w_max"
-  ), drop = FALSE])
+  param_cols  <- c("cls_thr","p_thr","prev_thr","n_consec","L","eps","K_sum","p_sum_thr","N_req","w_min","w_max",
+                   "K_dp","dp_thr")
+  best_params <- stats::setNames(lapply(param_cols, function(nm) best_row[[nm]]), param_cols)
   
   # evaluate on all seasons (including excluded)
   det_all <- detectIgnitionBySeason_M0v2(
@@ -925,8 +957,8 @@ loso_M0v2 <- function(dat,
                                  fill = TRUE)
   
   # expected parameter names (only aggregate those that exist)
-  num_par <- intersect(c("cls_thr","p_thr","prev_thr","p_sum_thr","eps"), names(bp_df))
-  int_par <- intersect(c("n_consec","L","K_sum","N_req","w_min","w_max"), names(bp_df))
+  num_par <- intersect(c("cls_thr","p_thr","prev_thr","p_sum_thr","eps","dp_thr"), names(bp_df))
+  int_par <- intersect(c("n_consec","L","K_sum","N_req","w_min","w_max","K_dp"), names(bp_df))
   
   best_params_loso <- list()
   for (nm in num_par) best_params_loso[[nm]] <- as.numeric(stats::median(as.numeric(bp_df[[nm]]), na.rm = TRUE))
@@ -1135,31 +1167,62 @@ detect_ignition_from_tuning <- function(tuned,
 #' @export
 plot_season_detection_table <- function(det_all, season) {
   stopifnot(is.list(det_all), !is.null(det_all$data))
-  cols <- c("weekF", "p", "cond_win", "cond_cls", "cond_sum",
-            "cond_p", "cond_prev", "cond_inc", "n_hit", "ignite_ok", "ignite_flag")
-  df <- det_all$data[det_all$data$season == season, ]
-  # keep only columns that actually exist
-  cols <- intersect(cols, names(df))
-  df <- df[, cols, drop = FALSE]
-  df$p <- round(df$p, 4)
 
-  flag_rows <- which(isTRUE(df$ignite_flag) | df$ignite_flag %in% TRUE)
-  ok_rows   <- which(isTRUE(df$ignite_ok)   | df$ignite_ok   %in% TRUE)
-  # ignite_flag rows take priority: remove from ok_rows
-  ok_rows   <- setdiff(ok_rows, flag_rows)
+  # look up true ignition week from compare table
+  iWeek_true <- NA_integer_
+  if (!is.null(det_all$compare)) {
+    cr <- det_all$compare[det_all$compare$season == season, ]
+    if (nrow(cr) > 0) iWeek_true <- cr$iWeek_true[1]
+  }
+
+  raw <- det_all$data[det_all$data$season == season, ]
+
+  # helper: NA-safe logical flag (NA treated as FALSE)
+  get_flag <- function(col) {
+    if (col %in% names(raw)) as.logical(raw[[col]]) %in% TRUE
+    else rep(FALSE, nrow(raw))
+  }
+
+  # wrap numeric value in red+bold span when gate fires; blank when NA
+  fmt_val <- function(val, flag) {
+    v <- ifelse(is.na(val), "", sprintf("%.4f", val))
+    ifelse(flag,
+           paste0('<span style="color:red;font-weight:bold">', v, "</span>"),
+           v)
+  }
+
+  disp <- data.frame(
+    Week  = raw$weekF,
+    p     = round(raw$p, 4),
+    Sum5w = fmt_val(raw$p_sumK, get_flag("cond_sum")),
+    p_sm  = fmt_val(raw$p_sm,   get_flag("cond_p")),
+    Prev  = fmt_val(raw$prev,   get_flag("cond_prev")),
+    dp    = fmt_val(raw$dp,     !is.na(raw$dp) & raw$dp > 0),
+    Inc   = {
+      vals <- if ("n_hit" %in% names(raw)) as.integer(raw$n_hit) else rep(NA_integer_, nrow(raw))
+      v    <- ifelse(is.na(vals), "", as.character(vals))
+      ifelse(get_flag("cond_inc"),
+             paste0('<span style="color:red;font-weight:bold">', v, "</span>"), v)
+    },
+    stringsAsFactors = FALSE
+  )
+
+  # Row highlighting: true ignition = green (priority); first detected = yellow
+  row_colors <- rep(NA_character_, nrow(disp))
+  row_colors[get_flag("ignite_flag")]                           <- "#fff3cd"  # yellow – detected
+  if (!is.na(iWeek_true)) row_colors[raw$weekF == iWeek_true] <- "#d4edda"  # green  – true ignition
+  highlight_rows   <- which(!is.na(row_colors))
+  highlight_colors <- row_colors[highlight_rows]
 
   DT::datatable(
-    df,
-    rownames  = FALSE,
-    options   = list(pageLength = 30, scrollX = TRUE, dom = "t")
+    disp,
+    rownames = FALSE,
+    escape   = FALSE,
+    options  = list(pageLength = 30, scrollX = TRUE, dom = "t")
   ) |>
     DT::formatStyle(
-      columns    = names(df),
-      target     = "row",
-      backgroundColor = DT::styleRow(
-        rows   = c(flag_rows, ok_rows),
-        values = c(rep("#d4edda", length(flag_rows)),   # green
-                   rep("#fff3cd", length(ok_rows)))     # yellow
-      )
+      columns         = "Week",
+      target          = "row",
+      backgroundColor = DT::styleRow(rows = highlight_rows, values = highlight_colors)
     )
 }
