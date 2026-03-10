@@ -22,7 +22,7 @@ if (!file.exists(rdata_path) && file.exists("data/data.RData")) {
 out_dir    <- get_kv("--out",   "results")
 mode       <- tolower(get_kv("--mode", "summary"))
 cores_str  <- get_kv("--cores", NULL)
-if (!is.null(cores_str) && grepl("^[0-9]+$", trimws(cores_str))) {
+if (!is.null(cores_str) && grepl("^[1-9][0-9]*$", trimws(cores_str))) {
   ncores <- as.integer(cores_str)
 } else {
   if (!is.null(cores_str))
