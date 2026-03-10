@@ -2,6 +2,7 @@
 # Usage (PowerShell):
 #   Rscript .\scripts\auto_from_rdata.R --rdata=.\data\inputs.RData --out=.\results --mode=summary --verbose
 #   Rscript .\scripts\auto_from_rdata.R --rdata=.\data\inputs.RData --out=.\results --mode=all
+#   Rscript .\scripts\auto_from_rdata.R --rdata=.\data\inputs.RData --out=.\results --mode=all --cores=10
 
 args <- commandArgs(trailingOnly = TRUE)
 
@@ -20,6 +21,12 @@ if (!file.exists(rdata_path) && file.exists("data/data.RData")) {
 }
 out_dir    <- get_kv("--out",   "results")
 mode       <- tolower(get_kv("--mode", "summary"))
+cores_str  <- get_kv("--cores", NULL)
+ncores     <- if (!is.null(cores_str)) as.integer(cores_str) else parallel::detectCores(logical = TRUE)
+if (is.na(ncores) || ncores < 1L) {
+  warning("--cores value is invalid or detection failed; defaulting to 10 cores.")
+  ncores <- 10L
+}
 verbose    <- has_flag("--verbose")
 
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
@@ -27,7 +34,8 @@ dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 cat("\n=== auto_from_rdata.R ===\n")
 cat("rdata: ", rdata_path, "\n")
 cat("out:   ", out_dir, "\n")
-cat("mode:  ", mode, "\n\n")
+cat("mode:  ", mode, "\n")
+cat("cores: ", ncores, "\n\n")
 
 # ---- load .RData into dedicated env ----
 if (!file.exists(rdata_path)) stop("RData file not found: ", rdata_path)
@@ -100,7 +108,7 @@ if (mode == "all") {
     gamma          = 25,
     gamma_late     = 25,
     iWeek          = TRUE,
-    ncores         = 10L,
+    ncores         = ncores,
     verbose        = FALSE,
     progress_every = 200L
   )

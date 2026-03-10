@@ -1,0 +1,184 @@
+name: Run R Files
+
+on:
+  push:
+    branches: ["main", "master"]
+    paths:
+      - "R/**"
+      - "scripts/**"
+      - "flualign/**"
+      - ".github/workflows/run-r.yml"
+  pull_request:
+    paths:
+      - "R/**"
+      - "scripts/**"
+      - "flualign/**"
+      - ".github/workflows/run-r.yml"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Script mode: summary | all"
+        required: false
+        default: "summary"
+      cores:
+        description: "Number of parallel cores"
+        required: false
+        default: "4"
+
+jobs:
+  check-r-syntax:
+    name: Check R Syntax
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.4"
+          use-public-rspm: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev libharfbuzz-dev libfribidi-dev
+
+      - name: Install R package dependencies
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          working-directory: flualign
+          extra-packages: |
+            any::data.table
+            any::future
+            any::future.apply
+            any::R.utils
+
+      - name: Check R syntax in R/ directory
+        run: |
+          Rscript -e "
+          r_files <- list.files('R', pattern = '\\\\.R$', full.names = TRUE, recursive = TRUE)
+          cat('Checking', length(r_files), 'R files for syntax errors...\n')
+          errors <- character(0)
+          for (f in r_files) {
+            result <- tryCatch(
+              { parse(f); NULL },
+              error = function(e) paste0(f, ': ', conditionMessage(e))
+            )
+            if (!is.null(result)) errors <- c(errors, result)
+          }
+          if (length(errors) > 0) {
+            cat('Syntax errors found:\n')
+            cat(paste(errors, collapse = '\n'), '\n')
+            quit(status = 1)
+          }
+          cat('All R files parsed successfully.\n')
+          "
+
+      - name: Check R syntax in scripts/ directory
+        run: |
+          Rscript -e "
+          r_files <- list.files('scripts', pattern = '\\\\.R$', full.names = TRUE, recursive = TRUE)
+          cat('Checking', length(r_files), 'script files for syntax errors...\n')
+          errors <- character(0)
+          for (f in r_files) {
+            result <- tryCatch(
+              { parse(f); NULL },
+              error = function(e) paste0(f, ': ', conditionMessage(e))
+            )
+            if (!is.null(result)) errors <- c(errors, result)
+          }
+          if (length(errors) > 0) {
+            cat('Syntax errors found:\n')
+            cat(paste(errors, collapse = '\n'), '\n')
+            quit(status = 1)
+          }
+          cat('All script files parsed successfully.\n')
+          "
+
+      - name: Install flualign package
+        run: |
+          Rscript -e "remotes::install_local('flualign', dependencies = TRUE)"
+        env:
+          R_REMOTES_NO_ERRORS_FROM_WARNINGS: "true"
+
+  run-pipeline:
+    name: Run Pipeline (${{ github.event.inputs.mode || 'summary' }})
+    runs-on: ubuntu-latest
+    # Only run full pipeline when data is available (workflow_dispatch)
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.4"
+          use-public-rspm: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev libharfbuzz-dev libfribidi-dev
+
+      - name: Install R package dependencies
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          working-directory: flualign
+          extra-packages: |
+            any::data.table
+            any::future
+            any::future.apply
+            any::R.utils
+
+      - name: Create results directory
+        run: mkdir -p results
+
+      - name: Run auto_from_rdata.R (summary mode, no data required)
+        if: ${{ github.event.inputs.mode == 'summary' || github.event.inputs.mode == '' }}
+        run: |
+          if [ -f "data/inputs.RData" ]; then
+            RDATA="data/inputs.RData"
+          elif [ -f "data/data.RData" ]; then
+            RDATA="data/data.RData"
+          else
+            echo "No .RData file found in data/. Skipping pipeline run."
+            echo "To run the pipeline, upload data/inputs.RData to the repository (or as an artifact)."
+            exit 0
+          fi
+          Rscript scripts/auto_from_rdata.R \
+            --rdata="${RDATA}" \
+            --out=results \
+            --mode=summary \
+            --verbose
+
+      - name: Run auto_from_rdata.R (all mode)
+        if: ${{ github.event.inputs.mode == 'all' }}
+        run: |
+          CORES="${{ github.event.inputs.cores }}"
+          if [ -f "data/inputs.RData" ]; then
+            RDATA="data/inputs.RData"
+          elif [ -f "data/data.RData" ]; then
+            RDATA="data/data.RData"
+          else
+            echo "No .RData file found in data/. Skipping pipeline run."
+            echo "To run the full pipeline, upload data/inputs.RData as a repository secret or artifact."
+            exit 0
+          fi
+          Rscript scripts/auto_from_rdata.R \
+            --rdata="${RDATA}" \
+            --out=results \
+            --mode=all \
+            --cores=${CORES:-4} \
+            --verbose
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-results
+          path: results/
+          if-no-files-found: ignore
