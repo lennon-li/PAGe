@@ -22,9 +22,15 @@ if (!file.exists(rdata_path) && file.exists("data/data.RData")) {
 out_dir    <- get_kv("--out",   "results")
 mode       <- tolower(get_kv("--mode", "summary"))
 cores_str  <- get_kv("--cores", NULL)
-ncores     <- if (!is.null(cores_str)) as.integer(cores_str) else parallel::detectCores(logical = TRUE)
+if (!is.null(cores_str) && grepl("^[0-9]+$", trimws(cores_str))) {
+  ncores <- as.integer(cores_str)
+} else {
+  if (!is.null(cores_str))
+    warning("--cores value '", cores_str, "' is not a positive integer; using detectCores().")
+  ncores <- parallel::detectCores(logical = TRUE)
+}
 if (is.na(ncores) || ncores < 1L) {
-  warning("--cores value is invalid or detection failed; defaulting to 10 cores.")
+  warning("Core detection failed; defaulting to 10 cores.")
   ncores <- 10L
 }
 verbose    <- has_flag("--verbose")

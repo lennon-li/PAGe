@@ -26,6 +26,7 @@ Imports:
     mgcv,
     gamm4,
     plotly,
+    lubridate,
     MMWRweek
 Suggests:
     knitr,
