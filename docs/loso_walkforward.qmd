@@ -396,6 +396,25 @@ We evaluate each `k_ref` using **prospective peak MAE**: for each `(season, eval
 
 This gives one error per `(season, eval_week)`. We then take a **Weibull-weighted average** across all rows, pooled over all seasons, using $w(t) = \exp(-(0.1\,t)^2)$ where $t = \text{eval\_week} - \text{iWeek\_true}$ (weeks since true ignition lock). This weight stays near 1 for the first ~5 weeks (when all early predictions are similarly uncertain) and then decays sharply, up-weighting early-season accuracy where it matters most.
 
+```{r weight-viz}
+#| echo: false
+#| warning: false
+
+t_seq <- seq(0, 20, by = 0.1)
+plot_ly(
+  x = t_seq,
+  y = exp(-(0.1 * t_seq)^2),
+  type = "scatter", mode = "lines",
+  line = list(color = "firebrick", width = 2.5),
+  name = "Weibull p=2, λ=0.1"
+) %>%
+  layout(
+    title  = "Weibull weight w(t) = exp(-(0.1·t)²)",
+    xaxis  = list(title = "t — weeks since ignition lock", dtick = 2),
+    yaxis  = list(title = "Relative weight", range = c(0, 1.05))
+  )
+```
+
 Results are cached separately in `../data/k_ref_tuning.rds`.
 
 ```{r k-ref-tuning}

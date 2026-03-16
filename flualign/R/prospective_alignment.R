@@ -100,8 +100,7 @@ run_alignment_prospective <- function(
   level           = 0.95,
   min_obs         = 4L,
   cal             = NULL,   # output of fit_peak_calibration(); NULL = no calibration
-  curvature_ratio = 1.0,    # passed to fit_tau_delta() delta curvature gate
-  offset          = -1L     # passed to run_ignition_weekly() when ign_out is NULL
+  curvature_ratio = 1.0     # passed to fit_tau_delta() delta curvature gate
 ) {
 
   # Helper: early return in pre-ignition state
@@ -136,8 +135,7 @@ run_alignment_prospective <- function(
       currentSeason  = currentSeason,
       ign_fit_or_gam = NULL,
       params         = params,
-      start_week     = 1L,
-      offset         = offset
+      start_week     = 1L
     )
   }
 
@@ -151,13 +149,8 @@ run_alignment_prospective <- function(
   ign_week_locked <- as.integer(ign_out$ign_week_locked)
 
   # --- Step 3: Re-anchor data to alignment (newWeek) space ---
-  # Apply TAU_SHIFT to pre-correct the systematic tau bias learned from training.
-  # Subtracting TAU_SHIFT from the effective anchor shifts the data left in
-  # newWeek space so the optimizer converges near tau = 0 instead of tau ≈ TAU_SHIFT.
-  tau_shift  <- if (!is.null(hyper$TAU_SHIFT)) round(hyper$TAU_SHIFT) else 0L
-  eff_anchor <- ref$anchorWeek - tau_shift
   currentD <- currentSeason %>%
-    dplyr::mutate(newWeek = as.integer(.data$weekF) - iWeek_hat + eff_anchor)
+    dplyr::mutate(newWeek = as.integer(.data$weekF) - iWeek_hat + ref$anchorWeek)
 
   # --- Step 4: Guard minimum observations ---
   if (nrow(currentD) < as.integer(min_obs))
@@ -220,9 +213,9 @@ run_alignment_prospective <- function(
     t_peak_ci_use <- res$peak$t_peak_ci
   }
 
-  peak_weekF    <- round(t_peak_use       - eff_anchor + iWeek_hat)
-  peak_weekF_lo <- round(t_peak_ci_use[1] - eff_anchor + iWeek_hat)
-  peak_weekF_hi <- round(t_peak_ci_use[2] - eff_anchor + iWeek_hat)
+  peak_weekF    <- round(t_peak_use       - ref$anchorWeek + iWeek_hat)
+  peak_weekF_lo <- round(t_peak_ci_use[1] - ref$anchorWeek + iWeek_hat)
+  peak_weekF_hi <- round(t_peak_ci_use[2] - ref$anchorWeek + iWeek_hat)
 
   # --- Step 9: State ---
   state <- if (pk$peak_passed) "post_peak" else "aligning"

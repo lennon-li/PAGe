@@ -272,7 +272,6 @@ loso_walkforward <- function(allD,
                               n_cores         = parallel::detectCores() - 1L,
                               min_obs         = 4L,
                               curvature_ratio = 1.0,
-                              offset          = -1L,
                               verbose         = TRUE) {
 
   all_seasons <- sort(unique(as.character(allD$season)))
@@ -352,8 +351,7 @@ loso_walkforward <- function(allD,
       currentSeason  = raw_test_D,
       ign_fit_or_gam = NULL,
       params         = params,
-      start_week     = det_start,
-      offset         = offset
+      start_week     = det_start
     )
 
     # --- resolve walk_start for this season ---
@@ -384,7 +382,6 @@ loso_walkforward <- function(allD,
     .use_ci          <- use_ci
     .buffer_weeks    <- buffer_weeks
     .curvature_ratio <- curvature_ratio
-    .offset          <- offset
 
     # --- 4. Walk-forward: parallelise over eval_weeks ---
     week_results <- furrr::future_map(eval_weeks_s, function(ew) {
@@ -403,8 +400,7 @@ loso_walkforward <- function(allD,
         allow_scale     = .allow_scale,
         level           = .level,
         min_obs         = .min_obs,
-        curvature_ratio = .curvature_ratio,
-        offset          = .offset
+        curvature_ratio = .curvature_ratio
       )
 
       if (ap$state == "pre_ignition") {
