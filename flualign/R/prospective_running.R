@@ -172,24 +172,39 @@ resolve_week_override <- function(week_est,
 #' @param start_week Integer. First \code{weekF} to start producing output rows.
 #'   Earlier weeks are still used as history when slicing \code{weekF <= w}.
 #' @param week_col Name of the within-season week column in \code{currentSeason}.
+#' @param offset Integer. Adjustment applied to the locked ignition estimate before
+#'   returning: \code{iWeek_hat_locked = iWeek_hat_locked_raw + offset}.
+#'   Default \code{-1L} shifts the reported ignition one week \emph{earlier} than
+#'   the raw detector output (i.e., \code{raw - 1}), correcting for the tendency
+#'   of threshold-based detectors to fire one week late.
 #'
 #' @return A list with components \code{df}, \code{iWeek_hat_dynamic_last},
 #'   \code{iWeek_hat_locked}, \code{ign_week_locked}.
+#'   \code{iWeek_hat_locked} has the \code{offset} applied; the raw detector value
+#'   is available in \code{iWeek_hat_locked_raw}.
 #' @export
 run_ignition_weekly <- function(currentSeason,
-                                ign_fit_or_gam,
+                                ign_fit_or_gam = NULL,
                                 params,
                                 start_week = 5L,
-                                week_col = "weekF") {
+                                week_col = "weekF",
+                                offset = -1L) {
   stopifnot(is.data.frame(currentSeason), is.list(params))
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   if (!requireNamespace("tibble", quietly = TRUE)) stop("Please install tibble.")
-  
+
   if (!exists("detectIgnition_oneSeason", mode = "function")) {
     stop("detectIgnition_oneSeason() was not found. Source your Stage-1 file before calling this function.")
   }
-  
-  gam_cls <- get_gam_cls(ign_fit_or_gam)
+
+  use_cls <- isTRUE(params$use_cls)
+  if (!is.null(ign_fit_or_gam)) {
+    gam_cls <- get_gam_cls(ign_fit_or_gam)
+  } else if (use_cls) {
+    stop("ign_fit_or_gam must be provided when params$use_cls = TRUE")
+  } else {
+    gam_cls <- NULL
+  }
   
   d0 <- dplyr::as_tibble(currentSeason) %>%
     dplyr::transmute(
@@ -219,6 +234,7 @@ run_ignition_weekly <- function(currentSeason,
     return(list(
       df = out_df,
       iWeek_hat_dynamic_last = NA_integer_,
+      iWeek_hat_locked_raw = NA_integer_,
       iWeek_hat_locked = NA_integer_,
       ign_week_locked = NA_integer_
     ))
@@ -227,7 +243,10 @@ run_ignition_weekly <- function(currentSeason,
   rows <- lapply(weeks_eval, function(w) {
     d_now <- d0 %>%
       dplyr::filter(.data$weekF <= w) %>%
-      dplyr::mutate(p_cls_p = as.numeric(stats::predict(gam_cls, newdata = ., type = "response")))
+      dplyr::mutate(p_cls_p = if (!is.null(gam_cls))
+        as.numeric(stats::predict(gam_cls, newdata = ., type = "response"))
+      else
+        0)
     
     det <- detectIgnition_oneSeason(as.data.frame(d_now), params = params)
     now <- det$now %||% data.frame()
@@ -280,12 +299,14 @@ run_ignition_weekly <- function(currentSeason,
   ign_week_locked <- suppressWarnings(min(df$weekF[df$ignite_ok_now %in% TRUE], na.rm = TRUE))
   ign_week_locked <- ifelse(is.infinite(ign_week_locked), NA_integer_, as.integer(ign_week_locked))
   
-  iwh_locked <- suppressWarnings(min(df$iWeek_hat_dynamic, na.rm = TRUE))
-  iwh_locked <- ifelse(is.infinite(iwh_locked), NA_integer_, as.integer(iwh_locked))
-  
+  iwh_locked_raw <- suppressWarnings(min(df$iWeek_hat_dynamic, na.rm = TRUE))
+  iwh_locked_raw <- ifelse(is.infinite(iwh_locked_raw), NA_integer_, as.integer(iwh_locked_raw))
+  iwh_locked <- if (is.na(iwh_locked_raw)) NA_integer_ else as.integer(iwh_locked_raw + as.integer(offset))
+
   list(
     df = df,
     iWeek_hat_dynamic_last = df$iWeek_hat_dynamic[nrow(df)],
+    iWeek_hat_locked_raw = iwh_locked_raw,
     iWeek_hat_locked = iwh_locked,
     ign_week_locked = ign_week_locked
   )

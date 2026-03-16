@@ -182,24 +182,39 @@ resolve_week_override <- function(week_est,
 #' @param start_week Integer. First \code{weekF} to start producing output rows.
 #'   Earlier weeks are still used as history when slicing \code{weekF <= w}.
 #' @param week_col Name of the within-season week column in \code{currentSeason}.
+#' @param offset Integer. Adjustment applied to the locked ignition estimate before
+#'   returning: \code{iWeek_hat_locked = iWeek_hat_locked_raw + offset}.
+#'   Default \code{-1L} shifts the reported ignition one week \emph{earlier} than
+#'   the raw detector output (i.e., \code{raw - 1}), correcting for the tendency
+#'   of threshold-based detectors to fire one week late.
 #'
 #' @return A list with components \code{df}, \code{iWeek_hat_dynamic_last},
 #'   \code{iWeek_hat_locked}, \code{ign_week_locked}.
+#'   \code{iWeek_hat_locked} has the \code{offset} applied; the raw detector value
+#'   is available in \code{iWeek_hat_locked_raw}.
 #' @export
 run_ignition_weekly <- function(currentSeason,
-                                ign_fit_or_gam,
+                                ign_fit_or_gam = NULL,
                                 params,
                                 start_week = 5L,
-                                week_col = "weekF") {
+                                week_col = "weekF",
+                                offset = -1L) {
   stopifnot(is.data.frame(currentSeason), is.list(params))
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   if (!requireNamespace("tibble", quietly = TRUE)) stop("Please install tibble.")
-  
+
   if (!exists("detectIgnitionBySeason_M0v2", mode = "function")) {
     stop("detectIgnitionBySeason_M0v2() was not found. Source your Stage-1 file before calling this function.")
   }
 
-  gam_cls <- get_gam_cls(ign_fit_or_gam)
+  use_cls <- isTRUE(params$use_cls)
+  if (!is.null(ign_fit_or_gam)) {
+    gam_cls <- get_gam_cls(ign_fit_or_gam)
+  } else if (use_cls) {
+    stop("ign_fit_or_gam must be provided when params$use_cls = TRUE")
+  } else {
+    gam_cls <- NULL
+  }
   
   d0 <- dplyr::as_tibble(currentSeason) %>%
     dplyr::transmute(
@@ -229,6 +244,7 @@ run_ignition_weekly <- function(currentSeason,
     return(list(
       df = out_df,
       iWeek_hat_dynamic_last = NA_integer_,
+      iWeek_hat_locked_raw = NA_integer_,
       iWeek_hat_locked = NA_integer_,
       ign_week_locked = NA_integer_
     ))
@@ -237,7 +253,10 @@ run_ignition_weekly <- function(currentSeason,
   rows <- lapply(weeks_eval, function(w) {
     d_now <- d0 %>%
       dplyr::filter(.data$weekF <= w) %>%
-      dplyr::mutate(p_cls_p = as.numeric(stats::predict(gam_cls, newdata = ., type = "response")))
+      dplyr::mutate(p_cls_p = if (!is.null(gam_cls))
+        as.numeric(stats::predict(gam_cls, newdata = ., type = "response"))
+      else
+        0)
     
     det <- detectIgnitionBySeason_M0v2(
       ign_fit      = as.data.frame(d_now),
@@ -296,12 +315,14 @@ run_ignition_weekly <- function(currentSeason,
   ign_week_locked <- suppressWarnings(min(df$weekF[df$ignite_ok_now %in% TRUE], na.rm = TRUE))
   ign_week_locked <- ifelse(is.infinite(ign_week_locked), NA_integer_, as.integer(ign_week_locked))
   
-  iwh_locked <- suppressWarnings(min(df$iWeek_hat_dynamic, na.rm = TRUE))
-  iwh_locked <- ifelse(is.infinite(iwh_locked), NA_integer_, as.integer(iwh_locked))
-  
+  iwh_locked_raw <- suppressWarnings(min(df$iWeek_hat_dynamic, na.rm = TRUE))
+  iwh_locked_raw <- ifelse(is.infinite(iwh_locked_raw), NA_integer_, as.integer(iwh_locked_raw))
+  iwh_locked <- if (is.na(iwh_locked_raw)) NA_integer_ else as.integer(iwh_locked_raw + as.integer(offset))
+
   list(
     df = df,
     iWeek_hat_dynamic_last = df$iWeek_hat_dynamic[nrow(df)],
+    iWeek_hat_locked_raw = iwh_locked_raw,
     iWeek_hat_locked = iwh_locked,
     ign_week_locked = ign_week_locked
   )
@@ -368,16 +389,20 @@ stage2_extract_hyperparams <- function(best_mean_nll) {
 #'
 #' @param currentSeason One-season data.frame with at least columns \code{weekF}, \code{y},
 #'   and either \code{N} or \code{neg}. Optional \code{date} column (see \code{date_col}).
+#' @param kit Optional prospective kit from \code{\link{make_prospective_kit}}. When supplied,
+#'   \code{template_df}, \code{best_mean_nll}, \code{align}, \code{anchorWeek},
+#'   \code{pre_buffer}, and \code{deriv_k} are extracted from it automatically; any of those
+#'   arguments passed explicitly will still override the kit values.
 #' @param template_df Data frame with columns \code{newWeek} (integer) and \code{fit}
-#'   (numeric in (0,1)) defining the reference/template curve.
+#'   (numeric in (0,1)) defining the reference/template curve. Extracted from \code{kit} when \code{NULL}.
 #' @param best_mean_nll Tuned Stage-2 hyperparameters (list or 1-row data.frame) that may
-#'   contain \code{delta} (or \code{shift}), \code{K}, and \code{leads}.
+#'   contain \code{delta} (or \code{shift}), \code{K}, and \code{leads}. Extracted from \code{kit} when \code{NULL}.
 #' @param iWeek_hat Integer ignition week estimate used for phase and alignment.
 #' @param align Logical. If TRUE, uses aligned \code{newWeek = weekF - iWeek_hat + anchorWeek}.
-#'   If FALSE, uses \code{newWeek = weekF}.
-#' @param anchorWeek Integer anchor week used when \code{align=TRUE}.
-#' @param pre_buffer Integer >= 0. Weeks before ignition included for \code{toFit==1} logic.
-#' @param deriv_k Integer window size passed to \code{add_prospective_derivs_link()}.
+#'   If FALSE, uses \code{newWeek = weekF}. Extracted from \code{kit$defaults} when \code{NULL}.
+#' @param anchorWeek Integer anchor week used when \code{align=TRUE}. Extracted from \code{kit$defaults} when \code{NULL}.
+#' @param pre_buffer Integer >= 0. Weeks before ignition included for \code{toFit==1} logic. Extracted from \code{kit$defaults} when \code{NULL}.
+#' @param deriv_k Integer window size passed to \code{add_prospective_derivs_link()}. Extracted from \code{kit$defaults} when \code{NULL}.
 #' @param n_weeks Integer. Length of the full season axis (52 or 53).
 #' @param eps Numeric small constant passed to derivative calculations.
 #' @param date_col Character. Name of the date column in \code{currentSeason} (default tries \code{"date"}).
@@ -391,17 +416,33 @@ stage2_extract_hyperparams <- function(best_mean_nll) {
 #' @export
 build_stage2_pseudo_prospective_list <- function(
     currentSeason,
-    template_df,
-    best_mean_nll,
+    kit           = NULL,
+    template_df   = NULL,
+    best_mean_nll = NULL,
     iWeek_hat,
-    align = TRUE,
-    anchorWeek = 19L,
-    pre_buffer = 1L,
-    deriv_k = 5L,
+    align      = NULL,
+    anchorWeek = NULL,
+    pre_buffer = NULL,
+    deriv_k    = NULL,
     n_weeks = 53L,
     eps = 1e-6,
     date_col = if ("date" %in% names(currentSeason)) "date" else NULL
 ) {
+  # ---- extract from kit when individual args not supplied ----
+  if (!is.null(kit)) {
+    if (is.null(template_df))   template_df   <- kit$stage2$template_df
+    if (is.null(best_mean_nll)) best_mean_nll <- kit$stage2$best_mean_nll
+    if (is.null(align))         align         <- kit$defaults$align
+    if (is.null(anchorWeek))    anchorWeek    <- kit$defaults$anchorWeek
+    if (is.null(pre_buffer))    pre_buffer    <- kit$defaults$pre_buffer
+    if (is.null(deriv_k))       deriv_k       <- kit$defaults$deriv_k
+  }
+  # ---- apply non-kit defaults ----
+  if (is.null(align))      align      <- TRUE
+  if (is.null(anchorWeek)) anchorWeek <- 19L
+  if (is.null(pre_buffer)) pre_buffer <- 1L
+  if (is.null(deriv_k))    deriv_k    <- 5L
+
   stopifnot(is.data.frame(currentSeason), is.data.frame(template_df))
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   if (!exists("add_prospective_derivs_link", mode = "function")) {
@@ -569,7 +610,14 @@ build_stage2_pseudo_prospective_list <- function(
 #' @param alpha_state Numeric in (0,1). If \code{z_ema} is missing, it is computed as an EWMA
 #'   on the logit scale using this alpha. Defaults to \code{pp$meta$alpha_state} if present, else 0.3.
 #' @param ref_col Character. Column name used as background reference curve (default \code{"template_fit_shift"}).
+#' @param exclude Character vector of additional smooth terms to exclude during prediction (passed to
+#'   \code{mgcv::predict.gam}'s \code{exclude} argument). Use this to pass
+#'   \code{kit$stage2$exclude_terms} when predicting for a brand-new season. Combined with the
+#'   terms excluded by \code{exclude_season_re}.
 #' @param exclude_season_re Logical. If TRUE (default), excludes \code{s(season)} during prediction.
+#' @param cal Optional Platt calibration object from \code{\link[prospective_training]{train_calib_platt}}
+#'   (named vectors \code{$a}, \code{$b}, scalar \code{$eps}). When supplied, adds \code{p_cal_h1},
+#'   \code{p_cal_h2} columns to each snapshot data.frame via per-lead logistic rescaling.
 #' @param ci_level Confidence level for intervals (default 0.95).
 #' @param date_step_days Integer days per week when imputing missing dates (default 7).
 #'
@@ -583,7 +631,9 @@ stage2_predict_series <- function(pp,
                                   horizons = c(1L, 2L),
                                   alpha_state = NULL,
                                   ref_col = "template_fit_shift",
+                                  exclude = NULL,
                                   exclude_season_re = TRUE,
+                                  cal = NULL,
                                   interval = c("pi", "ci"),
                                   level = 0.95,
                                   pi_B = 2000L,
@@ -611,17 +661,34 @@ stage2_predict_series <- function(pp,
   
   lev_lead   <- tryCatch(levels(stage2_fit$model$lead),   error = function(e) NULL)
   lev_season <- tryCatch(levels(stage2_fit$model$season), error = function(e) NULL)
-  ex <- if (isTRUE(exclude_season_re)) "s(season)" else NULL
+  ex <- unique(c(if (isTRUE(exclude_season_re)) "s(season)" else NULL, exclude))
   
   zcrit <- stats::qnorm((1 + level) / 2)
   want_leads <- paste0("h", as.integer(horizons))
-  if (!is.null(lev_lead)) want_leads <- intersect(want_leads, lev_lead)
+  if (!is.null(lev_lead)) {
+    if (!any(want_leads %in% lev_lead))
+      want_leads <- as.character(as.integer(horizons))   # model uses "1","2" not "h1","h2"
+    want_leads <- intersect(want_leads, lev_lead)
+  }
   lead_to_int <- function(x) as.integer(sub("^h", "", as.character(x)))
   
   ewma <- function(z, alpha) {
-    out <- numeric(length(z))
-    out[1] <- z[1]
-    if (length(z) > 1) for (i in 2:length(z)) out[i] <- alpha * z[i] + (1 - alpha) * out[i - 1]
+    n <- length(z)
+    out <- rep(NA_real_, n)
+    ok <- which(is.finite(z) & !is.na(z))
+    if (!length(ok)) return(out)
+
+    first_ok <- ok[1]
+    out[first_ok] <- z[first_ok]
+    if (first_ok < n) {
+      for (i in seq.int(first_ok + 1L, n)) {
+        if (is.finite(z[i]) && !is.na(z[i])) {
+          out[i] <- alpha * z[i] + (1 - alpha) * out[i - 1L]
+        } else {
+          out[i] <- out[i - 1L]
+        }
+      }
+    }
     out
   }
   
@@ -737,13 +804,27 @@ stage2_predict_series <- function(pp,
       d2$season <- factor(as.character(d2$season), levels = lev_season)
       d2$season[is.na(d2$season)] <- lev_season[1]
     }
+    # season_h is a fs-smooth grouping variable present in the training model frame
+    # but absent for new-season prediction; inject a dummy (first training level) so
+    # model.frame succeeds — its smooth term must be listed in `ex` to zero it out.
+    if (!"season_h" %in% names(d2) && "season_h" %in% names(stage2_fit$model)) {
+      lev_season_h <- tryCatch(levels(stage2_fit$model$season_h), error = function(e) NULL)
+      d2$season_h <- if (!is.null(lev_season_h)) factor(lev_season_h[1], levels = lev_season_h) else factor("current")
+    }
     
-    idx <- which(!is.na(d2$toFit) & d2$toFit == 1L & as.character(d2$lead) %in% want_leads)
+    d2_lead_int    <- as.character(lead_to_int(d2$lead))
+    want_leads_int <- as.character(as.integer(sub("^h", "", want_leads)))
+    idx <- which(!is.na(d2$toFit) & d2$toFit == 1L & d2_lead_int %in% want_leads_int)
     
     pred_wide <- NULL
     if (length(idx)) {
       nd <- d2[idx, , drop = FALSE]
-      if (!is.null(lev_lead)) nd$lead <- factor(as.character(nd$lead), levels = lev_lead)
+      if (!is.null(lev_lead)) {
+        nd_lead_chr <- as.character(nd$lead)
+        if (!any(grepl("^h", lev_lead)) && any(grepl("^h", nd_lead_chr)))
+          nd_lead_chr <- sub("^h", "", nd_lead_chr)   # "h1" -> "1" to match model levels
+        nd$lead <- factor(nd_lead_chr, levels = lev_lead)
+      }
       
       need <- c("logit_f_eff", "z_ema", "logN_now", "d1_now", "d2_now", "lead", "season")
       miss <- setdiff(need, names(nd))
@@ -778,7 +859,7 @@ stage2_predict_series <- function(pp,
       
       pred_long <- tibble::tibble(
         weekF = weekF_target,
-        lead  = as.character(nd$lead),
+        lead  = paste0("h", lead_to_int(nd$lead)),   # always "h1","h2" regardless of model encoding
         p_hat = p_hat,
         p_lo  = p_lo,
         p_hi  = p_hi
@@ -790,6 +871,19 @@ stage2_predict_series <- function(pp,
           values_from = c(.data$p_hat, .data$p_lo, .data$p_hi),
           names_glue  = "{.value}_{lead}"
         )
+
+      # ---- offline Platt calibration (optional) ----
+      if (!is.null(cal) && !is.null(cal$a) && !is.null(cal$b)) {
+        eps_c <- cal$eps %||% 1e-6
+        for (h in want_leads) {
+          col_hat <- paste0("p_hat_", h)
+          col_cal <- paste0("p_cal_", h)
+          if (col_hat %in% names(pred_wide) && h %in% names(cal$a)) {
+            lp <- stats::qlogis(pmin(pmax(as.numeric(pred_wide[[col_hat]]), eps_c), 1 - eps_c))
+            pred_wide[[col_cal]] <- stats::plogis(cal$a[[h]] + cal$b[[h]] * lp)
+          }
+        }
+      }
     }
     
     w_max_obs  <- suppressWarnings(max(base$weekF, na.rm = TRUE)); if (!is.finite(w_max_obs)) w_max_obs <- 1L
@@ -850,8 +944,9 @@ plot_stage2 <- function(ppp,
                         ncol = 4,
                         show_ref = TRUE,
                         show_pi = TRUE,
+                        use_cal = FALSE,
                         interval = c("pi", "ci", "none"),
-                        h_plot = c("h1", "h2"),   # NEW: choose horizons to plot
+                        h_plot = c("h1", "h2"),
                         base_size = 10) {
   stopifnot(is.list(ppp), length(ppp) > 0)
   interval <- match.arg(interval)
@@ -897,7 +992,18 @@ plot_stage2 <- function(ppp,
       ref <- dplyr::tibble(snapshot = snap, x = d[[xvar]], p_ref = as.numeric(d$p_ref))
     }
     
-    pred <- d %>%
+    # when use_cal=TRUE and p_cal_h* are present, use them in place of p_hat_h*
+    d_pred <- d
+    if (isTRUE(use_cal)) {
+      for (h in c("h1", "h2")) {
+        cal_col <- paste0("p_cal_", h)
+        hat_col <- paste0("p_hat_", h)
+        if (cal_col %in% names(d_pred) && any(is.finite(d_pred[[cal_col]])))
+          d_pred[[hat_col]] <- d_pred[[cal_col]]
+      }
+    }
+
+    pred <- d_pred %>%
       dplyr::select(dplyr::all_of(c(xvar,
                                     "p_hat_h1","p_lo_h1","p_hi_h1",
                                     "p_hat_h2","p_lo_h2","p_hi_h2"))) %>%
@@ -981,14 +1087,26 @@ plot_stage2 <- function(ppp,
         ggplot2::aes(x = .data$x, y = .data$p_hat, color = .data$h, group = .data$h),
         linewidth = 0.95
       )
+      # dot at the tip of each forecast line
+      pred_tips <- pred2 %>%
+        dplyr::group_by(.data$h) %>%
+        dplyr::slice_tail(n = 1L) %>%
+        dplyr::ungroup()
+      p <- p + ggplot2::geom_point(
+        data = pred_tips,
+        ggplot2::aes(x = .data$x, y = .data$p_hat, color = .data$h),
+        size = 2.5, show.legend = FALSE
+      )
     }
-    
+
+    shape_vals <- c(h1 = 15L, h2 = 8L)[h_plot]
     if (nrow(truth)) {
       p <- p + ggplot2::geom_point(
         data = truth,
-        ggplot2::aes(x = .data$x, y = .data$p_true, color = .data$h, group = .data$h),
-        shape = 8, size = 2.5, stroke = 1.2
-      )
+        ggplot2::aes(x = .data$x, y = .data$p_true, shape = .data$h),
+        color = "black", size = 2.5, stroke = 1.2
+      ) +
+        ggplot2::scale_shape_manual(values = shape_vals, name = NULL, drop = TRUE)
     }
     
     p <- p + ggplot2::geom_vline(
@@ -1452,43 +1570,65 @@ plot_ignition_weekly_snapshots <- function(ign_out,
 }
 
 
-update_c_online <- function(d_obs, w_now,
-                            week_col = "newWeek",
-                            lead_col = "lead",
-                            y_col = "y_lead",
-                            N_col = "N_lead",
-                            eta_col = "eta_cal",   # logit(p_cal) per row
-                            k_pre = 0L,
-                            w_ign = NULL,
-                            lambda_c = 0,
-                            eps = 1e-6) {
-  stopifnot(requireNamespace("data.table", TRUE))
-  d <- data.table::as.data.table(d_obs)
-  
-  if (is.null(w_ign)) stop("Provide w_ign (ignition week) for the current season.")
-  w_start <- (w_ign - as.integer(k_pre))
-  
-  # use rows whose outcomes are known by w_now:
-  # for lead 1, need week <= w_now-1; for lead 2 need week <= w_now-2, etc.
-  lead_num <- if (is.numeric(d[[lead_col]])) d[[lead_col]] else ifelse(d[[lead_col]] == "h1", 1L, 2L)
-  d[, lead_num := lead_num]
-  
-  d <- d[get(week_col) >= w_start & get(week_col) <= w_now - lead_num]
-  d <- d[!is.na(get(y_col)) & !is.na(get(N_col)) & get(N_col) > 0 & !is.na(get(eta_col))]
-  
-  if (nrow(d) == 0L) return(0)  # no info yet -> no shift
-  
-  y  <- d[[y_col]]
-  N  <- d[[N_col]]
-  eta <- d[[eta_col]]
-  
-  # objective: negative penalized log-lik
-  obj <- function(c) {
-    p <- plogis(eta + c)
-    p <- pmin(pmax(p, eps), 1 - eps)
-    -sum(dbinom(y, size = N, prob = p, log = TRUE)) + lambda_c * c^2
+#' Align current-season data for weekly Stage-2 refit
+#'
+#' Formats a single current season's observed data into the same layout as
+#' \code{alignedD_prosp} so it can be row-bound and passed to
+#' \code{train_stage2_joint()} for a weekly refit.
+#'
+#' @param currentSeason data.frame with at least \code{weekF}, \code{y},
+#'   \code{N} (or \code{neg}), and optionally \code{p}.
+#' @param iWeek_used Integer. Detected ignition week (weekF scale).
+#' @param template_df data.frame with columns \code{newWeek} and \code{fit}
+#'   from \code{estimateRef()}.
+#' @param spec List. Stage-2 spec from \code{stage2_spec_from_tuning()}.
+#'   Used to compute \code{z_ema} and prospective derivatives with the same
+#'   hyperparameters used during training.
+#' @param season_label Character. Label for the current season (e.g.
+#'   \code{"2025-26"}). Defaults to \code{"current"}.
+#' @param eps Numeric. Clamping bound for logit transforms. Default \code{1e-6}.
+#'
+#' @return A data.table in \code{alignedD_prosp} format: columns
+#'   \code{season}, \code{weekF}, \code{y}, \code{N}, \code{p},
+#'   \code{iWeek_used}, \code{phase}, \code{newWeek}, \code{d1_link},
+#'   \code{d2_link}. Only rows with \code{weekF >= iWeek_used} are returned.
+#'
+#' @examples
+#' \dontrun{
+#' cur_aligned <- format_current_for_stage2(currentSeason, iWeek_used, template_df, spec_stage2_best)
+#' dat_refit <- dplyr::bind_rows(alignedD_prosp, cur_aligned)
+#' }
+#' @export
+format_current_for_stage2 <- function(currentSeason,
+                                      iWeek_used,
+                                      template_df,
+                                      spec,
+                                      season_label = "current",
+                                      eps = 1e-6) {
+  stopifnot(requireNamespace("data.table", quietly = TRUE))
+  d <- data.table::as.data.table(currentSeason)
+
+  # ensure N column
+  if (!"N" %in% names(d) && "neg" %in% names(d) && "y" %in% names(d)) {
+    d[, N := y + neg]
   }
-  
-  opt <- optim(par = 0, fn = obj, method = "BFGS")
-  unname(opt$par)
+  stopifnot(all(c("weekF", "y", "N") %in% names(d)))
+
+  if (!"p" %in% names(d)) d[, p := data.table::fifelse(N > 0, y / N, NA_real_)]
+
+  # alignment columns
+  iw <- as.integer(iWeek_used)
+  d[, season    := season_label]
+  d[, iWeek_used := iw]
+  d[, phase     := data.table::fifelse(weekF >= iw, 1L, 0L)]
+  d[, newWeek   := weekF - iw]
+
+  # keep only post-ignition rows (same as training)
+  pre_buf <- as.integer(spec$Kb %||% spec$pre_buffer %||% 0L)
+  d <- d[weekF >= iw - pre_buf]
+
+  # prospective derivatives (no look-ahead)
+  d <- add_prospective_derivs_link(d, k = 5L, eps = eps, min_obs = 4L)
+
+  d[]
 }

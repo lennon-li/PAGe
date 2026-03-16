@@ -17,10 +17,16 @@ learn_alignment_hyperparams <- function(
 
   seasons <- unique(theD$season)
 
+  # Unweighted NLL: consistent with safe_obj() which normalises by n_eff.
+  # Removing weights=n ensures LAMBDA_DELTA is on the same per-observation scale,
+  # so the penalty in safe_obj() is correctly calibrated against the data signal.
   nll_tau_delta <- function(t, y, n, tau, delta) {
     u <- (t - tau) / (1 + delta)
     g <- g_ref_safe(u)
-    fit <- glm(cbind(y, n - y) ~ g, family = binomial(), weights = n)
+    ok <- is.finite(g) & n > 0
+    if (sum(ok) < 2) return(1e9)
+    fit <- try(glm(cbind(y[ok], n[ok] - y[ok]) ~ g[ok], family = binomial()), silent = TRUE)
+    if (inherits(fit, "try-error")) return(1e9)
     -as.numeric(logLik(fit))
   }
 
@@ -91,11 +97,14 @@ learn_alignment_hyperparams <- function(
     TAU_BOUNDS <- pmax(pmin(TAU_BOUNDS, 20), -20)
   }
 
+  TAU_SHIFT <- stats::median(tau_delta_hist$tau_hat, na.rm = TRUE)
+
   list(
     TAU_BOUNDS = as.numeric(TAU_BOUNDS),
     DELTA_BOUNDS = as.numeric(DELTA_BOUNDS),
     WEEK_THRESHOLD_DELTA = as.numeric(WEEK_THRESHOLD_DELTA),
     LAMBDA_DELTA = as.numeric(LAMBDA_DELTA),
+    TAU_SHIFT = as.numeric(TAU_SHIFT),
     tau_delta_hist = tau_delta_hist,
     delta_stability = delta_stability,
     stability_summary = stability_summary,

@@ -1,0 +1,472 @@
+---
+title: "LOSO Walk-forward Alignment Evaluation"
+format:
+  html:
+    self-contained: true
+    toc: true
+    page-layout: full
+    grid:
+      body-width: 1200px
+---
+
+```{r setup}
+#| include: false
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(purrr)
+library(mgcv)
+library(gamm4)
+library(gratia)
+library(MMWRweek)
+library(plotly)
+library(gt)
+library(flualign)
+library(future)
+library(furrr)
+
+source("../R/estimateRef.R")
+source("../R/loso_alignment.R")
+source("../R/utils.R")
+source("../R/prospective_running.R")
+source("../R/prospective_alignment.R")
+startWeek <- 27
+
+tuned  <- readRDS("../data/stage1_tuning.rds")
+params <- tuned$best_params
+
+allD <- read.csv("../data/flu_testing_data.csv") %>%
+  select(season, week, year, start_year = seasonstart, date = week_start_date,
+         y = pos_flua, N = test_flu) %>%
+  mutate(neg = N - y, date = as.Date(date),
+         mmwr_year = ifelse(week >= 35L, start_year, start_year + 1L),
+         nW_true   = n_weeks_in_start_year(start_year),
+         weekF     = ((week - startWeek) %% nW_true) + 1L,
+         p = y / N) %>%
+  filter(!season %in% c("2011-12", "2020-21", "2021-22", "2025-26"))
+
+manual_labels <- c(
+  "2012-13" = 18L, "2013-14" = 20L, "2014-15" = 20L,
+  "2015-16" = 24L, "2016-17" = 19L, "2017-18" = 20L,
+  "2018-19" = 19L, "2019-20" = 22L, "2022-23" = 15L,
+  "2023-24" = 20L, "2024-25" = 23L
+)
+```
+
+## Run full LOSO walk-forward
+
+Results are cached to `../data/loso_wf_cache.rds`. Delete that file to force a rerun.
+
+Season **2015-16** is excluded as a known outlier (ignition fires at week 14 when the true ignition is week 24).
+
+```{r run-loso}
+#| message: false
+#| warning: false
+
+CACHE_FILE    <- "../data/loso_wf_cache.rds"
+EXCLUDE_SEAS  <- "2015-16"
+
+if (file.exists(CACHE_FILE)) {
+  wf <- readRDS(CACHE_FILE)
+  message("Loaded LOSO results from cache: ", CACHE_FILE)
+} else {
+  wf <- loso_walkforward(
+    allD            = allD,
+    params          = params,
+    manual_labels   = manual_labels,
+    exclude_seasons = EXCLUDE_SEAS,
+    k_deriv         = 10,
+    k_ref           = 8,     # tuned: k_ref=8 outperforms 10 and 12
+    n_weeks         = 52,
+    buffer_weeks    = 5L,    # generous — keeps params_df rows well past peak for tuning
+    curvature_ratio = 1.0,   # delta enabled when data curvature > lam_delta (per-obs scale)
+    n_cores         = parallel::detectCores() - 1L,
+    verbose         = TRUE
+  )
+  saveRDS(wf, CACHE_FILE)
+  message("LOSO complete. Saved to ", CACHE_FILE)
+}
+
+# flatten_list_cols is now called inside loso_walkforward()
+
+# Backfill peak_passed / peak_weekF if loaded from a pre-refactor cache
+if (!"peak_passed" %in% names(wf$params_df)) {
+  wf$params_df <- wf$params_df %>%
+    mutate(
+      peak_weekF    = round(t_peak - anchorWeek + iWeek_hat),
+      last_obs_newW = eval_week - iWeek_hat + anchorWeek,
+      peak_passed   = !is.na(last_obs_newW) & !is.na(t_peak_hi) &
+                      last_obs_newW >= t_peak_hi + 5  # use_ci=TRUE, buffer_weeks=5
+    ) %>%
+    select(-last_obs_newW)
+}
+```
+
+## Alignment parameters over time
+
+One trace per season. Each point = one prospective evaluation at that `eval_week`.
+
+```{r param-plots-setup}
+#| echo: false
+#| warning: false
+
+param_vars <- c("tau", "delta", "a", "b", "t_peak")
+param_labels <- c(
+  tau    = "τ — time shift",
+  delta  = "δ — scale",
+  a      = "a — lower asymptote",
+  b      = "b — upper asymptote",
+  t_peak = "t_peak — predicted peak (aligned)"
+)
+
+df_params <- wf$params_df %>%
+  filter(!is.na(iWeek_hat)) %>%
+  select(season, eval_week, all_of(param_vars))
+
+seasons_pal <- setNames(
+  RColorBrewer::brewer.pal(min(11, length(unique(df_params$season))), "Set3"),
+  sort(unique(df_params$season))
+)
+
+make_param_plot <- function(pvar) {
+  df <- df_params %>% select(season, eval_week, value = all_of(pvar))
+  plot_ly(df, x = ~eval_week, y = ~value, color = ~season,
+          colors = seasons_pal,
+          type = "scatter", mode = "lines+markers",
+          marker = list(size = 6), line = list(width = 1),
+          legendgroup = ~season, showlegend = TRUE) %>%
+    layout(
+      xaxis  = list(title = "Eval week"),
+      yaxis  = list(title = param_labels[[pvar]]),
+      legend = list(title = list(text = "Season"))
+    )
+}
+```
+
+::: {.panel-tabset}
+
+```{r param-tabs}
+#| echo: false
+#| warning: false
+#| results: asis
+
+param_tab_chunks <- lapply(param_vars, function(pvar) {
+  e <- new.env(parent = globalenv())
+  e$p <- make_param_plot(pvar)
+  knitr::knit_child(
+    text = c(sprintf("### %s", param_labels[[pvar]]), "",
+             "```{r echo=FALSE, warning=FALSE}", "p", "```", ""),
+    envir = e, quiet = TRUE
+  )
+})
+cat(unlist(param_tab_chunks), sep = "\n")
+```
+
+:::
+
+## Custom train/test split example
+
+The function supports explicit `train_seasons` / `test_seasons` to run a fixed split instead of full LOSO. Example (not evaluated):
+
+```{r custom-split-example}
+#| eval: false
+
+wf_custom <- loso_walkforward(
+  allD          = allD,
+  params        = params,
+  manual_labels = manual_labels,
+  train_seasons = c("2012-13", "2013-14", "2014-15", "2015-16", "2016-17"),
+  test_seasons  = c("2017-18", "2018-19", "2019-20"),
+  k_deriv       = 10,
+  k_ref         = 10,
+  n_weeks       = 52,
+  n_cores       = parallel::detectCores() - 1L,
+  verbose       = TRUE
+)
+```
+
+## Results by season
+
+Tabs run until 2 weeks after peak detection fires, so both the estimated and
+observed peaks are visible. The curve is **blue** left of the current-week line
+(fitted past) and **red** right of it (forecast). Vertical lines:
+dashed grey = ignition, solid black = current week, dashed red = estimated peak,
+solid blue = observed peak.
+
+```{r season-reports}
+#| echo: false
+#| warning: false
+#| results: asis
+
+all_seasons_wf <- sort(unique(wf$params_df$season))
+
+# True observed peak per season
+true_peaks_obs <- allD %>%
+  mutate(p_obs = y / N) %>%
+  filter(!is.na(p_obs), is.finite(p_obs), N > 0) %>%
+  group_by(season) %>%
+  slice_max(p_obs, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  select(season, true_peak_weekF = weekF)
+
+for (s in all_seasons_wf) {
+
+  cat(sprintf("\n## %s\n\n", s))
+
+  s_all <- wf$params_df %>%
+    filter(season == s, !is.na(iWeek_hat))
+
+  if (nrow(s_all) == 0) {
+    cat("*No forecasts generated (ignition never detected).*\n\n")
+    next
+  }
+
+  # Extend 2 weeks past the first peak-detection week so both peaks are visible
+  first_peak_ew <- s_all %>% filter(peak_passed) %>%
+    slice_min(eval_week, n = 1, with_ties = FALSE) %>% pull(eval_week)
+  cutoff_ew <- if (length(first_peak_ew) > 0) first_peak_ew + 2L else max(s_all$eval_week)
+
+  s_params <- s_all %>%
+    filter(eval_week <= cutoff_ew) %>%
+    select(eval_week, iWeek_hat, iWeek_true, peak_weekF,
+           tau, delta, t_peak, t_peak_lo, t_peak_hi, peak_passed)
+
+  # --- gt table ---
+  tbl <- gt(s_params) %>%
+    cols_label(
+      eval_week  = "Eval Week",
+      iWeek_hat  = "Ignition (hat)",
+      iWeek_true = "Ignition (true)",
+      peak_weekF = "Est. peak (wkF)",
+      tau        = "τ",
+      delta      = "δ",
+      t_peak     = "t_peak",
+      t_peak_lo  = "t_peak lo",
+      t_peak_hi  = "t_peak hi",
+      peak_passed = "Peak passed"
+    ) %>%
+    fmt_number(columns = c(tau, delta, t_peak, t_peak_lo, t_peak_hi), decimals = 2) %>%
+    fmt_integer(columns = c(eval_week, iWeek_hat, iWeek_true, peak_weekF)) %>%
+    tab_style(
+      style = cell_fill(color = "#f0f4ff"),
+      locations = cells_body(rows = seq(1, nrow(s_params), 2))
+    ) %>%
+    tab_style(
+      style = cell_fill(color = "#fff0f0"),
+      locations = cells_body(rows = peak_passed == TRUE)
+    ) %>%
+    tab_options(table.width = pct(100), table.font.size = "13px")
+
+  obs_s <- allD %>%
+    filter(season == s) %>%
+    mutate(p_obs = y / N)
+
+  true_peak_weekF <- true_peaks_obs %>%
+    filter(season == s) %>% pull(true_peak_weekF)
+  true_peak_weekF <- if (length(true_peak_weekF) > 0) true_peak_weekF[[1]] else NA_integer_
+
+  cat("::: {.panel-tabset}\n\n")
+
+  tab_chunks <- lapply(s_params$eval_week, function(ew) {
+
+    pw           <- wf$params_df %>% filter(season == s, eval_week == ew)
+    iWeek_hat_ew <- pw$iWeek_hat[[1]]
+    anchor_ew    <- pw$anchorWeek[[1]]
+    t_peak_ew    <- pw$t_peak[[1]]
+    peak_wF      <- pw$peak_weekF[[1]]
+
+    # Current week and peak positions in newWeek space
+    current_newW    <- ew - iWeek_hat_ew + anchor_ew
+    true_peak_newW  <- if (!is.na(true_peak_weekF))
+                         true_peak_weekF - iWeek_hat_ew + anchor_ew else NA_real_
+
+    # Smooth aligned curve: use only "forecast" kind (dense grid over 1:52)
+    # to get a smooth continuous line. Split at current_newW for blue/red.
+    fc_smooth <- wf$forecast_df %>%
+                   filter(season == s, eval_week == ew, kind == "forecast") %>%
+                   arrange(newWeek)
+    junction  <- fc_smooth$newWeek[which.min(abs(fc_smooth$newWeek - current_newW))]
+    fc_past   <- fc_smooth %>% filter(newWeek <= junction)
+    fc_future <- fc_smooth %>% filter(newWeek >= junction)
+
+    obs_aligned <- obs_s %>%
+      filter(weekF <= ew) %>%
+      mutate(newWeek = weekF - iWeek_hat_ew + anchor_ew)
+
+    y_max <- max(c(fc_smooth$p_hi, obs_aligned$p_obs), na.rm = TRUE) * 1.1
+    y_max <- max(y_max, 0.15)
+
+    plt <- plot_ly() %>%
+      # Single CI ribbon across the full smooth curve
+      add_ribbons(
+        data = fc_smooth, x = ~newWeek, ymin = ~p_lo, ymax = ~p_hi,
+        fillcolor = "rgba(150,150,150,0.15)",
+        line = list(color = "transparent"),
+        name = "95% CI", showlegend = TRUE
+      ) %>%
+      # Past curve (blue)
+      add_lines(
+        data = fc_past, x = ~newWeek, y = ~p_hat,
+        line = list(color = "steelblue", width = 2.5),
+        name = "Fitted (past)"
+      ) %>%
+      # Forecast curve (red) — shares junction point with past for continuity
+      add_lines(
+        data = fc_future, x = ~newWeek, y = ~p_hat,
+        line = list(color = "firebrick", width = 2.5),
+        name = "Forecast"
+      ) %>%
+      # Observed data points
+      add_markers(
+        data = obs_aligned, x = ~newWeek, y = ~p_obs,
+        marker = list(color = "black", size = 5, opacity = 0.75),
+        name = "Observed"
+      ) %>%
+      # Dashed grey: ignition
+      add_segments(
+        x = anchor_ew, xend = anchor_ew, y = 0, yend = y_max,
+        line = list(color = "grey50", dash = "dash", width = 1.5),
+        name = paste0("Ignition (wk ", iWeek_hat_ew, ")"), showlegend = TRUE
+      ) %>%
+      # Solid black: current eval week
+      add_segments(
+        x = current_newW, xend = current_newW, y = 0, yend = y_max,
+        line = list(color = "black", dash = "solid", width = 2),
+        name = paste0("Now (wk ", ew, ")"), showlegend = TRUE
+      ) %>%
+      # Dashed red: estimated peak
+      add_segments(
+        x = t_peak_ew, xend = t_peak_ew, y = 0, yend = y_max,
+        line = list(color = "firebrick", dash = "dash", width = 1.5),
+        name = paste0("Est. peak (wk ", peak_wF, ")"), showlegend = TRUE
+      )
+
+    # Solid blue: observed peak (only if known)
+    if (!is.na(true_peak_newW)) {
+      plt <- plt %>%
+        add_segments(
+          x = true_peak_newW, xend = true_peak_newW, y = 0, yend = y_max,
+          line = list(color = "steelblue", dash = "solid", width = 1.5),
+          name = paste0("Obs. peak (wk ", true_peak_weekF, ")"), showlegend = TRUE
+        )
+    }
+
+    plt <- plt %>%
+      layout(
+        title = paste0(s, " — newWeek ", current_newW,
+                       " (before-alignment wkF=", ew, ")",
+                       " | ign=", iWeek_hat_ew,
+                       " | est peak wk ", peak_wF),
+        xaxis = list(title = "newWeek (aligned)"),
+        yaxis = list(title = "Positivity", range = c(0, y_max)),
+        legend = list(orientation = "h", y = -0.20)
+      )
+
+    e <- new.env(parent = globalenv())
+    e$tab_plot <- plt
+    knitr::knit_child(
+      text = c(sprintf("### nW %d", current_newW), "",
+               "```{r echo=FALSE, warning=FALSE}", "tab_plot", "```", ""),
+      envir = e, quiet = TRUE
+    )
+  })
+
+  cat(unlist(tab_chunks), sep = "\n")
+
+  # --- Data tab ---
+  e_tbl <- new.env(parent = globalenv())
+  e_tbl$tbl_obj <- tbl
+  data_tab <- knitr::knit_child(
+    text = c("### Data", "", "```{r echo=FALSE}", "tbl_obj", "```", ""),
+    envir = e_tbl, quiet = TRUE
+  )
+  cat(data_tab)
+
+  cat("\n:::\n\n")
+}
+```
+
+## k_ref tuning
+
+`k_ref` controls the flexibility (maximum effective degrees of freedom) of the cyclic GAM reference curve. A value that is too low under-fits the curve shape; too high risks over-fitting to training seasons and producing poor generalization.
+
+### Metric description
+
+We evaluate each `k_ref` using **prospective peak MAE**: for each `(season, eval_week)` row from ignition lock through the true peak week, compute the absolute error between the (integer-rounded) model peak estimate and the true observed peak. Post-peak eval weeks are excluded (no actionable benefit once peak has passed).
+
+This gives one error per `(season, eval_week)`. We then take a **Weibull-weighted average** across all rows, pooled over all seasons, using $w(t) = \exp(-(0.1\,t)^2)$ where $t = \text{eval\_week} - \text{iWeek\_true}$ (weeks since true ignition lock). This weight stays near 1 for the first ~5 weeks (when all early predictions are similarly uncertain) and then decays sharply, up-weighting early-season accuracy where it matters most.
+
+Results are cached separately in `../data/k_ref_tuning.rds`.
+
+```{r k-ref-tuning}
+#| message: false
+#| warning: false
+
+K_CACHE <- "../data/k_ref_tuning.rds"
+
+if (file.exists(K_CACHE) && "mae_w_p1_l01" %in% names(readRDS(K_CACHE))) {
+  k_results <- readRDS(K_CACHE)
+  message("Loaded k_ref tuning from cache: ", K_CACHE)
+} else {
+  k_results <- tune_loso_k(
+    allD            = allD,
+    params          = params,
+    manual_labels   = manual_labels,
+    exclude_seasons = EXCLUDE_SEAS,
+    k_ref_grid      = c(6L, 8L, 10L, 12L, 15L, 20L),
+    n_weeks         = 52L,
+    n_cores         = parallel::detectCores() - 1L,
+    verbose         = TRUE
+  )
+  saveRDS(k_results, K_CACHE)
+  message("k_ref tuning complete. Saved to ", K_CACHE)
+}
+
+k_results
+```
+
+### k_ref tuning plots
+
+```{r k-ref-plots}
+#| echo: false
+#| warning: false
+
+plot_ly(k_results, x = ~k_ref, y = ~mae_w_p2_l01,
+        type = "scatter", mode = "lines+markers",
+        line   = list(color = "firebrick", width = 2),
+        marker = list(color = "firebrick", size = 7),
+        name   = "Weibull p=2, λ=0.1") %>%
+  layout(
+    xaxis  = list(title = "k_ref", dtick = 1),
+    yaxis  = list(title = "Prospective peak MAE (weeks)"),
+    title  = "Prospective peak MAE vs k_ref (Weibull p=2, λ=0.1)"
+  )
+```
+
+### k_ref summary table
+
+```{r k-ref-table}
+#| echo: false
+#| warning: false
+
+best_k <- k_results$k_ref[which.min(k_results$mae_w_p2_l01)]
+
+gt(k_results %>% dplyr::select(k_ref, mae_w_p2_l01, n_seasons)) %>%
+  cols_label(
+    k_ref        = "k_ref",
+    mae_w_p2_l01 = "Weibull p=2, λ=0.1 MAE",
+    n_seasons    = "N seasons"
+  ) %>%
+  fmt_number(columns = mae_w_p2_l01, decimals = 3) %>%
+  tab_style(
+    style     = list(cell_fill(color = "#d4edda"), cell_text(weight = "bold")),
+    locations = cells_body(rows = k_ref == best_k)
+  ) %>%
+  tab_footnote("Green = best k_ref. Metric: Weibull-weighted (p=2, λ=0.1) prospective peak MAE. Post-peak eval weeks excluded.") %>%
+  tab_options(table.width = pct(50), table.font.size = "13px")
+```
+
+## Peak detection tuning
+
+See [peak_detection_tuning.html](peak_detection_tuning.html) for the full
+tuning analysis (`use_ci` × `buffer_weeks` grid, heatmap, and recommendation).
