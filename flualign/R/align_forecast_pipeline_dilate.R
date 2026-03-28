@@ -12,8 +12,16 @@
 #' @param include_observed logical; whether to include observed part in pred_df.
 #' @param fallback_when_unstable logical; if TRUE, refit with delta=0 when
 #'   2D tau/delta profile covariance is unstable.
+#' @param curvature_ratio Numeric; gate coefficient for delta activation.
+#' @param time_weights Numeric vector or NULL; pre-computed time weights.
+#'   If NULL and \code{rise_weight > 1}, weights are computed from the reference
+#'   curve via \code{compute_align_weights()}.
+#' @param trough_weight Numeric; weight for pre-rising-limb weeks (default 0.1).
+#' @param rise_weight Numeric; weight for ignition-to-peak weeks (default 1.0,
+#'   i.e. no boost by default).
+#' @param peak_decay Numeric; exponential decay rate after peak (default 0.3).
 #'
-#' @return list with tau, delta, a, b, pred_df, peak, etc.
+#' @return list with tau, delta, a, b, pred_df, peak, nll, etc.
 #' @export
 align_forecast_pipeline_dilate <- function(currentD,
                                            g_ref_fun,
@@ -24,7 +32,12 @@ align_forecast_pipeline_dilate <- function(currentD,
                                            level = 0.95,
                                            future_weeks = NULL,
                                            include_observed = TRUE,
-                                           fallback_when_unstable = TRUE) {
+                                           fallback_when_unstable = TRUE,
+                                           curvature_ratio = 1.0,
+                                           time_weights  = NULL,
+                                           trough_weight = 0.1,
+                                           rise_weight   = 1.0,
+                                           peak_decay    = 0.3) {
   tb  <- hyper$TAU_BOUNDS
   db  <- hyper$DELTA_BOUNDS
   wk  <- hyper$WEEK_THRESHOLD_DELTA
@@ -42,14 +55,28 @@ align_forecast_pipeline_dilate <- function(currentD,
     allow_scale   = allow_scale,
     week_threshold_delta = wk,
     lam_delta     = lam,
-    use_weights   = use_weights
+    use_weights   = use_weights,
+    curvature_ratio = curvature_ratio,
+    time_weights  = time_weights,
+    trough_weight = trough_weight,
+    rise_weight   = rise_weight,
+    peak_decay    = peak_decay
   )
-  
+
   # 2) (a,b) at aligned (τ,δ)
   t <- currentD$newWeek
   y <- currentD$y
   n <- currentD$y + currentD$neg
-  w <- if (use_weights) n else rep(1, length(n))
+  # Compute same combined weights used in fit_tau_delta for GLM consistency
+  w_n <- if (use_weights) n else rep(1, length(n))
+  w_t <- if (!is.null(time_weights)) {
+    time_weights
+  } else if (rise_weight > 1) {
+    compute_align_weights(t, g_ref_safe, trough_weight, rise_weight, peak_decay)
+  } else {
+    rep(1, length(n))
+  }
+  w <- w_n * w_t
   
   u_hat  <- (t - fit$tau) / (1 + fit$delta)
   eta_of <- g_ref_safe(u_hat)
@@ -90,7 +117,11 @@ align_forecast_pipeline_dilate <- function(currentD,
       allow_scale   = fit$allow_scale,
       week_threshold_delta = 1e9,   # never turn delta on
       lam_delta     = lam,
-      use_weights   = use_weights
+      use_weights   = use_weights,
+      time_weights  = time_weights,
+      trough_weight = trough_weight,
+      rise_weight   = rise_weight,
+      peak_decay    = peak_decay
     )
     u_hat  <- (t - fit$tau) / (1 + fit$delta)
     eta_of <- g_ref_safe(u_hat)
@@ -235,6 +266,7 @@ align_forecast_pipeline_dilate <- function(currentD,
     b               = b_hat,
     allow_scale     = fit$allow_scale,
     delta_on        = fit$delta_on,
+    nll             = fit$value,
     pred_df         = dplyr::bind_rows(pred_obs, pred_fut) %>%
       dplyr::arrange(newWeek),
     last_obs        = last_obs,

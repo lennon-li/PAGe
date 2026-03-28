@@ -70,7 +70,11 @@ stage2_make_spec <- function(
     bs_week = "ts",
     bs_fs_marginal = "tp",
     use_season_re = TRUE,
-    
+
+    # --- time-decay training weight ---
+    lambda_w = 0,
+    w_floor  = 0,
+
     # --- deprecated aliases ---
     K = NULL,
     pre_buffer = NULL
@@ -109,10 +113,13 @@ stage2_make_spec <- function(
     
     bs_week = bs_week,
     bs_fs_marginal = bs_fs_marginal,
-    
-    use_season_re = TRUE
+
+    use_season_re = TRUE,
+
+    lambda_w = as.numeric(lambda_w),
+    w_floor  = as.numeric(w_floor)
   )
-  
+
   spec$best_row <- data.frame(
     delta = spec$delta,
     Kr    = spec$Kr,
@@ -179,6 +186,7 @@ expand_grid_specs <- function(
     k_n_grid = c(6L),
     k_1_grid = c(6L),
     k_2_grid = c(0L),
+    w_floor_grid        = c(0),
     bs_week_grid        = "ts",
     bs_fs_marginal_grid = "tp",
     drop_unused_kf_for_nonS = TRUE,
@@ -193,20 +201,21 @@ expand_grid_specs <- function(
     delta = as.integer(delta_grid),
     Kr    = as.integer(Kr_grid),
     T     = as.character(T_grid),
-    
+
     alpha_state = as.numeric(alpha_state),
     Kb    = as.integer(Kb_grid),
-    
+
     k_w   = as.integer(k_w_grid),
     k_s   = as.integer(k_s_grid),
     k_e   = as.integer(k_e_grid),
     k_n   = as.integer(k_n_grid),
     k_1   = as.integer(k_1_grid),
     k_2   = as.integer(k_2_grid),
-    
+    w_floor = as.numeric(w_floor_grid),
+
     bs_week        = as.character(bs_week_grid),
     bs_fs_marginal = as.character(bs_fs_marginal_grid),
-    
+
     unique = TRUE,
     sorted = FALSE
   )
@@ -227,19 +236,19 @@ expand_grid_specs <- function(
   }
   
   grid <- data.table::rbindlist(list(DT_N, DT_S), use.names = TRUE, fill = TRUE)
-  data.table::setorder(grid, T, delta, Kr, k_f, alpha_state, Kb, k_w, k_s, k_e, k_n, k_1, k_2)
-  
+  data.table::setorder(grid, T, delta, Kr, k_f, alpha_state, Kb, k_w, k_s, k_e, k_n, k_1, k_2, w_floor)
+
   grid[, spec_id := ifelse(
     T == "S",
-    sprintf("T%s_d%+d_Kr%d_kf%d_as%.2f_Kb%d_kw%d_ks%d_ke%d_kn%d_k1%d_k2%d",
-            T, delta, Kr, k_f, alpha_state, Kb, k_w, k_s, k_e, k_n, k_1, k_2),
-    sprintf("T%s_d%+d_Kr%d_as%.2f_Kb%d_kw%d_ks%d_ke%d_kn%d_k1%d_k2%d",
-            T, delta, Kr, alpha_state, Kb, k_w, k_s, k_e, k_n, k_1, k_2)
+    sprintf("T%s_d%+d_Kr%d_kf%d_as%.2f_Kb%d_kw%d_ks%d_ke%d_kn%d_k1%d_k2%d_wf%.2f",
+            T, delta, Kr, k_f, alpha_state, Kb, k_w, k_s, k_e, k_n, k_1, k_2, w_floor),
+    sprintf("T%s_d%+d_Kr%d_as%.2f_Kb%d_kw%d_ks%d_ke%d_kn%d_k1%d_k2%d_wf%.2f",
+            T, delta, Kr, alpha_state, Kb, k_w, k_s, k_e, k_n, k_1, k_2, w_floor)
   )]
-  
+
   specs <- Map(
     f = function(delta, Kr, T, k_f, alpha_state, Kb,
-                 k_w, k_s, k_e, k_n, k_1, k_2,
+                 k_w, k_s, k_e, k_n, k_1, k_2, w_floor,
                  bs_week, bs_fs_marginal) {
       if (is.na(k_f)) k_f <- k_f_grid[1]
       stage2_make_spec(
@@ -247,13 +256,13 @@ expand_grid_specs <- function(
         alpha_state = alpha_state,
         Kb = Kb,
         leads = as.integer(leads),
-        
         k_w = k_w, k_s = k_s, k_e = k_e, k_n = k_n, k_1 = k_1, k_2 = k_2,
+        w_floor = w_floor,
         bs_week = bs_week, bs_fs_marginal = bs_fs_marginal
       )
     },
     grid$delta, grid$Kr, grid$T, grid$k_f, grid$alpha_state, grid$Kb,
-    grid$k_w, grid$k_s, grid$k_e, grid$k_n, grid$k_1, grid$k_2,
+    grid$k_w, grid$k_s, grid$k_e, grid$k_n, grid$k_1, grid$k_2, grid$w_floor,
     grid$bs_week, grid$bs_fs_marginal
   )
   names(specs) <- grid$spec_id
@@ -264,7 +273,8 @@ expand_grid_specs <- function(
             " Kr=", length(Kr_grid),
             " Kb=", length(Kb_grid),
             " T=", paste(unique(T_grid), collapse=","),
-            " | alpha_state=", paste(as.numeric(alpha_state), collapse=","))
+            " | alpha_state=", paste(as.numeric(alpha_state), collapse=","),
+            " | w_floor=", paste(as.numeric(w_floor_grid), collapse=","))
   }
   
   list(specs = specs, grid = as.data.frame(grid), n = nrow(grid))
@@ -272,6 +282,28 @@ expand_grid_specs <- function(
 
 
 # ============================================================
+# ============================================================
+# 2b) Internal helper functions
+# ============================================================
+
+wrap_week <- function(week, n_weeks) {
+  ((as.integer(week) - 1L) %% as.integer(n_weeks)) + 1L
+}
+
+ewma_recursive <- function(x, a) {
+  n <- length(x)
+  if (n == 0L) return(numeric(0))
+  out <- numeric(n)
+  out[1] <- x[1]
+  for (i in seq_len(n - 1L) + 1L) out[i] <- a * x[i] + (1 - a) * out[i - 1L]
+  out
+}
+
+make_ref_logit_fun_from_template <- function(template_df, n_weeks = NULL) {
+  td <- template_df[order(template_df$newWeek), ]
+  stats::approxfun(td$newWeek, td$fit, method = "linear", rule = 2)
+}
+
 # 3) prep_stage2_m1_features()
 # ============================================================
 
@@ -409,6 +441,29 @@ prep_stage2_m1_features <- function(alignedD_prosp,
 #'
 #' @return List with \code{fit}, \code{spec}, and optionally \code{d_train}.
 #' @export
+stack_stage2_joint_data <- function(feat, spec, seasons_keep = NULL, drop_future = TRUE) {
+  DT <- data.table::as.data.table(data.table::copy(feat))
+  if (!is.null(seasons_keep)) DT <- DT[season %in% seasons_keep]
+  H  <- as.integer(spec$leads %||% c(1L, 2L))
+  Kb <- as.integer(spec$Kb %||% 0L)
+  d <- data.table::rbindlist(lapply(H, function(hh) {
+    d2 <- data.table::copy(DT)
+    d2[, `:=`(
+      lead_n = hh,
+      lead   = factor(hh, levels = H),
+      y_lead = data.table::shift(y_now, n = hh, type = "lead"),
+      N_lead = data.table::shift(N_now, n = hh, type = "lead")
+    ), by = season]
+    d2
+  }), use.names = TRUE)
+  d <- d[weekF >= (ign_weekF - Kb)]
+  if (isTRUE(drop_future)) d <- d[!is.na(y_lead) & !is.na(N_lead)]
+  d[, season   := factor(season)]
+  d[, lead     := factor(lead, levels = H)]
+  d[, season_h := factor(interaction(season, lead, drop = TRUE))]
+  d
+}
+
 train_stage2_joint_m1 <- function(feat,
                                   spec,
                                   seasons_keep = NULL,
@@ -416,19 +471,25 @@ train_stage2_joint_m1 <- function(feat,
                                   nthreads = 4L,
                                   method = "fREML",
                                   discrete = TRUE,
+                                  lambda_w = NULL,
+                                  w_floor  = NULL,
                                   return_data = TRUE,
                                   ...) {
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Please install data.table.")
   if (!requireNamespace("mgcv", quietly = TRUE)) stop("Please install mgcv.")
-  
+
   DT <- data.table::as.data.table(data.table::copy(feat))
   if (!is.null(seasons_keep)) DT <- DT[season %in% seasons_keep]
-  
+
   H  <- as.integer(spec$leads %||% c(1L,2L))
   Kb <- as.integer(spec$Kb %||% 0L)
-  
+
+  # per-spec lambda_w / w_floor: arg overrides spec
+  lw  <- if (!is.null(lambda_w)) as.numeric(lambda_w) else as.numeric(spec$lambda_w %||% 0)
+  wfl <- if (!is.null(w_floor))  as.numeric(w_floor)  else as.numeric(spec$w_floor  %||% 0)
+
   data.table::setorderv(DT, c("season","weekF"))
-  
+
   d_train <- data.table::rbindlist(lapply(H, function(hh) {
     d <- data.table::copy(DT)
     d[, `:=`(
@@ -439,26 +500,63 @@ train_stage2_joint_m1 <- function(feat,
     ), by = season]
     d
   }), use.names = TRUE)
-  
+
   d_train <- d_train[weekF >= (ign_weekF - Kb)]
   if (isTRUE(drop_future)) d_train <- d_train[!is.na(y_lead) & !is.na(N_lead)]
-  
+
   d_train[, season := factor(season)]
   d_train[, lead   := factor(lead, levels = H)]
   d_train[, season_h := factor(interaction(season, lead, drop = TRUE))]
-  
+
   form <- spec$formula
   if (is.null(form)) form <- stage2_build_joint_formula(spec)
-  
-  fit <- mgcv::bam(
-    formula  = form,
-    data     = d_train,
-    family   = binomial(),
-    method   = method,
-    discrete = discrete,
-    nthreads = as.integer(nthreads),
-    ...
+
+  # time-decay training weights: w_i = exp(-lw * t_since_i), normalised.
+  # Stored as d_train$.w so mgcv::bam can find it via data-frame eval.
+  use_weights <- FALSE
+  t_floor_start <- as.numeric(spec$t_floor_start %||% 14)
+  if (lw > 0 && "ign_weekF" %in% names(d_train)) {
+    t_since <- as.numeric(d_train$weekF - d_train$ign_weekF)
+    raw_w   <- exp(-lw * t_since)
+    if (wfl > 0) raw_w <- ifelse(t_since > t_floor_start, pmax(raw_w, wfl), raw_w)
+    raw_w[!is.finite(raw_w)] <- wfl
+    mn <- mean(raw_w[raw_w > 0], na.rm = TRUE)
+    if (is.finite(mn) && mn > 0) { d_train$.w <- raw_w / mn; use_weights <- TRUE }
+  }
+
+  bam_call <- function(use_w, disc, nth, maxit_val) {
+    args <- list(
+      formula  = form,
+      data     = d_train,
+      family   = binomial(),
+      method   = method,
+      discrete = disc,
+      nthreads = as.integer(nth),
+      control  = mgcv::gam.control(maxit = maxit_val)
+    )
+    if (use_w) args$weights <- d_train$.w
+    do.call(mgcv::bam, c(args, list(...)))
+  }
+
+  # withCallingHandlers (not tryCatch) so muffleWarning restart is still on stack.
+  # tryCatch unwinds the stack before calling its handler, so invokeRestart("muffleWarning")
+  # fails inside parallel workers where the restart environment is strict.
+  converged <- TRUE
+  fit <- withCallingHandlers(
+    bam_call(use_w = isTRUE(use_weights), disc = discrete, nth = nthreads, maxit_val = 500L),
+    warning = function(w) {
+      if (grepl("did not converge", conditionMessage(w))) {
+        converged <<- FALSE
+        invokeRestart("muffleWarning")
+      }
+      # other warnings propagate normally
+    }
   )
+  if (!converged) {
+    fit <- suppressWarnings(
+      bam_call(use_w = isTRUE(use_weights), disc = FALSE, nth = 1L, maxit_val = 1000L)
+    )
+  }
   
   fit$stage2_levels <- list(
     season   = levels(d_train$season),
@@ -856,12 +954,15 @@ tune_stage2_loso_spec_grid_parallel <- function(alignedD_prosp,
                                                 spec_grid,
                                                 ignD = NULL,
                                                 seasons = NULL,
+                                                eval_window = NULL,
+                                                refit_loso = FALSE,
                                                 k_t = 10L,
                                                 w_early = 2,
+                                                lambda_w_grid = NULL,
                                                 exclude_newseason_terms = TRUE,
                                                 # parallel controls
                                                 workers = 8L,
-                                                strategy = c("auto","multisession","multicore"),
+                                                strategy = c("auto","multisession","multicore","sequential"),
                                                 chunk_size = 8L,
                                                 # bam threads inside each worker (keep 1 if parallel)
                                                 nthreads = 1L,
@@ -876,27 +977,41 @@ tune_stage2_loso_spec_grid_parallel <- function(alignedD_prosp,
   strategy <- match.arg(strategy)
   stopifnot(is.list(spec_grid), !is.null(spec_grid$grid))
   grid <- data.table::as.data.table(spec_grid$grid)
-  
+
+  # expand grid over lambda_w_grid (cross-product with existing spec rows)
+  if (!is.null(lambda_w_grid) && length(lambda_w_grid) > 0) {
+    lw_vals <- as.numeric(lambda_w_grid)
+    if (any(lw_vals != 0) || !("lambda_w" %in% names(grid))) {
+      grid[, .tmp_key := 1L]
+      lw_dt   <- data.table::data.table(lambda_w = lw_vals, .tmp_key = 1L)
+      grid    <- merge(grid, lw_dt, by = ".tmp_key", allow.cartesian = TRUE)
+      grid[, .tmp_key := NULL]
+      # make spec_id unique per lambda_w combination
+      grid[, spec_id := paste0(spec_id, "_lw", formatC(lambda_w, digits = 3, format = "f"))]
+    }
+  } else if (!"lambda_w" %in% names(grid)) {
+    grid[, lambda_w := 0]
+  }
+
   all_seasons <- seasons %||% sort(unique(alignedD_prosp$season))
   if (length(all_seasons) < 3L) stop("Need >= 3 seasons for LOSO.")
-  
+
   # ---- timing ----
   t_start <- Sys.time()
   pt_start <- proc.time()
-  
+
   # ---- choose plan ----
   if (strategy == "auto") {
     strat <- if (.Platform$OS.type == "windows") "multisession" else "multicore"
   } else strat <- strategy
-  
-  old_plan <- future::plan()
-  on.exit(future::plan(old_plan), add = TRUE)
-  future::plan(strat, workers = as.integer(workers))
-  
+
+
   if (isTRUE(verbose)) {
     message("[tune_stage2_loso_spec_grid_parallel] grid_rows=", nrow(grid),
             " | seasons=", length(all_seasons),
-            " | k_t=", k_t, " w_early=", w_early,
+            " | eval_window=", if (is.null(eval_window)) paste0("NULL (legacy k_t=", k_t, " w_early=", w_early, ")") else eval_window,
+            " | refit_loso=", refit_loso,
+            " | lambda_w_grid: ", paste(sort(unique(grid$lambda_w)), collapse = ","),
             " | strategy=", strat, " workers=", workers,
             " | chunk_size=", chunk_size,
             " | bam nthreads=", nthreads)
@@ -924,22 +1039,28 @@ tune_stage2_loso_spec_grid_parallel <- function(alignedD_prosp,
   
   # ---- scoring helper inside worker (no closures that capture big env) ----
   worker_chunk <- function(idxs, f_dat, f_tmp, f_ign, f_grid,
-                           all_seasons, k_t, w_early, exclude_newseason_terms, nthreads) {
-    
+                           all_seasons, eval_window, k_t, w_early,
+                           exclude_newseason_terms, nthreads,
+                           refit_loso = FALSE) {
+
     library(data.table)
     library(mgcv)
-    
+
     dat  <- readRDS(f_dat)
     tmp  <- readRDS(f_tmp)
     ign  <- readRDS(f_ign)
     grid <- data.table::as.data.table(readRDS(f_grid))
-    
+
     out <- vector("list", length(idxs))
-    
+    t_chunk <- proc.time()
+    message(Sys.time(), " [worker] starting chunk: specs ", idxs[1], "-", idxs[length(idxs)],
+            " (", length(idxs), " specs x ", length(all_seasons), " folds)")
+
     for (j in seq_along(idxs)) {
       i <- idxs[j]
       row <- grid[i]
-      
+      t_spec <- proc.time()
+
       # build spec from grid row
       sp <- stage2_make_spec(
         delta = row$delta,
@@ -948,11 +1069,13 @@ tune_stage2_loso_spec_grid_parallel <- function(alignedD_prosp,
         T     = row$T,
         k_f   = ifelse(is.na(row$k_f), 6L, row$k_f),
         alpha_state = row$alpha_state,
-        
+
         k_w = row$k_w, k_s = row$k_s, k_e = row$k_e, k_n = row$k_n, k_1 = row$k_1, k_2 = row$k_2,
-        bs_week = row$bs_week, bs_fs_marginal = row$bs_fs_marginal
+        bs_week = row$bs_week, bs_fs_marginal = row$bs_fs_marginal,
+        lambda_w = if ("lambda_w" %in% names(row)) as.numeric(row$lambda_w) else 0,
+        w_floor  = if ("w_floor"  %in% names(row)) as.numeric(row$w_floor)  else 0
       )
-      
+
       # prep once per spec
       feat <- prep_stage2_m1_features(
         alignedD_prosp = dat,
@@ -960,11 +1083,75 @@ tune_stage2_loso_spec_grid_parallel <- function(alignedD_prosp,
         spec           = sp,
         ignD           = ign
       )
-      
+
       # LOSO folds
       fold_res <- lapply(all_seasons, function(s_out) {
+
+        # ---- refit-LOSO branch: one fit per post-ignition week of s_out ----
+        if (isTRUE(refit_loso)) {
+          d_test_full <- stack_stage2_joint_data(feat, sp, seasons_keep = s_out, drop_future = TRUE)
+          ew <- as.integer(eval_window %||% 8L)
+
+          train_seasons_pool <- setdiff(all_seasons, s_out)
+          fold_rows <- lapply(0:ew, function(w_week) {
+            t_s <- feat$weekF - feat$ign_weekF
+            feat_sub <- feat[feat$season %in% train_seasons_pool |
+                               (feat$season == s_out & is.finite(t_s) & t_s < w_week), ]
+
+            fit_res <- tryCatch(
+              train_stage2_joint_m1(feat_sub, sp, seasons_keep = NULL,
+                                    drop_future = TRUE, nthreads = nthreads,
+                                    return_data = FALSE),
+              error = function(e) NULL
+            )
+            if (is.null(fit_res)) return(NULL)
+            fit_w <- fit_res$fit
+
+            t_test <- d_test_full$weekF - d_test_full$ign_weekF
+            d_w <- d_test_full[is.finite(t_test) & t_test == w_week, ]
+            if (nrow(d_w) == 0L) return(NULL)
+
+            d_w$lead   <- factor(as.character(d_w$lead),   levels = fit_w$stage2_levels$lead)
+            d_w$season <- factor(as.character(d_w$season), levels = fit_w$stage2_levels$season)
+            if (anyNA(d_w$season)) d_w$season[is.na(d_w$season)] <- fit_w$stage2_levels$season[1]
+            d_w$season_h <- interaction(d_w$season, d_w$lead, drop = TRUE)
+            d_w$season_h <- factor(d_w$season_h, levels = fit_w$stage2_levels$season_h)
+            if (anyNA(d_w$season_h)) d_w$season_h[is.na(d_w$season_h)] <- fit_w$stage2_levels$season_h[1]
+
+            t_s_sub   <- feat_sub$weekF - feat_sub$ign_weekF
+            n_s_train <- sum(feat_sub$season == s_out & is.finite(t_s_sub) & t_s_sub >= 0L)
+            ex <- if (n_s_train == 0L && isTRUE(exclude_newseason_terms)) sp$exclude_newseason else NULL
+
+            eta <- as.numeric(stats::predict(fit_w, newdata = d_w, type = "link", exclude = ex))
+            p   <- plogis(eta)
+            y   <- as.numeric(d_w$y_lead)
+            N   <- as.numeric(d_w$N_lead)
+            p   <- pmin(1 - 1e-12, pmax(1e-12, p))
+            ok  <- is.finite(y) & is.finite(N) & is.finite(p) & N > 0
+            if (!any(ok)) return(NULL)
+            y <- y[ok]; N <- N[ok]; p <- p[ok]
+            ll <- stats::dbinom(y, N, p, log = TRUE)
+            data.table(n = length(p), w_sum = as.numeric(length(p)),
+                       nll = -sum(ll), brier_num = sum((p - y/N)^2))
+          })
+
+          fold_rows <- data.table::rbindlist(Filter(Negate(is.null), fold_rows))
+          if (nrow(fold_rows) == 0L) {
+            return(data.table(spec_id = row$spec_id, season_out = as.character(s_out),
+                              n = 0L, w_sum = 0, nll = NA_real_, mean_nll = NA_real_,
+                              brier = NA_real_, rmse_p = NA_real_, brier_num = NA_real_))
+          }
+          nll_t <- sum(fold_rows$nll); w_t <- sum(fold_rows$w_sum); b_t <- sum(fold_rows$brier_num)
+          return(data.table(
+            spec_id = row$spec_id, season_out = as.character(s_out),
+            n = sum(fold_rows$n), w_sum = w_t, nll = nll_t, mean_nll = nll_t / w_t,
+            brier = b_t / w_t, rmse_p = sqrt(b_t / w_t), brier_num = b_t
+          ))
+        }
+
+        # ---- standard LOSO branch (refit_loso = FALSE) ----
         train_seasons <- setdiff(all_seasons, s_out)
-        
+
         fit_mod <- train_stage2_joint_m1(
           feat = feat, spec = sp,
           seasons_keep = train_seasons,
@@ -972,50 +1159,57 @@ tune_stage2_loso_spec_grid_parallel <- function(alignedD_prosp,
           nthreads = nthreads,
           return_data = FALSE
         )$fit
-        
+
         d_test <- stack_stage2_joint_data(
           feat = feat, spec = sp,
           seasons_keep = s_out,
           drop_future = TRUE
         )
-        
+
         # align factor levels safely (avoid new levels)
         lev_lead   <- fit_mod$stage2_levels$lead
         lev_season <- fit_mod$stage2_levels$season
         lev_sh     <- fit_mod$stage2_levels$season_h
-        
+
         d_test$lead   <- factor(as.character(d_test$lead), levels = lev_lead)
         d_test$season <- factor(as.character(d_test$season), levels = lev_season)
         if (anyNA(d_test$season)) d_test$season[is.na(d_test$season)] <- lev_season[1]
-        
+
         d_test$season_h <- interaction(d_test$season, d_test$lead, drop = TRUE)
         d_test$season_h <- factor(d_test$season_h, levels = lev_sh)
         if (anyNA(d_test$season_h)) d_test$season_h[is.na(d_test$season_h)] <- lev_sh[1]
-        
+
         ex <- if (isTRUE(exclude_newseason_terms)) sp$exclude_newseason else NULL
         eta <- as.numeric(stats::predict(fit_mod, newdata = d_test, type = "link", exclude = ex))
         p   <- plogis(eta)
-        
-        # weights by TARGET week: (w+h) - ign_weekF
-        t_target <- (d_test$weekF + d_test$lead_n) - d_test$ign_weekF
-        w <- rep(1, length(t_target))
-        w[is.finite(t_target) & t_target >= 0 & t_target <= as.integer(k_t)] <- as.numeric(w_early)
-        
+
+        # scoring weights
+        if (!is.null(eval_window)) {
+          # fixed eval window: uniform weights over first eval_window post-ignition origin weeks
+          t_since <- d_test$weekF - d_test$ign_weekF
+          w <- ifelse(is.finite(t_since) & t_since >= 0 & t_since <= as.integer(eval_window), 1, 0)
+        } else {
+          # legacy: piecewise weights by TARGET week time since ignition
+          t_target <- (d_test$weekF + d_test$lead_n) - d_test$ign_weekF
+          w <- rep(1, length(t_target))
+          w[is.finite(t_target) & t_target >= 0 & t_target <= as.integer(k_t)] <- as.numeric(w_early)
+        }
+
         y <- as.numeric(d_test$y_lead)
         N <- as.numeric(d_test$N_lead)
         p <- pmin(1 - 1e-12, pmax(1e-12, p))
-        
+
         ok <- is.finite(y) & is.finite(N) & is.finite(p) & (N > 0) & is.finite(w)
         y <- y[ok]; N <- N[ok]; p <- p[ok]; w <- w[ok]
-        
+
         ll <- stats::dbinom(y, size = N, prob = p, log = TRUE)
         nll <- -sum(w * ll)
-        
+
         phat <- y / N
         se2  <- (p - phat)^2
         brier_num <- sum(w * se2)
         w_sum <- sum(w)
-        
+
         data.table(
           spec_id = row$spec_id,
           season_out = as.character(s_out),
@@ -1028,28 +1222,55 @@ tune_stage2_loso_spec_grid_parallel <- function(alignedD_prosp,
           brier_num = brier_num
         )
       })
-      
+
       out[[j]] <- rbindlist(fold_res)
+      elapsed_spec <- round(unname((proc.time() - t_spec)[["elapsed"]]), 1)
+      message(Sys.time(), " [worker] done spec ", j, "/", length(idxs),
+              " (grid row ", i, ") id=", row$spec_id,
+              " lw=", round(as.numeric(row$lambda_w %||% 0), 3),
+              " wf=", round(as.numeric(row$w_floor  %||% 0), 3),
+              " [", elapsed_spec, "s]")
     }
-    
+
+    elapsed_chunk <- round(unname((proc.time() - t_chunk)[["elapsed"]]), 1)
+    message(Sys.time(), " [worker] chunk done: specs ", idxs[1], "-", idxs[length(idxs)],
+            " total ", elapsed_chunk, "s")
     rbindlist(out, use.names = TRUE, fill = TRUE)
   }
-  environment(worker_chunk) <- baseenv()
   
+
   # ---- run parallel over chunks ----
-  res_chunks <- future.apply::future_lapply(
-    chunks,
-    worker_chunk,
-    f_dat = f_dat, f_tmp = f_tmp, f_ign = f_ign, f_grid = f_grid,
-    all_seasons = all_seasons,
-    k_t = k_t, w_early = w_early,
-    exclude_newseason_terms = exclude_newseason_terms,
-    nthreads = as.integer(nthreads),
-    future.seed = TRUE,
-    future.packages = c("data.table", "mgcv")
-  )
+  if (strat == "sequential") {
+    res_chunks <- lapply(chunks, function(ci) {
+      worker_chunk(ci, f_dat, f_tmp, f_ign, f_grid, all_seasons,
+                   eval_window, k_t, w_early, exclude_newseason_terms, nthreads,
+                   refit_loso = refit_loso)
+    })
+  } else {
+    nc_use <- min(as.integer(workers), length(chunks))
+    cl <- parallel::makeCluster(nc_use, type = "PSOCK")
+    on.exit(parallel::stopCluster(cl), add = TRUE)
+    parallel::clusterExport(cl, varlist = "worker_chunk", envir = environment())
+    parallel::clusterExport(cl, varlist = c(
+      "stage2_make_spec", "prep_stage2_m1_features",
+      "wrap_week", "ewma_recursive", "make_ref_logit_fun_from_template",
+      "stack_stage2_joint_data", "train_stage2_joint_m1",
+      "stage2_build_joint_formula", "stage2_exclude_newseason",
+      "%||%"), envir = globalenv())
+    parallel::clusterEvalQ(cl, { library(data.table); library(mgcv) })
+    res_chunks <- parallel::parLapply(cl, chunks, function(ci) {
+      worker_chunk(ci, f_dat, f_tmp, f_ign, f_grid, all_seasons,
+                   eval_window, k_t, w_early, exclude_newseason_terms, nthreads,
+                   refit_loso = refit_loso)
+    })
+  }
   
   by_season <- data.table::rbindlist(res_chunks, use.names = TRUE, fill = TRUE)
+  if (isTRUE(verbose)) {
+    elapsed_total <- round(as.numeric(difftime(Sys.time(), t_start, units = "secs")), 1)
+    message(Sys.time(), " [tune_stage2_loso_spec_grid_parallel] all chunks done.",
+            " total_specs=", nrow(grid), " elapsed=", elapsed_total, "s")
+  }
   
   by_spec <- by_season[, .(
     n_total = sum(n),
@@ -1076,7 +1297,7 @@ tune_stage2_loso_spec_grid_parallel <- function(alignedD_prosp,
     by_spec = by_spec,
     by_spec_grid = by_spec_grid,
     best = by_spec[1],
-    scoring = list(k_t = as.integer(k_t), w_early = as.numeric(w_early)),
+    scoring = list(eval_window = eval_window, k_t = as.integer(k_t), w_early = as.numeric(w_early)),
     timing = timing,
     parallel = list(strategy = strat, workers = workers, chunk_size = chunk_size, bam_nthreads = nthreads)
   )
@@ -1101,13 +1322,29 @@ tune_stage2_loso_spec_grid_parallel <- function(alignedD_prosp,
 #'
 #' @return A ggplot object.
 #' @export
-plot_stage2_joint_fit_by_season <- function(out_m1,
-                                            feat_full,
+plot_stage2_joint_fit_by_season <- function(out_m1 = NULL,
+                                            feat_full = NULL,
                                             dat_raw = NULL,
                                             ign_hat_df = NULL,
                                             exclude_season_re = FALSE,
                                             exclude_newseason_terms = FALSE,
-                                            facet_by_lead = TRUE) {
+                                            facet_by_lead = TRUE,
+                                            # aliases used by prospective_training.R API
+                                            joint_out = NULL,
+                                            template_df = NULL) {
+  # If called with joint_out/dat_raw (prospective_training.R API), delegate to that version.
+  # We re-source the function by calling the version defined in prospective_training.R,
+  # which we expose as .plot_stage2_joint_fit_prosp in that file.
+  if (!is.null(joint_out)) {
+    return(.plot_stage2_joint_fit_prosp(
+      joint_out         = joint_out,
+      dat_raw           = dat_raw,
+      ign_hat_df        = ign_hat_df,
+      exclude_season_re = exclude_season_re,
+      facet_by_lead     = facet_by_lead,
+      template_df       = template_df
+    ))
+  }
   stopifnot(is.list(out_m1), !is.null(out_m1$fit), !is.null(out_m1$spec))
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Please install data.table.")
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Please install ggplot2.")
@@ -1204,7 +1441,8 @@ plot_stage2_joint_fit_by_season <- function(out_m1,
 #' @param spec A spec list from stage2_make_spec().
 #' @return An R formula suitable for mgcv::bam().
 #' @export
-stage2_build_joint_formula <- function(spec) {
+stage2_build_joint_formula <- function(spec, k_f = NULL) {
+  if (!is.null(k_f)) spec$k_f <- as.integer(k_f)
   stopifnot(is.list(spec), all(c("T","k_f","k_w","k_s","k_e","k_n","k_1","k_2","bs_week","bs_fs_marginal") %in% names(spec)))
   
   bs1 <- spec$bs_week %||% "ts"

@@ -121,7 +121,10 @@ stage2_make_spec <- function(
     k_s   = 0L,
     bs_week = "ts",
     bs_fs_marginal = "tp",
-    use_season_re = TRUE
+    use_season_re = TRUE,
+    # --- time-decay training weight ---
+    lambda_w = 0,
+    w_floor  = 0
 ) {
   # Map old template_mode -> T if supplied
   if (!is.null(template_mode)) {
@@ -168,9 +171,13 @@ stage2_make_spec <- function(
     bs_fs_marginal = bs_fs_marginal,
     
     # RE (always included)
-    use_season_re = TRUE
+    use_season_re = TRUE,
+
+    # time-decay training weight
+    lambda_w = as.numeric(lambda_w),
+    w_floor  = as.numeric(w_floor)
   )
-  
+
   spec$best_row <- data.frame(
     delta = spec$delta,
     K = spec$K,
@@ -357,6 +364,7 @@ prep_stage2_joint <- function(dat,
                               ign_week_df = NULL,
                               pre_buffer = 0L,
                               alpha_state = 0.30,
+                              m1_preds = NULL,
                               verbose = FALSE) {
   stopifnot(is.data.frame(dat))
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
@@ -494,6 +502,45 @@ prep_stage2_joint <- function(dat,
       N_lead = as.integer(.data$N_lead),
       season_h = interaction(.data$season, .data$lead, drop = TRUE)
     )
+
+  # ---- Override logit_f_eff with M1 walk-forward predictions ----
+  # When m1_preds is supplied (output of m1_walkforward_predictions()),
+  # replace the static template feature with M1's aligned prediction.
+  # M1 provides p_hat at each (season, eval_weekF, h) — this is the
+  # stacking architecture: M1 = base model, M2 = meta-learner.
+  if (!is.null(m1_preds)) {
+    stopifnot(is.data.frame(m1_preds))
+    stopifnot(all(c("season", "eval_weekF", "h", "m1_p_hat") %in% names(m1_preds)))
+
+    # Extract h integer from lead factor (e.g., "h1" → 1, "h2" → 2)
+    d$.h_int <- as.integer(sub("^h", "", as.character(d$lead)))
+
+    m1_join <- m1_preds %>%
+      dplyr::transmute(
+        season      = as.character(.data$season),
+        weekF       = as.integer(.data$eval_weekF),
+        .h_int      = as.integer(.data$h),
+        .m1_p_hat   = as.numeric(.data$m1_p_hat)
+      )
+
+    d <- d %>%
+      dplyr::mutate(season_chr = as.character(.data$season)) %>%
+      dplyr::left_join(m1_join, by = c("season_chr" = "season",
+                                        "weekF" = "weekF",
+                                        ".h_int" = ".h_int")) %>%
+      dplyr::mutate(
+        logit_f_eff = dplyr::if_else(
+          is.finite(.data$.m1_p_hat) & !is.na(.data$.m1_p_hat),
+          logit_stable(.data$.m1_p_hat),
+          .data$logit_f_eff  # fallback to static template if M1 missing
+        )
+      ) %>%
+      dplyr::select(-dplyr::all_of(c("season_chr", ".h_int", ".m1_p_hat")))
+
+    if (isTRUE(verbose)) {
+      message("[prep_stage2_joint] M1 stacking mode: logit_f_eff replaced with M1 predictions")
+    }
+  }
   
   if (isTRUE(verbose)) {
     message("[prep_stage2_joint] delta=", delta, " K=", K,
@@ -511,49 +558,75 @@ prep_stage2_joint <- function(dat,
 # =========================================================
 
 # internal: score with optional exclude terms
+# lambda_w: time-decay weight rate (0 = uniform). Weights w_i = exp(-lambda_w * t_since_i),
+#   normalised to sum to n so that mean_nll is on the same scale regardless of lambda_w.
+# eval_window: if non-NULL, restrict evaluation to rows where t_since <= eval_window.
+#   This provides a *fixed* objective for comparing different lambda_w values fairly
+#   (all lambdas are assessed on the same early-window observations).
 score_stage2_metrics <- function(fit,
                                  d_test,
                                  exclude_season_re = TRUE,
-                                 exclude_terms = NULL) {
+                                 exclude_terms = NULL,
+                                 lambda_w = 0,
+                                 eval_window = NULL) {
   ex <- exclude_terms
   if (is.null(ex)) ex <- if (isTRUE(exclude_season_re)) "s(season)" else NULL
-  
+
   nd <- d_test
-  
+
   # lead levels
   if ("lead" %in% names(nd) && "lead" %in% names(fit$model) && is.factor(fit$model$lead)) {
     lev <- levels(fit$model$lead)
     nd$lead <- factor(as.character(nd$lead), levels = lev)
     nd$lead[is.na(nd$lead)] <- lev[1]
   }
-  
+
   # season levels
   if ("season" %in% names(nd) && "season" %in% names(fit$model) && is.factor(fit$model$season)) {
     lev <- levels(fit$model$season)
     nd$season <- factor(as.character(nd$season), levels = lev)
     nd$season[is.na(nd$season)] <- lev[1]
   }
-  
+
   # season_h levels (lead-specific season factor for fs term)
   if ("season_h" %in% names(nd) && "season_h" %in% names(fit$model) && is.factor(fit$model$season_h)) {
     lev <- levels(fit$model$season_h)
     nd$season_h <- factor(as.character(nd$season_h), levels = lev)
     nd$season_h[is.na(nd$season_h)] <- lev[1]
   }
-  
-  
+
+
   p_hat <- as.numeric(stats::predict(fit, newdata = nd, type = "response", exclude = ex))
   eps <- 1e-12
   p_hat <- pmin(1 - eps, pmax(eps, p_hat))
-  
+
   ll <- stats::dbinom(nd$y_lead, size = nd$N_lead, prob = p_hat, log = TRUE)
-  nll <- -sum(ll, na.rm = TRUE)
-  mean_nll <- nll / nrow(nd)
-  
-  p_obs <- nd$y_lead / nd$N_lead
-  brier <- mean((p_hat - p_obs)^2, na.rm = TRUE)
-  rmse_p <- sqrt(mean((p_hat - p_obs)^2, na.rm = TRUE))
-  
+
+  # restrict to early window for evaluation (fixed objective across lambda_w values)
+  eval_mask <- rep(TRUE, length(ll))
+  if (!is.null(eval_window) && "t_since" %in% names(nd)) {
+    eval_mask <- is.finite(nd$t_since) & nd$t_since <= eval_window
+  }
+  ll_eval   <- ll[eval_mask]
+  nd_eval   <- nd[eval_mask, , drop = FALSE]
+  p_hat_eval <- p_hat[eval_mask]
+
+  # time-decay weights on the eval set, normalised so mean_nll is interpretable
+  if (lambda_w > 0 && "t_since" %in% names(nd_eval) && any(eval_mask)) {
+    raw_w <- exp(-lambda_w * as.numeric(nd_eval$t_since))
+    raw_w[!is.finite(raw_w)] <- 0
+    w <- raw_w / mean(raw_w[raw_w > 0], na.rm = TRUE)  # normalise so mean(w)=1
+  } else {
+    w <- rep(1, sum(eval_mask))
+  }
+
+  nll      <- -sum(w * ll_eval, na.rm = TRUE)
+  mean_nll <- nll / max(sum(eval_mask), 1L)
+
+  p_obs_eval <- nd_eval$y_lead / nd_eval$N_lead
+  brier   <- stats::weighted.mean((p_hat_eval - p_obs_eval)^2, w = w, na.rm = TRUE)
+  rmse_p  <- sqrt(brier)
+
   list(nll = nll, mean_nll = mean_nll, brier = brier, rmse_p = rmse_p)
 }
 
@@ -568,6 +641,8 @@ train_stage2_joint_prepped <- function(d_all,
                                        k_1 = 6L,
                                        k_2 = 6L,
                                        method = "REML",
+                                       lambda_w = 0,
+                                       w_floor  = 0,
                                        verbose = FALSE) {
   if (!requireNamespace("mgcv", quietly = TRUE)) stop("Please install mgcv.")
   stopifnot(is.data.frame(d_all))
@@ -600,7 +675,24 @@ train_stage2_joint_prepped <- function(d_all,
   
   d_train <- d_all[d_all$post_ign, , drop = FALSE]
   if (nrow(d_train) == 0L) stop("train_stage2_joint_prepped: no post-ignition rows.")
-  
+
+  # time-decay training weights: w_i = exp(-lambda_w * t_since_i), normalised.
+  # w_floor applies only for t_since > t_floor_start (default 14), leaving the
+  # pre-peak window governed purely by exponential decay.
+  # Stored as a column in d_train (.w) so mgcv::bam can find it via data-frame eval.
+  t_floor_start <- as.numeric(spec$t_floor_start %||% 14)
+  if (lambda_w > 0 && "t_since" %in% names(d_train)) {
+    t_s   <- as.numeric(d_train$t_since)
+    raw_w <- exp(-lambda_w * t_s)
+    if (w_floor > 0) raw_w <- ifelse(t_s > t_floor_start, pmax(raw_w, w_floor), raw_w)
+    raw_w[!is.finite(raw_w)] <- w_floor
+    mn <- mean(raw_w[raw_w > 0], na.rm = TRUE)
+    d_train$.w <- if (is.finite(mn) && mn > 0) raw_w / mn else rep(1, nrow(d_train))
+    use_weights <- TRUE
+  } else {
+    use_weights <- FALSE
+  }
+
   req <- c("post_ign","lead","y_lead","N_lead")
   if (spec$template_mode != "none") req <- c(req, "logit_f_eff")
   if (spec$k_w > 0L || spec$k_s > 0L) req <- c(req, "newWeek")
@@ -629,17 +721,71 @@ train_stage2_joint_prepped <- function(d_all,
   # NOTE: mgcv's discrete=TRUE path can be fragile with factor-smooth interactions (bs='fs').
   # If the fs term is enabled (k_s>0), fall back to discrete=FALSE for stability.
   use_discrete <- isTRUE(spec$k_s <= 0L)
+  fit_method <- if (isTRUE(use_discrete) && identical(method, "REML")) "fREML" else method
   
-  fit <- mgcv::bam(
-    formula  = form,
-    data     = d_train,
-    family   = stats::binomial(),
-    method   = method,
-    discrete = use_discrete,
-    nthreads = 1
+  # Pass weights via column in d_train to avoid mgcv NSE scoping issue
+  if (isTRUE(use_weights)) {
+    fit <- mgcv::bam(
+      formula  = form,
+      data     = d_train,
+      family   = stats::binomial(),
+      weights  = .w,
+      method   = fit_method,
+      discrete = use_discrete,
+      nthreads = 1,
+      control  = mgcv::gam.control(maxit = 500)
+    )
+  } else {
+    fit <- mgcv::bam(
+      formula  = form,
+      data     = d_train,
+      family   = stats::binomial(),
+      method   = fit_method,
+      discrete = use_discrete,
+      nthreads = 1,
+      control  = mgcv::gam.control(maxit = 500)
+    )
+  }
+
+  list(fit = fit, train_data = d_train, tuned = best_mean_nll, spec = spec,
+       lambda_w = lambda_w)
+}
+
+#' Extract best Stage-2 spec from a tuning result
+#'
+#' Convenience wrapper: given the list returned by
+#' \code{tune_stage2_loso_spec_grid_parallel()}, finds the best row in
+#' \code{tuned2$by_spec_grid} and calls \code{stage2_make_spec()} with the
+#' appropriate column mappings (\code{Kr} -> \code{K}, \code{Kb} ->
+#' \code{pre_buffer}).
+#'
+#' @param tuned2 List with at least \code{$best} (1-row data frame with
+#'   \code{spec_id}) and \code{$by_spec_grid} (full grid with hyperparameters).
+#' @return A spec list as returned by \code{stage2_make_spec()}.
+#' @export
+stage2_spec_from_tuning <- function(tuned2) {
+  stopifnot(is.list(tuned2), !is.null(tuned2$best), !is.null(tuned2$by_spec_grid))
+  best_id  <- tuned2$best$spec_id[[1L]]
+  best_row <- tuned2$by_spec_grid[tuned2$by_spec_grid$spec_id == best_id, , drop = FALSE]
+  if (nrow(best_row) == 0L) stop("spec_id '", best_id, "' not found in by_spec_grid")
+  stage2_make_spec(
+    delta          = best_row$delta,
+    K              = best_row$Kr,
+    k_f            = best_row$k_f,
+    alpha_state    = best_row$alpha_state,
+    T              = best_row$T,
+    k_e            = best_row$k_e,
+    k_n            = best_row$k_n,
+    k_1            = best_row$k_1,
+    k_2            = best_row$k_2,
+    k_w            = best_row$k_w,
+    k_s            = best_row$k_s,
+    pre_buffer     = best_row$Kb,
+    bs_week        = best_row$bs_week,
+    bs_fs_marginal = best_row$bs_fs_marginal,
+    lambda_w       = if ("lambda_w" %in% names(best_row)) best_row$lambda_w else 0,
+    w_floor        = if ("w_floor"  %in% names(best_row)) best_row$w_floor  else 0
   )
-  
-  list(fit = fit, train_data = d_train, tuned = best_mean_nll, spec = spec)
 }
 
 #' Train Stage-2 joint model
@@ -672,14 +818,20 @@ train_stage2_joint <- function(dat,
                                k_2 = 6L,
                                ign_week_df = NULL,
                                method = "REML",
+                               lambda_w = 0,
+                               w_floor  = NULL,
+                               m1_preds = NULL,
                                verbose = TRUE) {
   if (!requireNamespace("mgcv", quietly = TRUE)) stop("Please install mgcv.")
-  
+
   if (!is.null(spec)) {
     if (is.null(best_mean_nll)) best_mean_nll <- spec$best_row
     if (is.null(pre_buffer))  pre_buffer  <- spec$pre_buffer
     if (is.null(alpha_state)) alpha_state <- spec$alpha_state
+    if (lambda_w == 0 && !is.null(spec$lambda_w)) lambda_w <- spec$lambda_w
+    if (is.null(w_floor) && !is.null(spec$w_floor)) w_floor <- spec$w_floor
   }
+  w_floor <- as.numeric(w_floor %||% 0)
   if (is.null(best_mean_nll)) stop("Provide either spec=... or best_mean_nll=...")
   
   # If spec is NULL and alpha_state was not provided, try to take it from best_mean_nll
@@ -701,6 +853,7 @@ train_stage2_joint <- function(dat,
     ign_week_df   = ign_week_df,
     pre_buffer    = as.integer(pre_buffer %||% 0L),
     alpha_state   = as.numeric(alpha_state %||% 0.30),
+    m1_preds      = m1_preds,
     verbose       = FALSE
   )
   
@@ -714,7 +867,74 @@ train_stage2_joint <- function(dat,
     k_1 = k_1,
     k_2 = k_2,
     method = method,
+    lambda_w = lambda_w,
+    w_floor  = w_floor,
     verbose = verbose
+  )
+}
+
+#' Refit Stage-2 GAM with current-season data for weekly prospective forecasting
+#'
+#' Combines all historical aligned data with the current season's observations
+#' (formatted via \code{format_current_for_stage2}) and refits the Stage-2 GAM.
+#' Call this function each week after ignition detection to obtain an updated model
+#' that has estimated the live season's random effect and factor-smooth.
+#'
+#' @param current_obs data.frame with columns \code{weekF}, \code{y}, \code{N}
+#'   (or \code{y}/\code{neg}) for the current season up to the current week.
+#' @param iWeek_used Numeric. Detected ignition week (on weekF scale).
+#' @param hist_data \code{alignedD_prosp} — historical aligned dataset (all past seasons).
+#' @param template_df Template curve with \code{newWeek} and \code{fit}.
+#' @param spec Stage-2 spec from \code{stage2_spec_from_tuning()}.
+#' @param season_label Character. Label for the current season (default \code{"current"}).
+#' @param addFS Integer threshold for re-enabling the season-specific factor-smooth
+#'   in a brand-new season refit. If \code{NULL} (default), the factor-smooth is
+#'   never included in weekly refits for unseen seasons. If an integer is given,
+#'   the original \code{spec$k_s} is restored once at least that many post-ignition
+#'   origin weeks are available in \code{current_obs}.
+#' @param verbose Logical. Print progress messages.
+#' @return Output of \code{train_stage2_joint()} on the combined dataset.
+#' @export
+refit_stage2_weekly <- function(current_obs,
+                                iWeek_used,
+                                hist_data,
+                                template_df,
+                                spec,
+                                season_label = "current",
+                                addFS = NULL,
+                                verbose = TRUE) {
+  refit_spec <- spec
+  fit_method <- "REML"
+  addFS <- if (is.null(addFS)) NULL else as.integer(addFS[1L])
+
+  # For a brand-new season, the season-specific factor-smooth is both the
+  # slowest term and the least stable early after ignition. The walk-forward
+  # plotting code excludes season-specific terms at prediction time anyway, so
+  # dropping the fs term here preserves the intended prediction target while
+  # avoiding multi-minute/hour refits on only a handful of current-season rows.
+  if (!season_label %in% unique(hist_data$season) && isTRUE(refit_spec$k_s > 0L)) {
+    post_ign_weeks <- sum(unique(current_obs$weekF) >= as.integer(iWeek_used), na.rm = TRUE)
+    keep_fs <- !is.null(addFS) && is.finite(addFS) && post_ign_weeks >= addFS
+    if (!isTRUE(keep_fs)) {
+      refit_spec$k_s <- 0L
+      fit_method <- "fREML"
+    }
+  }
+
+  cur_fmt <- format_current_for_stage2(
+    currentSeason = current_obs,
+    iWeek_used    = iWeek_used,
+    template_df   = template_df,
+    spec          = refit_spec,
+    season_label  = season_label
+  )
+  dat_refit <- dplyr::bind_rows(hist_data, cur_fmt)
+  train_stage2_joint(
+    dat         = dat_refit,
+    template_df = template_df,
+    spec        = refit_spec,
+    method      = fit_method,
+    verbose     = verbose
   )
 }
 
@@ -748,6 +968,8 @@ tune_stage2_loso_specs <- function(
     testSeason = NULL,
     method = "REML",
     exclude_newseason_terms = TRUE,
+    lambda_w = 0,
+    eval_window = NULL,
     num.cores = 8L,
     verbose = TRUE,
     progress_every = 200L
@@ -785,11 +1007,14 @@ tune_stage2_loso_specs <- function(
     train_dat <- dat[dat$season != ts, , drop = FALSE]
     test_dat  <- dat[dat$season == ts, , drop = FALSE]
     
+    spec_lambda_w <- getS(spec, "lambda_w", lambda_w)  # per-spec override or function default
+
     fit_out <- try(train_stage2_joint(
       dat = train_dat,
       template_df = template_df,
       spec = spec,
       method = method,
+      lambda_w = spec_lambda_w,
       verbose = FALSE
     ), silent = TRUE)
     
@@ -832,7 +1057,10 @@ tune_stage2_loso_specs <- function(
     ex_terms <- NULL
     if (isTRUE(exclude_newseason_terms)) ex_terms <- stage2_exclude_newseason(spec)
     
-    sc <- score_stage2_metrics(fit_out$fit, d_test, exclude_season_re = FALSE, exclude_terms = ex_terms)
+    sc <- score_stage2_metrics(fit_out$fit, d_test, exclude_season_re = FALSE,
+                               exclude_terms = ex_terms,
+                               lambda_w = 0,           # eval on uniform weights (fixed objective)
+                               eval_window = eval_window)
     
     data.frame(
       ok = TRUE,
@@ -842,6 +1070,7 @@ tune_stage2_loso_specs <- function(
       K = getS(spec, "K", NA_integer_),
       k_f = getS(spec, "k_f", NA_integer_),
       alpha_state = getS(spec, "alpha_state", NA_real_),
+      lambda_w = spec_lambda_w,
       template_mode = getS(spec, "template_mode", NA_character_),
       k_w = getS(spec, "k_w", NA_integer_),
       k_s = getS(spec, "k_s", NA_integer_),
@@ -876,26 +1105,45 @@ tune_stage2_loso_specs <- function(
     }
   } else {
     idx <- seq_len(nrow(tasks))
-    if (.Platform$OS.type == "windows") {
-      cl <- parallel::makeCluster(num.cores)
-      on.exit(try(parallel::stopCluster(cl), silent = TRUE), add = TRUE)
-      parallel::clusterEvalQ(cl, {
-        suppressPackageStartupMessages(library(dplyr))
-        suppressPackageStartupMessages(library(mgcv))
-        NULL
-      })
-      parallel::clusterExport(cl, varlist = c(
-        "dat","template_df","specs","ign_hat_df","method",
-        "prep_stage2_joint","train_stage2_joint","score_stage2_metrics",
-        "stage2_exclude_newseason","tasks","eval_one","eval_one_safe"
-      ), envir = environment())
-      out_list <- parallel::parLapply(cl, idx, function(i) eval_one_safe(tasks[i, , drop = FALSE]))
-    } else {
-      out_list <- parallel::mclapply(idx, function(i) eval_one_safe(tasks[i, , drop = FALSE]), mc.cores = num.cores)
+    if (!requireNamespace("future", quietly = TRUE) ||
+        !requireNamespace("future.apply", quietly = TRUE)) {
+      stop("tune_stage2_loso_specs: parallel requires 'future' + 'future.apply'.")
     }
+    old_plan <- future::plan()
+    on.exit(future::plan(old_plan), add = TRUE)
+    strat <- if (.Platform$OS.type == "windows") future::multisession else future::multicore
+    future::plan(strat, workers = num.cores)
+
+    # capture everything eval_one_safe needs in a globals list for future
+    fg <- list(
+      dat = dat, template_df = template_df, specs = specs,
+      ign_hat_df = ign_hat_df, method = method,
+      lambda_w = lambda_w, eval_window = eval_window,
+      tasks = tasks,
+      eval_one = eval_one, eval_one_safe = eval_one_safe,
+      getS = getS,
+      prep_stage2_joint = prep_stage2_joint,
+      train_stage2_joint = train_stage2_joint,
+      train_stage2_joint_prepped = train_stage2_joint_prepped,
+      score_stage2_metrics = score_stage2_metrics,
+      stage2_exclude_newseason = stage2_exclude_newseason,
+      stage2_build_joint_formula = stage2_build_joint_formula,
+      stage2_make_spec = stage2_make_spec,
+      logit_stable = logit_stable,
+      stage2_ramp_weight = stage2_ramp_weight,
+      `%||%` = `%||%`
+    )
+
+    out_list <- future.apply::future_lapply(
+      idx,
+      FUN = function(i) eval_one_safe(tasks[i, , drop = FALSE]),
+      future.seed = TRUE,
+      future.packages = c("dplyr", "mgcv"),
+      future.globals  = fg
+    )
   }
   
-  results <- dplyr::bind_rows(out_list) %>% as.data.frame(stringsAsFactors = FALSE)
+  results <- as.data.frame(dplyr::bind_rows(out_list), stringsAsFactors = FALSE)
   if (nrow(results) == 0L) stop("tune_stage2_loso_specs: no results returned")
   
   metrics <- c("nll","mean_nll","brier","rmse_p")
@@ -956,11 +1204,13 @@ tune_stage2_loso_shift_template <- function(
     k_f_grid = c(6L, 8L, 10L),
     alpha_grid = c(0.15, 0.25, 0.35, 0.50),
     leads = c(1L, 2L),
+    lambda_w_grid = 0,
+    eval_window = NULL,
     num.cores = 8L,
     verbose = TRUE
 ) {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
-  
+
   # Base spec defines *structure* (k's, T, bases) while the grid tunes (delta, K, k_f, alpha_state).
   if (is.null(spec_base)) {
     spec_base <- stage2_make_spec(
@@ -974,37 +1224,42 @@ tune_stage2_loso_shift_template <- function(
     spec_base$pre_buffer <- as.integer(pre_buffer)
     spec_base$leads <- as.integer(leads)
   }
-  
-  shift_grid <- as.integer(shift_grid)
-  K_grid <- as.integer(K_grid)
-  k_f_grid <- as.integer(k_f_grid)
-  alpha_grid <- as.numeric(alpha_grid)
-  
+
+  shift_grid    <- as.integer(shift_grid)
+  K_grid        <- as.integer(K_grid)
+  k_f_grid      <- as.integer(k_f_grid)
+  alpha_grid    <- as.numeric(alpha_grid)
+  lambda_w_grid <- as.numeric(lambda_w_grid)
+
   grid <- expand.grid(
-    delta = shift_grid,
-    K = K_grid,
-    k_f = k_f_grid,
+    delta       = shift_grid,
+    K           = K_grid,
+    k_f         = k_f_grid,
     alpha_state = alpha_grid,
+    lambda_w    = lambda_w_grid,
     KEEP.OUT.ATTRS = FALSE,
     stringsAsFactors = FALSE
   )
-  
+
   # Build a list of specs (one per hyperparam combination)
   specs <- vector("list", nrow(grid))
   nm <- character(nrow(grid))
   for (i in seq_len(nrow(grid))) {
     g <- grid[i, ]
     s <- spec_base
-    s$delta <- as.integer(g$delta)
-    s$K <- as.integer(g$K)
-    s$k_f <- as.integer(g$k_f)
+    s$delta       <- as.integer(g$delta)
+    s$K           <- as.integer(g$K)
+    s$k_f         <- as.integer(g$k_f)
     s$alpha_state <- as.numeric(g$alpha_state)
-    s$best_row <- data.frame(delta = s$delta, K = s$K, k_f = s$k_f, alpha_state = s$alpha_state,
-                             stringsAsFactors = FALSE)
-    s$formula <- stage2_build_joint_formula(s)
+    s$lambda_w    <- as.numeric(g$lambda_w)
+    s$best_row    <- data.frame(delta = s$delta, K = s$K, k_f = s$k_f, alpha_state = s$alpha_state,
+                                stringsAsFactors = FALSE)
+    s$formula          <- stage2_build_joint_formula(s)
     s$exclude_newseason <- stage2_exclude_newseason(s)
-    
-    nm[i] <- paste0("d", s$delta, "_K", s$K, "_kf", s$k_f, "_a", formatC(s$alpha_state, digits = 2, format = "f"))
+
+    nm[i] <- paste0("d", s$delta, "_K", s$K, "_kf", s$k_f,
+                    "_a", formatC(s$alpha_state, digits = 2, format = "f"),
+                    "_lw", formatC(s$lambda_w,    digits = 3, format = "f"))
     specs[[i]] <- s
   }
   names(specs) <- nm
@@ -1017,6 +1272,8 @@ tune_stage2_loso_shift_template <- function(
     testSeason = testSeason,
     method = "REML",
     exclude_newseason_terms = TRUE,
+    lambda_w = 0,          # per-spec lambda_w is read from spec$lambda_w inside eval_one
+    eval_window = eval_window,
     num.cores = num.cores,
     verbose = verbose
   )
@@ -1024,15 +1281,14 @@ tune_stage2_loso_shift_template <- function(
   # Return a legacy-friendly object:
   # - results has delta/K/k_f/alpha_state + metrics for each held-out season
   # - best_by_season / best_overall already computed inside tune_stage2_loso_specs
-  tuned$results <- tuned$results %>%
-    dplyr::rename(test_season = .data$test_season) %>%
-    dplyr::select(
-      .data$ok, .data$test_season, .data$spec_id,
-      .data$delta, .data$K, .data$k_f, .data$alpha_state,
-      .data$n_train, .data$n_test,
-      .data$nll, .data$mean_nll, .data$brier, .data$rmse_p,
-      .data$err
-    )
+  tuned$results <- dplyr::select(
+    tuned$results,
+    .data$ok, .data$test_season, .data$spec_id,
+    .data$delta, .data$K, .data$k_f, .data$alpha_state, .data$lambda_w,
+    .data$n_train, .data$n_test,
+    .data$nll, .data$mean_nll, .data$brier, .data$rmse_p,
+    .data$err
+  )
   
   tuned
 }
@@ -1058,12 +1314,26 @@ plot_tune_stage2_heatmap <- function(df,
   norm_scope <- match.arg(norm_scope)
   center <- match.arg(center)
   score_transform <- match.arg(score_transform)
-  
+
+  # Accept full tuned2 list: auto-extract by_spec_grid
+  if (is.list(df) && !is.data.frame(df) && !is.null(df$by_spec_grid))
+    df <- df$by_spec_grid
+
   stopifnot(is.data.frame(df), metric %in% names(df))
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Please install ggplot2.")
   if (!requireNamespace("scales", quietly = TRUE)) stop("Please install scales.")
-  
+
+  # Normalize column names: Kr -> K (new tuning output structure)
+  if ("Kr" %in% names(df) && !"K" %in% names(df))
+    df <- dplyr::rename(df, K = Kr)
+  # Normalize season column: season_out -> test_season
+  if ("season_out" %in% names(df) && !"test_season" %in% names(df))
+    df <- dplyr::rename(df, test_season = season_out)
+  # If already aggregated (no test_season col) and agg=TRUE, add dummy season
+  if (!"test_season" %in% names(df) && isTRUE(agg))
+    df$test_season <- "pooled"
+
   need <- c("test_season", "delta", "K", "k_f", "alpha_state", metric)
   miss <- setdiff(need, names(df))
   if (length(miss)) stop("Missing cols: ", paste(miss, collapse = ", "))
@@ -1162,7 +1432,7 @@ plot_tune_stage2_heatmap <- function(df,
 # Training-fit plotting helper (kept compatible with QMD)
 # =========================================================
 
-plot_stage2_joint_fit_by_season <- function(joint_out,
+.plot_stage2_joint_fit_prosp <- function(joint_out,
                                             dat_raw,
                                             ign_hat_df = NULL,
                                             exclude_season_re = FALSE,
@@ -1341,4 +1611,158 @@ expand_grid_specs <- function(
   }
   
   list(specs = specs, grid = grid, n = nrow(grid))
+}
+
+#’ Bundle all trained components into a prospective forecasting kit
+#’
+#’ Packages Stage-1 ignition detection and Stage-2 forecasting into a single list
+#’ for prospective deployment. The weekly-refit workflow refits the Stage-2 GAM
+#’ with current-season data each week; no offline calibration or online updater is stored.
+#’
+#’ Accepts either high-level training output objects (\code{ign_fit}, \code{joint_out})
+#’ or the individual pieces directly. High-level objects take precedence only when the
+#’ corresponding individual argument is \code{NULL}.
+#’
+#’ @param template_df Data frame with columns \code{newWeek} and \code{fit} defining
+#’   the reference template curve.
+#’ @param ign_fit Output of \code{fitIgnition()}. Used to extract \code{gam_cls} when
+#’   \code{gam_cls} is \code{NULL}.
+#’ @param gam_cls A trained \pkg{mgcv} \code{gam}/\code{bam} classifier, or a container
+#’   accepted by \code{get_gam_cls()}. Overrides extraction from \code{ign_fit}.
+#’ @param params_stage1 List of tuned Stage-1 threshold parameters (e.g.
+#’   \code{tuned$best_params}).
+#’ @param joint_out Output of \code{train_stage2_joint()}. Used to extract
+#’   \code{spec_stage2}, \code{stage2_fit}, and \code{train_data_stage2} when those
+#’   are \code{NULL}.
+#’ @param spec_stage2 Stage-2 spec list from \code{stage2_make_spec()} or
+#’   \code{stage2_spec_from_tuning()}. Overrides extraction from \code{joint_out}.
+#’ @param stage2_fit Fitted \pkg{mgcv} \code{gam}/\code{bam} Stage-2 model. Overrides
+#’   extraction from \code{joint_out}.
+#’ @param train_data_stage2 Stage-2 training design data frame (preserves factor levels).
+#’   Overrides extraction from \code{joint_out}.
+#’ @param best_mean_nll 1-row data frame or list with \code{delta}/\code{K}/\code{leads}.
+#’   Derived from \code{spec_stage2$best_row} when \code{NULL}.
+#’ @param exclude_stage2 Character vector of model terms to exclude for new-season
+#’   prediction. Derived from \code{spec_stage2$exclude_newseason} when \code{NULL}.
+#’ @param defaults Named list of prospective pipeline run-time defaults:
+#’   \code{align}, \code{anchorWeek}, \code{pre_buffer}, \code{deriv_k}.
+#’
+#’ @return A named list with components \code{stage1}, \code{stage2}, and \code{defaults},
+#’   ready to be passed to the prospective pipeline.
+#’
+#’ @examples
+#’ \dontrun{
+#’ # Preferred: pass training objects directly
+#’ kit <- make_prospective_kit(
+#’   template_df   = template_df,
+#’   ign_fit       = ign_fit,
+#’   params_stage1 = tuned$best_params,
+#’   joint_out     = joint_out,
+#’ )
+#’
+#’ # Legacy: pass individual components
+#’ kit <- make_prospective_kit(
+#’   template_df       = template_df,
+#’   gam_cls           = gam_cls,
+#’   params_stage1     = params_stage1,
+#’   spec_stage2       = spec_stage2,
+#’   stage2_fit        = joint_out$fit,
+#’   train_data_stage2 = joint_out$train_data
+#’ )
+#’ }
+#’
+#’ @export
+make_prospective_kit <- function(template_df,
+                                 ign_fit = NULL,
+                                 gam_cls = NULL,
+                                 params_stage1 = NULL,
+                                 joint_out = NULL,
+                                 spec_stage2 = NULL,
+                                 stage2_fit = NULL,
+                                 train_data_stage2 = NULL,
+                                 best_mean_nll = NULL,
+                                 exclude_stage2 = NULL,
+                                 defaults = list(
+                                   align = TRUE,
+                                   anchorWeek = 19L,
+                                   pre_buffer = 1L,
+                                   deriv_k = 5L
+                                 )) {
+  stopifnot(is.data.frame(template_df))
+  stopifnot(is.list(defaults))
+
+  # ---- extract from high-level training objects ----
+
+  # Stage-1: pull gam_cls from ign_fit if not supplied directly
+  if (is.null(gam_cls) && !is.null(ign_fit)) {
+    gam_cls <- get_gam_cls(ign_fit)
+  }
+
+  # Stage-2: pull spec, fit, train_data from joint_out if not supplied directly
+  if (!is.null(joint_out)) {
+    if (is.null(spec_stage2)       && !is.null(joint_out$spec))       spec_stage2       <- joint_out$spec
+    if (is.null(stage2_fit)        && !is.null(joint_out$fit))        stage2_fit        <- joint_out$fit
+    if (is.null(train_data_stage2) && !is.null(joint_out$train_data)) train_data_stage2 <- joint_out$train_data
+  }
+
+  # ---- derive secondary fields from spec when not explicitly provided ----
+  if (is.null(best_mean_nll) && is.list(spec_stage2) && "best_row" %in% names(spec_stage2)) {
+    best_mean_nll <- spec_stage2$best_row
+  }
+  if (is.null(exclude_stage2) && is.list(spec_stage2) && "exclude_newseason" %in% names(spec_stage2)) {
+    exclude_stage2 <- spec_stage2$exclude_newseason
+  }
+  # ---- backfill defaults$pre_buffer from spec (LOSO result) when available ----
+  if (is.list(spec_stage2) && !is.null(spec_stage2$pre_buffer)) {
+    defaults$pre_buffer <- as.integer(spec_stage2$pre_buffer)
+  }
+
+  # ---- validate required pieces ----
+  if (is.null(gam_cls)) stop("gam_cls is required (or supply ign_fit to extract it).")
+  if (is.null(params_stage1) || !is.list(params_stage1)) stop("params_stage1 must be a list.")
+  if (!inherits(stage2_fit, c("gam", "bam"))) stop("stage2_fit must be a mgcv gam/bam (or supply joint_out).")
+  if (!is.data.frame(train_data_stage2)) stop("train_data_stage2 must be a data frame (or supply joint_out).")
+
+  list(
+    stage1 = list(
+      gam_cls = gam_cls,
+      params  = params_stage1
+    ),
+    stage2 = list(
+      template_df   = template_df,
+      spec_stage2   = spec_stage2,       # single source of truth for spec (includes lambda_w)
+      best_mean_nll = best_mean_nll,     # back-compat for helpers expecting delta/K/leads
+      exclude_terms = exclude_stage2,    # terms to exclude for brand-new season prediction
+      fit           = stage2_fit,
+      train_data    = train_data_stage2
+    ),
+    defaults = defaults
+  )
+}
+
+check_prospective_kit <- function(kit) {
+  stopifnot(is.list(kit))
+  req <- list(
+    c("stage1","gam_cls"),
+    c("stage1","params"),
+    c("stage2","template_df"),
+    c("stage2","spec_stage2"),
+    c("stage2","fit"),
+    c("stage2","train_data"),
+    c("stage2","best_mean_nll"),
+    c("stage2","exclude_terms"),
+    c("defaults")
+  )
+  
+  get_path <- function(x, path) {
+    for (nm in path) x <- x[[nm]]
+    x
+  }
+  
+  missing <- vapply(req, function(p) is.null(try(get_path(kit, p), silent = TRUE)), logical(1))
+  if (any(missing)) {
+    bad <- vapply(req[missing], paste, collapse = "/", FUN.VALUE = character(1))
+    stop("kit missing: ", paste(bad, collapse = ", "))
+  }
+  invisible(TRUE)
 }

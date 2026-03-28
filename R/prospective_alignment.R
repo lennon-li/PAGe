@@ -100,7 +100,11 @@ run_alignment_prospective <- function(
   level           = 0.95,
   min_obs         = 4L,
   cal             = NULL,   # output of fit_peak_calibration(); NULL = no calibration
-  curvature_ratio = 1.0     # passed to fit_tau_delta() delta curvature gate
+  curvature_ratio = 1.0,    # passed to fit_tau_delta() delta curvature gate
+  time_weights    = NULL,
+  trough_weight   = 0.1,
+  rise_weight     = 1.0,
+  peak_decay      = 0.3
 ) {
 
   # Helper: early return in pre-ignition state
@@ -178,7 +182,11 @@ run_alignment_prospective <- function(
       level            = level,
       future_weeks     = seq(1, 52, by = 0.5),
       include_observed = TRUE,
-      curvature_ratio  = curvature_ratio
+      curvature_ratio  = curvature_ratio,
+      time_weights     = time_weights,
+      trough_weight    = trough_weight,
+      rise_weight      = rise_weight,
+      peak_decay       = peak_decay
     ),
     error = function(e) NULL
   )

@@ -127,6 +127,56 @@ fit_tau_delta_old <- function(currentD, g_ref_fun,
 
 
 
+#' Compute ignition-to-peak time weights for alignment loss
+#'
+#' Creates per-observation weights that emphasise the rising limb (ignition to
+#' peak) of the reference curve.  Pre-peak trough weeks receive a low weight,
+#' the ignition-to-peak region receives a boosted weight, and weeks after the
+#' peak decay exponentially back toward 1.
+#'
+#' @param t Numeric vector of newWeek values (observed data).
+#' @param g_ref_fun Reference curve function on logit scale.
+#' @param trough_weight Weight for pre-rising-limb weeks (default 0.1).
+#' @param rise_weight Weight for ignition-through-peak weeks (default 3.0).
+#' @param peak_decay Exponential decay rate after peak (default 0.3).
+#' @param n_weeks Integer; template domain length (default 52).
+#' @return Numeric vector of time weights, same length as \code{t}.
+#' @keywords internal
+compute_align_weights <- function(t,
+                                  g_ref_fun,
+                                  trough_weight = 0.1,
+                                  rise_weight   = 3.0,
+                                  peak_decay    = 0.3,
+                                  n_weeks       = 52L) {
+  # Find peak of the reference curve (probability scale)
+  grid_u   <- seq_len(n_weeks)
+  g_vals   <- g_ref_fun(grid_u)
+  p_vals   <- stats::plogis(g_vals)
+  u_peak   <- grid_u[which.max(p_vals)]
+  p_peak   <- max(p_vals)
+  p_min    <- min(p_vals)
+
+  # Rising limb start: last week before peak where p is below 10% of peak
+  # range above baseline.  This avoids false positives from cyclic wrap-around.
+  p_thresh <- p_min + 0.10 * (p_peak - p_min)
+  pre_peak <- grid_u[seq_len(u_peak)]
+  below    <- which(p_vals[pre_peak] < p_thresh)
+  u_rise   <- if (length(below) > 0) max(below) + 1L else 1L
+
+  # Build weight vector
+  w_t <- rep(1.0, length(t))
+  # Pre-rising-limb trough
+  w_t[t < u_rise]                <- trough_weight
+  # Ignition-to-peak boost
+  w_t[t >= u_rise & t <= u_peak] <- rise_weight
+  # Post-peak exponential decay back toward 1
+  past <- t > u_peak
+  w_t[past] <- 1 + (rise_weight - 1) * exp(-peak_decay * (t[past] - u_peak))
+
+  w_t
+}
+
+
 #' Internal: fit tau & delta for one season, given reference curve
 #' @keywords internal
 fit_tau_delta <- function(currentD, g_ref_fun,
@@ -135,7 +185,11 @@ fit_tau_delta <- function(currentD, g_ref_fun,
                           week_threshold_delta,
                           lam_delta,
                           use_weights = TRUE,
-                          curvature_ratio = 1.0) {
+                          curvature_ratio = 1.0,
+                          time_weights  = NULL,
+                          trough_weight = 0.1,
+                          rise_weight   = 1.0,
+                          peak_decay    = 0.3) {
   # safe wrapper around the user-supplied g_ref_fun
   # (clamp to [1, 52] or whatever range your template is on)
   g_ref_safe <- function(u) g_ref_fun(pmin(pmax(u, 1), 52))
@@ -143,7 +197,19 @@ fit_tau_delta <- function(currentD, g_ref_fun,
   t <- currentD$newWeek
   y <- currentD$y
   n <- currentD$y + currentD$neg
-  w <- if (use_weights) n else rep(1, length(n))
+
+  # Sample-size weights
+
+  w_n <- if (use_weights) n else rep(1, length(n))
+  # Time-based weights (ignition-to-peak emphasis)
+  w_t <- if (!is.null(time_weights)) {
+    time_weights
+  } else if (rise_weight > 1) {
+    compute_align_weights(t, g_ref_safe, trough_weight, rise_weight, peak_decay)
+  } else {
+    rep(1, length(n))
+  }
+  w <- w_n * w_t
 
   # if we haven’t seen far enough into the season, don’t try scale yet
   if (is.null(allow_scale)) allow_scale <- max(t, na.rm = TRUE) >= 28

@@ -1,0 +1,408 @@
+---
+title: "PAGe: Phase-Aligned Gated Epidemic Forecasting"
+format:
+  html:
+    self-contained: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    page-layout: full
+    grid:
+      body-width: 1300px
+---
+
+```{=html}
+<style>
+
+h2 {
+  margin-top: 1.8em;
+  padding: 0.4em 0.9em;
+  border-left: 5px solid #1e5f8e;
+  background: #e8f1f8;
+  color: #1a3a5c;
+  border-radius: 0 4px 4px 0;
+}
+h3 {
+  margin-top: 2em;
+  padding: 0.4em 0.8em;
+  border-left: 4px solid #4a90d9;
+  background: #f4f8fd;
+  border-radius: 0 4px 4px 0;
+}
+h4 {
+  margin-top: 1.5em;
+  padding: 0.3em 0.7em;
+  border-left: 3px solid #a0bfe0;
+  background: #f9fbfe;
+  border-radius: 0 3px 3px 0;
+}
+</style>
+```
+
+## Notation and Objectives
+
+Let $s = 1,\dots,S$ index influenza seasons and let $w$ denote the within-season flu-week number. For each season–week $(s,w)$, define:
+
+- $x_{s,w}$: number of influenza-positive tests (code column `y`)
+- $n_{s,w}$: number of tests performed (code column `N`)
+- $p_{s,w} = x_{s,w} / n_{s,w}$: observed weekly positivity (code column `p`)
+- $\pi_{s,w}$: underlying probability of positivity (the quantity modelled/forecast)
+
+Several week indices are kept in the data:
+
+- `week`: MMWR **epidemiologic week-of-year** from surveillance data.
+- `weekS`: **surveillance-week index** (season starts at MMWR week 35), for interpretation only.
+- `weekF`: $w_s^f$, **flu-week index** (flu season starts at MMWR week `startWeek`; here 27).
+- `iWeek`: $w_s^{(\mathrm{ign})}$, ignition week for season $s$ (manually labelled or estimated).
+- `anchorWeek`: $w^{an}$, anchor week for alignment (median ignition week across seasons).
+- `newWeek`: $w^a_{s,w}$, **aligned week index** after shifting $w^f_{s,w}$ so that $w_s^{(\mathrm{ign})}$ lines up at `anchorWeek` across seasons
+- `peak`: $w_{s}^{p}$, week of the season's epidemic peak (estimated by alignment).
+
+Let $P(s,w)\in\{0,1\}$ be a phase indicator:
+$$
+P(s,w)=
+\begin{cases}
+0, & \text{pre-ignition (pre-season)}\\
+1, & \text{post-ignition (in-season)}
+\end{cases}
+$$
+
+The framework has 3 main components:
+
+- **$M_0$ (Ignition detector):** using only information available up to week $w$, estimate whether the season has ignited ($P(s,w)=1$), estimate reference curve.
+- **$M_1$ (Alignment):** shifts and stretches the estimated reference curve to fit the observed data, producing an estimate of the current epidemic phase and a rough forecast trajectory.
+- **$M_2$ (Forecast model):** once ignition is detected and aligned, build forecast model and forecast $h$ weeks ahead:
+$$
+\pi_{s,w+h} \;=\; \Pr\!\big(\text{positive at } w+h \mid P(s,w)=1,\, M_1\big).
+$$
+
+Primary forecasting targets: one- and two-week-ahead positivity $\pi_{s,w+1}$ and $\pi_{s,w+2}$. Raw surveillance data is loaded and converted to a within-season week index
+(`weekF`) started at MMWR week 27. Each row is one season-week with columns `y` (positive tests), `N` (total tests), `p = y/N`. Seasons with known data quality issues (`2020-21`, `2021-22`) are excluded.
+
+
+---
+
+## $M_0$ — Ignition Detection {#sec-m0}
+
+**Goal:** detect the start of the epidemic season ("ignition") in real time, so that alignment and forecasting can begin.
+
+Ignition marks the transition from background noise to sustained epidemic activity. Detecting it accurately — and promptly — is critical: if ignition fires too late, M1 and M2 lose early-season data that anchors the alignment; if it fires too early, alignment parameters are estimated from noise. M0 uses a consensus-vote rule across four real-time gates, each capturing a different aspect of the signal (level, trend, cumulative burden, sustained elevation). All gates must agree simultaneously before ignition is declared.
+
+### Training: Gate threshold tuning
+
+The detector votes each week using four threshold-based gates built from data available only up to the current week:
+
+| Gate | Signal | Purpose |
+|------|--------|---------|
+| `cond_sum` | rolling sum of $p$ over $K_{\mathrm{sum}}$ weeks | sustained elevation, not a spike |
+| `cond_p` | smoothed $\tilde p$ (window $L$) | current level above threshold $\tau_p$ |
+| `cond_prev` | cumulative positivity $\mathrm{Prv}_{s,w}$ | season-wide burden exceeds $\tau_{\mathrm{prev}}$ |
+| `cond_inc` | week-to-week direction of $\tilde p$ | signal not falling for $n_{\mathrm{consec}}-1$ steps |
+
+Ignition fires when all four gates agree simultaneously for the first time within an eligible window $[w_{\min}, w_{\max}]$.
+
+Gate thresholds $\theta$ are tuned via grid search with LOSO evaluation (using `alignedD` and known ignition weeks from historical data), minimising detection timing error while penalising late or missed detections. The tuned $\hat\theta$ is frozen for deployment.
+
+**Key functions:** `tuneIgnitionGrid_M0v2()`, `detectIgnitionBySeason_M0v2()`
+
+**Full analysis:** [`ignition_training.html`](ignition_training.html)
+
+### Deployment: Weekly ignition checking
+
+Once ignition locks at $\hat w_s^{(\mathrm{ign})}$, the alignment coordinate system activates:
+
+$$
+w^a_{s,w} = w^f_{s,w} - \hat{w}^{(\mathrm{ign})}_s + w^{an}.
+$$
+
+**Key function:** `run_ignition_weekly(currentSeason, params)`
+
+---
+
+## $M_1$ — Curve Alignment {#sec-m1}
+
+**Goal:** fit observed epidemic curves to a learned reference template to estimate peak timing and provide short-term forecasts.
+
+Once ignition is detected by $M_0$, historical seasons are aligned by their ignition weeks to estimate a smooth **reference curve** $g_{\mathrm{ref}}$ — the average epidemic shape across seasons. Each week during the live season, the current partial curve is then aligned to this reference by fitting a small set of shift and scale parameters, yielding a continuously updated peak estimate. This whole process — reference curve estimation and prospective alignment — is validated and tuned via LOSO cross-validation.
+
+The alignment uses a **4-parameter dilation model** on the logit scale:
+
+$$
+u_{s,w} = \frac{w^a_{s,w} - \tau_w}{1 + \delta_w}, \qquad \mathrm{logit}(\hat\pi_{s,w}) = a_w + b_w\cdot g_{\mathrm{ref}}(u_{s,w})
+$$
+
+| Parameter | Symbol | Interpretation | Flexibility |
+|-----------|--------|---------------|-------------|
+| **Shift** | $\tau_w$ | Time shift of epidemic centre relative to template | Always fitted |
+| **Dilation** | $\delta_w$ | Stretch ($> 0$) or compression ($< 0$) of timeline | Fixed at 0 early; activated at `WEEK_THRESHOLD_DELTA` |
+| **Intercept** | $a_w$ | Overall positivity level | Always fitted |
+| **Amplitude** | $b_w$ | Scale of rise/fall | Fixed at 1 early (`allow_scale=FALSE`); released when threshold crossed |
+
+**Progressive activation guards** prevent unstable early-season fits:
+- `allow_scale = FALSE` (early): Only $a_w$ estimated, $b_w = 1$ fixed
+- `delta_on = FALSE` (early): Only $\tau_w$ estimated, $\delta_w = 0$ fixed
+
+The peak is derived from the fitted parameters as:
+$$t_{\mathrm{peak},w} = \tau_w + (1+\delta_w)\cdot u^*, \quad \text{converted back to calendar: } w_s^p = t_{\mathrm{peak},w} - w^{an} + \hat{w}^{(\mathrm{ign})}_s$$
+where $u^*$ is the argmax of $g_{\mathrm{ref}}$.
+
+### Training {#sec-m1-training}
+
+Three offline training steps build the products used by weekly deployment. Reference curve estimation and LOSO walk-forward evaluation are interdependent: the LOSO loop re-estimates the reference curve on each training fold to select `k_ref`, and the final reference is then re-estimated with the chosen `k_ref` on all seasons. Post-peak flag tuning uses the alignment outputs produced by LOSO — no separate alignment pass is needed.
+
+#### Reference curve estimation {#sec-refcurve}
+
+A smooth seasonal template is built from historical data using **known (manually labelled) ignition weeks**. This becomes the foundation for all alignment and peak estimation.
+
+Each season's ignition week $w_s^{(\mathrm{ign})}$ is assigned by expert review. Using these known labels, the data are aligned so all seasons are centred on their median ignition week $w^{an}$:
+
+$$
+w^a_{s,w} = w^f_{s,w} - w_s^{(\mathrm{ign})} + w^{an}.
+$$
+
+`estimateRef()` then fits a cyclic GAMM on all training seasons in aligned `newWeek` space to produce the reference curve $g_{\mathrm{ref}}(u)$ on the **link (logit) scale** — the average epidemic shape. `learn_alignment_hyperparams()` derives bounds and penalties (`TAU_BOUNDS`, `DELTA_BOUNDS`, `LAMBDA_DELTA`, `WEEK_THRESHOLD_DELTA`) stored as `hyper`.
+
+**Key functions:** `flagIgnition(manual_labels=...)`, `alignIgnition()`, `estimateRef()`, `learn_alignment_hyperparams()`
+
+**Full analysis:** [`estimateRef.html`](estimateRef.html)
+
+#### Post-peak flag tuning {#sec-peak-tuning}
+
+The parameters governing when the peak is declared *passed* are tuned offline. `tune_peak_detection()` finds the combination that minimises detection delay with zero false positives:
+
+| Parameter | Role |
+|-----------|------|
+| `use_ci` | If `TRUE`, use upper CI of peak estimate (more conservative) |
+| `buffer_weeks` | Extra weeks beyond threshold before declaring peak passed |
+
+**Key functions:** `tune_peak_detection()`
+
+**Full analysis:** [`peak_detection_tuning.html`](peak_detection_tuning.html)
+
+#### LOSO walk-forward evaluation {#sec-loso}
+
+Reference curve flexibility `k_ref` and alignment performance are validated via leave-one-season-out (LOSO) cross-validation to prevent data leakage.
+
+For each test season:
+1. Re-run `estimateRef()` + `learn_alignment_hyperparams()` on training seasons only (test season excluded)
+2. Detect ignition on test season prospectively using tuned M0 thresholds
+3. Walk forward week by week, calling `run_alignment_prospective()` at each step
+4. Collect `params_df` with fitted parameters and alignment outputs at each week
+
+`k_ref` is selected by prospective peak MAE across LOSO folds, weighted by proximity to ignition. The resulting `params_df` is consumed directly by M2 training — no second alignment pass is needed.
+
+**Key functions:** `loso_walkforward()`
+
+**Full analysis:** [`loso_walkforward.html`](loso_walkforward.html)
+
+### Deployment: Weekly prospective alignment {#sec-run}
+
+Each week, `run_alignment_prospective()` is called with frozen training products:
+
+- `ref` — reference curve from above
+- `hyper` — alignment hyperparameters
+- `params` — ignition thresholds from M0 training
+- `use_ci`, `buffer_weeks` — peak detection settings
+
+The function returns:
+- Current **state**: `"pre_ignition"` / `"aligning"` / `"post_peak"`
+- Estimated peak week with CI
+- Aligned forecast trajectory
+
+Once `state == "post_peak"`, alignment freezes and the peak estimate is final.
+
+**Key function:** `run_alignment_prospective(currentSeason, ref, hyper, params, use_ci, buffer_weeks)`
+
+**Full analysis:** [`run.html`](run.html)
+
+---
+
+## $M_2$ — Forecast Model {#sec-m2}
+
+**Goal:** forecast weekly percentage positivity 1–2 weeks ahead using alignment outputs and prospective derivatives.
+
+$M_2$ receives alignment outputs **already in aligned-week space** — it never
+operates on raw `weekF` directly. The reference curve $g_\text{ref}$ is
+injected as one covariate evaluated at $w^a_{s,w}$, not re-estimated here.
+
+| Alignment input (from §@sec-m1 / @sec-run) | Role in $M_2$ |
+|-------------------|---------------|
+| $w^a_{s,w}$ (`newWeek`) | time axis for all GAM smooths; defines "where in the epidemic" |
+| $\tau_w, \delta_w$ (time shift, dilation) | coarse alignment already absorbed into $w^a_{s,w}$ |
+| $a_w, b_w$ (intercept, amplitude) | season level and intensity from M₁ fit |
+| `state` (`aligning` / `post_peak`) | gates whether forecasting is active |
+| $w_s^p$ (`peak_weekF`) with CI | explicit peak-timing anchor |
+
+### Training {#sec-m2-training}
+
+$M_2$ fits a **joint** binomial GAM for both horizons $h \in \{1,2\}$ simultaneously, with data stacked across leads and all smooth terms lead-specific. Observations are down-weighted exponentially by time since ignition ($\lambda_w \ge 0$) to emphasise early post-ignition weeks.
+
+**Covariate sources — what comes from where:**
+
+| Covariate | Source | Leakage-sensitive? |
+|-----------|--------|--------------------|
+| $w^a_{s,w}$ (`newWeek`) — aligned time axis | M1: alignment via ignition week | Yes — depends on $g_{\mathrm{ref}}$ |
+| $z_{s,w}(\delta, Kr)$ — ramped template backbone | M1: $g_{\mathrm{ref}}$ evaluated in aligned space | Yes — **is** $g_{\mathrm{ref}}$ |
+| $z^{(\mathrm{ema})}_{s,w}$ — EWMA positivity level | Raw data: computed by `prep_stage2_joint()` from $p = y/N$ | No |
+| $d1_{s,w}$ — slope (logit scale) | Raw data: from `estimateDerivs()` on observed $p$ | No |
+| $d2_{s,w}$ — curvature (logit scale) | Raw data: from `estimateDerivs()` on observed $p$ | No |
+| $S_2^h(w^a_{s,w})$ — global aligned-time smooth | M1: operates on `newWeek` | Yes — depends on alignment |
+| $S_{3,s}^h(w^a_{s,w})$ — season deviation smooth | M1: operates on `newWeek` | Yes — depends on alignment |
+
+The EWMA, slope, and curvature are computed from real-time surveillance data — they do not pass through M1's alignment. The leakage-sensitive covariates are the aligned time axis and the reference curve template, both of which depend on which seasons were used to build $g_{\mathrm{ref}}$.
+
+**LOSO training with leakage-free alignment.** M2's LOSO calls `prep_stage2_joint()` on `alignedD` split into train/test seasons. The alignment-derived columns (`newWeek`, template) come from a reference curve that must exclude the held-out season to prevent leakage. This is ensured by using the `alignedD` produced from LOSO-fold-specific reference curves. The real-time covariates ($z^{(\mathrm{ema})}$, $d1$, $d2$) are recomputed from raw data within `prep_stage2_joint()` and do not leak.
+
+The nested LOSO structure, and what varies at each level:
+
+```
+For each candidate hyperparameter set (δ, Kr, α_state, λ_w):        ← tuned
+  For each held-out season s*:                                         ← LOSO fold
+    Fixed:   g_ref estimated without s*  → determines newWeek and template
+    Recomputed: z_ema, d1, d2 from raw y/N by prep_stage2_joint()
+    Trained: GAM coefficients on alignedD rows for s ≠ s*
+    Predict: alignedD rows for s*, treating s* as a new season
+             (b_{s*} and S^h_{3,s*} excluded from linear predictor)
+  Evaluate: mean NLL over first W_eval=12 post-ignition weeks (uniform weights)
+Select: hyperparameter set with lowest mean NLL across folds
+```
+
+| Parameter | Role |
+|-----------|------|
+| $\delta$ | Integer-week horizontal nudge applied to the template |
+| $Kr$ | Ramp length — weeks over which the template is phased in after ignition |
+| $\alpha_\text{state}$ | EWMA decay rate |
+| $\lambda_w$ | Training time-decay weight (governs learning emphasis, not the LOSO criterion) |
+
+**Key functions:** `prep_stage2_joint()`, `train_stage2_joint()`, `tune_stage2_loso_spec_grid_parallel()`
+
+**Full design:** [`forecast_training.html`](forecast_training.html)
+
+### Deployment: Weekly refit {#sec-m2-deploy}
+
+Each week after ignition, $M_2$ is refit on the historical dataset augmented with current-season rows up to week $w$. All hyperparameters are frozen at LOSO-tuned values; only GAM coefficients are updated. As current-season data accumulate, the season random effect and season-specific shape smooth self-correct each week.
+
+$M_2$ runs **after** $M_1$ each week: `newWeek` and the template covariate require the alignment state that $M_1$ just produced, while EWMA, slope, and curvature are recomputed from the latest raw surveillance data by `prep_stage2_joint()`.
+
+**Key functions:** `refit_stage2_weekly()`, `stage2_predict_series()`
+
+---
+
+## Integration: Deployment sequence {#sec-train-deploy}
+
+**Goal:** clarify how $M_1$ (alignment) and $M_2$ (forecast model) are connected
+week to week, and how $M_2$ is trained correctly in a walk-forward regime without
+data leakage. The full working implementation is in [`prospective_deployment.html`](prospective_deployment.html).
+
+### Week-by-week execution
+
+$M_1$ and $M_2$ run **sequentially within each week**:
+
+1. **$M_1$ first.** `run_alignment_prospective()` processes all data up to
+   the current week $w$ and returns the alignment state plus aligned covariates
+   ($w^a_{s,w}$, $\tau_w$, $\delta_w$, $a_w$, $b_w$, `state`, peak estimate
+   with CI).
+2. **$M_2$ second.** Only if `state == "aligning"`, $M_2$ receives those outputs,
+   appends the current-season row to $\mathcal{D}_\text{hist}$, and calls
+   `refit_stage2_weekly()` to update the GAM coefficients before producing
+   forecasts $\hat\pi_{s,w+1}$ and $\hat\pi_{s,w+2}$.
+
+$M_2$ **cannot run before $M_1$** in a given week because the aligned time axis
+$w^a_{s,w}$ and template covariate require the alignment state that $M_1$ just
+produced. The EWMA, slope, and curvature are recomputed from the latest raw data
+by `prep_stage2_joint()`, but they still need the post-ignition filter that
+depends on $M_1$'s ignition call. All hyperparameters remain frozen (LOSO-tuned);
+only the GAM coefficients change as new rows accumulate.
+
+```
+Week w arrives
+  └─ M₁:  run_alignment_prospective(currentSeason[1:w], ref, hyper, params, …)
+         └─ returns: state, w^a_{s,w}, τ_w, δ_w, a_w, b_w, peak_weekF (+ CI)
+              └─ if state == "aligning":
+                   M₂:  refit_stage2_weekly(D_hist ∪ {row w with M₁ outputs})
+                         └─ predict: π̂_{s,w+1},  π̂_{s,w+2}
+```
+
+This cycle repeats every week until `state == "post_peak"`, at which point
+alignment freezes and $M_2$ can be called one final time or retired for the
+season.
+
+### Leakage-free $M_2$ training
+
+The nested LOSO design that prevents data leakage is described in full in §@sec-m2-training. In brief: M2's leakage-sensitive covariates (aligned time axis `newWeek` and the template backbone $z_{s,w}$) depend on the reference curve $g_{\mathrm{ref}}$, so M2's LOSO must use a reference curve that excludes the held-out season. Real-time covariates (EWMA, slope, curvature) are computed from raw surveillance data and do not leak.
+
+### Full pipeline execution order
+
+The table below summarises what is done offline (once, before the live season
+begins) and what is repeated online (every week during the live season).
+
+| Step | Component | When | What freezes |
+|------|-----------|------|-------------|
+| 1 | Reference curve + `hyper` (`estimateRef`, `learn_alignment_hyperparams`) | Offline, once | @sec-refcurve |
+| 2 | Ignition detector thresholds $\hat\theta$ | Offline, once | @sec-m0 |
+| 3 | LOSO walk-forward ($M_1$) → `params_df` | Offline, once | @sec-loso |
+| 4 | Post-peak flag parameters (`use_ci`, `buffer_weeks`) | Offline, once | §@sec-peak-tuning |
+| 5 | $M_2$ hyperparameter tuning ($\delta$, $Kr$, $\alpha_\text{state}$, $\lambda_w$) | Offline, once | @sec-m2 |
+| 6 | $M_2$ initial fit on full historical `params_df` (`train_stage2_joint`) | Offline, before season start | GAM structure |
+| **7** | **Weekly: $M_1$ → $M_2$ refit → forecast** | **Online, every week** | GAM coefficients only |
+
+Steps 1–6 are completed once and the products are frozen objects (`ref`, `hyper`,
+`params`, `use_ci`, `buffer_weeks`, and the initial GAM fit). Step 7 is the only
+online component: $M_1$ runs first each week to produce alignment outputs, then
+$M_2$ is immediately refit and used to generate forecasts. The whole cycle is
+weekly, not streaming real-time.
+
+---
+
+## Document map {#sec-docmap}
+
+| Document | What it covers |
+|----------|---------------|
+| [`estimateRef.html`](estimateRef.html) | §@sec-refcurve — reference curve fitting and diagnostics |
+| [`ignition_training.html`](ignition_training.html) | §@sec-m0 — ignition gate definitions and LOSO threshold tuning |
+| [`loso_walkforward.html`](loso_walkforward.html) | §@sec-loso — LOSO evaluation, k_ref tuning, walk-forward plots |
+| [`peak_detection_tuning.html`](peak_detection_tuning.html) | §@sec-peak-tuning — post-peak flag parameter tuning |
+| [`forecast_training.html`](forecast_training.html) | §@sec-m2 — $M_2$ forecast model specification, training, and nested LOSO hyperparameter tuning |
+| [`m1_m2_stacking.html`](m1_m2_stacking.html) | $M_1 \to M_2$ stacking — replacing static template with walk-forward $M_1$ predictions |
+| [`prospective_deployment.html`](prospective_deployment.html) | **Full deployment** — M0→M1→M2 walk-forward pipeline for the current season, with forecast evolution visualizations |
+| [`run.html`](run.html) | Current season M1-only prospective alignment (legacy; no M2 forecasts) |
+| *(this document)* | Overview — notation, stage descriptions, deployment sequence |
+
+---
+
+## Key design choices
+
+**Weekly refit without leakage.** $M_2$ is refit every week by appending the
+growing current season to the fixed historical dataset. All modelling happens
+in aligned-week space ($w^a_{s,w}$) — the GAM smooth terms $S_2^h$ and
+$S_{3,s}^h$ provide additional flexibility to shift and stretch the forecast
+curve beyond M₁'s coarse alignment, so the model is not rigidly constrained
+to follow $g_\text{ref}$. Hyperparameters are frozen at LOSO-tuned values;
+only GAM coefficients update each week. The season random effect and
+season-specific factor-smooth absorb both level and shape corrections as
+current-season data accumulate.
+
+**Reference curve uses known labels (@sec-refcurve before @sec-m0).** The reference
+curve is estimated from retrospectively labelled ignition weeks — not from
+the prospective detector. This separation means the template is not corrupted
+by detection errors, and the prospective detector is evaluated independently.
+
+**Stateless prospective function.** `run_alignment_prospective()` takes the
+current data and returns the current state — the caller decides whether to keep
+calling. The same function powers both the LOSO inner loop and production
+deployment, guaranteeing identical behaviour.
+
+**LOSO for honest evaluation.** All tuning (`k_ref`, peak detection params)
+uses walk-forward LOSO so that no future data leaks into training. Ignition
+detector thresholds are tuned in an earlier LOSO pass (@sec-m0).
+
+**Alignment stops at peak.** Once `peak_passed == TRUE`, alignment freezes.
+This prevents the descending limb from distorting the peak estimate, and
+cleanly separates the peak prediction module from any downstream forecasting.
+
+**Two-stage identifiability guard.** Two parameters are activated progressively
+as data accumulate. The slope $b_w$ is fixed at 1 (`allow_scale = FALSE`) until
+sufficient data span the curve. The dilation $\delta_w$ is fixed at 0
+(`delta_on = FALSE`) until a further threshold is crossed. This prevents
+numerically unstable estimates early in the season when few observations are
+available.

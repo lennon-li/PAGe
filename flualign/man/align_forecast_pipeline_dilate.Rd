@@ -14,7 +14,12 @@ align_forecast_pipeline_dilate(
   level = 0.95,
   future_weeks = NULL,
   include_observed = TRUE,
-  fallback_when_unstable = TRUE
+  fallback_when_unstable = TRUE,
+  curvature_ratio = 1,
+  time_weights = NULL,
+  trough_weight = 0.1,
+  rise_weight = 1,
+  peak_decay = 0.3
 )
 }
 \arguments{
@@ -39,9 +44,22 @@ uses (last_obs + 1):52.}
 
 \item{fallback_when_unstable}{logical; if TRUE, refit with delta=0 when
 2D tau/delta profile covariance is unstable.}
+
+\item{curvature_ratio}{Numeric; gate coefficient for delta activation.}
+
+\item{time_weights}{Numeric vector or NULL; pre-computed time weights.
+If NULL and \code{rise_weight > 1}, weights are computed from the reference
+curve via \code{compute_align_weights()}.}
+
+\item{trough_weight}{Numeric; weight for pre-rising-limb weeks (default 0.1).}
+
+\item{rise_weight}{Numeric; weight for ignition-to-peak weeks (default 1.0,
+i.e. no boost by default).}
+
+\item{peak_decay}{Numeric; exponential decay rate after peak (default 0.3).}
 }
 \value{
-list with tau, delta, a, b, pred_df, peak, etc.
+list with tau, delta, a, b, pred_df, peak, nll, etc.
 }
 \description{
 Align and forecast using dilated reference curve

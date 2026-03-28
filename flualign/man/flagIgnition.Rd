@@ -14,7 +14,10 @@ flagIgnition(
   min_window = 10L,
   w_min = 20L,
   w_max = 21L,
-  d2_relax = -0.01
+  d2_relax = -0.01,
+  manual_labels = c(`2012-13` = 18L, `2013-14` = 20L, `2014-15` = 20L, `2015-16` = 24L,
+    `2016-17` = 19L, `2017-18` = 20L, `2018-19` = 19L, `2019-20` = 22L, `2022-23` = 15L,
+    `2023-24` = 20L, `2024-25` = 23L)
 )
 }
 \arguments{
@@ -39,6 +42,12 @@ If y and N are present, cum_p_obs/cum_p_fit are computed (cum_p_fit weighted by 
 \item{w_max}{enable rule 4 only if weekF > w_max (default 21).}
 
 \item{d2_relax}{threshold for optional 1-week relaxation when d2 exists.}
+
+\item{manual_labels}{named integer vector mapping season labels (e.g. "2015-16") to
+manually-verified ignition weekF values. When a season is found in this vector,
+the algorithmic detection is bypassed and the specified week is used directly.
+Pass \code{NULL} to always run the algorithm. Defaults to a set of pre-verified
+historical labels.}
 }
 \value{
 list(data=augmented df, ignition=1-row summary)
@@ -57,4 +66,12 @@ Rules:
 Window gate (all rules): weekF in [min_window, 52-min_window], and <= current_week if provided.
 Fallback gate (rules 2-4 only): weekF >= w_min, and only evaluated if rule 1 fails.
 Extra gate (rule 4 only): weekF > w_max.
+}
+\examples{
+# Use default manual labels (bypasses algorithm for known seasons)
+# out <- flagIgnition(season_df, p_thresh = 0.01, k1 = 0.05)
+
+# Force algorithmic detection for all seasons
+# out <- flagIgnition(season_df, p_thresh = 0.01, k1 = 0.05, manual_labels = NULL)
+
 }

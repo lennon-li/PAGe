@@ -97,14 +97,11 @@ learn_alignment_hyperparams <- function(
     TAU_BOUNDS <- pmax(pmin(TAU_BOUNDS, 20), -20)
   }
 
-  TAU_SHIFT <- stats::median(tau_delta_hist$tau_hat, na.rm = TRUE)
-
   list(
     TAU_BOUNDS = as.numeric(TAU_BOUNDS),
     DELTA_BOUNDS = as.numeric(DELTA_BOUNDS),
     WEEK_THRESHOLD_DELTA = as.numeric(WEEK_THRESHOLD_DELTA),
     LAMBDA_DELTA = as.numeric(LAMBDA_DELTA),
-    TAU_SHIFT = as.numeric(TAU_SHIFT),
     tau_delta_hist = tau_delta_hist,
     delta_stability = delta_stability,
     stability_summary = stability_summary,

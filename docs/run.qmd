@@ -1,0 +1,510 @@
+---
+title: "2025-26 Season: Prospective Alignment"
+format:
+  html:
+    self-contained: true
+    toc: true
+    page-layout: full
+    grid:
+      body-width: 1200px
+---
+
+```{r setup}
+#| include: false
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(purrr)
+library(mgcv)
+library(gamm4)
+library(gratia)
+library(MMWRweek)
+library(plotly)
+library(gt)
+library(flualign)
+library(future)
+library(furrr)
+
+source("../R/estimateRef.R")
+source("../R/loso_alignment.R")
+source("../R/utils.R")
+source("../R/prospective_running.R")
+source("../R/prospective_alignment.R")
+source("../R/getCurrentD.R")
+
+startWeek  <- 27L
+WALK_START <- 5L
+EXCLUDE_SEAS <- "2015-16"
+
+tuned  <- readRDS("../data/stage1_tuning.rds")
+params <- tuned$best_params
+
+manual_labels <- c(
+  "2012-13" = 18L, "2013-14" = 20L, "2014-15" = 20L,
+  "2015-16" = 24L, "2016-17" = 19L, "2017-18" = 20L,
+  "2018-19" = 19L, "2019-20" = 22L, "2022-23" = 15L,
+  "2023-24" = 20L, "2024-25" = 23L
+)
+
+# Historical data (all seasons, excluding current + bad seasons)
+allD_hist <- read.csv("../data/flu_testing_data.csv") %>%
+  select(season, week, year, start_year = seasonstart, date = week_start_date,
+         y = pos_flua, N = test_flu) %>%
+  mutate(neg = N - y, date = as.Date(date),
+         mmwr_year = ifelse(week >= 35L, start_year, start_year + 1L),
+         nW_true   = n_weeks_in_start_year(start_year),
+         weekF     = ((week - startWeek) %% nW_true) + 1L,
+         p = y / N) %>%
+  filter(!season %in% c("2011-12", "2020-21", "2021-22", "2025-26"))
+```
+
+```{=html}
+<style>
+h1 {
+  margin-top: 1.8em;
+  padding: 0.45em 1em;
+  background: #1a3a5c;
+  color: #ffffff;
+  border-radius: 5px;
+}
+h2 {
+  margin-top: 1.8em;
+  padding: 0.4em 0.9em;
+  border-left: 5px solid #1e5f8e;
+  background: #e8f1f8;
+  color: #1a3a5c;
+  border-radius: 0 4px 4px 0;
+}
+h3 {
+  margin-top: 2em;
+  padding: 0.4em 0.8em;
+  border-left: 4px solid #4a90d9;
+  background: #f4f8fd;
+  border-radius: 0 4px 4px 0;
+}
+h4 {
+  margin-top: 1.5em;
+  padding: 0.3em 0.7em;
+  border-left: 3px solid #a0bfe0;
+  background: #f9fbfe;
+  border-radius: 0 3px 3px 0;
+}
+</style>
+```
+
+## Production reference curve
+
+Trained on all non-excluded historical seasons (`r paste(sort(unique(filter(allD_hist, !season %in% EXCLUDE_SEAS)$season)), collapse = ", ")`). Cached in `../data/ref_production.rds`.
+
+```{r build-ref}
+#| message: false
+#| warning: false
+
+REF_CACHE <- "../data/ref_production.rds"
+
+if (file.exists(REF_CACHE)) {
+  ref_cache <- readRDS(REF_CACHE)
+  message("Loaded production ref from cache: ", REF_CACHE)
+} else {
+  train_allD <- filter(allD_hist, !season %in% EXCLUDE_SEAS)
+  flag_args  <- list(p_thresh = 0.01, k1 = 0.4, k_c = 0.01, n_consec = 2L,
+                     min_window = 10L, w_min = 21L, w_max = 21L, d2_relax = -0.01)
+
+  res_deriv  <- estimateDerivs(train_allD, k = 10L)
+  train_outs <- res_deriv$data %>%
+    group_by(season) %>%
+    group_split(.keep = TRUE) %>%
+    map(~ do.call(flagIgnition, c(list(df = .x, manual_labels = manual_labels), flag_args)))
+
+  aligned_train <- alignIgnition(train_outs)
+  ref  <- estimateRef(alignedD = aligned_train, exSeason = character(0),
+                      k = 8L, n_weeks = 52L)
+  ref$g_ref_fun_orig <- ref$g_ref_fun   # store unshifted for plotting
+  hyper <- learn_alignment_hyperparams(ref$dat, ref$g_ref_fun)
+
+  ref_cache <- list(ref = ref, hyper = hyper)
+  saveRDS(ref_cache, REF_CACHE)
+  message("Production ref built and cached: ", REF_CACHE)
+}
+
+ref   <- ref_cache$ref
+hyper <- ref_cache$hyper
+```
+
+```{r ref-plot}
+#| echo: false
+#| warning: false
+
+newW_grid <- seq(1, 52, by = 0.5)
+ref_df_plot <- tibble(
+  newWeek = newW_grid,
+  p_ref   = plogis(ref$g_ref_fun_orig(newW_grid))
+)
+
+plot_ly() %>%
+  add_lines(data = ref_df_plot, x = ~newWeek, y = ~p_ref,
+            line = list(color = "steelblue", width = 2),
+            name = "Reference curve") %>%
+  layout(xaxis = list(title = "newWeek (aligned)"),
+         yaxis = list(title = "Positivity"),
+         title = "Production reference curve (k_ref = 8, all training seasons)")
+```
+
+## Current season data
+
+```{r get-current}
+#| message: false
+#| warning: false
+
+currentD_full <- getCurrentD(startWeek = startWeek)
+# Keep only 2025-26
+currentD_full <- filter(currentD_full, season == "2025-26")
+
+cat(sprintf("Season: 2025-26 | Weeks observed: %d | weekF range: %d – %d\n",
+            nrow(currentD_full),
+            min(currentD_full$weekF), max(currentD_full$weekF)))
+```
+
+## Walk-forward alignment
+
+Starting at `weekF = WALK_START` (`r WALK_START`). Results cached in `../data/run_wf_cache.rds`.
+
+```{r run-wf}
+#| message: false
+#| warning: false
+
+WF_CACHE <- "../data/run_wf_cache.rds"
+
+if (file.exists(WF_CACHE)) {
+  wf <- readRDS(WF_CACHE)
+  message("Loaded walk-forward from cache.")
+} else {
+  walk_end_s <- max(currentD_full$weekF, na.rm = TRUE)
+
+  # Run ignition detection once on all available data
+  ign_out <- run_ignition_weekly(
+    currentSeason  = currentD_full,
+    ign_fit_or_gam = NULL,
+    params         = params,
+    start_week     = 1L
+  )
+
+  walk_start_s <- if (!is.na(ign_out$ign_week_locked)) {
+    max(WALK_START, as.integer(ign_out$ign_week_locked))
+  } else {
+    WALK_START
+  }
+  eval_weeks <- seq(walk_start_s, walk_end_s)
+
+  iWeek_true <- NA_integer_   # unknown for current season
+
+  week_results <- lapply(eval_weeks, function(ew) {
+    season_data_to_ew <- filter(currentD_full, weekF <= ew)
+    n_obs <- nrow(season_data_to_ew)
+
+    ap <- run_alignment_prospective(
+      currentSeason   = season_data_to_ew,
+      ref             = ref,
+      hyper           = hyper,
+      params          = NULL,
+      ign_out         = ign_out,
+      use_ci          = TRUE,
+      buffer_weeks    = 0L,
+      allow_scale     = NULL,
+      level           = 0.95,
+      min_obs         = 4L,
+      curvature_ratio = 1.0
+    )
+
+    if (ap$state == "pre_ignition") {
+      ign_locked_w <- ign_out$ign_week_locked
+      reason <- if (is.na(ign_locked_w) || ign_locked_w > ew) "no_ignition"
+                else if (n_obs < 4L) "too_few_obs"
+                else "alignment_error"
+      iWeek_hat_ew <- if (!is.na(ign_locked_w) && ign_locked_w <= ew)
+                        as.integer(ign_out$iWeek_hat_locked) else NA_integer_
+
+      params_row <- tibble(
+        eval_week = ew, n_obs = n_obs, iWeek_hat = iWeek_hat_ew,
+        iWeek_true = iWeek_true, state = ap$state,
+        tau = NA_real_, delta = NA_real_, a = NA_real_, b = NA_real_,
+        allow_scale = NA, delta_on = NA,
+        t_peak = NA_real_, t_peak_lo = NA_real_, t_peak_hi = NA_real_,
+        peak_weekF = NA_integer_, peak_passed = FALSE,
+        fallback_reason = reason, anchorWeek = ref$anchorWeek
+      )
+      return(list(params = params_row, forecast = NULL))
+    }
+
+    params_row <- tibble(
+      eval_week       = ew,
+      n_obs           = n_obs,
+      iWeek_hat       = ap$iWeek_hat,
+      iWeek_true      = iWeek_true,
+      state           = ap$state,
+      tau             = ap$tau,
+      delta           = ap$delta,
+      a               = ap$a,
+      b               = ap$b,
+      allow_scale     = ap$allow_scale,
+      delta_on        = ap$delta_on,
+      t_peak          = ap$t_peak,
+      t_peak_lo       = ap$t_peak_ci[1],
+      t_peak_hi       = ap$t_peak_ci[2],
+      peak_weekF      = ap$peak_weekF,
+      peak_passed     = ap$peak_passed,
+      fallback_reason = ap$fallback_reason,
+      anchorWeek      = ref$anchorWeek
+    )
+
+    forecast_row <- ap$forecast_df %>%
+      mutate(eval_week = ew,
+             newWeek = as.numeric(newWeek),
+             p_hat   = as.numeric(p_hat),
+             p_lo    = as.numeric(p_lo),
+             p_hi    = as.numeric(p_hi)) %>%
+      select(eval_week, newWeek, p_hat, p_lo, p_hi, kind)
+
+    list(params = params_row, forecast = forecast_row)
+  })
+
+  params_df   <- bind_rows(map(week_results, "params"))
+  forecast_df <- bind_rows(map(week_results, "forecast"))
+
+  wf <- list(params_df = params_df, forecast_df = forecast_df, ign_out = ign_out)
+  saveRDS(wf, WF_CACHE)
+  message("Walk-forward complete. Saved to ", WF_CACHE)
+}
+```
+
+## Current state
+
+```{r current-state}
+#| echo: false
+
+last_row <- wf$params_df %>%
+  filter(!is.na(iWeek_hat)) %>%
+  slice_max(eval_week, n = 1, with_ties = FALSE)
+
+if (nrow(last_row) > 0) {
+  cat(sprintf(
+    "State: %s | Ignition: weekF %d | Est. peak: weekF %d [%d, %d] | Latest eval: weekF %d\n",
+    last_row$state,
+    last_row$iWeek_hat,
+    last_row$peak_weekF,
+    wf$params_df %>% filter(!is.na(iWeek_hat)) %>% slice_max(eval_week, n=1) %>% pull(t_peak_lo) %>% {round(. - ref$anchorWeek + last_row$iWeek_hat)},
+    wf$params_df %>% filter(!is.na(iWeek_hat)) %>% slice_max(eval_week, n=1) %>% pull(t_peak_hi) %>% {round(. - ref$anchorWeek + last_row$iWeek_hat)},
+    last_row$eval_week
+  ))
+} else {
+  cat("No alignment yet — ignition not detected.\n")
+}
+```
+
+## Alignment parameters over time
+
+```{r param-plots-setup}
+#| echo: false
+#| warning: false
+
+param_vars <- c("tau", "delta", "a", "b", "t_peak")
+param_labels <- c(
+  tau    = "τ — time shift",
+  delta  = "δ — scale",
+  a      = "a — lower asymptote",
+  b      = "b — upper asymptote",
+  t_peak = "t_peak — predicted peak (aligned)"
+)
+
+df_params <- wf$params_df %>%
+  filter(!is.na(iWeek_hat)) %>%
+  select(eval_week, all_of(param_vars))
+
+make_param_plot <- function(pvar) {
+  df <- df_params %>% select(eval_week, value = all_of(pvar))
+  plot_ly(df, x = ~eval_week, y = ~value,
+          type = "scatter", mode = "lines+markers",
+          line = list(color = "steelblue", width = 1.5),
+          marker = list(size = 6, color = "steelblue")) %>%
+    layout(xaxis = list(title = "Eval weekF"),
+           yaxis = list(title = param_labels[[pvar]]))
+}
+```
+
+::: {.panel-tabset}
+
+```{r param-tabs}
+#| echo: false
+#| warning: false
+#| results: asis
+
+param_tab_chunks <- lapply(param_vars, function(pvar) {
+  e <- new.env(parent = globalenv())
+  e$p <- make_param_plot(pvar)
+  knitr::knit_child(
+    text = c(sprintf("### %s", param_labels[[pvar]]), "",
+             "```{r echo=FALSE, warning=FALSE}", "p", "```", ""),
+    envir = e, quiet = TRUE
+  )
+})
+cat(unlist(param_tab_chunks), sep = "\n")
+```
+
+:::
+
+## Results by eval week
+
+Grey line = reference curve (background). Blue = fitted past, red = forecast.
+Dashed grey = ignition, solid black = current eval week, dashed red = est. peak.
+
+```{r week-reports}
+#| echo: false
+#| warning: false
+#| results: asis
+
+s_all <- wf$params_df %>% filter(!is.na(iWeek_hat))
+
+if (nrow(s_all) == 0) {
+  cat("*No forecasts yet — ignition not detected.*\n\n")
+} else {
+  # Extend 2 weeks past first peak-detection week
+  first_peak_ew <- s_all %>% filter(peak_passed) %>%
+    slice_min(eval_week, n = 1, with_ties = FALSE) %>% pull(eval_week)
+  cutoff_ew <- if (length(first_peak_ew) > 0) first_peak_ew + 2L else max(s_all$eval_week)
+
+  s_params <- s_all %>% filter(eval_week <= cutoff_ew)
+
+  # gt parameter table
+  tbl <- gt(s_params %>% select(eval_week, iWeek_hat, state, peak_weekF,
+                                 tau, delta, t_peak, t_peak_lo, t_peak_hi, peak_passed)) %>%
+    cols_label(eval_week = "Eval wkF", iWeek_hat = "Ign (hat)", state = "State",
+               peak_weekF = "Est. peak", tau = "τ", delta = "δ",
+               t_peak = "t_peak", t_peak_lo = "lo", t_peak_hi = "hi",
+               peak_passed = "Peak passed") %>%
+    fmt_number(columns = c(tau, delta, t_peak, t_peak_lo, t_peak_hi), decimals = 2) %>%
+    fmt_integer(columns = c(eval_week, iWeek_hat, peak_weekF)) %>%
+    tab_style(style = cell_fill(color = "#fff0f0"),
+              locations = cells_body(rows = peak_passed == TRUE)) %>%
+    tab_options(table.width = pct(100), table.font.size = "13px")
+
+  # Reference curve for background
+  newW_grid <- seq(1, 52, by = 0.5)
+  ref_curve <- tibble(
+    newWeek = newW_grid,
+    p_ref   = plogis(ref$g_ref_fun_orig(newW_grid))
+  )
+
+  obs_s <- currentD_full %>% mutate(p_obs = y / N)
+
+  cat("::: {.panel-tabset}\n\n")
+
+  tab_chunks <- lapply(s_params$eval_week, function(ew) {
+    .ref_curve <- ref_curve
+
+    pw           <- wf$params_df %>% filter(eval_week == ew)
+    iWeek_hat_ew <- pw$iWeek_hat[[1]]
+    anchor_ew    <- pw$anchorWeek[[1]]
+    t_peak_ew    <- pw$t_peak[[1]]
+    peak_wF      <- pw$peak_weekF[[1]]
+    state_ew     <- pw$state[[1]]
+
+    current_newW <- ew - iWeek_hat_ew + anchor_ew
+
+    fc_smooth <- wf$forecast_df %>%
+      filter(eval_week == ew, kind == "forecast") %>%
+      arrange(newWeek)
+
+    if (nrow(fc_smooth) == 0) return(NULL)
+
+    junction  <- fc_smooth$newWeek[which.min(abs(fc_smooth$newWeek - current_newW))]
+    fc_past   <- fc_smooth %>% filter(newWeek <= junction)
+    fc_future <- fc_smooth %>% filter(newWeek >= junction)
+
+    obs_aligned <- obs_s %>%
+      filter(weekF <= ew) %>%
+      mutate(newWeek = weekF - iWeek_hat_ew + anchor_ew)
+
+    y_max <- max(c(fc_smooth$p_hi, obs_aligned$p_obs), na.rm = TRUE) * 1.1
+    y_max <- max(y_max, 0.15)
+
+    plt <- plot_ly() %>%
+      add_lines(
+        data = .ref_curve, x = ~newWeek, y = ~p_ref,
+        line = list(color = "rgba(160,160,160,0.5)", width = 1.2),
+        name = "Template (orig)"
+      ) %>%
+      add_ribbons(
+        data = fc_smooth, x = ~newWeek, ymin = ~p_lo, ymax = ~p_hi,
+        fillcolor = "rgba(150,150,150,0.15)",
+        line = list(color = "transparent"),
+        name = "95% CI", showlegend = TRUE
+      ) %>%
+      add_lines(
+        data = fc_past, x = ~newWeek, y = ~p_hat,
+        line = list(color = "steelblue", width = 2.5),
+        name = "Fitted (past)"
+      ) %>%
+      add_lines(
+        data = fc_future, x = ~newWeek, y = ~p_hat,
+        line = list(color = "firebrick", width = 2.5),
+        name = "Forecast"
+      ) %>%
+      add_markers(
+        data = obs_aligned, x = ~newWeek, y = ~p_obs,
+        marker = list(color = "black", size = 5, opacity = 0.75),
+        name = "Observed"
+      ) %>%
+      add_segments(
+        x = anchor_ew, xend = anchor_ew, y = 0, yend = y_max,
+        line = list(color = "grey50", dash = "dash", width = 1.5),
+        name = paste0("Ignition (wk ", iWeek_hat_ew, ")"), showlegend = TRUE
+      ) %>%
+      add_segments(
+        x = current_newW, xend = current_newW, y = 0, yend = y_max,
+        line = list(color = "black", dash = "solid", width = 2),
+        name = paste0("Now (wk ", ew, ")"), showlegend = TRUE
+      )
+
+    if (!is.na(t_peak_ew)) {
+      plt <- plt %>%
+        add_segments(
+          x = t_peak_ew, xend = t_peak_ew, y = 0, yend = y_max,
+          line = list(color = "firebrick", dash = "dash", width = 1.5),
+          name = paste0("Est. peak (wk ", peak_wF, ")"), showlegend = TRUE
+        )
+    }
+
+    plt <- plt %>%
+      layout(
+        title = paste0("2025-26 | weekF=", ew, " | ign=", iWeek_hat_ew,
+                       " | state=", state_ew,
+                       if (!is.na(peak_wF)) paste0(" | est peak wk ", peak_wF) else ""),
+        xaxis = list(title = "newWeek (aligned)"),
+        yaxis = list(title = "Positivity", range = c(0, y_max)),
+        legend = list(orientation = "h", y = -0.20)
+      )
+
+    e <- new.env(parent = globalenv())
+    e$tab_plot <- plt
+    knitr::knit_child(
+      text = c(sprintf("### nW %d", current_newW), "",
+               "```{r echo=FALSE, warning=FALSE}", "tab_plot", "```", ""),
+      envir = e, quiet = TRUE
+    )
+  })
+
+  valid_tabs <- Filter(Negate(is.null), tab_chunks)
+  cat(unlist(valid_tabs), sep = "\n")
+
+  # Data tab
+  e_tbl <- new.env(parent = globalenv())
+  e_tbl$tbl_obj <- tbl
+  data_tab <- knitr::knit_child(
+    text = c("### Data", "", "```{r echo=FALSE}", "tbl_obj", "```", ""),
+    envir = e_tbl, quiet = TRUE
+  )
+  cat(data_tab)
+
+  cat("\n:::\n\n")
+}
+```

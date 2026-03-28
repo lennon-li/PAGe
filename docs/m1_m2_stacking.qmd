@@ -1,0 +1,398 @@
+---
+title: "$M_1 \\to M_2$ Stacking: Aligned Template Integration"
+format:
+  html:
+    html-math-method: mathjax
+    self-contained: true
+    toc: true
+    number-sections: true
+    page-layout: full
+    grid:
+      body-width: 1200px
+---
+
+```{=html}
+<style>
+h1 {
+  margin-top: 1.8em;
+  padding: 0.45em 1em;
+  background: #1a3a5c;
+  color: #ffffff;
+  border-radius: 5px;
+}
+h2 {
+  margin-top: 1.8em;
+  padding: 0.4em 0.9em;
+  border-left: 5px solid #1e5f8e;
+  background: #e8f1f8;
+  color: #1a3a5c;
+  border-radius: 0 4px 4px 0;
+}
+h3 {
+  margin-top: 2em;
+  padding: 0.4em 0.8em;
+  border-left: 4px solid #4a90d9;
+  background: #f4f8fd;
+  border-radius: 0 4px 4px 0;
+}
+h4 {
+  margin-top: 1.5em;
+  padding: 0.3em 0.7em;
+  border-left: 3px solid #a0bfe0;
+  background: #f9fbfe;
+  border-radius: 0 3px 3px 0;
+}
+.callout-note {
+  border-left: 4px solid #2196F3;
+  background: #e3f2fd;
+  padding: 1em;
+  margin: 1.2em 0;
+  border-radius: 0 4px 4px 0;
+}
+.callout-warning {
+  border-left: 4px solid #FF9800;
+  background: #fff3e0;
+  padding: 1em;
+  margin: 1.2em 0;
+  border-radius: 0 4px 4px 0;
+}
+</style>
+```
+
+This document describes how the $M_1$ alignment model's **predictions** replace
+$M_2$'s static template backbone, and the implications for training, evaluation,
+and deployment. It supersedes the static template $z_{s,w}(\delta, Kr)$ described
+in the [pipeline overview](pipeline_overview.html) §6 and
+[forecast training](forecast_training.html) §1.
+
+## Motivation: the static-template problem
+
+In the original $M_2$ specification
+([pipeline overview](pipeline_overview.html) §6), the template backbone is
+
+$$
+z_{s,w}(\delta, Kr) = \omega(t_{s,w};\, Kr)\;\mathrm{logit}_\varepsilon\!\bigl(g_\text{ref}(w^a_{s,w} + \delta)\bigr),
+$$
+
+where $\delta$ is a fixed integer-week shift tuned by LOSO, and $g_\text{ref}$
+is the reference curve. This has two problems:
+
+1. **$\delta$ is static.** The same shift is used at every week of every season.
+   In reality, the optimal alignment changes as data accumulate — $M_1$ exists
+   precisely to capture this.
+
+2. **$M_1$'s work is discarded.** $M_1$ fits a 4-parameter dilation model
+   $(\tau_w, \delta_w, a_w, b_w)$ that adapts weekly. The static template
+   ignores this entirely, using only the coarse $w^a_{s,w}$ alignment from
+   ignition anchoring.
+
+The solution is **model stacking**: use $M_1$'s prediction $\hat\pi^{M_1}_{s,w}$
+as $M_2$'s template feature instead of the static reference curve.
+
+
+## Stacking architecture {#sec-stacking}
+
+### Notation
+
+Recall from the [pipeline overview](pipeline_overview.html):
+
+- $g_\text{ref}(u)$: reference curve on the logit scale, defined on aligned
+  time $u$
+- $M_1$ fits $(\tau_w, \delta_w, a_w, b_w)$ at each evaluation week $w$ and
+  produces a predicted positivity curve:
+
+$$
+\mathrm{logit}\!\bigl(\hat\pi^{M_1}_{s,w}(t)\bigr) = a_w + b_w \cdot g_\text{ref}\!\!\left(\frac{t - \tau_w}{1 + \delta_w}\right)
+$$
+
+for any aligned time point $t$. In particular, $M_1$ can predict at
+**future** target weeks $w^a_{s,w+h}$ for $h = 1, 2$.
+
+### New template feature
+
+Define the **stacked template** covariate:
+
+$$
+\tilde{z}^h_{s,w} = \mathrm{logit}_\varepsilon\!\Bigl(\hat\pi^{M_1}_{s,w}\!\bigl(w^a_{s,w+h}\bigr)\Bigr),
+$$ {#eq-stacked-z}
+
+where $w^a_{s,w+h}$ is the aligned time at the target week $w + h$.
+This replaces the static $z_{s,w}(\delta, Kr)$ in $M_2$'s linear predictor.
+
+The key difference is that $\tilde{z}^h_{s,w}$ is computed from $M_1$'s
+**time-varying** alignment parameters $(\tau_w, \delta_w, a_w, b_w)$
+evaluated at the current week $w$, not from the fixed reference curve with
+a static shift $\delta$.
+
+### Updated $M_2$ linear predictor
+
+The $M_2$ model becomes:
+
+$$
+\eta^h_{s,w} = \mathrm{logit}\!\bigl(\pi^h_{s,w}\bigr)
+= \alpha^h + b_s
++ \underbrace{\tilde{z}^h_{s,w}}_{\text{M}_1\text{ template}}
++ S_2^h\!\bigl(w^a_{s,w}\bigr)
++ S_{3,s}^h\!\bigl(w^a_{s,w}\bigr)
++ S_4^h\!\bigl(z^{(\mathrm{ema})}_{s,w}\bigr)
++ S_6^h\!\bigl(d1_{s,w}\bigr)
++ S_7^h\!\bigl(d2_{s,w}\bigr).
+$$ {#eq-stacked-m2}
+
+Compared to the original specification, the only structural change is:
+
+| Original | Stacked |
+|---|---|
+| $z_{s,w}(\delta, Kr) = \omega(t;\,Kr)\;\mathrm{logit}_\varepsilon\!\bigl(g_\text{ref}(w^a + \delta)\bigr)$ | $\tilde{z}^h_{s,w} = \mathrm{logit}_\varepsilon\!\bigl(\hat\pi^{M_1}_{s,w}(w^a_{s,w+h})\bigr)$ |
+
+**The template entry mode `T` and ramp `Kr` are unchanged** — $\tilde{z}^h_{s,w}$
+enters the model exactly as $z_{s,w}$ did (offset, smooth, or excluded).
+The hyperparameter $\delta$ (static integer-week shift) is **eliminated** because
+$M_1$ already handles alignment timing.
+
+::: {.callout-note}
+#### Why pass predictions, not parameters?
+
+One could instead pass $M_1$'s fitted parameters $(\tau_w, \delta_w, a_w, b_w)$
+as four separate covariates. This has two disadvantages:
+
+1. **Dimensionality.** Four correlated, time-varying parameters require more
+   complex interaction terms. A single logit-scale prediction compresses them
+   into the quantity $M_2$ actually needs.
+
+2. **Interpretability.** The stacked prediction $\tilde{z}^h_{s,w}$ is on the
+   same logit scale as $M_2$'s response — it is directly comparable to the
+   old $z_{s,w}$ and inherits the same model entry mechanisms.
+
+This is standard stacking: stage-1 predictions are features for stage-2.
+:::
+
+## Training: walk-forward M1 predictions {#sec-training}
+
+### The leakage constraint
+
+$M_2$'s template feature $\tilde{z}^h_{s,w}$ is itself a model output from
+$M_1$. If we used retro-fitted $M_1$ outputs (full-season alignment) as
+training features, $M_2$ would overfit to unrealistically good $M_1$ predictions
+that are unavailable at forecast time.
+
+**Requirement:** $M_2$ must be trained on $M_1$ predictions that were generated
+**prospectively** — using only data available at evaluation week $w$.
+
+### Walk-forward M1 generation
+
+For each training season $s$ and evaluation week $w \ge w_s^{(\mathrm{ign})}$,
+we run $M_1$ prospectively:
+
+$$
+\hat\pi^{M_1}_{s,w}(\cdot) \;\leftarrow\;
+\texttt{run\_alignment\_prospective}\!\bigl(\text{data}_{s,1:w},\; g_\text{ref}^{(-s^*)},\; \text{hyper}^{(-s^*)}\bigr),
+$$
+
+where $g_\text{ref}^{(-s^*)}$ denotes the reference curve estimated with the
+current LOSO fold's test season $s^*$ excluded.
+
+This produces $M_1$'s forecast curve at week $w$. We then interpolate to
+get predictions at target weeks:
+
+$$
+\hat{p}^{M_1}_{s,w,h} = \hat\pi^{M_1}_{s,w}\!\bigl(w^a_{s,w+h}\bigr),
+\qquad h \in \{1, 2\},
+$$
+
+using linear interpolation on the predicted curve
+(`stats::approx(forecast_df$newWeek, forecast_df$p_hat, xout = w^a_{s,w+h})`).
+
+::: {.callout-note}
+#### Target week computation
+
+The target aligned week is:
+
+$$
+w^a_{s,w+h} = (w^f_{s,w} + h) - \hat{w}^{(\mathrm{ign})}_s + w^{an},
+$$
+
+where $\hat{w}^{(\mathrm{ign})}_s$ is the detected ignition week and $w^{an}$
+is the anchor week (median ignition across training seasons).
+:::
+
+### LOSO integration
+
+In each LOSO fold with test season $s^*$:
+
+1. **Reference curve.** Fit $g_\text{ref}^{(-s^*)}$ on all seasons except $s^*$
+   (as usual).
+
+2. **$M_1$ walk-forward on training seasons.** For each training season
+   $s \ne s^*$, run $M_1$ prospectively week by week. Collect predictions
+   $\hat{p}^{M_1}_{s,w,h}$ for all $(s, w, h)$. This uses the same
+   $g_\text{ref}^{(-s^*)}$, so the training seasons' M1 predictions are
+   generated with the test season excluded from the reference curve.
+
+3. **Build $M_2$ training data.** Stack training rows across seasons and
+   horizons. For each row $(s, w, h)$, set:
+
+$$
+\texttt{logit\_f\_eff}_{s,w,h} = \mathrm{logit}_\varepsilon\!\bigl(\hat{p}^{M_1}_{s,w,h}\bigr).
+$$
+
+4. **$M_1$ walk-forward on test season.** Run $M_1$ on $s^*$ prospectively
+   to get $\hat{p}^{M_1}_{s^*,w,h}$.
+
+5. **Score.** Predict $s^*$ as a new season (season-dependent terms excluded)
+   using $M_2$ fitted in step 3, and compute NLL over the evaluation window.
+
+```
+LOSO fold for test season s*:
+  ├─ estimateRef(−s*)  →  g_ref, hyper
+  ├─ M0: detect ignition for each season
+  ├─ M1 walk-forward on training seasons  →  m1_train_preds
+  ├─ train_stage2_joint(m1_preds = m1_train_preds)  →  M2 fit
+  ├─ M1 walk-forward on test season s*  →  m1_test_preds
+  └─ score M2 on s* using m1_test_preds  →  NLL
+```
+
+::: {.callout-warning}
+#### Mild leakage in training-season M1
+
+When generating $M_1$ predictions for training season $s$, the reference curve
+$g_\text{ref}^{(-s^*)}$ **includes** season $s$ itself (only $s^*$ is excluded).
+This means $M_1$'s predictions for training seasons are slightly optimistic
+compared to true leave-one-out predictions. This leakage is mild because:
+
+- The reference curve is an average over $\sim$10 seasons — adding or removing
+  one season changes it only slightly.
+- The test season $s^*$ (which matters for evaluation) always uses a reference
+  curve from which it is properly excluded.
+- Full nested LOSO (excluding each training season from its own reference curve)
+  would require $O(S^2)$ reference curve fits per fold — prohibitive for tuning.
+:::
+
+### Fallback to static template
+
+When $M_1$ predictions are unavailable for a row (e.g., pre-ignition weeks
+included in the training buffer via $Kb$), $M_2$ falls back to the static
+template:
+
+$$
+\texttt{logit\_f\_eff}_{s,w,h} =
+\begin{cases}
+\mathrm{logit}_\varepsilon\!\bigl(\hat{p}^{M_1}_{s,w,h}\bigr) &
+  \text{if } \hat{p}^{M_1}_{s,w,h} \text{ is available} \\[6pt]
+\omega(t;\,Kr)\;\mathrm{logit}_\varepsilon\!\bigl(g_\text{ref}(w^a + \delta)\bigr) &
+  \text{otherwise (original static template)}
+\end{cases}
+$$
+
+
+## Deployment: weekly M0 → M1 → M2 chain {#sec-deploy}
+
+At runtime during the live season $s^*$, the weekly cycle becomes:
+
+### Step 1: $M_0$ — Ignition detection
+
+$$
+P(s^*,w) \;\leftarrow\; \texttt{run\_ignition\_weekly}(\text{data}_{s^*,1:w},\; \hat\theta).
+$$
+
+If $P(s^*,w) = 0$, stop — no forecast this week.
+
+### Step 2: $M_1$ — Alignment
+
+$$
+\bigl(\tau_w,\, \delta_w,\, a_w,\, b_w,\, \text{state},\, \text{forecast\_df}\bigr)
+\;\leftarrow\; \texttt{run\_alignment\_prospective}(\text{data}_{s^*,1:w},\; g_\text{ref},\; \text{hyper}).
+$$
+
+$M_1$'s `forecast_df` contains the predicted curve $\hat\pi^{M_1}_{s^*,w}(t)$
+on a dense grid of aligned time $t$.
+
+### Step 3: Inject M1 into M2 snapshots
+
+For each forecast horizon $h \in \{1, 2\}$, interpolate $M_1$'s prediction at
+the target week and replace the template feature:
+
+$$
+\texttt{logit\_f\_eff}^h_{s^*,w} \;\leftarrow\; \mathrm{logit}_\varepsilon\!\Bigl(\hat\pi^{M_1}_{s^*,w}\!\bigl(w^a_{s^*,w+h}\bigr)\Bigr).
+$$
+
+This is performed by `inject_m1_into_snapshots()`, which modifies the M2
+prediction snapshots in-place.
+
+### Step 4: $M_2$ — Forecast
+
+$$
+\hat\pi^h_{s^*,w} \;\leftarrow\; \texttt{stage2\_predict\_series}(\text{snapshots with } \tilde{z}^h,\; \text{M}_2\text{ fit}).
+$$
+
+The full chain is wrapped in `run_m0_m1_m2_weekly()`:
+
+```
+Week w arrives
+  └─ M₀:  run_ignition_weekly(data[1:w], params)
+       └─ if ignited:
+            M₁:  run_alignment_prospective(data[1:w], ref, hyper)
+                 └─ forecast_df  →  interpolate at target weeks
+                      └─ inject_m1_into_snapshots(pp, m1_result, ref)
+                           └─ M₂:  stage2_predict_series(pp, stage2_fit)
+                                    └─ π̂_{s*,w+1},  π̂_{s*,w+2}
+```
+
+
+## Impact on existing components
+
+### What changes
+
+| Component | Impact |
+|---|---|
+| **$M_2$ template feature** | `logit_f_eff` now computed from $M_1$'s prediction instead of static $g_\text{ref}(w^a + \delta)$ |
+| **$M_2$ hyperparameters** | $\delta$ (template shift) is **eliminated** — $M_1$ handles alignment |
+| **$M_2$ LOSO** | Now requires $M_1$ walk-forward per fold; use `loso_m1_m2_joint()` instead of `tune_stage2_loso_spec_grid_parallel()` |
+| **Deployment pipeline** | Use `run_m0_m1_m2_weekly()` for full chain |
+
+### What does NOT change
+
+| Component | Status |
+|---|---|
+| **$M_0$ ignition detection** | Unchanged — still gates everything |
+| **$M_1$ alignment model** | Unchanged — same 4-parameter dilation |
+| **$M_1$ LOSO** ([`loso_walkforward.html`](loso_walkforward.html)) | Unchanged — still valid for `k_ref` tuning and peak detection |
+| **Reference curve estimation** | Unchanged — `estimateRef()` is still the foundation |
+| **$M_2$ model structure** | All other terms ($b_s$, $S_2^h$, $S_4^h$, $S_6^h$, $S_7^h$) unchanged |
+| **$M_2$ hyperparameters** | $Kr$, $\alpha_\text{state}$, $\lambda_w$, $k_*$ all still tunable |
+| **$M_2$ weekly refit** | Same mechanism — only template source differs |
+
+
+## Key functions {#sec-functions}
+
+All new functions live in `R/m1_m2_bridge.R`:
+
+| Function | Purpose |
+|---|---|
+| `m1_walkforward_predictions(seasonD, ...)` | Run $M_1$ walk-forward for one season, return predictions at target weeks as a data frame with columns `(season, eval_weekF, h, m1_p_hat)` |
+| `m1_walkforward_multi(allD, ...)` | Parallelised wrapper — runs `m1_walkforward_predictions` across multiple seasons using `future`/`furrr` |
+| `inject_m1_into_snapshots(pp, m1_result, ref)` | Replace `logit_f_eff` in $M_2$ prediction snapshots with $M_1$'s interpolated prediction |
+| `run_m0_m1_m2_weekly(currentSeason, ref, hyper, stage2_fit, ...)` | Full $M_0 \to M_1 \to M_2$ weekly chain for deployment |
+| `loso_m1_m2_joint(allD, spec, ...)` | Joint $M_0 \to M_1 \to M_2$ LOSO evaluator |
+
+Modified functions in `R/prospective_training.R`:
+
+| Function | Change |
+|---|---|
+| `prep_stage2_joint(..., m1_preds = NULL)` | When `m1_preds` is provided, joins on `(season, weekF, lead)` and sets `logit_f_eff = logit(m1_p_hat)`, falling back to static template for missing rows |
+| `train_stage2_joint(..., m1_preds = NULL)` | Passes `m1_preds` through to `prep_stage2_joint()` |
+
+
+## Updated training & deployment sequence
+
+Compare with the [pipeline overview](pipeline_overview.html) §7:
+
+| Step | Component | When | Change from original |
+|---|---|---|---|
+| 1 | Reference curve + `hyper` | Offline | *No change* |
+| 2 | Ignition detector $\hat\theta$ | Offline | *No change* |
+| 3 | $M_1$ LOSO walk-forward → `params_df` | Offline | *No change* (still needed for `k_ref` tuning) |
+| 4 | Peak detection tuning | Offline | *No change* |
+| **5** | **$M_2$ hyperparameter tuning** | **Offline** | **Use `loso_m1_m2_joint()` — runs $M_1$ walk-forward per fold to generate template features; $\delta$ grid no longer needed** |
+| **6** | **$M_2$ initial fit** | **Offline** | **`train_stage2_joint(m1_preds = m1_train_all)` — uses walk-forward $M_1$ predictions on all historical seasons** |
+| **7** | **Weekly: $M_0 \to M_1 \to M_2$** | **Online** | **Use `run_m0_m1_m2_weekly()` — $M_1$ output feeds $M_2$'s template via `inject_m1_into_snapshots()`** |

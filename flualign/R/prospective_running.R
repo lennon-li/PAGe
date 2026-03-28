@@ -184,9 +184,7 @@ run_ignition_weekly <- function(currentSeason,
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   if (!requireNamespace("tibble", quietly = TRUE)) stop("Please install tibble.")
 
-  if (!exists("detectIgnition_oneSeason", mode = "function")) {
-    stop("detectIgnition_oneSeason() was not found. Source your Stage-1 file before calling this function.")
-  }
+  # detectIgnition_oneSeason is now exported from the package
 
   use_cls <- isTRUE(params$use_cls)
   if (!is.null(ign_fit_or_gam)) {

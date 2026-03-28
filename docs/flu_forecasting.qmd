@@ -21,8 +21,6 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 
 library(tidyverse)
 library(mgcv)
-library(gamm4)
-library(gratia)
 library(plotly)
 library(data.table)
 library(MMWRweek)
@@ -33,6 +31,7 @@ source("../R/retro_estimation.R")
 source("../R/ignitionTraining.R")
 source("../R/prospective_training.R")
 source("../R/prospective_running.R")
+source("../R/module_training.R")
 
 # ---- Settings ----
 startWeek   <- 27     # MMWR week number that defines weekF = 1
@@ -41,6 +40,12 @@ df          <- 10     # k for the common-curve smooth
 p_thresh    <- 0.01
 k1          <- 0.4
 k2          <- -0.01
+manual_labels <- c(
+  "2012-13" = 18L, "2013-14" = 20L, "2014-15" = 20L,
+  "2015-16" = 24L, "2016-17" = 19L, "2017-18" = 20L,
+  "2018-19" = 19L, "2019-20" = 22L, "2022-23" = 15L,
+  "2023-24" = 20L, "2024-25" = 23L
+)
 
 n_weeks_in_start_year <- function(start_year) {
   52L + as.integer(MMWRweek(as.Date(paste0(start_year, "-12-31")))$MMWRweek == 53L)
@@ -217,15 +222,16 @@ outs <- res$data %>%
   group_by(season) %>%
   group_split(.keep = TRUE) %>%
   purrr::map(~ flagIgnition(
-    df         = .x,
-    p_thresh   = p_thresh,
-    k1         = k1,
-    k_c        = 0.01,
-    n_consec   = 2,
-    min_window = min_window,
-    w_min      = 21,
-    w_max      = 21,
-    d2_relax   = k2
+    df            = .x,
+    p_thresh      = p_thresh,
+    k1            = k1,
+    k_c           = 0.01,
+    n_consec      = 2,
+    min_window    = min_window,
+    w_min         = 21,
+    w_max         = 21,
+    d2_relax      = k2,
+    manual_labels = manual_labels-1
   ))
 ```
 
@@ -293,6 +299,10 @@ The estimated common curve $f(\cdot)$ serves as a **template** for forecasting: 
 
 # Prospective 2-stage model training
 
+```{r}
+#| include: false
+knitr::opts_chunk$set(eval = FALSE)
+```
 
 
 ## $M_0$ — prospective ignition detection (offline tuning, online use)
@@ -308,7 +318,7 @@ g_{\mathrm{win}}(s,w)=\mathbf{1}\{w_{\min}\le w^f_{s,w}\le w_{\max}\}.
 $$
 
 
-```{r, eval = T, echo = F, include = F}
+```{r, eval = F, echo = F, include = F}
 ign_fit <- fitIgnition(
   dat = alignedD,
   event_k = 1L,
@@ -469,60 +479,65 @@ $$
 \mathrm{diff}_s(\theta)=\hat w_s^{(\mathrm{ign})}(\theta)-w_s^{(\mathrm{ign})}.
 $$
 
-A late-aware per-season loss is
+If no week fires within $[w_{\min}, w_{\max}]$, the detector assigns $\hat w_s^{(\mathrm{ign})} = w_{\max}$ as a fallback, so misses never occur.
+
+Detection one week early is treated as exact via an adjusted error with a $-1$ wiggle room:
 
 $$
-\ell(\mathrm{diff}) = |\mathrm{diff}|
-+ \kappa\max(\mathrm{diff},0)
-+ \gamma\max(|\mathrm{diff}|-2,\,0)
-+ \gamma_{\mathrm{late}}\max(\mathrm{diff}-2,\,0),
-\qquad \kappa,\gamma,\gamma_{\mathrm{late}} \ge 0,
+\mathrm{adj\_diff}_s = \max(\mathrm{diff}_s,\,0)+\max(-1-\mathrm{diff}_s,\,0),
 $$
 
-where the $\gamma$ term penalizes any error exceeding 2 weeks, and $\gamma_{\mathrm{late}}$ adds an additional penalty for being late by more than 2 weeks.
+so $\mathrm{adj\_diff}=0$ when $\mathrm{diff}\in\{-1,0\}$, and errors grow symmetrically beyond that window.
+
+Per-season loss:
+
+$$
+\ell(\mathrm{adj\_diff}) = \mathrm{adj\_diff}
++ \gamma\max(\mathrm{adj\_diff}-2,\,0),
+\qquad \gamma \ge 0,
+$$
+
+where the $\gamma$ term penalizes adjusted errors exceeding 2 weeks. Late and missing detections are not penalized separately.
 
 A global tuning objective is
 
 $$
 \mathrm{Score}(\theta)=
-\sum_s \ell(\mathrm{diff}_s(\theta))
-+\lambda\max_s |\mathrm{diff}_s(\theta)|
-+\mathrm{miss\_penalty}\cdot n_{\mathrm{miss}}(\theta),
+\sum_s \ell(\mathrm{adj\_diff}_s(\theta))
++\lambda\max_s \mathrm{adj\_diff}_s(\theta).
 $$
-
-where $n_{\mathrm{miss}}(\theta)$ counts seasons with $\hat w_s^{(\mathrm{ign})}(\theta)=\mathrm{NA}$.
 
 **Parameter selection.** Among all grid candidates, the best $\hat\theta$ is selected by the following lexicographic criterion (in priority order):
 
-1. Minimize $n_{>2}(\theta)$: number of seasons with $|\mathrm{diff}|>2$.
-2. Minimize $n_{\mathrm{late},>2}(\theta)$: number of seasons with $\mathrm{diff}>2$.
-3. Minimize $\max_s|\mathrm{diff}_s(\theta)|$.
-4. Minimize $n_{\mathrm{miss}}(\theta)$.
-5. Minimize $\mathrm{Score}(\theta)$ (final tiebreaker).
+1. Minimize $n_{>2}(\theta)$: number of seasons with $\mathrm{adj\_diff}>2$.
+2. Minimize $\max_s\,\mathrm{adj\_diff}_s(\theta)$.
+3. Minimize $\mathrm{Score}(\theta)$ (final tiebreaker).
 
 The tuned $\hat\theta$ is then applied prospectively in real time to determine ignition timing and trigger downstream forecasting.
 
 
 
 ```{r, eval = T}
-if(file.exists("../data/stage1_tuning.rds")) { 
+if(file.exists("../data/stage1_tuning.rds")) {
   tuned <- readRDS("../data/stage1_tuning.rds")
 } else { 
  
 grid_loso <- data.table::CJ(
   # classifier gate excluded from vote (use_cls=FALSE); cls_thr kept for display only
-  cls_thr   = 0.26,                     # fixed (display only)
-  use_cls   = FALSE,                    # 4-gate voting: cond_sum, cond_p, cond_prev, cond_inc
-  p_thr     = c(0.008, 0.009, 0.010),  # smoothed-level threshold
-  prev_thr  = c(0.005, 0.006, 0.007),  # cumulative prevalence threshold
-  n_consec  = c(3L, 4L, 5L),           # trend gate window
-  L         = 2L,                       # fixed at best
-  eps       = 0,                        # fixed at best
-  K_sum     = 5L,                       # fixed at best
-  p_sum_thr = c(0.045, 0.050, 0.055),  # rolling-sum threshold
-  N_req     = 4L,                       # require all 4 gates
+  cls_thr   = 0.26,                            # fixed (display only)
+  use_cls   = FALSE,                           # 4-gate voting: cond_sum, cond_p, cond_prev, cond_inc
+  p_thr     = c(0.002, 0.003, 0.004, 0.005),  # shifted left: prev best was at lower boundary
+  prev_thr  = c(0.001, 0.002, 0.003),          # shifted left: prev best was at lower boundary
+  n_consec  = 5L,                              # fixed: stable optimum across two runs
+  L         = 2L,                              # fixed at best
+  eps       = 0,                               # fixed at best
+  K_sum     = 5L,                              # fixed at best
+  p_sum_thr = c(0.050, 0.055, 0.060),          # shifted right: prev best was at upper boundary
+  N_req     = 4L,                              # require all 4 gates
   w_min     = 13L,
-  w_max     = 30L,
+  w_max     = 26L,
+  K_dp      = 3L,                              # fixed at best
+  dp_thr    = 0.01,                            # fixed at best
   sorted    = FALSE
 )
   
@@ -541,11 +556,11 @@ tuned<- loso_M0v2(
   ),
 
   tune_args = list(
-    miss_penalty = 20,
+    miss_penalty = 0,
     lambda = 20,
-    kappa = 2,
+    kappa = 0,
     gamma = 25,
-    gamma_late = 25,
+    gamma_late = 0,
     iWeek = TRUE,
     ncores = 10L,
     verbose = FALSE,
@@ -555,13 +570,15 @@ tuned<- loso_M0v2(
   verbose = TRUE
 )
 
-  saveRDS(tuned, "../data/stage1_tuning.rds") 
-} 
+  saveRDS(tuned, "../data/stage1_tuning.rds")
+}
 
 
-
+tuned$compare %>%  gt()
 
 ```
+
+
 
 
 
@@ -592,29 +609,17 @@ det_all$compare |>
 ```
 
 
-```{r}
-#| results: asis
-#| echo: false
+```{r, eval = T, results = 'asis', echo = FALSE}
 seasons_in_data <- sort(unique(det_all$data$season))
 for (s in seasons_in_data) {
-  cat(knitr::knit_child(
-    text = c(
-      paste0("### ", s),
-      "",
-      "```{r echo=FALSE}",
-      sprintf("plot_season_detection_table(det_all, %s)", deparse(s)),
-      "```",
-      ""
-    ),
-    envir = environment(),
-    quiet = TRUE
-  ), sep = "\n")
+  cat(paste0("\n\n### ", s, "\n\n"))
+  cat(gt::as_raw_html(plot_season_detection_table(det_all, s)))
+  cat("\n")
 }
 ```
+
+
 :::
-
-
-
 
 ## $M_1$ - Prospective forecast training (offline training, online use)
 
@@ -641,8 +646,6 @@ $$
   S_{3,s}^{h}\!\left(w^a_{s,w};\;S, k_s\right) \\[2pt]
 &+ \mathbb{I}\{k_e>0\}\;
   S_{4}^{h}\!\left(z^{(\mathrm{ema})}_{s,w};\; k_e\right) \\[2pt]
-&+ \mathbb{I}\{k_n>0\}\;
-  S_{5}^{h}\!\left(\log n_{s,w};\; k_n\right) \\[2pt]
 &+ \mathbb{I}\{k_1>0\}\;
   S_{6}^{h}\!\left(d1_{s,w};\; k_1\right) \\[2pt]
 &+ \mathbb{I}\{k_2>0\}\;
@@ -650,7 +653,10 @@ $$
 \end{aligned}
 $$ {#eq-mod1}
 
-For each term in the model, the indicator functions $\mathbb{I}\{\cdot\}$ represent toggles that allow us to include/exclude the term from the model, and the hyperparameters ($k_*$) control the complexity of the corresponding smooth term. The model is fit retrospectively using the aligned historical data, and then applied prospectively in real time after ignition is detected.
+
+
+### Model training (offline)
+For each term in the model, the indicator functions $\mathbb{I}\{\cdot\}$ represent toggles that allow us to include/exclude the term from the model, and the hyperparameters ($k_*$) control the complexity of the corresponding smooth term.
 
 
 Below, each term in Eq. (@eq-mod1) has (i) an interpretation, (ii) its hyperparameter(s), (iii) how to turn it on/off, and (iv) the corresponding `mgcv` implementation. All smooths are **lead-specific** (one smooth per horizon), implemented in `mgcv` using `by = lead`.
@@ -713,19 +719,22 @@ Below, each term in Eq. (@eq-mod1) has (i) an interpretation, (ii) its hyperpara
   - **R:** `s(newWeek, by=interaction(season,lead), bs="fs", k=k_s, xt=...)`.  
   - **New-season prediction:** typically excluded because a brand-new season has an unseen factor level.
 
-### $S_{4}^{h}(z^{(\mathrm{ema})}_{s,w};k_e)$  
-  - EMA state (current level memory), stabilizes the “current level” of activity using an EWMA on the logit scale, estimated in real time 
-  - **Hyperparams:** $\alpha_{\text{state}}\in(0,1)$ (EWMA decay) and $k_e$ (basis dimension).  
-  - **Toggle:** on if $k_e>0$; off if $k_e=0$.  
-  - **R (feature):** `z_ema` computed in `prep_stage2_joint()` using `alpha_state`.  
-  - **R (model):** `s(z_ema, by=lead, bs="ts", k=k_e)`.
+### $S_{4}^{h}(z^{(\mathrm{ema})}_{s,w};k_e)$
 
-### $S_{5}^{h}(\log n_{s,w};k_n)$  
-  - Testing volume effect , allows dependence on current testing intensity.  
-  - **Hyperparams:** $k_n$ (basis dimension).  
-  - **Toggle:** on if $k_n>0$; off if $k_n=0$.  
-  - **R (feature):** `logN_now`.  
-  - **R (model):** `s(logN_now, by=lead, bs="ts", k=k_n)`.
+EMA state (current-level memory): provides the model with a smoothed summary of the current level of positivity, estimated causally in real time.
+
+The covariate $z^{(\mathrm{ema})}_{s,w}$ is an exponentially weighted moving average of the logit-transformed positivity, computed recursively forward in time within each season:
+
+$$
+z^{(\mathrm{ema})}_{s,w} = \alpha_{\text{state}}\;\mathrm{logit}_\varepsilon(p_{s,w}) \;+\; (1-\alpha_{\text{state}})\; z^{(\mathrm{ema})}_{s,w-1},
+$$
+
+initialised at $z^{(\mathrm{ema})}_{s,1} = \mathrm{logit}_\varepsilon(p_{s,1})$. The smoothing parameter $\alpha_{\text{state}}\in(0,1)$ controls how quickly the memory adapts: $\alpha_{\text{state}}=1$ gives the raw logit (no smoothing); small $\alpha_{\text{state}}$ gives a long memory that changes slowly.
+
+  - **Hyperparams:** $\alpha_{\text{state}}\in(0,1)$ (EWMA decay, tuned jointly with $\lambda_w$) and $k_e$ (smooth basis dimension).
+  - **Toggle:** on if $k_e>0$; off if $k_e=0$.
+  - **R (feature):** `z_ema` computed via `ewma_recursive()` using `alpha_state`.
+  - **R (model):** `s(z_ema, by=lead, bs=”ts”, k=k_e)`.
 
 ### $S_{6}^{h}(d1_{s,w};k_1)$  
   - Prospective derivative (slope), captures local growth/decline momentum on the logit scale, estimated in real time  
@@ -734,16 +743,67 @@ Below, each term in Eq. (@eq-mod1) has (i) an interpretation, (ii) its hyperpara
   - **R (feature):** `d1_now`.  
   - **R (model):** `s(d1_now, by=lead, bs="ts", k=k_1)`.
 
-###  $S_{7}^{h}(d2_{s,w};k_2)$  
+###  $S_{7}^{h}(d2_{s,w};k_2)$
   - Prospective derivative (curvature), captures acceleration/curvature on the logit scale (often the noisiest term), estimated in real time
-  - **Hyperparams:** $k_2$ (basis dimension).  
-  - **Toggle:** on if $k_2>0$; off if $k_2=0$ (recommended if noisy).  
-  - **R (feature):** `d2_now`.  
+  - **Hyperparams:** $k_2$ (basis dimension).
+  - **Toggle:** on if $k_2>0$; off if $k_2=0$ (recommended if noisy).
+  - **R (feature):** `d2_now`.
   - **R (model):** `s(d2_now, by=lead, bs="ts", k=k_2)`.
 
+### $\lambda_w$
 
+To emphasise early post-ignition weeks during training — the period most critical for real-time forecasting — each observation is assigned a time-decay weight
+
+$$
+w_{s,w} = \frac{\exp(-\lambda_w\, t_{s,w})}{\bar{w}_s},
+\qquad
+\bar{w}_s = \operatorname{mean}_{w}\!\left(\exp(-\lambda_w\, t_{s,w})\right),
+$$
+
+where $t_{s,w} = w^f_{s,w} - w_s^{(\mathrm{ign})}$ is weeks since ignition (pre-buffer rows have $t_{s,w}<0$). Normalising by $\bar{w}_s$ keeps the weighted log-likelihood on the same scale across $\lambda_w$ values. Setting $\lambda_w=0$ recovers standard (uniform) MLE.
+
+The weighted binomial log-likelihood fitted by `mgcv::bam` is then
+
+$$
+\ell(\theta) = \sum_s\sum_{w}\sum_h w_{s,w}\;\log\Pr\!\left(x_{s,w+h}\mid n_{s,w+h},\,\pi^h_{s,w}\right).
+$$
+
+**Interpretation.** Larger $\lambda_w$ concentrates the fit on the first few post-ignition weeks and down-weights the tail of the season. This is appropriate because forecasts are consumed immediately after ignition; tail accuracy matters less in practice. The trade-off is that a very large $\lambda_w$ may overfit the early-season pattern across training seasons.
+
+**Tuning.** $\lambda_w$ is treated as a hyperparameter and selected jointly with $\alpha_{\text{state}}$ by LOSO. However, evaluation during LOSO always uses **uniform weights** over the first `eval_window` post-ignition weeks, so all specs are compared on the same objective regardless of their $\lambda_w$ value — $\lambda_w$ governs what the model learns, not what it is judged on.
+
+**R implementation:** weights are stored as column `.w` in `d_train` and passed to `mgcv::bam(weights = .w, ...)`. The tuned value is stored in the spec as `spec$lambda_w` and applied identically during the weekly refit.
+
+### Late-season floor (`w_floor`, `t_floor_start`)
+
+An aggressive $\lambda_w$ (e.g. 0.20) reduces the effective weight on late-season observations to near zero ($e^{-0.2 \times 30} \approx 0.002$). While this is intentional for the training objective, it leaves the smooth terms unconstrained in the late-season covariate range, producing numerically unstable extrapolation well beyond the epidemic peak.
+
+To prevent this without distorting the pre-peak fit, we apply a **two-phase weight floor**:
+
+$$
+w_{s,w} = \begin{cases}
+\exp(-\lambda_w\, t_{s,w}) & t_{s,w} \le t_{\text{floor}} \\
+\max\!\bigl(\exp(-\lambda_w\, t_{s,w}),\; w_{\text{floor}}\bigr) & t_{s,w} > t_{\text{floor}}
+\end{cases}
+$$
+
+where $t_{\text{floor}}$ (`t_floor_start`, default 14) is the week beyond which the floor activates, and $w_{\text{floor}}$ (`w_floor`, default 0.05) is the minimum relative weight. Setting $t_{\text{floor}} = 14$ ensures the floor is inactive throughout the entire pre-peak window (historical median peak at $t \approx 9$, maximum at $t = 12$), so the tuned early-window behaviour is completely preserved. The floor is a **fitting-time regularisation only** — it is not a tuning hyperparameter and does not affect the LOSO objective.
+
+**Practical effect:** observations at $t_{s,w} > 14$ receive at least 5% of the peak-week weight. This is enough to anchor the smooth terms in the late-season covariate range (preventing wild extrapolation) while keeping late-season predictions operationally meaningless weeks from influencing the peak-window fit. As a side effect, the REML optimisation converges significantly faster because the information matrix is no longer near-singular at late covariate values.
+
+**R implementation:** `spec$w_floor` and `spec$t_floor_start` are read by both `train_stage2_joint_prepped()` (prospective pipeline) and `train_stage2_joint_m1()` (module tuning pipeline) and applied identically during the weekly refit.
 
 :::
+
+### Weekly refit (online use)
+
+Let $s^*$ denote the current live season and $\mathcal{D}_{\text{hist}}$ the full historical dataset of all past seasons. At each week $w \geq w^{(\mathrm{ign})}_{s^*}$ after ignition detection, $M_1$ is refit on the augmented dataset
+
+$$
+\mathcal{D}_w = \mathcal{D}_{\text{hist}} \;\cup\; \bigl\{\,(s^*,\,w',\,x_{s^*,w'},\,n_{s^*,w'}) : w' \leq w\,\bigr\}.
+$$
+
+This allows the season random effect $b_{s^*}$ and the factor-smooth $S^h_{3,s^*}$ to be estimated from current-season observations, so both the level and shape of the forecast are corrected as data accumulate. All hyperparameters (including $\lambda_w$, $\alpha_{\text{state}}$, and basis dimensions $k_*$) are fixed at their LOSO-tuned values; only the GAM coefficients are updated each week.
 
 ::: panel-tabset
 
@@ -774,7 +834,7 @@ This estimator is **prospective-safe** because it only uses weeks $\le w$, and i
 
 
 
-```{r}
+```{r, eval = T}
 #| label: compute-prospective-derivs
 #| fig-height: 10
 #| fig-width: 12
@@ -809,36 +869,30 @@ For each candidate spec (from `expand_grid_specs()`), we repeatedly:
 - **`T` (template entry mode):** one of `{"S","O","N"}` (smooth, offset, none). *(In code: `template_mode ∈ {"smooth","offset","none"}`.)*
 - **$Kr$ (ramp length):** integer with $Kr \ge 1$. Use $Kr=1$ for “no ramp” (immediate template effect). Set `Kr=NA` to disable the template covariate at the feature level.
 - **$k_f$ (template smooth basis):** integer $\ge 1$ used only when `T="S"` (typical 4–12).
-- **$k_w,k_s,k_e,k_n,k_1,k_2$ (basis dimensions):** integers $\ge 0$ with the on/off rule: **0 disables the term**; typical values 4–12.
-- **$\alpha_{\text{state}}$ (EWMA decay):** real number in $(0,1)$ (typical grid 0.15–0.50),only relevant when $k_e>0$.
-- **$Kb$** integer $\ge 0$ (commonly 0–2), defines $M_1$ training start as `weekF >= iWeek_used - Kb`.
+- **$k_w,k_s,k_e,k_1,k_2$ (basis dimensions):** integers $\ge 0$ with the on/off rule: **0 disables the term**; typical values 4–12.
+- **$k_n$:** always fixed at 0 (logN term dropped; structurally redundant in binomial model).
+- **$\alpha_{\text{state}}$ (EWMA decay):** real number in $(0,1)$ (grid $\{0.15, 0.25, 0.35\}$), tuned jointly with $\lambda_w$; only relevant when $k_e>0$.
+- **$\lambda_w$ (time-decay weight):** non-negative real (grid $\{0, 0.05, 0.10, 0.20\}$); $\lambda_w=0$ is standard MLE.
+- **$Kb$** integer $\ge 0$ (commonly 1–2), defines $M_1$ training start as `weekF >= iWeek_used - Kb`.
 
-**Primary selection metric: NLL**
+**Primary selection metric: mean NLL over the evaluation window**
 
+Let $W_{\mathrm{eval}}$ denote the **evaluation window** — the number of post-ignition origin weeks used to score each held-out season. We set $W_{\mathrm{eval}} = 12$, covering the first twelve weeks after ignition detection. This value is **not tuned**; it is a fixed design choice calibrated to the observed ignition-to-peak distribution across historical seasons. Across ten evaluable seasons (excluding pandemic/anomalous years), the median time from ignition to peak positivity is **8.5 weeks** and the maximum is **12 weeks** (2018-19), so $W_{\mathrm{eval}} = 12$ ensures that the tuning objective covers the approach to peak — the period of greatest operational interest — in all historical seasons. Using a fixed window also ensures that all candidate specs are evaluated on exactly the same set of rows regardless of season length or tail behaviour.
 
-Define target-week time since ignition:
+The evaluation set for season $s$ is
+
 $$
-t_{\text{target}} = (w + h) - w_s^{(\mathrm{ign})}.
-$$
-
-We emphasize the first $k_t$ weeks after ignition (on the **target week**) by using weights:
-$$
-w(t_{\text{target}})=
-\begin{cases}
-w_{\text{early}}, & 0 \le t_{\text{target}} \le k_t,\\
-1, & t_{\text{target}} > k_t.
-\end{cases}
+\mathcal{E}_s = \bigl\{(s,w,h) : 0 \le t_{s,w} \le W_{\mathrm{eval}}\bigr\},
+\qquad t_{s,w} = w^f_{s,w} - w_s^{(\mathrm{ign})},
 $$
 
-The **weighted NLL**:
+and the LOSO objective is the mean NLL over all held-out seasons and evaluation rows:
+
 $$
-\mathrm{NLL} =
--\sum_i w_i \log \Pr\!\left(x_i \mid n_i,\hat p_i\right),
-\qquad
-\mathrm{mean\_nll} = \frac{\mathrm{NLL}}{\sum_i w_i}.
+\overline{\mathrm{NLL}} = \frac{-1}{\sum_s|\mathcal{E}_s|}\sum_s\sum_{i\in\mathcal{E}_s} \log\Pr(x_i\mid n_i,\hat{p}_i).
 $$
 
-We select the best spec by **minimizing** `mean_nll`.
+Evaluation uses **uniform weights** even when $\lambda_w > 0$ for training — $\lambda_w$ controls what the model learns, not what it is judged on. We select the best spec by minimizing $\overline{\mathrm{NLL}}$.
 
 Secondary diagnostics: Brier and RMSE(p)
 
@@ -848,66 +902,100 @@ $$
 \qquad
 \mathrm{RMSE}(p)=\sqrt{\mathrm{Brier}}.
 $$
-```{r, eval = T}
-
-if (file.exists("../data/stage2_tuning.rds")) {
-  tuned2 <- readRDS("../data/stage2_tuning.rds")
-} else {
-  
+```{r, eval = F}
+# ---- Spec grid (shared by both tuning runs) ----
+# Run this block + the refit-LOSO block below on the server (eval=F here).
+#
+# Grid reduction history (top-20% frequency analysis across runs):
+#   k_e=4   dropped  — k_e=6 wins 100% of top-20%
+#   k_1=6   dropped  — k_1=4 wins 100% of top-20%
+#   k_s=6   dropped  — k_s=4 wins 100% of top-20% (eval_window=12 run)
+#
+# w_floor now tuned in the grid (previously hard-coded post-hoc to 0.05).
+# lambda_w densified around the refit-LOSO optimum (~0.20).
+nc <- min(parallel::detectCores() - 1L, 32L)
 
 spec_grid <- expand_grid_specs(
-  delta_grid = -3:3,
-  Kr_grid    = 1:4,
-  Kb_grid    = c(0L, 1L, 2L),
-  T_grid     = c("O","S"),
-  k_f_grid   = c(6L, 8L, 10L),
-  alpha_state = c(0.25),
-  k_w_grid = c(6L, 8L),
-  k_e_grid = c(0L, 6L),
-  k_n_grid = c(0L, 6L),
-  k_1_grid = c(4L, 6L),
-  k_2_grid = c(0L),
-  k_s_grid = c(4L,6L,10L),
-  verbose = TRUE
+  delta_grid  = -2:2,              # full range; -2 is weaker but kept for coverage
+  Kr_grid     = 2:6,               # ramp length 2–6 weeks
+  Kb_grid     = c(1L, 2L),        # training buffer around ignition
+  T_grid      = "S",
+  k_f_grid    = c(6L, 8L),        # template smooth df
+  alpha_state = c(0.15, 0.25, 0.35),
+  k_w_grid    = c(0L, 4L),        # week smooth on/off
+  k_e_grid    = 6L,               # z_ema: 6 always wins
+  k_n_grid    = 0L,               # logN: dropped (never meaningful)
+  k_1_grid    = 4L,               # d1 slope: 4 always wins
+  k_2_grid    = 0L,               # d2 curvature: dropped
+  k_s_grid    = 4L,               # fs season-shape: 4 always wins
+  w_floor_grid = c(0, 0.03, 0.05, 0.08),  # late-season weight floor (tuned here)
+  verbose     = TRUE
 )
-  
-  
+# Expected grid size:
+# delta(5) x Kr(5) x Kb(2) x k_f(2) x alpha(3) x k_w(2) x w_floor(4) = 2,400 base specs
+# x lambda_w(7) in refit-LOSO tuning call = 16,800 total evaluations
+```
+
+```{r, eval = F}
+# ---- Refit-LOSO tuning (correct objective for prospective deployment) ----
+if (file.exists("../data/stage2_tuning_refit.rds")) {
+  tuned2_refit <- readRDS("../data/stage2_tuning_refit.rds")
+} else {
+  tuned2_refit <- tune_stage2_loso_spec_grid_parallel(
+    alignedD_prosp = alignedD_prosp,
+    template_df    = template_df,
+    spec_grid      = spec_grid,
+    seasons        = NULL,
+    eval_window    = 12L,
+    refit_loso     = TRUE,
+    lambda_w_grid  = c(0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30),
+    workers        = nc,
+    chunk_size     = 8L,
+    nthreads       = 1L,
+    verbose        = TRUE
+  )
+  saveRDS(tuned2_refit, "../data/stage2_tuning_refit.rds")
+}
+
+ggplotly(plot_tune_stage2_heatmap(tuned2_refit, metric="mean_nll", normalize01=TRUE,
+                          norm_scope="facet", agg=TRUE, base_size=10))
+```
+
+```{r, eval = F}
+# ---- Standard LOSO tuning (optional — for historical in-sample plot only) ----
+# lambda_w=0 dominates here; run only if you need a refreshed stage2_tuning.rds.
 tuned2 <- tune_stage2_loso_spec_grid_parallel(
   alignedD_prosp = alignedD_prosp,
   template_df    = template_df,
   spec_grid      = spec_grid,
-  ignD           = ignD,
-  k_t            = 10L,
-  w_early        = 2,
-  workers        = 10L,
-  strategy       = "auto",   # Windows -> multisession, Linux -> multicore
-  chunk_size     = 4L,       # reduce I/O per worker; 4–16 is typical
-  nthreads       = 1L,       # keep 1 when parallel
+  seasons        = NULL,
+  eval_window    = 12L,
+  refit_loso     = FALSE,
+  lambda_w_grid  = c(0, 0.05, 0.10, 0.20),
+  workers        = nc,
+  chunk_size     = 8L,
+  nthreads       = 1L,
   verbose        = TRUE
 )
-  saveRDS(tuned2, "../data/stage2_tuning.rds")
-}
-
-
-
-ggplotly(plot_tune_stage2_heatmap(tuned2, metric="mean_nll", normalize01=TRUE,
-                          norm_scope="facet", agg=TRUE, base_size=10))
+saveRDS(tuned2, "../data/stage2_tuning.rds")
 ```
 
 
 
 ### Traning results (true ingnition week)
 
-```{r, eval = T, echo = T}
+```{r, eval = F, echo = T}
 spec_stage2_best <- stage2_spec_from_tuning(tuned2)
-spec_display <- within(spec_stage2_best, rm(best_row))
+# Drop non-scalar slots (formula, best_row, exclude_newseason) for display
+skip_slots <- c("best_row", "formula", "exclude_newseason")
+spec_display <- spec_stage2_best[!names(spec_stage2_best) %in% skip_slots]
 data.frame(
   Specification = names(spec_display),
   Value = sapply(spec_display, function(x) {
-    if (inherits(x, "formula")) paste(deparse(x), collapse = " ") else paste(as.character(x), collapse = ", ")
+    paste(as.character(x), collapse = ", ")
   }),
   row.names = NULL
-) |> gt() |> tab_header(title = "Best M1 spec")
+) |> gt::gt() |> gt::tab_header(title = "Best M1 spec")
 
 
 
@@ -927,300 +1015,141 @@ ggplotly(plot_stage2_joint_fit_by_season(
 
 
 ### Fit Summary
-```{r, eval = T, echo = T}
+```{r, eval = F, echo = T}
 summary(joint_out$fit)
 ```
-:::
 
+### Refit-LOSO: best spec and fit by season
 
-### Offline calibration for prospective probability accuracy
+```{r refit-loso-fit, eval = F, echo = T, fig.height = 14, fig.width = 14}
+tuned2_refit <- readRDS("../data/stage2_tuning_refit.rds")
+spec_refit_best <- stage2_spec_from_tuning(tuned2_refit)
+spec_refit_best$w_floor <- 0.05   # floor weight for late-season constraint
 
-::: panel-tabset
+skip_slots <- c("best_row", "formula", "exclude_newseason")
+spec_display_refit <- spec_refit_best[!names(spec_refit_best) %in% skip_slots]
+data.frame(
+  Specification = names(spec_display_refit),
+  Value = sapply(spec_display_refit, function(x) paste(as.character(x), collapse = ", ")),
+  row.names = NULL
+) |> gt::gt() |> gt::tab_header(title = "Best M1 spec (refit-LOSO)")
+```
 
-### Description
-The Stage-2 model is trained on historical seasons and produces a linear predictor $\eta^{h}_{s,w}$ (equivalently a raw probability $\hat\pi^{h}_{s,w}=\mathrm{logit}^{-1}(\eta^{h}_{s,w})$). However, strong in-sample likelihood fit does not guarantee that $\hat\pi^{h}_{s,w}$ is well calibrated when applied to a **new season**. In particular, predicted probabilities can be systematically biased or overly confident even when point forecasts appear reasonable.
+```{r refit-loso-plot, eval = F, echo = T, fig.height = 14, fig.width = 14}
+joint_out_refit <- train_stage2_joint(
+  dat         = alignedD_prosp,
+  template_df = template_df,
+  spec        = spec_refit_best
+)
 
-To improve new-season probability accuracy, we learn an **offline calibration map** from **out-of-sample** predictions. For each horizon $h\in\{1,2\}$, we apply Platt scaling on the logit scale:
-$$
-\mathrm{logit}\!\left(\pi^{h,\mathrm{cal}}_{s,w}\right)
-\;=\;
-a_h \;+\; b_h\,\mathrm{logit}\!\left(\hat\pi^{h}_{s,w}\right),
-$$
-where $a_h$ adjusts an overall bias and $b_h$ rescales confidence (values $b_h<1$ shrink extreme probabilities toward $0.5$; values $b_h>1$ sharpen them).
-
-### $(a_h,b_h)$ training using LOSO 
-
-A key point is that $(a_h,b_h)$ are *not* estimated from in-sample fitted values. Instead, we construct a calibration training set using leave-one-season-out (LOSO) cross-fitting:
-
-1. Hold out season $s$.
-2. Fit the Stage-2 model on seasons $\{s'\neq s\}$ (with Stage-2 hyperparameters fixed).
-3. Predict $\hat\pi^{h}_{s,w}$ for all weeks $w$ in the held-out season and both horizons $h$.
-4. Pair each prediction with the observed outcome $(x_{s,w+h},n_{s,w+h})$.
-
-Stacking the held-out predictions across seasons yields a single out-of-sample dataset
-$$
-\mathcal{D}_{\mathrm{cal}}^{\mathrm{LOSO}}
-=
-\bigcup_{s\in\mathcal{S}}
-\Big\{(s,w,h,x_{s,w+h},n_{s,w+h},\hat\pi^{h}_{s,w})\Big\},
-$$
-on which $(a_h,b_h)$ are estimated. Because each $\hat\pi^{h}_{s,w}$ is generated by a Stage-2 model trained **without** season $s$, this calibration map directly targets the prospective setting where the season is unknown at training time.
-
-Offline calibration $(a_h,b_h)$ is estimated once from $\mathcal{D}_{\mathrm{cal}}^{\mathrm{LOSO}}$ and then held fixed during deployment, providing an immediate adjustment to probability scale even before substantial current-season outcomes are available.
-
-
-```{r}
-
-if(file.exists("../data/stage2_calib_loso.rds")) {
-  d_calib_oos <- readRDS("../data/stage2_calib_loso.rds")
-} else {
-d_calib_oos <- make_calib_train_loso(joint_out, parallel = TRUE, workers = 12)
-saveRDS(d_calib_oos, "../data/stage2_calib_loso.rds")
-}
-
-
-# 2) train calibrator
-cal_off <- train_calib_platt(d_calib_oos)
-plot_fit_obs_cal_by_season(joint_out = joint_out, cal = cal_off, interactive = TRUE)
-
+ggplotly(plot_stage2_joint_fit_by_season(
+  joint_out   = joint_out_refit,
+  dat_raw     = alignedD_prosp,
+  ign_hat_df  = det_all$compare,
+  template_df = template_df
+))
 ```
 :::
 
 
-### Online calibration for real time adaption
+# Prospective deployment and forecasting
 
-::: panel-tabset
+Data from the 2025-26 season are used prospectively. Each week after ignition detection, we refit the Stage-2 GAM on all historical seasons **plus the current season's data observed so far**, using time-decay weights ($\lambda_w = 0.20$) that down-weight older observations. Season-specific terms ($b_s$, factor-smooth $S_3$) are excluded from predictions because 2025-26 is an unseen factor level in the base model; the correction comes through $z_\text{ema}$ and the updated weighted fit.
 
-### Description
+## Pre-trained model
 
-In prospective deployment, the current season can be systematically higher or lower than historical seasons even after phase alignment and gating. Rather than refitting the full Stage-2 model online, we introduce a lightweight **logit-scale intercept shift** that adapts as new data arrive.
-
-Let $\eta^{h,\mathrm{cal}}_{s,w} = a_h + b_h\,\eta^{h}_{s,w}$ denote the offline-calibrated linear predictor (equivalently, $\eta^{h,\mathrm{cal}}_{s,w} = \mathrm{logit}(\pi^{h,\mathrm{cal}}_{s,w})$), where $\eta^{h}_{s,w}$ is the raw Stage-2 linear predictor from Eq. (@eq-mod1) evaluated prospectively (e.g., excluding season-specific effects). We define the online-adjusted predictor
-$$
-\mathrm{logit}\!\left(\tilde\pi^{h}_{s,w}\right)
-\;=\;
-\eta^{h,\mathrm{cal}}_{s,w}
-\;+\;
-c_{s,w},
-$$
-where $c_{s,w}\in\mathbb{R}$ is a scalar estimated at within-season week $w$ for season $s$. The same $c_{s,w}$ is applied to both horizons $h\in\{1,2\}$, so the updater corrects a **level shift** on top of the already-calibrated predictor, without altering Stage-2 shape or lead-specific dynamics.
-
-At each week $w$ (once outcomes become available), we re-estimate $c_{s,w}$ using an expanding window of origins $u\le w$, starting at $w_s^{(\mathrm{ign})}-k_{\mathrm{pre}}$ to allow up to $k_{\mathrm{pre}}\ge 0$ pre-ignition weeks. Treating $\eta^{h,\mathrm{cal}}_{s,u}$ as a fixed offset, we estimate $c_{s,w}$ by maximizing a penalized binomial log-likelihood over all outcomes already observed by week $w$:
-$$
-\hat c_{s,w}
-=
-\arg\max_{c\in\mathbb{R}}
-\left\{
-\sum_{u\,=\,w_s^{(\mathrm{ign})}-k_{\mathrm{pre}}}^{w}
-\ \sum_{h\in\{1,2\}}
-\mathbf{1}\{u+h\le w\}\;
-\log \Pr\!\Big(x_{s,u+h}\,\big|\, n_{s,u+h},\ \mathrm{logit}^{-1}\!\left(\eta^{h,\mathrm{cal}}_{s,u}+c\right)\Big)
-\;-\;
-\lambda_c \, c^2
-\right\},
-$$
-where $x_{s,u+h}$ and $n_{s,u+h}$ are the observed positives and totals at week $u+h$, and $\lambda_c\ge 0$ shrinks $c$ toward $0$ for stability (especially early in the season). The Stage-2 model and offline calibration map $(a_h,b_h)$ are both fixed during deployment.
-
-### Penalty $\lambda_c$ tuning
-
-We choose $\lambda_c$ offline via LOSO by *replaying* the online updating procedure under the same information constraints as deployment. The LOSO out-of-sample predictions $\mathcal{D}_{\mathrm{cal}}^{\mathrm{LOSO}}$ and offline calibration map $(a_h,b_h)$ are pre-computed by `make_calib_train_loso` and `train_calib_platt` respectively; `tune_lambda_c` only performs the simulation below. For each candidate $\lambda_c\in\Lambda$ and each held-out season $s$:
-
-1. Form the calibrated linear predictor for season $s$ using the pre-computed offline calibration map,
-   $$
-   \eta^{h,\mathrm{cal}}_{s,w}
-   \;=\;
-   a_h + b_h\,\mathrm{logit}\!\left(\hat\pi^{h}_{s,w}\right),
-   $$
-   where $\hat\pi^{h}_{s,w}$ are the LOSO out-of-sample predictions from $\mathcal{D}_{\mathrm{cal}}^{\mathrm{LOSO}}$.
-
-2. For each week $w$ in season $s$, estimate $c_{s,w}$ using only outcomes already observed by week $w$ (i.e., include an origin $u$ only if $u+h\le w$):
-   $$
-   \hat c_{s,w}(\lambda_c)
-   =
-   \arg\max_{c\in\mathbb{R}}
-   \left[
-   \sum_{u=w_s^{(\mathrm{ign})}-k_{\mathrm{pre}}}^{w}
-   \ \sum_{h\in\{1,2\}}
-   \mathbf{1}\{u+h\le w\}\;
-   \log \Pr\!\Big(x_{s,u+h}\,\big|\,
-   n_{s,u+h},\ \mathrm{logit}^{-1}(\eta^{h,\mathrm{cal}}_{s,u}+c)\Big)
-   \;-\;
-   \lambda_c\,c^2
-   \right].
-   $$
-
-3. Score the resulting forecasts
-   $$
-   \tilde\pi^{h}_{s,w}(\lambda_c)
-   =
-   \mathrm{logit}^{-1}\!\left(\eta^{h,\mathrm{cal}}_{s,w}+\hat c_{s,w}(\lambda_c)\right)
-   $$
-   using binomial negative log-likelihood aggregated over $w$ and $h$.
-
-We repeat across all seasons and select the $\lambda_c$ that minimizes the average held-out score.
-
-```{r, eval = T}
-
-res_lambda <- tune_lambda_c(
-  d_calib_oos = d_calib_oos,
-  cal_off     = cal_off,
-  ign_df      = ign_fit$iWeek_by_season,
-  time_col    = "newWeek",
-  k_pre       = spec_stage2_best$pre_buffer,
-  lambda_grid = c(500, 800, 1000, 1250, 1600, 2000), 
-  parallel    = TRUE,
-  workers     = 12
-)
-
-res_lambda$best$lambda_c
-
-plot_fit_obs_cal_online_by_season(
-  joint_out    = joint_out,
-  cal          = cal_off,
-  lambda_c     = res_lambda$best$lambda_c,   # your best lambda
-  k_pre        =  spec_stage2_best$pre_buffer,  # whatever you selected already
-  interactive  = TRUE
-)
-
-```
-:::
-
-# Prospective deployment and forecasting 
-
-Data from 2025-26 season are used prospectively, taking each week start at a given week as a snapshot, we produce a forecast at each week and evaluate how the forecast evolves as more data become available and the season unfolds. The workflow is as follows:with the following workflow:
-
-In deployment, we apply these layers sequentially: 
-
-- Ignition detection ($M_0$) produces an estimated ignition week $w^{(\mathrm{ign})}_s$ for the current season $s$.
-- Forecast base model ($M_1$) produces $\hat\pi^{h}_{s,w}$ 
-- Offline calibration maps it to $\pi^{h,\mathrm{cal}}_{s,w}$
-- Online updater optionally adds a week-specific intercept shift $c_{s,w}$ to correct a current-season level offset.
-
-
-
-## Pre-trained model needed
-
-To simplify prospective deployment, all trained components and fixed settings are bundled into a single object `kit` via `make_prospective_kit()`. The table below describes each variable passed into that function.
+All trained components are bundled into a single `kit` object. The refit-LOSO spec (`lambda_w = 0.20`, `w_floor = 0.05`) is used as the fixed hyperparameter set; only the GAM coefficients are updated each week.
 
 | Variable | Source | Description |
 |---|---|---|
-| `template_df` | `ref$pred_df` | Smoothed reference positivity curve over aligned week index `newWeek`. Used to construct the template-shift covariate $x^{\delta}_{s,w}$ and ramp weight in Stage-2. |
-| `ign_fit` | `fitIgnition()` | Full Stage-1 model object. Contains the fitted GAM classifier (`ign_fit$fits$base$gam`) and the scored training data. `make_prospective_kit` extracts the classifier automatically. |
-| `tuned$best_params` | `loso_M0v2()` | LOSO-tuned threshold parameters for the Stage-1 ignition detector — positivity thresholds (`p_thr`, `prev_thr`, `p_sum_thr`), trend requirement (`n_consec`), velocity gate (`K_dp`, `dp_thr`), minimum vote count (`N_req`), and allowable ignition window (`w_min`, `w_max`). |
-| `joint_out` | `train_stage2_joint()` | Joint Stage-2 training output. Contains the tuned hyperparameter spec (`joint_out$spec`), the final fitted model (`joint_out$fit`), and the training design table (`joint_out$train_data`) used for safe prospective prediction. |
-| `cal_off` | `train_calib_platt()` | Offline Platt calibration map trained on LOSO out-of-sample predictions. For each horizon $h$ it applies $\mathrm{logit}(\pi^{h,\mathrm{cal}}) = a_h + b_h\,\mathrm{logit}(\hat\pi^h)$ to correct bias and rescale confidence. Held fixed during deployment. |
-| `res_lambda$best$lambda_c` | `tune_lambda_c()` | Ridge penalty $\lambda_c \ge 0$ for online intercept updating. `res_lambda` is the output of `tune_lambda_c()`; `$best$lambda_c` extracts the cross-validated optimal scalar. Larger values yield more conservative within-season updates. |
-| `spec_stage2_best$pre_buffer` | `stage2_spec_from_tuning()` | Number of pre-ignition weeks $k_{\mathrm{pre}} \ge 0$ included in the online update window. Extracted from the best Stage-2 specification object. |
+| `template_df` | `ref$pred_df` | Smoothed reference curve (`newWeek`, `fit`). Drives $x^\delta_{s,w}$ and the ramp weight. |
+| `ign_fit` | `fitIgnition()` | Stage-1 model object; `make_prospective_kit` extracts the GAM classifier automatically. |
+| `tuned$best_params` | `loso_M0v2()` | LOSO-tuned Stage-1 threshold parameters. |
+| `joint_out_refit` | `train_stage2_joint()` | Stage-2 training output using refit-LOSO best spec (includes `lambda_w`, `w_floor`). |
 
-In deployment, Stage-2 produces $\hat\pi^{h}_{s,w}$, offline calibration maps it to $\pi^{h,\mathrm{cal}}_{s,w}$, and the online updater optionally applies a season-specific intercept shift so that
-$$
-\mathrm{logit}\!\left(\tilde\pi^{h}_{s,w}\right)
-=
-\mathrm{logit}\!\left(\pi^{h,\mathrm{cal}}_{s,w}\right)
-+
-c_{s,w}.
-$$
-```{r}
-
+```{r prosp-kit, eval=F, echo=T}
 kit <- make_prospective_kit(
   template_df   = template_df,
-  ign_fit       = ign_fit,               # extracts gam_cls automatically
-  params_stage1 = tuned$best_params,     # tuned Stage-1 threshold parameters
-  joint_out     = joint_out,             # extracts spec, fit, train_data automatically
-  cal_off       = cal_off,               # can be NULL if not trained yet
-  lambda_c      = res_lambda$best$lambda_c,
-  k_pre         = spec_stage2_best$pre_buffer
+  ign_fit       = ign_fit,
+  params_stage1 = tuned$best_params,
+  joint_out     = joint_out_refit    # refit-LOSO spec: lambda_w=0.20, w_floor=0.05
 )
-
-
-saveRDS(kit, file = "prospective_kit.rds")
 ```
 
-## Current season snapshot 
+## Current season snapshot
 
-`currentSeason` should include only weeks observed so far and contain at least:
-`season, weekF, y, N, neg, p` (if `p` is missing, your Stage-1 code can compute `p=y/N`).
+2025-26 is excluded from training data and is loaded here directly from the raw CSV.
 
-```{r}
-#| label: prospective-current-season
-#| eval: true
-#| echo: true
-
-currentSeason <- getCurrentD() |>dplyr::select(-newWeek, -season)
+```{r prosp-current, eval=F, echo=T}
+nW_2025       <- get_full_cycle_weeks(2025)   # 53 MMWR weeks in 2025
+currentSeason <- read.csv("../data/flu_testing_data.csv", stringsAsFactors = FALSE) %>%
+  filter(season == "2025-26") %>%
+  select(season, week, year, start_year = seasonstart,
+         date = week_start_date, y = pos_flua, N = test_flu) %>%
+  mutate(
+    date  = as.Date(date),
+    neg   = N - y,
+    p     = y / N,
+    weekF = ((week - startWeek) %% nW_2025) + 1L
+  )
 ```
 
 ::: panel-tabset
 
 ### Plot
 
-```{r}
-#| echo: false
+```{r, echo=F}
 ggplotly(
   ggplot(currentSeason, aes(x = weekF, y = p)) +
-    geom_point() +
-    geom_line() +
+    geom_point() + geom_line() +
     labs(x = "weekF", y = "Positivity (p)")
 )
 ```
 
 ### Data
 
-```{r}
-#| echo: false
+```{r, echo=F}
 DT::datatable(currentSeason, options = list(pageLength = 25, scrollX = TRUE))
 ```
 
 :::
 
-## $M_0$: Ignition week estimation 
+## $M_0$: Walk-forward ignition detection (from weekF = 5)
 
-This function takes the current season, starting at `start_week` (weekF),  it returns a detection result for each week after.
+`run_ignition_weekly` steps through each week from `start_week` and applies the Stage-1 detector with only data available at that week.
 
-
-```{r}
-#| label: prospective-stage1
-#| eval: true
-#| echo: true
-
+```{r prosp-ignition, eval=F, echo=T}
 ign_out <- run_ignition_weekly(
   currentSeason  = currentSeason,
   ign_fit_or_gam = kit$stage1$gam_cls,
   params         = kit$stage1$params,
   start_week     = 5L
 )
-plots <- plot_ignition_weekly_snapshots(
-  ign_out, currentSeason,
-  facet = FALSE, start_week = 5L, maxWeek = 20
+plots_ign        <- plot_ignition_weekly_snapshots(
+  ign_out, currentSeason, facet = FALSE, start_week = 5L, maxWeek = 20
 )
 iWeek_hat_locked <- ign_out$iWeek_hat_locked
 ```
 
 ::: panel-tabset
 
-```{r}
-#| results: asis
-#| echo: false
-
-for (nm in names(plots)) {
+```{r, results="asis", echo=F, eval=F}
+for (nm in names(plots_ign)) {
   cat(knitr::knit_child(
     text = c(
-      paste0("### ", nm),
-      "",
+      paste0("### ", nm), "",
       "```{r echo=FALSE}",
-      sprintf("plotly::ggplotly(plots[[%s]])", deparse(nm)),
-      "```",
-      ""
+      sprintf("plotly::ggplotly(plots_ign[[%s]])", deparse(nm)),
+      "```", ""
     ),
-    envir = environment(),
-    quiet = TRUE
+    envir = environment(), quiet = TRUE
   ), sep = "\n")
 }
 ```
 
 ### Detection table
 
-```{r}
-#| echo: false
+```{r, echo=F, eval=F}
 local({
   df <- ign_out$df
   fmt_val <- function(val, flag) {
@@ -1229,11 +1158,11 @@ local({
            paste0('<span style="color:red;font-weight:bold">', v, "</span>"), v)
   }
   disp <- data.frame(
-    Week     = df$weekF,
-    p        = round(df$p_now, 4),
-    Sum5w    = fmt_val(df$cum_p_now, df$ok_cum_p  %in% TRUE),
-    Prev     = fmt_val(df$prev_now,  df$ok_prev   %in% TRUE),
-    Inc      = {
+    Week      = df$weekF,
+    p         = round(df$p_now, 4),
+    Sum5w     = fmt_val(df$cum_p_now, df$ok_cum_p    %in% TRUE),
+    Prev      = fmt_val(df$prev_now,  df$ok_prev     %in% TRUE),
+    Inc       = {
       v    <- ifelse(is.na(df$n_hit_now), "", as.character(as.integer(df$n_hit_now)))
       flag <- df$ok_n_consec %in% TRUE
       ifelse(flag, paste0('<span style="color:red;font-weight:bold">', v, "</span>"), v)
@@ -1257,106 +1186,156 @@ local({
 
 :::
 
-```{r}
-#| echo: false
-cat("Locked ignition week:", iWeek_hat_locked)
+```{r, echo=F}
+cat("Locked ignition week:", iWeek_hat_locked, "\n")
 ```
 
+## Ignition week
 
+Override manually if needed, or leave `NULL` to use the auto-detected week.
 
-<!-- ## Ignition week estimation -->
+```{r prosp-iweek, eval=F, echo=T}
+override_iWeek <- NULL   # set to e.g. 17L to force a specific week
+iWeek_used <- if (!is.null(override_iWeek)) as.integer(override_iWeek) else iWeek_hat_locked
+```
 
-<!-- Use the locked week by default, or optionally override manually if disagree with the detection results, or for sensitivity analysis -->
+If `iWeek_used` is `NA` (ignition not yet detected), **stop here**.
 
-<!-- ```{r} -->
-<!-- #| label: prospective-iweek-used -->
-<!-- #| eval: true -->
-<!-- #| echo: true -->
+## $M_1$: Walk-forward weekly refit forecast
 
-<!-- override_iWeek <- 17  # set to e.g. 18L to force, otherwise keep NULL -->
-<!-- iWeek_used <- if (!is.null(override_iWeek)) as.integer(override_iWeek) else iWeek_hat_locked -->
-<!-- ``` -->
+Starting from the locked ignition week, the Stage-2 GAM is refit at each observed week using all historical seasons plus 2025-26 data up to that week. Season-specific terms are excluded during prediction (2025-26 is unseen at the base-model level); the real-time signal enters through $z_\text{ema}$ and the time-decay-weighted fit.
 
-<!-- If ignition has not triggered yet (`iWeek_used` is `NA`), **stop here**. -->
+```{r prosp-walkforward, eval=F, echo=T}
+if (is.na(iWeek_used)) {
+  message("Ignition not detected (iWeek_used is NA). Skipping Stage-2 walk-forward.")
+} else {
+  n_weeks_season <- get_full_cycle_weeks(2025)
 
-## $M_1$ real time forecast
+  # Build pseudo-prospective snapshots once.
+  # Derivatives in each snapshot are prospective-safe (add_prospective_derivs_link
+  # only uses data up to each snapshot's week).
+  pp_full <- build_stage2_pseudo_prospective_list(
+    currentSeason = currentSeason,
+    kit           = kit,
+    iWeek_hat     = iWeek_used,
+    n_weeks       = n_weeks_season
+  )
 
+  # asof-week index for each pre-built snapshot.
+  # The snapshot names are "newWeek=X_asofWeekF=Y"; extract Y.
+  # Fallback: derive from toFit column if name pattern doesn't match.
+  snap_wks <- {
+    nm_raw <- names(pp_full$df)
+    parsed <- suppressWarnings(as.integer(sub(".*_asofWeekF=(\\d+).*", "\\1", nm_raw)))
+    if (any(is.na(parsed))) {
+      vapply(pp_full$df, function(d) {
+        fit_idx <- !is.na(d$toFit) & d$toFit == 1L
+        if (any(fit_idx)) max(as.integer(d$weekF[fit_idx]), na.rm = TRUE) else NA_integer_
+      }, integer(1L))
+    } else parsed
+  }
 
+  # Walk-forward weeks: observed weeks at or after ignition that have a snapshot
+  obs_weeks  <- sort(currentSeason$weekF[is.finite(currentSeason$p)])
+  walk_weeks <- intersect(obs_weeks[obs_weeks >= iWeek_used], snap_wks)
 
+  # ── Diagnostic: test a single prediction before the full loop ──────────────
+  w_test   <- walk_weeks[1]
+  joint_test <- suppressWarnings(refit_stage2_weekly(
+    current_obs  = currentSeason[currentSeason$weekF <= w_test, ],
+    iWeek_used   = iWeek_used,
+    hist_data    = alignedD_prosp,
+    template_df  = kit$stage2$template_df,
+    spec         = kit$stage2$spec_stage2,
+    season_label = "2025-26",
+    verbose      = FALSE
+  ))
+  snap_test <- list(meta = pp_full$meta, df = pp_full$df[which(snap_wks == w_test)])
+  ppp_test  <- stage2_predict_series(snap_test, joint_test$fit,
+                                     which = "all", exclude_season_re = TRUE, interval = "ci")
+  diag_df <- ppp_test[[1]]
+  message("=== DIAG w=", w_test, " ===")
+  message("lead levels in model: ", paste(levels(joint_test$fit$model$lead), collapse=", "))
+  message("lead values in snapshot: ", paste(unique(as.character(snap_test$df[[1]]$lead)), collapse=", "))
+  message("toFit==1 rows in snapshot: ", sum(!is.na(snap_test$df[[1]]$toFit) & snap_test$df[[1]]$toFit == 1L))
+  message("p_hat_h1 non-NA: ", sum(!is.na(diag_df$p_hat_h1)))
+  message("p_hat_h2 non-NA: ", sum(!is.na(diag_df$p_hat_h2)))
+  message("cols in result: ", paste(names(diag_df), collapse=", "))
+  # ────────────────────────────────────────────────────────────────────────────
 
-### Forcasting model data prep
+  walk_preds <- vector("list", length(walk_weeks))
+  names(walk_preds) <- paste0("w", walk_weeks)
 
-<!-- Treating each week since ignition as "current" week, this block prepare the data for forecasting by building the design matrix with all features needed used in stage 2 model, including the template covariate with the tuned shift and ramp-in, and the prospective derivatives computed in a real-time safe way.  -->
+  for (i in seq_along(walk_weeks)) {
+    w <- walk_weeks[i]
 
+    # Refit Stage-2 on historical + 2025-26 up to week w
+    joint_w <- suppressWarnings(refit_stage2_weekly(
+      current_obs  = currentSeason[currentSeason$weekF <= w, ],
+      iWeek_used   = iWeek_used,
+      hist_data    = alignedD_prosp,
+      template_df  = kit$stage2$template_df,
+      spec         = kit$stage2$spec_stage2,
+      season_label = "2025-26",
+      verbose      = FALSE
+    ))
 
-<!-- ```{r} -->
-<!-- #| label: prospective-stage2 -->
-<!-- #| eval: true -->
-<!-- #| echo: true -->
+    # Select the pre-built snapshot for this week
+    snap_idx <- which(snap_wks == w)
+    pp_w     <- list(meta = pp_full$meta, df = pp_full$df[snap_idx])
 
-<!-- if (is.na(iWeek_used)) { -->
-<!--   message("Ignition not detected yet (iWeek_used is NA). Stop after Stage 1.") -->
-<!-- } else { -->
-<!--   pp <- build_stage2_pseudo_prospective_list( -->
-<!--     currentSeason = currentSeason, -->
-<!--     template_df   = template_df, -->
-<!--     best_mean_nll = best_mean_nll, -->
-<!--     iWeek_hat     = iWeek_used , -->
-<!--     align         = TRUE, -->
-<!--      n_weeks =   get_full_cycle_weeks(2025), -->
-<!--     anchorWeek    = anchorWeek, -->
-<!--     pre_buffer    = spec_stage2$pre_buffer, -->
-<!--     deriv_k       = 5L -->
-<!--   ) -->
+    # Exclude season-specific terms: 2025-26 is not a level in the base model factor
+    ppp_w <- stage2_predict_series(
+      pp_w, joint_w$fit,
+      which             = "all",
+      exclude           = kit$stage2$exclude_terms,
+      exclude_season_re = TRUE,
+      interval          = "ci"
+    )
+    walk_preds[[i]] <- ppp_w[[1]]
+  }
+  walk_preds <- Filter(Negate(is.null), walk_preds)
+}
+```
 
-<!-- } -->
+```{r prosp-walkforward-plots, eval=F, echo=F}
+if (!is.na(iWeek_used) && length(walk_preds) > 0) {
+  plots_wf <- plot_stage2(
+    walk_preds,
+    ign_week = iWeek_used,
+    facet     = FALSE,
+    interval  = "ci",
+    show_ref  = TRUE,
+    show_pi   = TRUE
+  )
+}
+```
 
+::: panel-tabset
 
-<!-- knitr::kable(unlist(pp$meta)) -->
-<!-- ``` -->
+```{r, results="asis", echo=F, eval=F}
+if (!is.na(iWeek_used) && exists("plots_wf") && length(plots_wf) > 0) {
+  for (nm in names(plots_wf)) {
+    wk       <- suppressWarnings(as.integer(sub("^w", "", nm)))
+    post_ign <- if (is.finite(wk) && is.finite(iWeek_used)) wk - as.integer(iWeek_used) else NA
+    tab_label <- if (is.finite(wk))
+      sprintf("wk %d (+%d post-ign)", wk, post_ign) else nm
 
+    cat(knitr::knit_child(
+      text = c(
+        paste0("### ", tab_label), "",
+        "```{r echo=FALSE, fig.height=5, fig.width=9}",
+        sprintf("plotly::ggplotly(plots_wf[[%s]])", deparse(nm)),
+        "```", ""
+      ),
+      envir = environment(), quiet = TRUE
+    ), sep = "\n")
+  }
+}
+```
 
-### Forecast:
+:::
 
-<!-- Note that for a brand-new season we exclude season-level terms (at minimum `s(season)`, and also `s(newWeek,season)` if you fit the optional `bs="fs"` term). In code we use `exclude_stage2 <- spec_stage2$exclude_newseason`. -->
-
-<!-- ```{r, eval=T} -->
-<!-- if (!is.na(iWeek_used)) { -->
-<!--   ppp <- stage2_predict_series(pp, stage2_fit, which = "all", ref_col = "template_fit_shift", exclude_season_re = TRUE) -->
-<!--   allP <- ggplotly(plot_stage2(ppp, ign_week = ign_out$iWeek_hat_locked, interval = "none")) -->
-<!--   plots <-plot_stage2(ppp, ign_week = ign_out$iWeek_hat_locked, interval = "pi", facet = FALSE) -->
-<!-- } -->
-
-<!-- #allP -->
-<!-- ``` -->
-
-
-<!-- ::: panel-tabset -->
-
-
-<!-- ```{r} -->
-<!-- #| results: asis -->
-<!-- #| echo: false -->
-<!-- library(knitr) -->
-<!-- library(plotly) -->
-
-<!-- for (nm in names(plots)) { -->
-<!--   cat(knitr::knit_child( -->
-<!--     text = c( -->
-<!--       paste0("### ", nm), -->
-<!--       "", -->
-<!--       "```{r echo=FALSE}", -->
-<!--       sprintf("plotly::ggplotly(plots[[%s]])", deparse(nm)), -->
-<!--       "```", -->
-<!--       "" -->
-<!--     ), -->
-<!--     envir = environment(), -->
-<!--     quiet = TRUE -->
-<!--   ), sep = "\n") -->
-<!-- } -->
-<!-- ``` -->
-
-<!-- ::: -->
 
 
 # Summary

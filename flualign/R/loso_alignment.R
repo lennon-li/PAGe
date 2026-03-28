@@ -214,6 +214,16 @@ loso_alignment <- function(alignedD,
 #'   Defaults to \code{parallel::detectCores() - 1}. Set to 1 to disable.
 #' @param min_obs Integer. Minimum observations after ignition before attempting
 #'   alignment (default 4).
+#' @param use_smoothed Logical. If \code{TRUE}, feed pre-smoothed synthetic counts
+#'   into \code{estimateRef()} instead of raw counts (default \code{FALSE}).
+#' @param peak_weight_boost Numeric >= 1. Multiplicative weight for observations
+#'   between ignition and peak in \code{estimateDerivs()} (default 1 = no boost).
+#' @param peak_weight_decay Numeric > 0. Exponential decay rate for weights after
+#'   the observed peak (default 0.3).
+#' @param checkpoint_file Character path (or \code{NULL}). If provided, saves
+#'   incremental results to this RDS file after each test season completes. On
+#'   restart, completed seasons are loaded from the checkpoint and skipped.
+#'   Delete the file to force a full rerun.
 #' @param verbose Logical. Print per-season progress (default \code{TRUE}).
 #'
 #' @return A list with three elements:
@@ -272,6 +282,20 @@ loso_walkforward <- function(allD,
                               n_cores         = parallel::detectCores() - 1L,
                               min_obs         = 4L,
                               curvature_ratio = 1.0,
+                              template_shift  = 0L,
+                              peak_weight_boost  = 1,
+                              peak_weight_decay  = 0.3,
+                              # --- Alignment loss weighting (Improvement C) ---
+                              align_trough_weight = 0.1,
+                              align_rise_weight   = 1.0,
+                              align_peak_decay    = 0.3,
+                              # --- Multi-template ensemble (Improvement A) ---
+                              use_multi_template        = FALSE,
+                              ref_method                = "binomial",
+                              multi_temperature         = 1.0,
+                              multi_top_k               = NULL,
+                              multi_blend_alpha         = 1.0,
+                              checkpoint_file = NULL,
                               verbose         = TRUE) {
 
   all_seasons <- sort(unique(as.character(allD$season)))
@@ -307,7 +331,30 @@ loso_walkforward <- function(allD,
   ref_list      <- vector("list", length(test_seasons))
   names(params_list) <- names(forecast_list) <- names(ref_list) <- test_seasons
 
+  # --- Resume from checkpoint if available ---
+  completed_seasons <- character(0)
+  if (!is.null(checkpoint_file) && file.exists(checkpoint_file)) {
+    ckpt <- readRDS(checkpoint_file)
+    completed_seasons <- ckpt$completed_seasons %||% character(0)
+    for (s in intersect(completed_seasons, test_seasons)) {
+      params_list[[s]]   <- ckpt$params_list[[s]]
+      forecast_list[[s]] <- ckpt$forecast_list[[s]]
+      ref_list[[s]]      <- ckpt$ref_list[[s]]
+    }
+    if (verbose && length(completed_seasons))
+      message(sprintf("[loso_walkforward] Resuming from checkpoint: %d/%d seasons done (%s)",
+                      length(intersect(completed_seasons, test_seasons)),
+                      length(test_seasons),
+                      paste(intersect(completed_seasons, test_seasons), collapse = ", ")))
+  }
+
   for (test_s in test_seasons) {
+
+    # Skip seasons already completed in checkpoint
+    if (test_s %in% completed_seasons) {
+      if (verbose) message(sprintf("[loso_walkforward] Skipping %s (from checkpoint)", test_s))
+      next
+    }
 
     tr_seasons <- if (!is.null(train_seasons)) {
       train_seasons
@@ -324,7 +371,10 @@ loso_walkforward <- function(allD,
 
     # --- 1. Build aligned training data (retrospective) ---
     train_allD  <- dplyr::filter(allD, season %in% tr_seasons)
-    res_deriv   <- estimateDerivs(train_allD, k = k_deriv)
+    res_deriv   <- estimateDerivs(train_allD, k = k_deriv,
+                                  peak_weight_boost = peak_weight_boost,
+                                  peak_weight_decay = peak_weight_decay,
+                                  ignition_weeks    = manual_labels)
 
     train_outs <- res_deriv$data %>%
       dplyr::group_by(season) %>%
@@ -335,8 +385,23 @@ loso_walkforward <- function(allD,
     aligned_train <- alignIgnition(train_outs)
 
     # --- 2. Fit reference curve on aligned training data ---
+    ref_meth <- if (use_multi_template) "fs" else ref_method
     ref   <- estimateRef(alignedD = aligned_train, exSeason = character(0),
-                         k = k_ref, n_weeks = n_weeks)
+                         k = k_ref, n_weeks = n_weeks,
+                         method = ref_meth)
+
+    # Store original (unshifted) template for plotting, then apply lag if requested
+    ref$g_ref_fun_orig <- ref$g_ref_fun
+    if (as.integer(template_shift) != 0L) {
+      s_int <- as.integer(template_shift)
+      orig_fun    <- ref$g_ref_fun
+      orig_mu_se  <- ref$g_ref_mu_se
+      orig_safe   <- ref$g_ref_safe
+      ref$g_ref_fun  <- function(u) orig_fun(u - s_int)
+      ref$g_ref_safe <- function(u) orig_fun(pmin(pmax(u - s_int, 1L), n_weeks))
+      ref$g_ref_mu_se <- function(u) orig_mu_se(u - s_int)
+    }
+
     hyper <- learn_alignment_hyperparams(ref$dat, ref$g_ref_fun)
     ref_list[[test_s]] <- ref
 
@@ -382,6 +447,13 @@ loso_walkforward <- function(allD,
     .use_ci          <- use_ci
     .buffer_weeks    <- buffer_weeks
     .curvature_ratio <- curvature_ratio
+    .trough_weight   <- align_trough_weight
+    .rise_weight     <- align_rise_weight
+    .peak_decay      <- align_peak_decay
+    .use_multi       <- use_multi_template
+    .multi_temp      <- multi_temperature
+    .multi_top_k     <- multi_top_k
+    .multi_blend     <- multi_blend_alpha
 
     # --- 4. Walk-forward: parallelise over eval_weeks ---
     week_results <- furrr::future_map(eval_weeks_s, function(ew) {
@@ -389,19 +461,44 @@ loso_walkforward <- function(allD,
       season_data_to_ew <- dplyr::filter(.allD_test, weekF <= ew)
       n_obs             <- nrow(season_data_to_ew)
 
-      ap <- run_alignment_prospective(
-        currentSeason   = season_data_to_ew,
-        ref             = .ref,
-        hyper           = .hyper,
-        params          = NULL,
-        ign_out         = .ign_out,
-        use_ci          = .use_ci,
-        buffer_weeks    = .buffer_weeks,
-        allow_scale     = .allow_scale,
-        level           = .level,
-        min_obs         = .min_obs,
-        curvature_ratio = .curvature_ratio
-      )
+      # Dispatch: multi-template ensemble or single-template alignment
+      if (.use_multi && !is.null(.ref$eta_mat)) {
+        ap <- run_alignment_prospective_multi(
+          currentSeason   = season_data_to_ew,
+          ref             = .ref,
+          hyper           = .hyper,
+          ign_out         = .ign_out,
+          use_ci          = .use_ci,
+          buffer_weeks    = .buffer_weeks,
+          allow_scale     = .allow_scale,
+          level           = .level,
+          min_obs         = .min_obs,
+          curvature_ratio = .curvature_ratio,
+          trough_weight   = .trough_weight,
+          rise_weight     = .rise_weight,
+          peak_decay      = .peak_decay,
+          temperature     = .multi_temp,
+          top_k           = .multi_top_k,
+          blend_alpha     = .multi_blend
+        )
+      } else {
+        ap <- run_alignment_prospective(
+          currentSeason   = season_data_to_ew,
+          ref             = .ref,
+          hyper           = .hyper,
+          params          = NULL,
+          ign_out         = .ign_out,
+          use_ci          = .use_ci,
+          buffer_weeks    = .buffer_weeks,
+          allow_scale     = .allow_scale,
+          level           = .level,
+          min_obs         = .min_obs,
+          curvature_ratio = .curvature_ratio,
+          trough_weight   = .trough_weight,
+          rise_weight     = .rise_weight,
+          peak_decay      = .peak_decay
+        )
+      }
 
       if (ap$state == "pre_ignition") {
         ign_locked_w <- .ign_out$ign_week_locked
@@ -464,6 +561,20 @@ loso_walkforward <- function(allD,
 
     params_list[[test_s]]   <- dplyr::bind_rows(purrr::map(week_results, "params"))
     forecast_list[[test_s]] <- dplyr::bind_rows(purrr::map(week_results, "forecast"))
+
+    # --- Checkpoint: save progress after each season ---
+    if (!is.null(checkpoint_file)) {
+      completed_seasons <- union(completed_seasons, test_s)
+      saveRDS(list(
+        completed_seasons = completed_seasons,
+        params_list       = params_list[completed_seasons],
+        forecast_list     = forecast_list[completed_seasons],
+        ref_list          = ref_list[completed_seasons]
+      ), checkpoint_file)
+      if (verbose)
+        message(sprintf("[loso_walkforward] Checkpoint saved: %d/%d seasons (%s)",
+                        length(completed_seasons), length(test_seasons), checkpoint_file))
+    }
   }
 
   # Flatten any list columns that furrr parallel serialisation may introduce
@@ -514,6 +625,20 @@ loso_walkforward <- function(allD,
 #' @param n_weeks Integer. Template length (default 52).
 #' @param n_cores Integer. Workers per \code{loso_walkforward()} call
 #'   (default \code{parallel::detectCores() - 1}).
+#' @param use_smoothed_peaks Logical. If \code{TRUE}, compute true peaks from
+#'   \code{estimateDerivs()} smoothed fits (\code{argmax(fit)}) instead of raw
+#'   observed positivity \code{argmax(p)} (default \code{FALSE}).
+#' @param k_smooth Integer. Basis dimension for the per-season GAM used to
+#'   compute smoothed peaks (default 10). Only used when
+#'   \code{use_smoothed_peaks = TRUE}.
+#' @param peak_weight_boost Numeric >= 1. Multiplicative weight for observations
+#'   between ignition and peak in per-season smoothing (default 1 = no boost).
+#'   Applied both to smoothed-peak computation and to the \code{loso_walkforward()}
+#'   reference curve estimation.
+#' @param peak_weight_decay Numeric > 0. Exponential decay rate for weights after
+#'   the observed peak (default 0.3).
+#' @param use_smoothed Logical. If \code{TRUE}, pass pre-smoothed synthetic counts
+#'   to \code{estimateRef()} within each LOSO fold (default \code{FALSE}).
 #' @param verbose Logical. Print progress per k value (default \code{TRUE}).
 #' @param ... Additional arguments forwarded to \code{loso_walkforward()}.
 #'
@@ -540,6 +665,11 @@ tune_loso_k <- function(allD,
                          exclude_seasons = NULL,
                          n_weeks         = 52L,
                          n_cores         = parallel::detectCores() - 1L,
+                         use_smoothed_peaks = FALSE,
+                         k_smooth           = 10L,
+                         peak_weight_boost  = 1,
+                         peak_weight_decay  = 0.3,
+                         use_smoothed       = FALSE,
                          verbose         = TRUE,
                          ...) {
 
@@ -548,13 +678,26 @@ tune_loso_k <- function(allD,
     allD <- dplyr::filter(allD, !season %in% exclude_seasons)
   }
 
-  # True peak week per season (argmax of observed positivity)
-  true_peaks <- allD %>%
-    dplyr::filter(!is.na(p), is.finite(p), N > 0) %>%
-    dplyr::group_by(season) %>%
-    dplyr::slice_max(p, n = 1L, with_ties = FALSE) %>%
-    dplyr::ungroup() %>%
-    dplyr::select(season, true_peak_weekF = weekF)
+  # True peak week per season: smoothed or raw
+  if (use_smoothed_peaks) {
+    deriv_all <- estimateDerivs(allD, k = k_smooth,
+                                peak_weight_boost = peak_weight_boost,
+                                peak_weight_decay = peak_weight_decay,
+                                ignition_weeks    = manual_labels)
+    true_peaks <- deriv_all$data %>%
+      dplyr::filter(!is.na(fit), is.finite(fit)) %>%
+      dplyr::group_by(season) %>%
+      dplyr::slice_max(fit, n = 1L, with_ties = FALSE) %>%
+      dplyr::ungroup() %>%
+      dplyr::select(season, true_peak_weekF = weekF)
+  } else {
+    true_peaks <- allD %>%
+      dplyr::filter(!is.na(p), is.finite(p), N > 0) %>%
+      dplyr::group_by(season) %>%
+      dplyr::slice_max(p, n = 1L, with_ties = FALSE) %>%
+      dplyr::ungroup() %>%
+      dplyr::select(season, true_peak_weekF = weekF)
+  }
 
   results <- purrr::map_dfr(k_ref_grid, function(k) {
 
@@ -568,6 +711,9 @@ tune_loso_k <- function(allD,
       k_ref           = k,
       n_weeks         = n_weeks,
       n_cores         = n_cores,
+      use_smoothed       = use_smoothed,
+      peak_weight_boost  = peak_weight_boost,
+      peak_weight_decay  = peak_weight_decay,
       verbose         = FALSE,
       ...
     )
@@ -608,4 +754,231 @@ tune_loso_k <- function(allD,
   })
 
   results
+}
+
+
+#' LOSO grid search over M1 alignment hyperparameters
+#'
+#' Runs \code{loso_walkforward()} for every combination of candidate values
+#' across multiple alignment hyperparameters and scores each specification by
+#' prospective peak MAE under three Weibull weighting schemes (same metrics as
+#' \code{tune_loso_k()}).
+#'
+#' Each specification is identified by a short string \code{spec_id}. Results
+#' are checkpointed after every completed spec so the search can be resumed
+#' after interruption.
+#'
+#' @param allD Raw data frame passed to \code{loso_walkforward()}.
+#' @param params Stage-1 detector parameters list.
+#' @param grid A data frame (or tibble) where each row is one parameter
+#'   specification. Column names must match arguments of
+#'   \code{loso_walkforward()} (e.g. \code{k_ref}, \code{multi_temperature},
+#'   \code{template_shift}, \code{align_rise_weight}).
+#' @param manual_labels Named integer vector of verified ignition weeks.
+#' @param exclude_seasons Character vector of seasons to exclude.
+#' @param n_weeks Integer. Template length (default 52).
+#' @param n_cores Integer. Workers per \code{loso_walkforward()} call
+#'   (default \code{parallel::detectCores() - 1}).
+#' @param checkpoint_dir Character. Directory for per-spec checkpoint files
+#'   and the results cache (default \code{"data/m1_tune_ckpt"}).
+#' @param verbose Logical. Print progress (default \code{TRUE}).
+#' @param ... Additional fixed arguments forwarded to
+#'   \code{loso_walkforward()} (e.g. \code{buffer_weeks}, \code{use_ci}).
+#'
+#' @return A list with elements:
+#' \describe{
+#'   \item{scores}{Tibble with one row per spec: \code{spec_id} plus the
+#'     grid columns, \code{mae_uniform}, \code{mae_exp}, \code{mae_weibull},
+#'     \code{n_seasons}.}
+#'   \item{best}{Single-row tibble for the spec with lowest
+#'     \code{mae_weibull}.}
+#'   \item{grid}{The input grid (for reference).}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' grid <- expand.grid(
+#'   k_ref             = c(15L, 20L, 25L),
+#'   multi_temperature = c(0.5, 1.0, 2.0),
+#'   template_shift    = c(-1L, 0L, 1L),
+#'   align_rise_weight = c(1.0, 2.0, 3.0),
+#'   stringsAsFactors  = FALSE
+#' )
+#' res <- tune_m1_alignment(
+#'   allD, params, grid,
+#'   manual_labels   = manual_labels,
+#'   exclude_seasons = "2015-16",
+#'   use_multi_template = TRUE,
+#'   ref_method         = "fs"
+#' )
+#' res$best
+#' }
+#' @export
+tune_m1_alignment <- function(allD,
+                               params,
+                               grid,
+                               manual_labels   = NULL,
+                               exclude_seasons = NULL,
+                               n_weeks         = 52L,
+                               n_cores         = parallel::detectCores() - 1L,
+                               checkpoint_dir  = "data/m1_tune_ckpt",
+                               verbose         = TRUE,
+                               ...) {
+
+  if (!dir.exists(checkpoint_dir))
+    dir.create(checkpoint_dir, recursive = TRUE)
+
+  results_cache <- file.path(checkpoint_dir, "tune_m1_results.rds")
+
+  # Pre-filter excluded seasons once
+  if (!is.null(exclude_seasons)) {
+    allD <- dplyr::filter(allD, !season %in% exclude_seasons)
+  }
+
+  # True peak week per season (observed argmax)
+  true_peaks <- allD %>%
+    dplyr::filter(!is.na(p), is.finite(p), N > 0) %>%
+    dplyr::group_by(season) %>%
+    dplyr::slice_max(p, n = 1L, with_ties = FALSE) %>%
+    dplyr::ungroup() %>%
+    dplyr::select(season, true_peak_weekF = weekF)
+
+  # Build spec IDs
+  grid <- tibble::as_tibble(grid)
+  n_specs <- nrow(grid)
+  grid$spec_id <- sprintf("s%03d", seq_len(n_specs))
+
+  # Load previously completed specs
+  if (file.exists(results_cache)) {
+    prev <- readRDS(results_cache)
+    done_ids <- prev$spec_id
+    score_rows <- split(prev, seq_len(nrow(prev)))
+    if (verbose) message(sprintf("[tune_m1] Resuming: %d / %d specs already done.",
+                                 length(done_ids), n_specs))
+  } else {
+    done_ids <- character(0)
+    score_rows <- list()
+  }
+
+  # Tunable column names (columns in grid that are loso_walkforward args)
+  tune_cols <- setdiff(names(grid), "spec_id")
+
+  for (i in seq_len(n_specs)) {
+    sid <- grid$spec_id[i]
+    if (sid %in% done_ids) next
+
+    spec <- grid[i, ]
+    if (verbose) {
+      spec_str <- paste(tune_cols, "=",
+                        vapply(tune_cols, function(c) as.character(spec[[c]]),
+                               character(1)),
+                        collapse = ", ")
+      message(sprintf("[tune_m1] Spec %d / %d  (%s)  %s",
+                      i, n_specs, sid, spec_str))
+    }
+
+    # Build loso_walkforward arguments from the spec row
+    wf_args <- list(
+      allD            = allD,
+      params          = params,
+      manual_labels   = manual_labels,
+      exclude_seasons = NULL,   # already filtered
+      n_weeks         = n_weeks,
+      n_cores         = n_cores,
+      verbose         = FALSE
+    )
+    # Overlay tunable params from grid
+    for (col in tune_cols) {
+      wf_args[[col]] <- spec[[col]]
+    }
+    # Overlay fixed caller args (...)
+    dots <- list(...)
+    for (nm in names(dots)) {
+      wf_args[[nm]] <- dots[[nm]]
+    }
+    # Per-spec checkpoint
+    wf_args$checkpoint_file <- file.path(checkpoint_dir,
+                                         paste0("ckpt_", sid, ".rds"))
+
+    wf <- tryCatch(
+      do.call(loso_walkforward, wf_args),
+      error = function(e) {
+        warning(sprintf("[tune_m1] Spec %s failed: %s", sid, conditionMessage(e)))
+        NULL
+      }
+    )
+
+    if (is.null(wf)) {
+      row <- tibble::tibble(
+        spec_id      = sid,
+        mae_uniform  = NA_real_,
+        mae_exp      = NA_real_,
+        mae_weibull  = NA_real_,
+        n_seasons    = 0L
+      )
+    } else {
+      score_df <- wf$params_df %>%
+        dplyr::filter(!is.na(t_peak), !is.na(iWeek_true)) %>%
+        dplyr::mutate(
+          pred_peak_weekF = round(t_peak - anchorWeek + iWeek_hat)
+        ) %>%
+        dplyr::left_join(true_peaks, by = "season") %>%
+        dplyr::filter(!is.na(true_peak_weekF),
+                      eval_week <= true_peak_weekF) %>%
+        dplyr::mutate(
+          error    = abs(pred_peak_weekF - true_peak_weekF),
+          t        = eval_week - iWeek_true,
+          w_unif   = 1,
+          w_exp    = exp(-(0.1 * t)^1),
+          w_weib   = exp(-(0.1 * t)^2)
+        )
+
+      wmae <- function(w) {
+        if (nrow(score_df) == 0 || sum(w) == 0) NA_real_
+        else sum(w * score_df$error) / sum(w)
+      }
+
+      row <- tibble::tibble(
+        spec_id      = sid,
+        mae_uniform  = wmae(score_df$w_unif),
+        mae_exp      = wmae(score_df$w_exp),
+        mae_weibull  = wmae(score_df$w_weib),
+        n_seasons    = dplyr::n_distinct(score_df$season)
+      )
+    }
+
+    score_rows <- c(score_rows, list(row))
+    done_ids <- c(done_ids, sid)
+
+    # Checkpoint after every spec
+    all_scores <- dplyr::bind_rows(score_rows)
+    saveRDS(all_scores, results_cache)
+
+    if (verbose) {
+      message(sprintf("  -> mae_weibull = %.3f   [%d / %d done]",
+                      row$mae_weibull, length(done_ids), n_specs))
+    }
+  }
+
+  all_scores <- dplyr::bind_rows(score_rows)
+
+  # Merge grid columns into scores
+  scores <- dplyr::left_join(
+    grid,
+    all_scores,
+    by = "spec_id"
+  ) %>%
+    dplyr::arrange(mae_weibull)
+
+  best <- scores %>% dplyr::slice_min(mae_weibull, n = 1L, with_ties = FALSE)
+
+  if (verbose) {
+    message(sprintf("\n[tune_m1] Best spec: %s  mae_weibull = %.4f",
+                    best$spec_id, best$mae_weibull))
+    for (col in tune_cols) {
+      message(sprintf("  %s = %s", col, as.character(best[[col]])))
+    }
+  }
+
+  list(scores = scores, best = best, grid = grid)
 }

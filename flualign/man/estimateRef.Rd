@@ -4,38 +4,67 @@
 \alias{estimateRef}
 \title{Estimate a reference (template) curve for influenza positivity}
 \usage{
-estimateRef(alignedD, exSeason = NULL, k = 10, n_weeks = 52L, nAGQ = 1)
+estimateRef(
+  alignedD,
+  exSeason = NULL,
+  k = 10,
+  n_weeks = 52L,
+  nAGQ = 1,
+  method = c("binomial", "binomial_weighted", "gaussian_logit", "median_smooth", "fs",
+    "gaussian_logit_fs"),
+  trough_weight = 0.1,
+  peak_weight_boost = 3,
+  agg = c("median", "mean")
+)
 }
 \arguments{
-\item{alignedD}{Data frame containing aligned seasonal data with at least:
-\code{season}, \code{newWeek}, \code{y}, \code{neg}. Optionally contains \code{N}.}
+\item{alignedD}{Data frame with at least: \code{season}, \code{newWeek}, \code{y}, \code{neg}.
+Methods \code{"gaussian_logit"} and \code{"median_smooth"} also require \code{fit}
+(from \code{estimateDerivs()}).}
 
-\item{exSeason}{Optional character vector of seasons to exclude.}
+\item{exSeason}{Character vector of season labels to exclude.}
 
-\item{k}{Basis dimension for the cyclic smooth \code{s(newWeek, bs="cc", k=k)}.}
+\item{k}{Basis dimension for the cyclic smooth.}
 
-\item{n_weeks}{Integer. Number of weeks in the template domain (default 52).
-If you want to support 53-week seasons, you can set this to 53, but then you
-should also change the clamping and grid logic consistently.}
+\item{n_weeks}{Integer. Number of weeks in the template domain (default 52).}
 
-\item{nAGQ}{Passed to \code{gamm4}; default 1 (Laplace).}
+\item{nAGQ}{Passed to \code{gamm4}; default 1 (Laplace). Only used by binomial methods.}
+
+\item{method}{Character. Estimation method:
+\describe{
+  \item{"binomial"}{Binomial GAMM on raw counts via gamm4 (original).}
+  \item{"binomial_weighted"}{Binomial GAMM on raw counts with ignition-to-peak
+    count inflation (like estimateDerivs weighting).}
+  \item{"gaussian_logit"}{Gaussian GAM on logit(fit) with trough downweighting.
+    Requires \code{fit} column.}
+  \item{"median_smooth"}{Pointwise median of per-season \code{fit} across seasons
+    at each newWeek, then smooth with cyclic GAM. Requires \code{fit} column.}
+  \item{"fs"}{Factor-smooth interaction via \code{s(newWeek, season, bs="fs")}.
+    Each season gets its own smooth with shared smoothness penalty; population
+    curve = average of per-season predictions. Requires \code{fit} column.}
+  \item{"gaussian_logit_fs"}{Combined: global cyclic smooth \code{s(newWeek, bs="cc")}
+    plus factor-smooth \code{s(newWeek, season, bs="fs")} for per-season shape
+    deviations. Population curve from the global smooth only (fs excluded from
+    prediction). Requires \code{fit} column.}
+}}
+
+\item{trough_weight}{Numeric in (0,1]. Weight for pre-season (phase==0) rows.
+Only used by \code{"gaussian_logit"} and \code{"binomial_weighted"}. Default 0.1.}
+
+\item{peak_weight_boost}{Numeric >= 1. Count inflation factor for ignition-to-peak
+rows. Only used by \code{"binomial_weighted"}. Default 3.}
+
+\item{agg}{Character. Aggregation method for the \code{"fs"} method's population curve:
+\code{"median"} (default) takes pointwise median across seasons on logit scale;
+\code{"mean"} takes the mean. Ignored for other methods.}
 }
 \value{
-A list with components:
-\describe{
-  \item{mod2}{The fitted \code{gamm4} object.}
-  \item{g_ref_fun}{Function(u): natural spline of link-scale fitted values.}
-  \item{g_ref_safe}{Function(u): \code{g_ref_fun} with u clamped to 1..n_weeks.}
-  \item{g_ref_mu_se}{Function(u): returns list(mu, se) on link scale from the GAM.}
-  \item{ref_df}{Tibble with \code{newWeek} and \code{p_gamm} = plogis(g_ref_fun).}
-  \item{pred_df}{Tibble with \code{newWeek, fit, se.fit, low, high} on prob scale.}
-  \item{anchorWeek}{Anchor week attribute if present on \code{alignedD}, else NA.}
-}
+A list with components: \code{mod2}, \code{g_ref_fun}, \code{g_ref_safe},
+  \code{g_ref_mu_se}, \code{ref_df}, \code{pred_df}, \code{dat}, \code{anchorWeek},
+  \code{method}.
 }
 \description{
-Fits a season-pooled binomial GAMM (via \code{gamm4}) on aligned week index
-\code{newWeek}, with a cyclic smooth and a season random intercept. Returns
-a link-scale reference function \code{g_ref_fun} (spline over weeks),
-a helper \code{g_ref_mu_se(u)} that returns link-scale mean and SE at arbitrary
-\code{u}, and probability-scale reference data frames for plotting.
+Fits a season-pooled model on aligned week index \code{newWeek} with a cyclic
+smooth and a season random intercept. Multiple estimation methods are available
+via the \code{method} parameter.
 }
