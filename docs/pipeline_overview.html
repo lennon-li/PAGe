@@ -2319,8 +2319,11 @@ window.Quarto = {
   </ul></li>
   <li><a href="#sec-m1" id="toc-sec-m1" class="nav-link" data-scroll-target="#sec-m1"><span class="header-section-number">3</span> <span class="math inline">\(M_1\)</span> — Curve Alignment</a>
   <ul class="collapse">
-  <li><a href="#sec-m1-training" id="toc-sec-m1-training" class="nav-link" data-scroll-target="#sec-m1-training"><span class="header-section-number">3.1</span> Training</a></li>
-  <li><a href="#sec-run" id="toc-sec-run" class="nav-link" data-scroll-target="#sec-run"><span class="header-section-number">3.2</span> Deployment: Weekly prospective alignment</a></li>
+  <li><a href="#sec-refcurve" id="toc-sec-refcurve" class="nav-link" data-scroll-target="#sec-refcurve"><span class="header-section-number">3.1</span> Reference curve estimation</a></li>
+  <li><a href="#sec-m1-align" id="toc-sec-m1-align" class="nav-link" data-scroll-target="#sec-m1-align"><span class="header-section-number">3.2</span> Alignment methods</a></li>
+  <li><a href="#sec-peak-tuning" id="toc-sec-peak-tuning" class="nav-link" data-scroll-target="#sec-peak-tuning"><span class="header-section-number">3.3</span> Post-peak flag tuning</a></li>
+  <li><a href="#sec-m1-training" id="toc-sec-m1-training" class="nav-link" data-scroll-target="#sec-m1-training"><span class="header-section-number">3.4</span> Training</a></li>
+  <li><a href="#sec-run" id="toc-sec-run" class="nav-link" data-scroll-target="#sec-run"><span class="header-section-number">3.5</span> Deployment: Weekly prospective alignment</a></li>
   </ul></li>
   <li><a href="#sec-m2" id="toc-sec-m2" class="nav-link" data-scroll-target="#sec-m2"><span class="header-section-number">4</span> <span class="math inline">\(M_2\)</span> — Forecast Model</a>
   <ul class="collapse">
@@ -2480,12 +2483,37 @@ w^a_{s,w} = w^f_{s,w} - \hat{w}^{(\mathrm{ign})}_s + w^{an}.
 </section>
 <section id="sec-m1" class="level2" data-number="3">
 <h2 data-number="3" class="anchored" data-anchor-id="sec-m1"><span class="header-section-number">3</span> <span class="math inline">\(M_1\)</span> — Curve Alignment</h2>
-<p><strong>Goal:</strong> fit observed epidemic curves to a learned reference template to estimate peak timing and provide short-term forecasts.</p>
-<p>Once ignition is detected by <span class="math inline">\(M_0\)</span>, historical seasons are aligned by their ignition weeks to estimate a smooth <strong>reference curve</strong> <span class="math inline">\(g_{\mathrm{ref}}\)</span> — the average epidemic shape across seasons. Each week during the live season, the current partial curve is then aligned to this reference by fitting a small set of shift and scale parameters, yielding a continuously updated peak estimate. This whole process — reference curve estimation and prospective alignment — is validated and tuned via LOSO cross-validation.</p>
-<p>The alignment uses a <strong>4-parameter dilation model</strong> on the logit scale:</p>
+<p><strong>Goal:</strong> fit observed epidemic curves to learned reference templates to estimate peak timing and provide short-term forecasts.</p>
+<p>Once ignition is detected by <span class="math inline">\(M_0\)</span>, historical seasons are aligned by their ignition weeks to estimate per-season and population <strong>reference curves</strong>. Each week during the live season, the current partial curve is aligned to multiple reference templates in parallel, and forecasts are <strong>ensemble-weighted by alignment quality (NLL)</strong>, yielding a continuously updated peak estimate.</p>
+<p><strong>Peak tracking and alignment freeze:</strong> Once the epidemic peak is detected (flagged as <code>peak_passed == TRUE</code>), alignment is <strong>frozen</strong> — no further parameter estimation occurs. This prevents over-fitting to the declining phase where the model has poor information, and provides a stable peak estimate for <span class="math inline">\(M_2\)</span> to anchor forecasts. The peak flag is tuned offline to minimize detection delay with zero false positives.</p>
+<p>This whole process — reference curve estimation, prospective multi-template alignment, and peak detection — is validated and tuned via LOSO cross-validation.</p>
+<section id="sec-refcurve" class="level3" data-number="3.1">
+<h3 data-number="3.1" class="anchored" data-anchor-id="sec-refcurve"><span class="header-section-number">3.1</span> Reference curve estimation</h3>
+<p>A smooth seasonal template is built from historical data using <strong>known (manually labelled) ignition weeks</strong>. This becomes the foundation for all alignment and peak estimation.</p>
+<p>Each season’s ignition week <span class="math inline">\(w_s^{(\mathrm{ign})}\)</span> is assigned by expert review. Using these known labels, the data are aligned so all seasons are centred on their median ignition week <span class="math inline">\(w^{an}\)</span>:</p>
 <p><span class="math display">\[
+w^a_{s,w} = w^f_{s,w} - w_s^{(\mathrm{ign})} + w^{an}.
+\]</span></p>
+<p>The reference curve is estimated using the <strong>factor-smooth (fs) method</strong>, which operates on aligned <code>newWeek</code> space:</p>
+<p><strong>Method: <code>&quot;fs&quot;</code> (factor-smooth)</strong> - Uses a GAM term <code>s(newWeek, season, bs=&quot;fs&quot;)</code> with factor-smooth basis - Returns per-season curves <code>eta_mat</code> (52 weeks × n_seasons matrix) for multi-template alignment - Computes population reference as pointwise median across seasons - Provides per-season flexibility while maintaining robustness to outlier seasons</p>
+<p><code>learn_alignment_hyperparams()</code> derives bounds and penalties (<code>TAU_BOUNDS</code>, <code>DELTA_BOUNDS</code>, <code>LAMBDA_DELTA</code>, <code>WEEK_THRESHOLD_DELTA</code>) stored as <code>hyper</code>.</p>
+<p><strong>Key functions:</strong> <code>flagIgnition(manual_labels=...)</code>, <code>alignIgnition()</code>, <code>estimateRef()</code>, <code>learn_alignment_hyperparams()</code></p>
+<p><strong>Full analysis:</strong> <a href="estimateRef.html"><code>estimateRef.html</code></a></p>
+</section>
+<section id="sec-m1-align" class="level3" data-number="3.2">
+<h3 data-number="3.2" class="anchored" data-anchor-id="sec-m1-align"><span class="header-section-number">3.2</span> Alignment methods</h3>
+<p>The alignment uses a <strong>4-parameter dilation model</strong> on the logit scale. Two approaches are supported:</p>
+<p><strong>Single-template baseline:</strong> Uses a single population reference <span class="math inline">\(g_{\mathrm{ref}}\)</span>: <span class="math display">\[
 u_{s,w} = \frac{w^a_{s,w} - \tau_w}{1 + \delta_w}, \qquad \mathrm{logit}(\hat\pi_{s,w}) = a_w + b_w\cdot g_{\mathrm{ref}}(u_{s,w})
 \]</span></p>
+<p><strong>Multi-template ensemble (</strong>selected<strong>):</strong> The FS reference method returns per-season curves <span class="math inline">\(\eta_s(u)\)</span> (columns of <code>eta_mat</code>). Multi-template alignment fits to each training season’s curve independently:</p>
+<ol type="1">
+<li>For each training season <span class="math inline">\(s&#39;\)</span>, build a spline template from <span class="math inline">\(\eta_{s&#39;}\)</span> and call <code>align_forecast_pipeline_dilate()</code> to estimate (<span class="math inline">\(\tau_{s&#39;}, \delta_{s&#39;}, a_{s&#39;}, b_{s&#39;}\)</span>) and obtain NLL<span class="math inline">\(_{s&#39;}\)</span></li>
+<li>Compute softmax weights: <span class="math display">\[w_{s&#39;} = \frac{\exp(-\text{NLL}_{s&#39;} / T)}{\sum_s \exp(-\text{NLL}_s / T)}\]</span> where <span class="math inline">\(T\)</span> is temperature (lower <span class="math inline">\(T\)</span> = peakier weights)</li>
+<li>Ensemble forecasts: <span class="math inline">\(\hat\pi_{s,w} = \sum_{s&#39;} w_{s&#39;} \hat\pi_{s&#39;,s,w}\)</span></li>
+</ol>
+<p><strong>Advantage:</strong> Recognizes that historical seasons have diverse shapes (e.g., steep 2022–23 vs gradual 2017–18) and adapts which template to use without being forced into a single population shape.</p>
+<p><strong>Tuned parameters (LOSO grid search):</strong> - <code>k_ref</code> = 25 (basis dimension for FS reference GAM) - <code>multi_temperature</code> = 0.5 (strongly peaks weights on best-matching template) - <code>template_shift</code> = −1 (corrects ~1-week detection lag) - <code>align_rise_weight</code> = 1.0 (uniform loss weights across all phases — time-weighting not beneficial)</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 23%">
@@ -2530,22 +2558,9 @@ u_{s,w} = \frac{w^a_{s,w} - \tau_w}{1 + \delta_w}, \qquad \mathrm{logit}(\hat\pi
 </table>
 <p><strong>Progressive activation guards</strong> prevent unstable early-season fits: - <code>allow_scale = FALSE</code> (early): Only <span class="math inline">\(a_w\)</span> estimated, <span class="math inline">\(b_w = 1\)</span> fixed - <code>delta_on = FALSE</code> (early): Only <span class="math inline">\(\tau_w\)</span> estimated, <span class="math inline">\(\delta_w = 0\)</span> fixed</p>
 <p>The peak is derived from the fitted parameters as: <span class="math display">\[t_{\mathrm{peak},w} = \tau_w + (1+\delta_w)\cdot u^*, \quad \text{converted back to calendar: } w_s^p = t_{\mathrm{peak},w} - w^{an} + \hat{w}^{(\mathrm{ign})}_s\]</span> where <span class="math inline">\(u^*\)</span> is the argmax of <span class="math inline">\(g_{\mathrm{ref}}\)</span>.</p>
-<section id="sec-m1-training" class="level3" data-number="3.1">
-<h3 data-number="3.1" class="anchored" data-anchor-id="sec-m1-training"><span class="header-section-number">3.1</span> Training</h3>
-<p>Three offline training steps build the products used by weekly deployment. Reference curve estimation and LOSO walk-forward evaluation are interdependent: the LOSO loop re-estimates the reference curve on each training fold to select <code>k_ref</code>, and the final reference is then re-estimated with the chosen <code>k_ref</code> on all seasons. Post-peak flag tuning uses the alignment outputs produced by LOSO — no separate alignment pass is needed.</p>
-<section id="sec-refcurve" class="level4" data-number="3.1.1">
-<h4 data-number="3.1.1" class="anchored" data-anchor-id="sec-refcurve"><span class="header-section-number">3.1.1</span> Reference curve estimation</h4>
-<p>A smooth seasonal template is built from historical data using <strong>known (manually labelled) ignition weeks</strong>. This becomes the foundation for all alignment and peak estimation.</p>
-<p>Each season’s ignition week <span class="math inline">\(w_s^{(\mathrm{ign})}\)</span> is assigned by expert review. Using these known labels, the data are aligned so all seasons are centred on their median ignition week <span class="math inline">\(w^{an}\)</span>:</p>
-<p><span class="math display">\[
-w^a_{s,w} = w^f_{s,w} - w_s^{(\mathrm{ign})} + w^{an}.
-\]</span></p>
-<p><code>estimateRef()</code> then fits a cyclic GAMM on all training seasons in aligned <code>newWeek</code> space to produce the reference curve <span class="math inline">\(g_{\mathrm{ref}}(u)\)</span> on the <strong>link (logit) scale</strong> — the average epidemic shape. <code>learn_alignment_hyperparams()</code> derives bounds and penalties (<code>TAU_BOUNDS</code>, <code>DELTA_BOUNDS</code>, <code>LAMBDA_DELTA</code>, <code>WEEK_THRESHOLD_DELTA</code>) stored as <code>hyper</code>.</p>
-<p><strong>Key functions:</strong> <code>flagIgnition(manual_labels=...)</code>, <code>alignIgnition()</code>, <code>estimateRef()</code>, <code>learn_alignment_hyperparams()</code></p>
-<p><strong>Full analysis:</strong> <a href="estimateRef.html"><code>estimateRef.html</code></a></p>
 </section>
-<section id="sec-peak-tuning" class="level4" data-number="3.1.2">
-<h4 data-number="3.1.2" class="anchored" data-anchor-id="sec-peak-tuning"><span class="header-section-number">3.1.2</span> Post-peak flag tuning</h4>
+<section id="sec-peak-tuning" class="level3" data-number="3.3">
+<h3 data-number="3.3" class="anchored" data-anchor-id="sec-peak-tuning"><span class="header-section-number">3.3</span> Post-peak flag tuning</h3>
 <p>The parameters governing when the peak is declared <em>passed</em> are tuned offline. <code>tune_peak_detection()</code> finds the combination that minimises detection delay with zero false positives:</p>
 <table class="caption-top table">
 <colgroup>
@@ -2572,28 +2587,43 @@ w^a_{s,w} = w^f_{s,w} - w_s^{(\mathrm{ign})} + w^{an}.
 <p><strong>Key functions:</strong> <code>tune_peak_detection()</code></p>
 <p><strong>Full analysis:</strong> <a href="peak_detection_tuning.html"><code>peak_detection_tuning.html</code></a></p>
 </section>
-<section id="sec-loso" class="level4" data-number="3.1.3">
-<h4 data-number="3.1.3" class="anchored" data-anchor-id="sec-loso"><span class="header-section-number">3.1.3</span> LOSO walk-forward evaluation</h4>
-<p>Reference curve flexibility <code>k_ref</code> and alignment performance are validated via leave-one-season-out (LOSO) cross-validation to prevent data leakage.</p>
-<p>For each test season: 1. Re-run <code>estimateRef()</code> + <code>learn_alignment_hyperparams()</code> on training seasons only (test season excluded) 2. Detect ignition on test season prospectively using tuned M0 thresholds 3. Walk forward week by week, calling <code>run_alignment_prospective()</code> at each step 4. Collect <code>params_df</code> with fitted parameters and alignment outputs at each week</p>
-<p><code>k_ref</code> is selected by prospective peak MAE across LOSO folds, weighted by proximity to ignition. The resulting <code>params_df</code> is consumed directly by M2 training — no second alignment pass is needed.</p>
-<p><strong>Key functions:</strong> <code>loso_walkforward()</code></p>
+<section id="sec-m1-training" class="level3" data-number="3.4">
+<h3 data-number="3.4" class="anchored" data-anchor-id="sec-m1-training"><span class="header-section-number">3.4</span> Training</h3>
+<p>Reference curve estimation (see §<a href="#sec-refcurve" class="quarto-xref">Section 3.1</a>), multi-template alignment methods, and peak detection parameters are all validated via LOSO cross-validation to prevent data leakage. Post-peak flag tuning uses the alignment outputs produced by LOSO — no separate alignment pass is needed.</p>
+<section id="sec-loso" class="level4" data-number="3.4.1">
+<h4 data-number="3.4.1" class="anchored" data-anchor-id="sec-loso"><span class="header-section-number">3.4.1</span> LOSO walk-forward evaluation</h4>
+<p>Reference curve methods, multi-template ensemble parameters, and alignment performance are validated via leave-one-season-out (LOSO) cross-validation to prevent data leakage.</p>
+<p><strong>Extended grid search:</strong> A 4-dimensional grid of M1 hyperparameters is evaluated: - <code>k_ref</code>: {15, 20, 25, 30, 35} — reference curve basis dimension - <code>multi_temperature</code>: {0.25, 0.5, 1.0} — softmax concentration on best template - <code>template_shift</code>: {−2, −1, 0, 1} — offset to correct detection lag - <code>align_rise_weight</code>: {1.0} — uniform loss emphasis (time-weighting not tuned)</p>
+<p>For each configuration in the grid, LOSO evaluation proceeds:</p>
+<ol type="1">
+<li>Re-run <code>estimateRef(method=&quot;fs&quot;)</code> + <code>learn_alignment_hyperparams()</code> on training seasons only (test season excluded)</li>
+<li>Detect ignition on test season prospectively using tuned M0 thresholds</li>
+<li>Walk forward week by week, calling <code>run_alignment_prospective()</code> or <code>align_multi_template()</code> at each step</li>
+<li>Collect <code>params_df</code> with fitted parameters and alignment outputs at each week</li>
+</ol>
+<p>Peak MAE is computed under <strong>Weibull weighting</strong> (emphasizes near-peak predictions where uncertainty matters most) and is the primary tuning metric. The resulting <code>params_df</code> is consumed directly by M2 training — no second alignment pass is needed.</p>
+<p><strong>Selected configuration (baseline grid, 81 configs):</strong> - k_ref=25, temperature=0.5, shift=−1 → Weibull MAE = 1.2178 weeks</p>
+<p><strong>Extended grid:</strong> 36 new boundary-pushing configurations in progress to verify whether edge optima can be improved.</p>
+<p><strong>Key functions:</strong> <code>loso_walkforward()</code>, <code>tune_m1_alignment()</code></p>
 <p><strong>Full analysis:</strong> <a href="loso_walkforward.html"><code>loso_walkforward.html</code></a></p>
 </section>
 </section>
-<section id="sec-run" class="level3" data-number="3.2">
-<h3 data-number="3.2" class="anchored" data-anchor-id="sec-run"><span class="header-section-number">3.2</span> Deployment: Weekly prospective alignment</h3>
-<p>Each week, <code>run_alignment_prospective()</code> is called with frozen training products:</p>
+<section id="sec-run" class="level3" data-number="3.5">
+<h3 data-number="3.5" class="anchored" data-anchor-id="sec-run"><span class="header-section-number">3.5</span> Deployment: Weekly prospective alignment</h3>
+<p>Each week, either <code>run_alignment_prospective()</code> (single-template) or <code>align_multi_template()</code> (multi-template) is called with frozen training products:</p>
 <ul>
-<li><code>ref</code> — reference curve from above</li>
+<li><code>ref</code> — reference curve + per-season curves <code>eta_mat</code> from FS method</li>
 <li><code>hyper</code> — alignment hyperparameters</li>
 <li><code>params</code> — ignition thresholds from M0 training</li>
+<li><code>multi_temperature</code>, <code>template_shift</code> — multi-template ensemble parameters</li>
 <li><code>use_ci</code>, <code>buffer_weeks</code> — peak detection settings</li>
 </ul>
-<p>The function returns: - Current <strong>state</strong>: <code>&quot;pre_ignition&quot;</code> / <code>&quot;aligning&quot;</code> / <code>&quot;post_peak&quot;</code> - Estimated peak week with CI - Aligned forecast trajectory</p>
+<p><strong>Multi-template flow (selected):</strong> 1. Align current-season data to each template in <code>eta_mat</code> → collect {<span class="math inline">\(\tau_s&#39;, \delta_s&#39;, a_s&#39;, b_s&#39;\)</span>, NLL<span class="math inline">\(_s&#39;\)</span>} for each training season <span class="math inline">\(s&#39;\)</span> 2. Compute softmax weights from NLL values with tuned temperature 3. Ensemble forecasts and peak estimate across templates</p>
+<p><strong>Single-template flow (fallback):</strong> 1. Align to population reference <span class="math inline">\(g_{\mathrm{ref}}\)</span> only</p>
+<p>The function returns: - Current <strong>state</strong>: <code>&quot;pre_ignition&quot;</code> / <code>&quot;aligning&quot;</code> / <code>&quot;post_peak&quot;</code> - Estimated peak week with CI - Aligned forecast trajectory - (Multi-template only) Per-template parameters and softmax weights</p>
 <p>Once <code>state == &quot;post_peak&quot;</code>, alignment freezes and the peak estimate is final.</p>
-<p><strong>Key function:</strong> <code>run_alignment_prospective(currentSeason, ref, hyper, params, use_ci, buffer_weeks)</code></p>
-<p><strong>Full analysis:</strong> <a href="run.html"><code>run.html</code></a></p>
+<p><strong>Key functions:</strong> <code>run_alignment_prospective()</code>, <code>align_multi_template()</code></p>
+<p><strong>Full analysis:</strong> <a href="loso_walkforward.html"><code>loso_walkforward.html</code></a>, <a href="run.html"><code>run.html</code></a></p>
 <hr>
 </section>
 </section>
@@ -2608,7 +2638,7 @@ w^a_{s,w} = w^f_{s,w} - w_s^{(\mathrm{ign})} + w^{an}.
 </colgroup>
 <thead>
 <tr class="header">
-<th>Alignment input (from §<a href="#sec-m1" class="quarto-xref">Section 3</a> / <a href="#sec-run" class="quarto-xref">Section 3.2</a>)</th>
+<th>Alignment input (from §<a href="#sec-m1" class="quarto-xref">Section 3</a> / <a href="#sec-run" class="quarto-xref">Section 3.5</a>)</th>
 <th>Role in <span class="math inline">\(M_2\)</span></th>
 </tr>
 </thead>
@@ -2755,11 +2785,16 @@ Select: hyperparameter set with lowest mean NLL across folds</code></pre>
 </ol>
 <p><span class="math inline">\(M_2\)</span> <strong>cannot run before <span class="math inline">\(M_1\)</span></strong> in a given week because the aligned time axis <span class="math inline">\(w^a_{s,w}\)</span> and template covariate require the alignment state that <span class="math inline">\(M_1\)</span> just produced. The EWMA, slope, and curvature are recomputed from the latest raw data by <code>prep_stage2_joint()</code>, but they still need the post-ignition filter that depends on <span class="math inline">\(M_1\)</span>’s ignition call. All hyperparameters remain frozen (LOSO-tuned); only the GAM coefficients change as new rows accumulate.</p>
 <pre><code>Week w arrives
-  └─ M₁:  run_alignment_prospective(currentSeason[1:w], ref, hyper, params, …)
-         └─ returns: state, w^a_{s,w}, τ_w, δ_w, a_w, b_w, peak_weekF (+ CI)
+  └─ M₁:  align_multi_template(currentSeason[1:w], eta_mat, g_ref, hyper, …)
+         └─ for each training season s&#39;:
+              align_forecast_pipeline_dilate(…, time_weights, temperature, …)
+              → {τ_s&#39;, δ_s&#39;, a_s&#39;, b_s&#39;, NLL_s&#39;}
+         └─ compute softmax weights w_s&#39; = exp(−NLL_s&#39;/T) / Σ
+         └─ ensemble: state, w^a_{s,w}, peak_weekF (+ CI)
               └─ if state == &quot;aligning&quot;:
                    M₂:  refit_stage2_weekly(D_hist ∪ {row w with M₁ outputs})
                          └─ predict: π̂_{s,w+1},  π̂_{s,w+2}</code></pre>
+<p>The alignment loss is computed with <strong>time-weighted observations</strong> emphasizing ignition-to-peak weeks, then weighted by template quality (NLL) via softmax.</p>
 <p>This cycle repeats every week until <code>state == &quot;post_peak&quot;</code>, at which point alignment freezes and <span class="math inline">\(M_2\)</span> can be called one final time or retired for the season.</p>
 </section>
 <section id="leakage-free-m_2-training" class="level3" data-number="5.2">
@@ -2789,7 +2824,7 @@ Select: hyperparameter set with lowest mean NLL across folds</code></pre>
 <td>1</td>
 <td>Reference curve + <code>hyper</code> (<code>estimateRef</code>, <code>learn_alignment_hyperparams</code>)</td>
 <td>Offline, once</td>
-<td><a href="#sec-refcurve" class="quarto-xref">Section 3.1.1</a></td>
+<td><a href="#sec-refcurve" class="quarto-xref">Section 3.1</a></td>
 </tr>
 <tr class="even">
 <td>2</td>
@@ -2801,13 +2836,13 @@ Select: hyperparameter set with lowest mean NLL across folds</code></pre>
 <td>3</td>
 <td>LOSO walk-forward (<span class="math inline">\(M_1\)</span>) → <code>params_df</code></td>
 <td>Offline, once</td>
-<td><a href="#sec-loso" class="quarto-xref">Section 3.1.3</a></td>
+<td><a href="#sec-loso" class="quarto-xref">Section 3.4.1</a></td>
 </tr>
 <tr class="even">
 <td>4</td>
 <td>Post-peak flag parameters (<code>use_ci</code>, <code>buffer_weeks</code>)</td>
 <td>Offline, once</td>
-<td>§<a href="#sec-peak-tuning" class="quarto-xref">Section 3.1.2</a></td>
+<td>§<a href="#sec-peak-tuning" class="quarto-xref">Section 3.3</a></td>
 </tr>
 <tr class="odd">
 <td>5</td>
@@ -2845,19 +2880,19 @@ Select: hyperparameter set with lowest mean NLL across folds</code></pre>
 <tbody>
 <tr class="odd">
 <td><a href="estimateRef.html"><code>estimateRef.html</code></a></td>
-<td>§<a href="#sec-refcurve" class="quarto-xref">Section 3.1.1</a> — reference curve fitting and diagnostics</td>
+<td>§<a href="#sec-refcurve" class="quarto-xref">Section 3.1</a> — 6 reference curve methods, FS selection, per-season curves</td>
 </tr>
 <tr class="even">
 <td><a href="ignition_training.html"><code>ignition_training.html</code></a></td>
 <td>§<a href="#sec-m0" class="quarto-xref">Section 2</a> — ignition gate definitions and LOSO threshold tuning</td>
 </tr>
 <tr class="odd">
-<td><a href="loso_walkforward.html"><code>loso_walkforward.html</code></a></td>
-<td>§<a href="#sec-loso" class="quarto-xref">Section 3.1.3</a> — LOSO evaluation, k_ref tuning, walk-forward plots</td>
+<td><strong><a href="loso_walkforward.html"><code>loso_walkforward.html</code></a></strong></td>
+<td><strong>§<a href="#sec-loso" class="quarto-xref">Section 3.4.1</a> — Multi-template ensemble: grid search tuning, extended boundary exploration, per-season plots</strong></td>
 </tr>
 <tr class="even">
 <td><a href="peak_detection_tuning.html"><code>peak_detection_tuning.html</code></a></td>
-<td>§<a href="#sec-peak-tuning" class="quarto-xref">Section 3.1.2</a> — post-peak flag parameter tuning</td>
+<td>§<a href="#sec-peak-tuning" class="quarto-xref">Section 3.3</a> — post-peak flag parameter tuning</td>
 </tr>
 <tr class="odd">
 <td><a href="forecast_training.html"><code>forecast_training.html</code></a></td>
@@ -2877,7 +2912,7 @@ Select: hyperparameter set with lowest mean NLL across folds</code></pre>
 </tr>
 <tr class="odd">
 <td><em>(this document)</em></td>
-<td>Overview — notation, stage descriptions, deployment sequence</td>
+<td>Overview — notation, stage descriptions, deployment sequence, multi-template architecture</td>
 </tr>
 </tbody>
 </table>
@@ -2885,10 +2920,11 @@ Select: hyperparameter set with lowest mean NLL across folds</code></pre>
 </section>
 <section id="key-design-choices" class="level2" data-number="7">
 <h2 data-number="7" class="anchored" data-anchor-id="key-design-choices"><span class="header-section-number">7</span> Key design choices</h2>
+<p><strong>Multi-template ensemble alignment.</strong> Instead of forcing all seasons into one population reference shape, the FS reference method produces per-season curves. M₁ aligns to each training season’s curve independently and ensembles forecasts via softmax weighting on NLL. This allows the model to recognize which historical season the current one most resembles (e.g., steep 2022–23 vs gradual 2017–18) without being constrained to a single population template. Temperature controls how strongly the model commits to the best-matching template.</p>
 <p><strong>Weekly refit without leakage.</strong> <span class="math inline">\(M_2\)</span> is refit every week by appending the growing current season to the fixed historical dataset. All modelling happens in aligned-week space (<span class="math inline">\(w^a_{s,w}\)</span>) — the GAM smooth terms <span class="math inline">\(S_2^h\)</span> and <span class="math inline">\(S_{3,s}^h\)</span> provide additional flexibility to shift and stretch the forecast curve beyond M₁’s coarse alignment, so the model is not rigidly constrained to follow <span class="math inline">\(g_\text{ref}\)</span>. Hyperparameters are frozen at LOSO-tuned values; only GAM coefficients update each week. The season random effect and season-specific factor-smooth absorb both level and shape corrections as current-season data accumulate.</p>
-<p><strong>Reference curve uses known labels (<a href="#sec-refcurve" class="quarto-xref">Section 3.1.1</a> before <a href="#sec-m0" class="quarto-xref">Section 2</a>).</strong> The reference curve is estimated from retrospectively labelled ignition weeks — not from the prospective detector. This separation means the template is not corrupted by detection errors, and the prospective detector is evaluated independently.</p>
-<p><strong>Stateless prospective function.</strong> <code>run_alignment_prospective()</code> takes the current data and returns the current state — the caller decides whether to keep calling. The same function powers both the LOSO inner loop and production deployment, guaranteeing identical behaviour.</p>
-<p><strong>LOSO for honest evaluation.</strong> All tuning (<code>k_ref</code>, peak detection params) uses walk-forward LOSO so that no future data leaks into training. Ignition detector thresholds are tuned in an earlier LOSO pass (<a href="#sec-m0" class="quarto-xref">Section 2</a>).</p>
+<p><strong>Reference curve uses known labels (<a href="#sec-refcurve" class="quarto-xref">Section 3.1</a> before <a href="#sec-m0" class="quarto-xref">Section 2</a>).</strong> The reference curve (and per-season FS curves) are estimated from retrospectively labelled ignition weeks — not from the prospective detector. This separation means the templates are not corrupted by detection errors, and the prospective detector is evaluated independently.</p>
+<p><strong>Stateless prospective function.</strong> <code>align_multi_template()</code> and <code>run_alignment_prospective()</code> take the current data and return the current state — the caller decides whether to keep calling. The same functions power both the LOSO inner loop and production deployment, guaranteeing identical behaviour.</p>
+<p><strong>LOSO grid search for multi-template tuning.</strong> All M₁ tuning (<code>k_ref</code>, <code>multi_temperature</code>, <code>template_shift</code>) uses walk-forward LOSO so that no future data leaks into training. A 4×3×4 grid (baseline 81 configs, extended ~120 configs) is evaluated to find the peak MAE minimizer under Weibull weighting. Ignition detector thresholds are tuned in an earlier LOSO pass (<a href="#sec-m0" class="quarto-xref">Section 2</a>).</p>
 <p><strong>Alignment stops at peak.</strong> Once <code>peak_passed == TRUE</code>, alignment freezes. This prevents the descending limb from distorting the peak estimate, and cleanly separates the peak prediction module from any downstream forecasting.</p>
 <p><strong>Two-stage identifiability guard.</strong> Two parameters are activated progressively as data accumulate. The slope <span class="math inline">\(b_w\)</span> is fixed at 1 (<code>allow_scale = FALSE</code>) until sufficient data span the curve. The dilation <span class="math inline">\(\delta_w\)</span> is fixed at 0 (<code>delta_on = FALSE</code>) until a further threshold is crossed. This prevents numerically unstable estimates early in the season when few observations are available.</p>
 </section>
