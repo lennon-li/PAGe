@@ -295,6 +295,10 @@ loso_walkforward <- function(allD,
                               multi_temperature         = 1.0,
                               multi_top_k               = NULL,
                               multi_blend_alpha         = 1.0,
+                              slope_weight              = 0.5,
+                              slope_window              = 4L,
+                              dynamic_temp              = TRUE,
+                              dynamic_temp_pivot        = 10L,
                               checkpoint_file = NULL,
                               verbose         = TRUE) {
 
@@ -452,8 +456,12 @@ loso_walkforward <- function(allD,
     .peak_decay      <- align_peak_decay
     .use_multi       <- use_multi_template
     .multi_temp      <- multi_temperature
-    .multi_top_k     <- multi_top_k
-    .multi_blend     <- multi_blend_alpha
+    .multi_top_k       <- multi_top_k
+    .multi_blend       <- multi_blend_alpha
+    .slope_weight      <- slope_weight
+    .slope_window      <- slope_window
+    .dynamic_temp      <- dynamic_temp
+    .dynamic_temp_pivot <- dynamic_temp_pivot
 
     # --- 4. Walk-forward: parallelise over eval_weeks ---
     week_results <- furrr::future_map(eval_weeks_s, function(ew) {
@@ -464,22 +472,26 @@ loso_walkforward <- function(allD,
       # Dispatch: multi-template ensemble or single-template alignment
       if (.use_multi && !is.null(.ref$eta_mat)) {
         ap <- run_alignment_prospective_multi(
-          currentSeason   = season_data_to_ew,
-          ref             = .ref,
-          hyper           = .hyper,
-          ign_out         = .ign_out,
-          use_ci          = .use_ci,
-          buffer_weeks    = .buffer_weeks,
-          allow_scale     = .allow_scale,
-          level           = .level,
-          min_obs         = .min_obs,
-          curvature_ratio = .curvature_ratio,
-          trough_weight   = .trough_weight,
-          rise_weight     = .rise_weight,
-          peak_decay      = .peak_decay,
-          temperature     = .multi_temp,
-          top_k           = .multi_top_k,
-          blend_alpha     = .multi_blend
+          currentSeason      = season_data_to_ew,
+          ref                = .ref,
+          hyper              = .hyper,
+          ign_out            = .ign_out,
+          use_ci             = .use_ci,
+          buffer_weeks       = .buffer_weeks,
+          allow_scale        = .allow_scale,
+          level              = .level,
+          min_obs            = .min_obs,
+          curvature_ratio    = .curvature_ratio,
+          trough_weight      = .trough_weight,
+          rise_weight        = .rise_weight,
+          peak_decay         = .peak_decay,
+          temperature        = .multi_temp,
+          top_k              = .multi_top_k,
+          blend_alpha        = .multi_blend,
+          slope_weight       = .slope_weight,
+          slope_window       = .slope_window,
+          dynamic_temp       = .dynamic_temp,
+          dynamic_temp_pivot = .dynamic_temp_pivot
         )
       } else {
         ap <- run_alignment_prospective(

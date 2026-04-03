@@ -14,6 +14,16 @@ nested_loso_m1_train(
   buffer_weeks = 0L,
   min_obs = 4L,
   curvature_ratio = 1,
+  temperature = 0.25,
+  rise_weight = 1,
+  trough_weight = 0.1,
+  peak_decay = 0.3,
+  slope_weight = 0.5,
+  slope_window = 4L,
+  dynamic_temp = TRUE,
+  dynamic_temp_pivot = 10L,
+  top_k = NULL,
+  blend_alpha = 1,
   parallel = TRUE,
   verbose = TRUE
 )

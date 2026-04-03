@@ -23,7 +23,11 @@ align_multi_template(
   time_weights = NULL,
   trough_weight = 0.1,
   rise_weight = 1,
-  peak_decay = 0.3
+  peak_decay = 0.3,
+  slope_weight = 0.5,
+  slope_window = 4L,
+  dynamic_temp = TRUE,
+  dynamic_temp_pivot = 10L
 )
 }
 \arguments{
@@ -70,6 +74,20 @@ Default 1.0 (pure per-season curve).}
 \item{rise_weight}{Numeric; alignment loss rise weight.}
 
 \item{peak_decay}{Numeric; exponential decay after peak.}
+
+\item{slope_weight}{Numeric; strength of growth-rate-aware template weighting
+(default 0.5). Higher values make templates with similar recent slope to
+observed data receive more weight. Set to 0 to disable.}
+
+\item{slope_window}{Integer; number of recent weeks to compute slope over
+(default 4).}
+
+\item{dynamic_temp}{Logical; if TRUE (default), scale temperature up when
+few observations available (wider ensemble early, sharper late).}
+
+\item{dynamic_temp_pivot}{Integer; observation count below which temperature
+is inflated (default 10). Temperature is scaled by
+\code{pivot / n_obs} when \code{n_obs < pivot}.}
 }
 \value{
 List with the same structure as

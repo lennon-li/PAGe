@@ -70,7 +70,9 @@ stage2_make_spec <- function(
     bs_week = "ts",
     bs_fs_marginal = "tp",
     use_season_re = TRUE,
-    
+    lambda_w = 0,
+    w_floor  = 0.05,
+
     # --- deprecated aliases ---
     K = NULL,
     pre_buffer = NULL
@@ -109,8 +111,10 @@ stage2_make_spec <- function(
     
     bs_week = bs_week,
     bs_fs_marginal = bs_fs_marginal,
-    
-    use_season_re = TRUE
+
+    use_season_re = TRUE,
+    lambda_w = as.numeric(lambda_w),
+    w_floor  = as.numeric(w_floor)
   )
   
   spec$best_row <- data.frame(

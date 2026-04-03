@@ -1,0 +1,58 @@
+
+
+processing file: loso_walkforward.qmd
+1/21                     
+2/21 [setup]             
+3/21                     
+4/21 [tuning-results]    
+5/21                     
+6/21 [run-multi-template]
+7/21                     
+8/21 [param-plots-setup] 
+9/21                     
+10/21 [param-plot-tau]    
+11/21                     
+12/21 [param-plot-delta]  
+13/21                     
+14/21 [param-plot-a]      
+15/21                     
+16/21 [param-plot-b]      
+17/21                     
+18/21 [param-plot-tpeak]  
+19/21                     
+20/21 [season-reports]    
+21/21                     
+output file: loso_walkforward.knit.md
+
+pandoc 
+  to: html
+  output-file: loso_walkforward.html
+  standalone: true
+  self-contained: true
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  variables: {}
+  
+metadata
+  document-css: false
+  link-citations: true
+  date-format: long
+  lang: en
+  title: LOSO Walk-forward Alignment Evaluation
+  page-layout: full
+  grid:
+    body-width: 1200px
+  
+[33mWARNING (C:/Program Files/RStudio/resources/app/bin/quarto/share/filters/main.lua:9634) 
+The following string was found in the document: :::
+
+This usually indicates a problem with a fenced div in the document. Please check the document for errors.
+[39m[33mWARNING (C:/Program Files/RStudio/resources/app/bin/quarto/share/filters/main.lua:9634) 
+The following string was found in the document: :::
+
+This usually indicates a problem with a fenced div in the document. Please check the document for errors.
+[39mOutput created: loso_walkforward.html
+

@@ -36,7 +36,7 @@ cat("=== Testing baseline (single ref, no time weights) ===\n")
 wf_base <- loso_walkforward(
   allD = allD, params = params, manual_labels = manual_labels,
   exclude_seasons = EXCLUDE, test_seasons = TEST_SEAS,
-  k_deriv = 20L, k_ref = 20L, n_weeks = 52L,
+  k_deriv = 20L, k_ref = 25L, n_weeks = 52L,
   buffer_weeks = 5L, curvature_ratio = 1.0,
   align_rise_weight = 1.0,
   use_multi_template = FALSE, ref_method = "binomial",
@@ -48,7 +48,7 @@ cat("\n=== Testing C: Weighted (FS ref, rise_weight=3) ===\n")
 wf_wt <- loso_walkforward(
   allD = allD, params = params, manual_labels = manual_labels,
   exclude_seasons = EXCLUDE, test_seasons = TEST_SEAS,
-  k_deriv = 20L, k_ref = 20L, n_weeks = 52L,
+  k_deriv = 20L, k_ref = 25L, n_weeks = 52L,
   buffer_weeks = 5L, curvature_ratio = 1.0,
   align_rise_weight = 3.0, align_trough_weight = 0.1,
   use_multi_template = FALSE, ref_method = "fs",
@@ -60,11 +60,11 @@ cat("\n=== Testing A: Multi-template ===\n")
 wf_multi <- loso_walkforward(
   allD = allD, params = params, manual_labels = manual_labels,
   exclude_seasons = EXCLUDE, test_seasons = TEST_SEAS,
-  k_deriv = 20L, k_ref = 20L, n_weeks = 52L,
+  k_deriv = 20L, k_ref = 25L, n_weeks = 52L,
   buffer_weeks = 5L, curvature_ratio = 1.0,
   align_rise_weight = 1.0,
   use_multi_template = TRUE, ref_method = "fs",
-  multi_temperature = 1.0,
+  multi_temperature = 0.5,
   n_cores = parallel::detectCores() - 1L, verbose = TRUE
 )
 cat(sprintf("Multi rows: %d\n", nrow(wf_multi$params_df)))

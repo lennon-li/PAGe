@@ -115,6 +115,69 @@ Three week indices appear in this analysis:
 
 All plots below use **newWeek** on the x-axis. A secondary flu-week annotation line at y=0.05 maps newWeek back to epidemiological weeks for clinical context.
 
+## Parameter Tuning via LOSO Grid Search
+
+The alignment hyperparameters were optimized using leave-one-season-out (LOSO) cross-validation over an extended grid search:
+
+- **`k_ref`**: 15, 20, 25, 30, 35 (basis dimension for FS reference GAM)
+- **`multi_temperature`**: 0.05, 0.10, 0.15, 0.20, 0.25, 0.5, 1.0, 2.0 (softmax temperature; lower = peakier template weights)
+- **`template_shift`**: -2, -1, 0, +1 (offset alignment templates by weeks)
+- **`align_rise_weight`**: 1.0 (uniform time weighting — no emphasis on rising limb)
+
+**153 configurations** evaluated on Weibull-weighted peak MAE.
+
+```{r tuning-results}
+#| echo: false
+#| message: false
+#| warning: false
+
+tune_m1 <- readRDS("../data/m1_alignment_tuning_v3.rds")
+
+# Top 15 by mae_weibull
+top_results <- tune_m1$scores %>%
+  arrange(mae_weibull) %>%
+  head(15) %>%
+  select(k_ref, multi_temperature, template_shift,
+         mae_uniform, mae_exp, mae_weibull) %>%
+  mutate(across(mae_uniform:mae_weibull, ~round(., 4)))
+
+gt(top_results) %>%
+  cols_label(
+    k_ref = "k_ref",
+    multi_temperature = "Temperature",
+    template_shift = "Template Shift",
+    mae_uniform = "MAE (uniform weight)",
+    mae_exp = "MAE (exp decay)",
+    mae_weibull = "MAE (Weibull) ★"
+  ) %>%
+  cols_align(align = "center") %>%
+  tab_style(
+    style = cell_fill(color = "#ffffcc", alpha = 0.8),
+    locations = cells_body(rows = 1)
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(columns = mae_weibull, rows = 1)
+  ) %>%
+  tab_options(table.font.size = "13px", table.width = pct(80))
+```
+
+**Best configuration (★)**: k_ref=25, temperature=0.25, template_shift=0, **Peak MAE = 1.169 weeks**
+
+### Tuning insights
+
+1. **Temperature=0.25 optimal** across the full range tested (0.05–2.0). Lower temperature concentrates softmax weight on the best-matching template, but going too low (≤0.20) overcommits to a single template and degrades performance (MAE 1.47–3.02). The sweet spot at 0.25 balances commitment to the best analog with hedging across templates.
+
+2. **Template_shift=0** is optimal — no systematic detection lag correction needed. The previous shift=−1 finding was an artifact of the smaller initial grid.
+
+3. **k_ref=25** (mid-range basis dimension) balances flexibility and smoothness of the population reference curve.
+
+4. **align_rise_weight=1.0** (uniform loss weights) is optimal — no time-based emphasis needed. The multi-template method adapts locally without requiring pre-ignition down-weighting.
+
+5. **Weibull-weighted MAE** is the headline metric — it accounts for peak uncertainty near the season peak and is most relevant for decision-making (e.g., hospital resource planning).
+
+---
+
 ## Multi-template alignment
 
 **Multi-template alignment** aligns to each training season's individual curve separately, then ensembles the results:
@@ -139,23 +202,25 @@ if (file.exists(MULTI_CACHE)) {
   wf <- readRDS(MULTI_CACHE)
   message("Loaded multi-template result from cache: ", MULTI_CACHE)
 } else {
+  # BEST TUNED PARAMETERS from LOSO grid search (153 configs evaluated)
+  # Peak MAE = 1.169 weeks (Weibull-weighted)
   wf <- loso_walkforward(
     allD              = allD,
     params            = params,
     manual_labels     = manual_labels,
     exclude_seasons   = EXCLUDE_SEAS,
     k_deriv           = 20L,
-    k_ref             = 20L,
+    k_ref             = 25L,           # ← TUNED: mid-range basis dimension
     n_weeks           = 52L,
     buffer_weeks      = 5L,
     curvature_ratio   = 1.0,
-    template_shift    = 0L,
+    template_shift    = 0L,            # ← TUNED: no offset needed
     peak_weight_boost = 3,
     peak_weight_decay = 0.3,
-    align_rise_weight = 1.0,
+    align_rise_weight = 1.0,           # ← TUNED: uniform loss weights optimal
     use_multi_template = TRUE,
     ref_method        = "fs",
-    multi_temperature = 1.0,
+    multi_temperature = 0.25,          # ← TUNED: concentration on best template
     n_cores           = parallel::detectCores() - 1L,
     checkpoint_file   = CKPT_FILE,
     verbose           = TRUE
@@ -163,6 +228,20 @@ if (file.exists(MULTI_CACHE)) {
   saveRDS(wf, MULTI_CACHE)
   message("Done. Saved to ", MULTI_CACHE)
 }
+```
+
+## Tuning summary
+
+The M1 alignment hyperparameters were tuned using a LOSO grid search (153 configurations) targeting the Weibull-weighted peak MAE. The selected specification (used above) is:
+
+- k_ref = 25
+- multi_temperature = 0.25
+- template_shift = 0
+- align_rise_weight = 1
+
+Best Weibull-weighted peak MAE (LOSO) = 1.1691 (4.0% improvement over previous baseline of 1.2178). These values were applied to the multi-template run and reflected in the short test script under scripts/_test_loso_comparison.R.
+
+
 ```
 
 ## Alignment parameters over time
@@ -206,26 +285,45 @@ make_param_plot <- function(pvar) {
 }
 ```
 
-::: {.panel-tabset}
+### tau - time shift
 
-```{r param-tabs}
+```{r param-plot-tau}
 #| echo: false
 #| warning: false
-#| results: asis
-
-param_tab_chunks <- lapply(param_vars, function(pvar) {
-  e <- new.env(parent = globalenv())
-  e$p <- make_param_plot(pvar)
-  knitr::knit_child(
-    text = c(sprintf("### %s", param_labels[[pvar]]), "",
-             "```{r echo=FALSE, warning=FALSE}", "p", "```", ""),
-    envir = e, quiet = TRUE
-  )
-})
-cat(unlist(param_tab_chunks), sep = "\n")
+make_param_plot("tau")
 ```
 
-:::
+### delta - scale
+
+```{r param-plot-delta}
+#| echo: false
+#| warning: false
+make_param_plot("delta")
+```
+
+### a - lower asymptote
+
+```{r param-plot-a}
+#| echo: false
+#| warning: false
+make_param_plot("a")
+```
+
+### b - upper asymptote
+
+```{r param-plot-b}
+#| echo: false
+#| warning: false
+make_param_plot("b")
+```
+
+### t_peak - predicted peak (newWeek)
+
+```{r param-plot-tpeak}
+#| echo: false
+#| warning: false
+make_param_plot("t_peak")
+```
 
 ## Results by season
 
@@ -466,18 +564,3 @@ for (s in all_seasons_wf) {
 }
 ```
 
-## Setup summary
-
-| Parameter | Value | Notes |
-|---|---|---|
-| `ref_method` | `"fs"` | Factor-smooth GAM, pointwise median aggregation (jagged median curve) |
-| `use_multi_template` | `TRUE` | **Selected method**: per-season template ensemble |
-| `multi_temperature` | `1.0` | Softmax temperature for NLL-based template weighting |
-| `exclude_seasons` | `"2015-16"` | Outlier: ignition fires week 14, true ignition week 24 |
-| `k_ref` | `20` | Basis dimension for FS GAM reference curve |
-| `k_deriv` | `20` | Basis dimension for derivative estimation |
-| `n_weeks` | `52` | Template domain length (aligned weeks) |
-| `buffer_weeks` | `5` | Keeps `params_df` rows past true peak for evaluation |
-| `curvature_ratio` | `1.0` | delta gate: enabled when observed curvature exceeds reference |
-| `peak_weight_boost` | `3` | Upweights peak-region observations in GAM reference fitting |
-| Ignition labels | Manual (-1 week) | All 10 seasons have hand-verified ignition `weekF` values, shifted 1 week earlier |

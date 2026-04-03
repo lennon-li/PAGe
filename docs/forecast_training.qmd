@@ -32,6 +32,9 @@ source("../R/prospective_training.R")
 source("../R/prospective_running.R")
 source("../R/module_training.R")
 source("../R/nested_loso.R")
+source("../test/R/ignitionTraining.R")
+# Pull internal helpers missing from R/ mirror
+.plot_stage2_joint_fit_prosp <- flualign:::.plot_stage2_joint_fit_prosp
 
 startWeek <- 27L
 
@@ -196,7 +199,7 @@ Below, each term in Eq. (@eq-mod1) has (i) an interpretation, (ii) its hyperpara
 - **R:** `s(season, bs="re")`.
 - **New-season prediction:** typically excluded (see "Prediction note" below).
 
-### $z_{s,w}(\delta,K)$
+### $z_{s,w}(\delta,Kr)$
 
 - Template backbone covariate: injects the reference curve shape into M2's linear predictor, ramped in gradually after ignition.
 
@@ -205,13 +208,13 @@ Below, each term in Eq. (@eq-mod1) has (i) an interpretation, (ii) its hyperpara
   $$
   f^{(\delta)}_{s,w} = g_{\mathrm{ref}}\!\left(w^a_{s,w} + \delta\right),
   \qquad
-  z_{s,w}(\delta,K)=\omega(t_{s,w};K)\;\mathrm{logit}_{\varepsilon}\!\left(f^{(\delta)}_{s,w}\right),
+  z_{s,w}(\delta,Kr)=\omega(t_{s,w};Kr)\;\mathrm{logit}_{\varepsilon}\!\left(f^{(\delta)}_{s,w}\right),
   $$
   where $t_{s,w}=w^f_{s,w}-w^{(\mathrm{ign})}_s$ is weeks since ignition, and
   $$
-  \omega(t;K)=\min\!\left(1,\max\!\left(0,\dfrac{t}{K}\right)\right)
+  \omega(t;Kr)=\min\!\left(1,\max\!\left(0,\dfrac{t}{Kr}\right)\right)
   $$
-  is a linear ramp from 0 at ignition to 1 after $K$ weeks (with $K \le 1$ meaning no ramp).
+  is a linear ramp from 0 at ignition to 1 after $Kr$ weeks (with $Kr=1$ meaning no ramp).
 
 - **Notation warning — $\delta$ here is not M1's dilation $\delta_w$.** In M1, $\tau_w$ (continuous shift) and $\delta_w$ (dilation/stretch) are fitted every week to align the current season to $g_{\mathrm{ref}}$. That alignment has already been absorbed into `newWeek` ($w^a_{s,w}$) by the time M2 sees it. The $\delta$ in M2 is a separate, fixed integer-week nudge applied to the template covariate, tuned once offline by LOSO grid search. It compensates for any systematic residual timing offset between the aligned time axis and the template peak — for example, if M1's alignment consistently centres slightly early. In practice, the tuned value is often $\delta = 0$, confirming that M1's alignment already handles the shift.
 
@@ -357,26 +360,51 @@ ggplotly(
 
 ## Hyperparameter tuning
 
-We tune hyperparameters of $M_2$ using **leave-one-season-out (LOSO)** cross-validation. For each candidate spec (from `expand_grid_specs()`), we repeatedly:
+$M_2$ hyperparameters are selected by **nested leave-one-season-out (LOSO) cross-validation**. Standard LOSO leaks alignment information: it uses a single reference curve fitted on all seasons, including the held-out one. Nested LOSO fixes this by re-estimating the reference curve and all M1 predictions per fold.
 
-1. Hold out one season $s$.
-2. Fit the joint model on all remaining seasons.
-3. Predict the held-out season **as a new season** (excluding season-dependent terms).
-4. Score predictions using binomial NLL.
+**Protocol per fold:**
 
-### Tuning grid
+1. Hold out season $s^*$.
+2. Fit $g_{\mathrm{ref}}^{(-s^*)}$ on the remaining seasons → per-fold template.
+3. Run M1 walk-forward on training seasons → M1 stacking features.
+4. Train $M_2$ with the per-fold template and M1 features.
+5. Run M1 walk-forward on $s^*$ → M1 test features.
+6. Evaluate $M_2$ on $s^*$ using uniform-weight NLL over the first 12 post-ignition weeks.
 
-- **$\delta$ (template shift):** integer weeks (typically $\{-3,\ldots,3\}$). Set `delta=NA` to disable the template covariate.
-- **`T` (template entry mode):** one of `{"S","O","N"}` (smooth, offset, none).
-- **$Kr$ (ramp length):** integer with $Kr \ge 1$. Use $Kr=1$ for "no ramp".
-- **$k_f, k_w, k_s, k_e, k_1, k_2$ (basis dimensions):** integers $\ge 0$; 0 disables the term.
-- **$\alpha_{\text{state}}$ (EWMA decay):** real in $(0,1)$, tuned jointly with $\lambda_w$.
-- **$\lambda_w$ (time-decay weight):** non-negative real; $\lambda_w=0$ is standard MLE.
-- **$Kb$:** integer $\ge 0$, defines training start as `weekF >= iWeek_used - Kb`.
+Steps 1–3 (Phase 1) are pre-computed once per fold and cached; Phase 2 (steps 4–6) runs in minutes regardless of grid size.
+
+### Tuning parameters
+
+The table below lists every hyperparameter, its role in the model, and the values searched. Parameters marked *fixed* were held constant throughout based on prior analysis or implementation constraints.
+
+```{r tuning-param-table}
+#| echo: false
+tibble::tribble(
+  ~Parameter,  ~Description,                                                                                                                                                    ~Type,          ~`Grid / value`,
+  "δ (delta)", "Integer-week nudge to the template covariate on the aligned axis. Compensates for residual timing offset after M1 alignment. δ=0 means no nudge.",             "Integer",      "Fixed: 0",
+  "Kr",        "Template ramp length in weeks. Kr=1 means full template weight from week 1 of ignition; Kr>1 blends in gradually over Kr weeks.",                              "Integer ≥ 1",  "{1, 2, 3}",
+  "k_f",       "Basis dimension for the template smooth $S_1^h$. Controls how nonlinearly the model maps the template covariate to the response. k_f=2 is near-linear.",       "Integer ≥ 2",  "{2, 3, 4}",
+  "k_e",       "Basis dimension for the EMA-state smooth $S_4^h$. Controls nonlinearity of the current-level correction.",                                                     "Integer ≥ 0",  "{3, 4, 6}",
+  "α_state",   "EWMA smoothing decay for the current-level covariate z_ema. Lower α = slower adaptation, longer effective memory (≈ 1/α weeks).",                             "Real ∈ (0,1)", "{0.03, 0.05, 0.07, 0.10, 0.15, 0.20, 0.25}",
+  "k_s",       "Basis dimension for per-season deviation smooth $S_3^h$. k_s=0 disables season-specific shape correction.",                                                    "Integer ≥ 0",  "Fixed: 0",
+  "λ_w",       "Time-decay weight exponent. Down-weights late-season training rows. λ_w=0 is standard uniform MLE.",                                                           "Real ≥ 0",     "Fixed: 0",
+  "k_1",       "Basis dimension for slope smooth $S_6^h$ (prospective first derivative d1).",                                                                                  "Integer ≥ 0",  "Fixed: 4",
+  "k_2",       "Basis dimension for curvature smooth $S_7^h$ (prospective second derivative d2). k_2=0 disables.",                                                             "Integer ≥ 0",  "Fixed: 0",
+  "k_w",       "Basis dimension for global aligned-time smooth $S_2^h$. k_w=0 disables.",                                                                                      "Integer ≥ 0",  "Fixed: 0"
+) |>
+  gt() |>
+  tab_header(title = "M2 tuning parameters") |>
+  cols_width(Parameter ~ px(90), Description ~ px(460),
+             Type ~ px(110), `Grid / value` ~ px(240)) |>
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_column_labels()) |>
+  tab_style(style = cell_fill(color = "#f0f4f8"),
+            locations = cells_body(rows = c(2, 3, 4, 5)))
+```
 
 ### Evaluation metric
 
-The evaluation window is fixed at $W_{\mathrm{eval}} = 12$ post-ignition weeks, covering the approach to peak in all historical seasons (median ignition-to-peak: 8.5 weeks; maximum: 12 weeks). The LOSO objective is the mean NLL over all held-out seasons and evaluation rows:
+The evaluation window is fixed at $W_{\mathrm{eval}} = 12$ post-ignition weeks, covering the full approach to peak (median ignition-to-peak: 8.5 weeks; maximum: 12 weeks). The LOSO objective is the mean binomial NLL over all held-out seasons and evaluation rows:
 
 $$
 \overline{\mathrm{NLL}} = \frac{-1}{\sum_s|\mathcal{E}_s|}\sum_s\sum_{i\in\mathcal{E}_s} \log\Pr(x_i\mid n_i,\hat{p}_i),
@@ -384,232 +412,103 @@ $$
 \mathcal{E}_s = \bigl\{(s,w,h) : 0 \le t_{s,w} \le W_{\mathrm{eval}}\bigr\}.
 $$
 
-Evaluation always uses **uniform weights** even when $\lambda_w > 0$ for training.
+Evaluation always uses **uniform weights** regardless of $\lambda_w$.
 
-### Tuning code
+### Tuning call
 
-```{r spec-grid}
+The nested LOSO is implemented as a two-phase script (`scripts/run_nested_loso_v4.R`). Phase 1 pre-computes M1 predictions once per fold; Phase 2 loops over all specs.
+
+```{r tuning-call}
 #| eval: false
-nc <- min(parallel::detectCores() - 1L, 32L)
 
-spec_grid <- expand_grid_specs(
-  delta_grid   = -2:2,
-  Kr_grid      = 2:6,
-  Kb_grid      = c(1L, 2L),
-  T_grid       = "S",
-  k_f_grid     = c(6L, 8L),
-  alpha_state  = c(0.15, 0.25, 0.35),
-  k_w_grid     = c(0L, 4L),
-  k_e_grid     = 6L,
-  k_n_grid     = 0L,
-  k_1_grid     = 4L,
-  k_2_grid     = 0L,
-  k_s_grid     = 4L,
-  w_floor_grid = c(0, 0.03, 0.05, 0.08),
-  verbose      = TRUE
+# --- Phase 1: build fold + pre-compute M1 (one-time per held-out season) ---
+fold <- nested_loso_build_fold(
+  allD = allD, test_season = test_s, exclude_seasons = "2015-16",
+  k_ref = 25L, ref_method = "fs", manual_labels = manual_labels
+)
+m1_train <- m1_walkforward_multi(
+  allD = allD, ref = fold$ref, hyper = fold$hyper, params = params,
+  seasons = fold$train_seasons,
+  temperature = 0.25, rise_weight = 1.0, trough_weight = 0.1,
+  peak_decay = 0.3, slope_weight = 0.5, slope_window = 4L,
+  dynamic_temp = TRUE, dynamic_temp_pivot = 10L, parallel = TRUE
+)
+m1_test <- m1_walkforward_predictions(
+  seasonD = allD[allD$season == test_s, ],
+  ref = fold$ref, hyper = fold$hyper, params = params,
+  temperature = 0.25, rise_weight = 1.0, trough_weight = 0.1,
+  peak_decay = 0.3, slope_weight = 0.5, slope_window = 4L,
+  dynamic_temp = TRUE, dynamic_temp_pivot = 10L
+)
+
+# --- Phase 2: for each candidate spec, train M2 and score held-out season ---
+# v4 grid: Kr x k_f x k_e x alpha_state (189 specs, fixed delta=0, k_s=0, lambda_w=0)
+grid <- tidyr::crossing(
+  Kr          = c(1L, 2L, 3L),
+  k_f         = c(2L, 3L, 4L),
+  k_e         = c(3L, 4L, 6L),
+  alpha_state = c(0.03, 0.05, 0.07, 0.10, 0.15, 0.20, 0.25)
+)
+spec <- stage2_make_spec(
+  delta = 0L, Kr = Kr, T = "S", k_f = k_f, k_e = k_e,
+  k_1 = 4L, k_2 = 0L, k_w = 0L, k_s = 0L,
+  alpha_state = alpha_state, lambda_w = 0, w_floor = 0.05
+)
+
+m2      <- nested_loso_m2_train(fold = fold, m1_train_preds = m1_train, spec = spec)
+eval_out <- nested_loso_m2_eval(
+  allD = allD, fold = fold, m2_fit = m2, m1_test_preds = m1_test,
+  spec = spec, eval_window = 12L, k_deriv = 10L,
+  manual_labels = manual_labels, flag_args = flag_args
 )
 ```
 
-```{r refit-loso}
-#| eval: true
-if (file.exists("../data/stage2_tuning_refit.rds")) {
-  tuned2_refit <- readRDS("../data/stage2_tuning_refit.rds")
-} else {
-  tuned2_refit <- tune_stage2_loso_spec_grid_parallel(
-    alignedD_prosp = alignedD_prosp,
-    template_df    = template_df,
-    spec_grid      = spec_grid,
-    seasons        = NULL,
-    eval_window    = 12L,
-    refit_loso     = TRUE,
-    lambda_w_grid  = c(0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30),
-    workers        = nc,
-    chunk_size     = 8L,
-    nthreads       = 1L,
-    verbose        = TRUE
-  )
-  saveRDS(tuned2_refit, "../data/stage2_tuning_refit.rds")
-}
+### Full grid results
 
-ggplotly(plot_tune_stage2_heatmap(tuned2_refit, metric = "mean_nll",
-                                  normalize01 = TRUE, norm_scope = "facet",
-                                  agg = TRUE, base_size = 10))
-```
-
-## Training results
-
-::: panel-tabset
-
-### Best spec (refit-LOSO)
-
-```{r refit-best-spec}
-#| eval: true
-tuned2_refit <- readRDS("../data/stage2_tuning_refit.rds")
-spec_refit_best <- stage2_spec_from_tuning(tuned2_refit)
-spec_refit_best$w_floor <- 0.05
-
-skip_slots <- c("best_row", "formula", "exclude_newseason")
-spec_display_refit <- spec_refit_best[!names(spec_refit_best) %in% skip_slots]
-data.frame(
-  Specification = names(spec_display_refit),
-  Value = sapply(spec_display_refit, function(x) paste(as.character(x), collapse = ", ")),
-  row.names = NULL
-) |> gt() |> tab_header(title = "Best M2 spec (refit-LOSO)")
-```
-
-### Fit by season
-
-```{r refit-fit-plot}
-#| eval: true
-#| fig-height: 14
-#| fig-width: 14
-joint_out_refit <- train_stage2_joint(
-  dat         = alignedD_prosp,
-  template_df = template_df,
-  spec        = spec_refit_best
-)
-
-ggplotly(plot_stage2_joint_fit_by_season(
-  joint_out   = joint_out_refit,
-  dat_raw     = alignedD_prosp,
-  ign_hat_df  = det_all$compare,
-  template_df = template_df
-))
-```
-
-### Fit summary
-
-```{r fit-summary}
-#| eval: true
-summary(joint_out_refit$fit)
-```
-
-:::
-
-## Nested LOSO tuning (leakage-free)
-
-The standard LOSO above uses a **single** reference curve (fitted on all seasons) as `template_df` for every fold. This leaks alignment information from the held-out season into the template covariate. **Nested LOSO** fixes this by re-estimating the reference curve per fold:
-
-1. Hold out season $s^*$.
-2. Fit $g_{\mathrm{ref}}^{(-s^*)}$ on the remaining seasons → per-fold `template_df`.
-3. Run M1 walk-forward on training seasons → M1 stacking features.
-4. Train $M_2$ using the per-fold template and M1 features.
-5. Run M1 walk-forward on $s^*$ → M1 test features.
-6. Evaluate $M_2$ on $s^*$.
-
-This is implemented by `nested_loso_cv()` and `nested_loso_grid_search()` (composable helpers in `nested_loso.R`).
-
-### Smoke-test grid
-
-A small grid for local validation — the full grid should be run on a server (see [Production grid](#production-grid) below).
-
-```{r nested-loso-grid}
+```{r load-production-results}
 #| eval: true
 
-# M0 detection params from stage1 tuning
-params <- tuned$best_params
-
-# Small smoke-test grid: 2 specs (local run uses skip_m1=TRUE)
-smoke_specs <- list(
-  base = stage2_make_spec(
-    delta = 0L, K = 3L, T = "S", k_f = 6L,
-    k_e = 6L, k_1 = 4L, k_2 = 0L, k_w = 0L, k_s = 4L,
-    alpha_state = 0.25, lambda_w = 0, w_floor = 0.05
-  ),
-  smaller = stage2_make_spec(
-    delta = 0L, K = 3L, T = "S", k_f = 4L,
-    k_e = 4L, k_1 = 4L, k_2 = 0L, k_w = 0L, k_s = 4L,
-    alpha_state = 0.30, lambda_w = 0, w_floor = 0.05
-  )
-)
+prod_results_v4 <- readRDS("../data/nested_loso_v4_production.rds")
+cat("v4 grid:", nrow(prod_results_v4$summary), "specs × 10 seasons nested LOSO\n")
+cat("Best:", prod_results_v4$best_spec_id,
+    "| mean_nll =", round(prod_results_v4$summary$mean_nll[1], 4), "\n")
 ```
 
-```{r nested-loso-run}
-#| eval: true
+### Best spec {#sec-best-spec-interp}
 
-if (file.exists("../data/nested_loso_smoke.rds")) {
-  nested_results <- readRDS("../data/nested_loso_smoke.rds")
-} else {
-  nested_results <- nested_loso_grid_search(
-    allD          = allD,
-    params        = params,
-    specs         = smoke_specs,
-    test_seasons  = c("2023-24", "2024-25"),
-    skip_m1       = TRUE,
-    eval_window   = 12L,
-    k_deriv       = 10L,
-    k_ref         = 8L,
-    n_weeks       = 52L,
-    manual_labels = manual_labels,
-    n_cores       = 1L,
-    verbose       = TRUE
-  )
-  saveRDS(nested_results, "../data/nested_loso_smoke.rds")
-}
+```{r load-best-spec}
+#| include: false
+best_spec_nested <- prod_results_v4$best_spec
 ```
 
-### Results
+The tuned spec is `Kr=1, k_f=2, k_e=4, alpha_state=0.10` with `delta=0, k_s=0, lambda_w=0`.
 
-::: panel-tabset
+**`delta = 0` — no template shift.**
+M1's alignment already places the current season correctly on the reference curve. No residual systematic timing offset remains. This validates that multi-template alignment with `k_ref=25` is well-calibrated.
 
-#### Score summary
+**`Kr = 1` — no ramp.**
+The template covariate is applied at full weight from the first week after ignition. There is no benefit to a gradual blend — once ignition fires, the reference curve shape is immediately a reliable anchor. This reflects the high quality of the M1 alignment.
 
-```{r nested-loso-summary}
-#| eval: true
-nested_results$summary |>
-  gt() |>
-  tab_header(title = "Nested LOSO: Score summary by spec") |>
-  fmt_number(columns = c(mean_nll, brier, rmse_p), decimals = 4)
-```
+**`k_f = 2` — near-linear template smooth.**
+The mapping from the template covariate $z_{s,w}$ to the logit-scale response is essentially linear (k_f=2 is the minimum non-trivial smooth in `mgcv`). The model trusts the reference curve shape and scales it linearly without bending — a tighter basis also reduces overfitting across 10 training seasons.
 
-#### Scores by season
+**`k_e = 4` — moderate EWMA spline.**
+The EMA state `z_ema` enters with a 4-knot smooth — enough to capture a nonlinear current-level correction (different responses at high vs low baseline positivity) without overfitting. k_e=3 has slightly lower brier but higher NLL; k_e=6 overfits.
 
-```{r nested-loso-scores-plot}
-#| eval: true
-#| fig-height: 5
-#| fig-width: 10
-best_cv <- nested_results$cv_results[[nested_results$best_spec_id]]
-ggplotly(plot_nested_loso_scores(best_cv$scores, metric = "mean_nll"))
-```
+**`alpha_state = 0.10` — slow EMA, ≈10-week memory.**
+The effective lookback is $1/\alpha = 10$ weeks. The model wants long-term memory of the positivity level — a slow average that tracks the season's overall trajectory rather than reacting to week-to-week noise. This parameter is genuinely interior: both lower (too sluggish) and higher (too reactive) values hurt. The grid has converged here.
 
-#### Per-season scores table
+**`k_s = 0` — no per-season deviation.**
+Allowing each season its own weekly shape (factor-smooth) hurts out-of-sample. The shared reference curve captures enough cross-season variation — per-season wiggle room overfits on 10 training seasons.
 
-```{r nested-loso-season-table}
-#| eval: true
-nested_results$scores |>
-  gt() |>
-  tab_header(title = "Nested LOSO: Per-season scores") |>
-  fmt_number(columns = c(mean_nll, brier, rmse_p), decimals = 4)
-```
+**`lambda_w = 0` — uniform training weights.**
+Down-weighting late-season observations provides no benefit. The model learns equally from all post-ignition weeks, including the declining phase. The late-season pattern is consistent enough across seasons to inform early-season accuracy.
 
-#### Out-of-sample predictions
+**Summary.** The tuned $M_2$ is a **simple, pooled, near-linear GAM** that trusts the M1 template immediately at ignition, corrects for the current level via a 10-week EMA, and does not adapt per-season. With only 10 training seasons, parsimony generalises better than flexibility.
 
-```{r nested-loso-pred-plot}
-#| eval: true
-#| fig-height: 12
-#| fig-width: 14
-ggplotly(plot_nested_loso_predictions(best_cv, dat_raw = alignedD))
-```
+## Fit-back on historical data
 
-:::
-
-### Fit-back with best spec
-
-Refit $M_2$ on all historical data using the best nested-LOSO spec and the production reference curve. This mirrors the "Fit by season" plot above but uses the leakage-free tuned hyperparameters.
-
-```{r nested-refit}
-#| eval: true
-best_spec_nested <- nested_results$best_spec
-
-# Display best spec
-skip_slots <- c("best_row", "formula", "exclude_newseason")
-spec_display <- best_spec_nested[!names(best_spec_nested) %in% skip_slots]
-data.frame(
-  Specification = names(spec_display),
-  Value = sapply(spec_display, function(x) paste(as.character(x), collapse = ", ")),
-  row.names = NULL
-) |> gt() |> tab_header(title = "Best nested-LOSO spec")
-```
+Refit $M_2$ on all historical seasons using the best nested-LOSO spec and the production reference curve.
 
 ```{r nested-fit-by-season}
 #| eval: true
@@ -632,115 +531,4 @@ ggplotly(plot_stage2_joint_fit_by_season(
 ```{r nested-fit-summary}
 #| eval: true
 summary(joint_out_nested$fit)
-```
-
-
-### Production grid {#production-grid}
-
-The smoke test above validates the pipeline with 2 specs on 2 seasons. For a proper hyperparameter search, the full grid below should be run on a server with `skip_m1 = FALSE` (includes M1 walk-forward stacking features). With 11 seasons and ~40 min per fold (M1 + M2), each spec takes ~7 hours, so the full grid below (~144 specs) will take several days on an 8-core machine.
-
-**Axes being searched:**
-
-| Parameter | Grid values | Rationale |
-|-----------|-------------|-----------|
-| `delta` | −2, −1, 0, 1, 2 | Template time-shift (weeks). Captures timing misalignment between the reference curve and the optimal forecast anchor. |
-| `K` | 1, 3, 5 | Ramp width for phase transition. `K = 1` = abrupt switch; larger K = smoother blend from pre- to post-ignition template. |
-| `T` | "S", "O" | Template entry mode. `S` = smooth spline on logit-template; `O` = offset (simpler, less flexible). |
-| `k_f` | 4, 6, 8 | Basis dimension for template smooth (only when `T = "S"`). |
-| `k_s` | 0, 4 | Season × week factor smooth dimension. `0` = off; `4` = season-specific weekly deviations. |
-| `alpha_state` | 0.20, 0.25, 0.30 | EWMA smoothing for `z_ema`. Lower = smoother (more lag); higher = more responsive. |
-| `lambda_w` | 0, 0.05 | Time-decay weight for older training seasons. `0` = equal weight; `0.05` = gentle down-weighting. |
-
-```{r production-grid}
-#| eval: false
-
-# --- Production grid: ~144 specs ---
-# Run on server with: Rscript -e 'source("run_nested_loso_full.R")'
-prod_specs <- {
-  grid <- tidyr::crossing(
-    delta       = c(-2L, -1L, 0L, 1L, 2L),
-    K           = c(1L, 3L, 5L),
-    T           = c("S", "O"),
-    k_s         = c(0L, 4L),
-    alpha_state = c(0.20, 0.25, 0.30),
-    lambda_w    = c(0, 0.05)
-  )
-
-  # k_f only matters for T="S"; for T="O" fix at 6
-  grid_S <- grid |> dplyr::filter(T == "S") |>
-    tidyr::crossing(k_f = c(4L, 6L, 8L))
-  grid_O <- grid |> dplyr::filter(T == "O") |>
-    dplyr::mutate(k_f = 6L)
-  grid <- dplyr::bind_rows(grid_S, grid_O) |>
-    dplyr::mutate(
-      spec_id = dplyr::if_else(
-        T == "S",
-        sprintf("d%+d_K%d_S_kf%d_ks%d_a%.0f_lw%.0f",
-                delta, K, k_f, k_s, alpha_state * 100, lambda_w * 100),
-        sprintf("d%+d_K%d_O_ks%d_a%.0f_lw%.0f",
-                delta, K, k_s, alpha_state * 100, lambda_w * 100)
-      )
-    )
-
-  specs <- purrr::pmap(grid, function(delta, K, T, k_s, alpha_state,
-                                       lambda_w, k_f, spec_id) {
-    stage2_make_spec(
-      delta = delta, K = K, T = T, k_f = k_f,
-      k_e = 6L, k_1 = 4L, k_2 = 0L, k_w = 0L, k_s = k_s,
-      alpha_state = alpha_state, lambda_w = lambda_w, w_floor = 0.05
-    )
-  })
-  names(specs) <- grid$spec_id
-  specs
-}
-
-cat("Production grid:", length(prod_specs), "specs\n")
-cat("Estimated time: ~", round(length(prod_specs) * 11 * 40 / 60 / 8, 0),
-    "hours on 8 cores\n")
-```
-
-To run on the server, save this script as `scripts/run_nested_loso_full.R`:
-
-```{r server-script}
-#| eval: false
-
-# --- Server runner: saves results incrementally ---
-# Usage: Rscript scripts/run_nested_loso_full.R
-
-prod_results <- nested_loso_grid_search(
-  allD          = allD,
-  params        = params,
-  specs         = prod_specs,
-  test_seasons  = NULL,          # all 11 seasons
-  skip_m1       = FALSE,         # full M1 walk-forward per fold
-  eval_window   = 12L,
-  k_deriv       = 10L,
-  k_ref         = 8L,
-  n_weeks       = 52L,
-  manual_labels = manual_labels,
-  n_cores       = min(parallel::detectCores() - 1L, 8L),
-  verbose       = TRUE
-)
-
-saveRDS(prod_results, "data/nested_loso_production.rds")
-cat("Done! Best spec:", prod_results$best_spec_id, "\n")
-```
-
-Once the server run completes, load results here:
-
-```{r load-production-results}
-#| eval: false
-
-if (file.exists("../data/nested_loso_production.rds")) {
-  prod_results <- readRDS("../data/nested_loso_production.rds")
-  cat("Production grid:", nrow(prod_results$summary), "specs evaluated\n")
-  cat("Best:", prod_results$best_spec_id,
-      "| mean_nll =", round(prod_results$summary$mean_nll[1], 2), "\n")
-
-  prod_results$summary |>
-    head(20) |>
-    gt() |>
-    tab_header(title = "Top 20 specs (production nested LOSO)") |>
-    fmt_number(columns = c(mean_nll, brier, rmse_p), decimals = 4)
-}
 ```

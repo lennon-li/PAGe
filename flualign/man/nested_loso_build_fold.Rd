@@ -9,8 +9,9 @@ nested_loso_build_fold(
   test_season,
   exclude_seasons = NULL,
   k_deriv = 10L,
-  k_ref = 10L,
+  k_ref = 25L,
   n_weeks = 52L,
+  ref_method = "fs",
   manual_labels = NULL,
   flag_args = list(p_thresh = 0.01, k1 = 0.4, k_c = 0.01, n_consec = 2L, min_window =
     10L, w_min = 21L, w_max = 21L, d2_relax = -0.01),

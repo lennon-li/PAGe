@@ -72,9 +72,31 @@ for (f in r_files) {
   if (file.exists(fp)) source(fp)
 }
 
+# flagIgnition lives only in flualign/R/ (not mirrored to R/)
+pkg_r_dir <- normalizePath("../flualign/R", mustWork = TRUE)
+source(file.path(pkg_r_dir, "flagIgnition.R"))
+
 startWeek    <- 27L
 WALK_START   <- 5L
 EXCLUDE_SEAS <- "2015-16"
+
+# ---- Manual ignition override ----
+# Set to an integer weekF to override M0 detection (e.g., 20L for week 20).
+# Set to NA_integer_ to use M0 automatic detection.
+MANUAL_IGN_WEEK <- NA_integer_
+
+# ---- Tuned M1 alignment params (from m1_alignment_tuning_v3.rds) ----
+M1_PARAMS <- list(
+  k_ref              = 25L,
+  temperature        = 0.25,
+  rise_weight        = 1.0,
+  trough_weight      = 0.1,
+  peak_decay         = 0.3,
+  slope_weight       = 0.5,
+  slope_window       = 4L,
+  dynamic_temp       = TRUE,
+  dynamic_temp_pivot = 10L
+)
 
 # ---- Tuned M0 parameters (from ignition LOSO) ----
 tuned  <- readRDS("../data/stage1_tuning.rds")
@@ -112,9 +134,11 @@ All three stages are fully tuned before deployment. The fixed parameters are:
 | Stage | Parameter | Source | Description |
 |-------|-----------|--------|-------------|
 | **M0** | `params` | `stage1_tuning.rds` | Ignition detection thresholds (13 params) |
-| **M1** | `k_ref = 8` | M1 LOSO peak MAE | Reference curve GAM basis dimension |
+| **M1** | `k_ref = 25` | M1 LOSO Weibull MAE | Reference curve GAM basis dimension |
+| **M1** | `temperature = 0.25` | M1 LOSO | Multi-template softmax temperature |
 | **M1** | `hyper` | `learn_alignment_hyperparams()` | Tau/delta bounds, curvature gates |
-| **M2** | `spec` | Nested LOSO grid search | GAM formula knobs (K, δ, k_f, α, …) |
+| **M2** | `spec` | Nested LOSO v4 (189 specs) | `Kr=1, k_f=2, k_e=4, α=0.10` |
+| — | `MANUAL_IGN_WEEK` | Analyst override | Force ignition week (NA = auto) |
 
 
 ## Production reference curve
@@ -125,13 +149,22 @@ The reference curve is trained on **all** non-excluded historical seasons. It de
 #| message: false
 #| warning: false
 
-K_REF     <- 8L
+K_REF     <- M1_PARAMS$k_ref   # 25 — tuned value
 REF_CACHE <- "../data/ref_production.rds"
 
+# Invalidate cache if built with different k_ref
 if (file.exists(REF_CACHE)) {
   ref_cache <- readRDS(REF_CACHE)
-  message("Loaded production ref from cache: ", REF_CACHE)
-} else {
+  cached_k  <- ref_cache$k_ref %||% 8L   # old caches have no k_ref field
+  if (cached_k != K_REF) {
+    message("Cache k_ref (", cached_k, ") != current K_REF (", K_REF, ") — rebuilding.")
+    ref_cache <- NULL
+  } else {
+    message("Loaded production ref from cache (k_ref=", K_REF, "): ", REF_CACHE)
+  }
+}
+
+if (is.null(ref_cache) || !file.exists(REF_CACHE)) {
   train_allD <- filter(allD_hist, !season %in% EXCLUDE_SEAS)
 
   res_deriv  <- estimateDerivs(train_allD, k = 10L)
@@ -147,9 +180,10 @@ if (file.exists(REF_CACHE)) {
                        k = K_REF, n_weeks = 52L)
   hyper <- learn_alignment_hyperparams(ref$dat, ref$g_ref_fun)
 
-  ref_cache <- list(ref = ref, hyper = hyper, aligned_train = aligned_train)
+  ref_cache <- list(ref = ref, hyper = hyper, aligned_train = aligned_train,
+                    k_ref = K_REF)
   saveRDS(ref_cache, REF_CACHE)
-  message("Production ref built and cached: ", REF_CACHE)
+  message("Production ref built and cached (k_ref=", K_REF, "): ", REF_CACHE)
 }
 
 ref   <- ref_cache$ref
@@ -189,39 +223,54 @@ The M2 model is trained on **all** historical aligned data with M1 walk-forward 
 #| message: false
 #| warning: false
 
-# ---- Best M2 spec from nested LOSO ----
-# If production grid search results exist, use the winner.
-# Otherwise fall back to the prospective kit or a sensible default.
-M2_CACHE <- "../data/m2_production.rds"
+# ---- Best M2 spec — load from v4 production nested LOSO ----
+# Priority: v4 > v3 > v2 > default
+M2_CACHE    <- "../data/m2_production.rds"
+M2_SPEC_SRC <- NA_character_
 
-if (file.exists("../data/nested_loso_production.rds")) {
-  prod_gs  <- readRDS("../data/nested_loso_production.rds")
-  best_spec <- prod_gs$best_spec
-  cat("M2 spec source: nested LOSO grid search\n")
-  cat("Best spec:", prod_gs$best_spec_id, "\n")
-} else if (file.exists("prospective_kit.rds")) {
-  kit <- readRDS("prospective_kit.rds")
-  best_spec <- kit$stage2$spec_stage2
-  cat("M2 spec source: prospective_kit.rds\n")
-} else {
+for (gs_path in c("../data/nested_loso_v4_production.rds",
+                   "../data/nested_loso_v3_production.rds",
+                   "../data/nested_loso_production.rds")) {
+  if (file.exists(gs_path)) {
+    prod_gs   <- readRDS(gs_path)
+    best_spec <- prod_gs$best_spec
+    M2_SPEC_SRC <- basename(gs_path)
+    cat("M2 spec source:", M2_SPEC_SRC, "\n")
+    cat("Best spec ID:", prod_gs$best_spec_id,
+        "| mean_nll:", round(prod_gs$summary$mean_nll[1], 4), "\n")
+    break
+  }
+}
+if (is.na(M2_SPEC_SRC)) {
   best_spec <- stage2_make_spec(
-    delta = 0L, K = 3L, k_f = 6L, k_e = 6L,
-    alpha_state = 0.25, k_s = 0L
+    delta = 0L, Kr = 1L, k_f = 2L, k_e = 4L,
+    alpha_state = 0.10, k_s = 0L, lambda_w = 0, w_floor = 0.05
   )
-  cat("M2 spec source: default (no tuning results found)\n")
+  M2_SPEC_SRC <- "hardcoded default (v4 best spec)"
+  cat("M2 spec source: hardcoded default (v4 tuned spec)\n")
+}
+
+# Invalidate M2 cache if spec source changed
+M2_SPEC_TAG <- file.path(dirname(M2_CACHE), ".m2_spec_tag")
+spec_sig    <- paste(M2_SPEC_SRC, best_spec$Kr, best_spec$k_f,
+                     best_spec$k_e, best_spec$alpha_state, sep = "_")
+if (file.exists(M2_CACHE) && file.exists(M2_SPEC_TAG)) {
+  if (readLines(M2_SPEC_TAG, warn = FALSE)[1] != spec_sig) {
+    message("M2 spec changed — invalidating M2 cache.")
+    file.remove(M2_CACHE)
+  }
 }
 
 # Show spec summary
-spec_df <- tibble(
-  Parameter = c("delta (template shift)", "K (ramp weeks)", "k_f (template basis)",
-                "k_e (EWA basis)", "alpha_state (EWA decay)", "k_s (season-smooth)"),
-  Value = c(best_spec$delta %||% 0, best_spec$K %||% 3,
-            best_spec$k_f %||% 6, best_spec$k_e %||% 6,
-            best_spec$alpha_state %||% 0.25, best_spec$k_s %||% 0)
-)
-gt(spec_df) %>%
-  tab_header(title = "Production M2 specification") %>%
-  tab_options(table.width = pct(60), table.font.size = "14px")
+skip_slots <- c("best_row", "formula", "exclude_newseason")
+spec_display <- best_spec[!names(best_spec) %in% skip_slots]
+data.frame(
+  Parameter = names(spec_display),
+  Value     = sapply(spec_display, function(x) paste(as.character(x), collapse = ", ")),
+  row.names = NULL
+) |> gt() |>
+  tab_header(title = paste0("Production M2 specification (", M2_SPEC_SRC, ")")) |>
+  tab_options(table.width = pct(70), table.font.size = "14px")
 ```
 
 ### M1 walk-forward on historical seasons
@@ -258,14 +307,22 @@ if (file.exists(M1_HIST_CACHE)) {
   }
 
   m1_hist_preds <- m1_walkforward_multi(
-    allD      = allD_hist,
-    ref       = ref,
-    hyper     = hyper,
-    params    = params,
-    seasons   = sort(unique(allD_hist$season)),
-    horizons  = c(1L, 2L),
-    parallel  = TRUE,
-    verbose   = TRUE
+    allD               = allD_hist,
+    ref                = ref,
+    hyper              = hyper,
+    params             = params,
+    seasons            = sort(unique(allD_hist$season)),
+    horizons           = c(1L, 2L),
+    temperature        = M1_PARAMS$temperature,
+    rise_weight        = M1_PARAMS$rise_weight,
+    trough_weight      = M1_PARAMS$trough_weight,
+    peak_decay         = M1_PARAMS$peak_decay,
+    slope_weight       = M1_PARAMS$slope_weight,
+    slope_window       = M1_PARAMS$slope_window,
+    dynamic_temp       = M1_PARAMS$dynamic_temp,
+    dynamic_temp_pivot = M1_PARAMS$dynamic_temp_pivot,
+    parallel           = TRUE,
+    verbose            = TRUE
   )
 
   saveRDS(m1_hist_preds, M1_HIST_CACHE)
@@ -317,6 +374,7 @@ if (file.exists(M2_CACHE)) {
   )
 
   saveRDS(m2_production, M2_CACHE)
+  writeLines(spec_sig, M2_SPEC_TAG)
   cat("Production M2 trained and cached\n")
 }
 
@@ -359,13 +417,35 @@ if (file.exists(WF_CACHE)) {
 } else {
   walk_end <- max(currentD_full$weekF, na.rm = TRUE)
 
-  # M0: run ignition detection once
+  # ---- M0: ignition detection ----
   ign_out <- run_ignition_weekly(
     currentSeason  = currentD_full,
     ign_fit_or_gam = NULL,
     params         = params,
     start_week     = 1L
   )
+
+  # ---- Manual ignition override ----
+  # If MANUAL_IGN_WEEK is set, replace M0's estimate.
+  # resolve_week_override() returns list(final, est, overridden, override).
+  ign_resolved <- resolve_week_override(
+    week_est      = ign_out$iWeek_hat_locked,
+    override_week = MANUAL_IGN_WEEK,
+    mode          = "replace"
+  )
+  if (ign_resolved$overridden) {
+    message(sprintf(
+      "Manual ignition override: M0 estimated week %s, overriding to week %d.",
+      ifelse(is.na(ign_resolved$est), "NA", as.character(ign_resolved$est)),
+      ign_resolved$final
+    ))
+    ign_out$iWeek_hat_locked  <- ign_resolved$final
+    ign_out$ign_week_locked   <- ign_resolved$final
+  } else if (!is.na(ign_resolved$final)) {
+    message(sprintf("M0 ignition: week %d (automatic).", ign_resolved$final))
+  } else {
+    message("M0: no ignition detected yet.")
+  }
 
   walk_start <- if (!is.na(ign_out$ign_week_locked)) {
     max(WALK_START, as.integer(ign_out$ign_week_locked))
@@ -384,22 +464,29 @@ if (file.exists(WF_CACHE)) {
   week_results <- lapply(eval_weeks, function(ew) {
     season_to_ew <- filter(currentD_full, weekF <= ew)
 
-    # ---- M1: alignment ----
+    # ---- M1: multi-template alignment (tuned params) ----
     ap <- tryCatch(
-      run_alignment_prospective(
-        currentSeason   = season_to_ew,
-        ref             = ref,
-        hyper           = hyper,
-        params          = NULL,
-        ign_out         = ign_out,
-        use_ci          = TRUE,
-        buffer_weeks    = 0L,
-        allow_scale     = NULL,
-        level           = 0.95,
-        min_obs         = 4L,
-        curvature_ratio = 1.0
+      run_alignment_prospective_multi(
+        currentSeason      = season_to_ew,
+        ref                = ref,
+        hyper              = hyper,
+        ign_out            = ign_out,
+        use_ci             = TRUE,
+        buffer_weeks       = 0L,
+        allow_scale        = NULL,
+        level              = 0.95,
+        min_obs            = 4L,
+        curvature_ratio    = 1.0,
+        temperature        = M1_PARAMS$temperature,
+        rise_weight        = M1_PARAMS$rise_weight,
+        trough_weight      = M1_PARAMS$trough_weight,
+        peak_decay         = M1_PARAMS$peak_decay,
+        slope_weight       = M1_PARAMS$slope_weight,
+        slope_window       = M1_PARAMS$slope_window,
+        dynamic_temp       = M1_PARAMS$dynamic_temp,
+        dynamic_temp_pivot = M1_PARAMS$dynamic_temp_pivot
       ),
-      error = function(e) NULL
+      error = function(e) { message("M1 error at week ", ew, ": ", conditionMessage(e)); NULL }
     )
 
     if (is.null(ap) || ap$state == "pre_ignition") {

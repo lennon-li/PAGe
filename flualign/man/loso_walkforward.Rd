@@ -26,7 +26,6 @@ loso_walkforward(
   min_obs = 4L,
   curvature_ratio = 1,
   template_shift = 0L,
-  use_smoothed = FALSE,
   peak_weight_boost = 1,
   peak_weight_decay = 0.3,
   align_trough_weight = 0.1,
@@ -37,6 +36,11 @@ loso_walkforward(
   multi_temperature = 1,
   multi_top_k = NULL,
   multi_blend_alpha = 1,
+  slope_weight = 0.5,
+  slope_window = 4L,
+  dynamic_temp = TRUE,
+  dynamic_temp_pivot = 10L,
+  checkpoint_file = NULL,
   verbose = TRUE
 )
 }
@@ -95,16 +99,21 @@ Defaults to \code{parallel::detectCores() - 1}. Set to 1 to disable.}
 \item{min_obs}{Integer. Minimum observations after ignition before attempting
 alignment (default 4).}
 
-\item{use_smoothed}{Logical. If \code{TRUE}, feed pre-smoothed synthetic counts
-into \code{estimateRef()} instead of raw counts (default \code{FALSE}).}
-
 \item{peak_weight_boost}{Numeric >= 1. Multiplicative weight for observations
 between ignition and peak in \code{estimateDerivs()} (default 1 = no boost).}
 
 \item{peak_weight_decay}{Numeric > 0. Exponential decay rate for weights after
 the observed peak (default 0.3).}
 
+\item{checkpoint_file}{Character path (or \code{NULL}). If provided, saves
+incremental results to this RDS file after each test season completes. On
+restart, completed seasons are loaded from the checkpoint and skipped.
+Delete the file to force a full rerun.}
+
 \item{verbose}{Logical. Print per-season progress (default \code{TRUE}).}
+
+\item{use_smoothed}{Logical. If \code{TRUE}, feed pre-smoothed synthetic counts
+into \code{estimateRef()} instead of raw counts (default \code{FALSE}).}
 }
 \value{
 A list with three elements:

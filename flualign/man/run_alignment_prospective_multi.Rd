@@ -20,7 +20,11 @@ run_alignment_prospective_multi(
   peak_decay = 0.3,
   temperature = 1,
   top_k = NULL,
-  blend_alpha = 1
+  blend_alpha = 1,
+  slope_weight = 0.5,
+  slope_window = 4L,
+  dynamic_temp = TRUE,
+  dynamic_temp_pivot = 10L
 )
 }
 \arguments{
@@ -64,4 +68,3 @@ List with same structure as \code{run_alignment_prospective()} output.
 Drop-in replacement for \code{run_alignment_prospective()} that uses
 \code{align_multi_template()} internally. Returns the same output structure.
 }
-\keyword{internal}

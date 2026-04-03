@@ -29,6 +29,16 @@
 #' @param trough_weight Numeric; alignment loss trough weight.
 #' @param rise_weight Numeric; alignment loss rise weight.
 #' @param peak_decay Numeric; exponential decay after peak.
+#' @param slope_weight Numeric; strength of growth-rate-aware template weighting
+#'   (default 0.5). Higher values make templates with similar recent slope to
+#'   observed data receive more weight. Set to 0 to disable.
+#' @param slope_window Integer; number of recent weeks to compute slope over
+#'   (default 4).
+#' @param dynamic_temp Logical; if TRUE (default), scale temperature up when
+#'   few observations available (wider ensemble early, sharper late).
+#' @param dynamic_temp_pivot Integer; observation count below which temperature
+#'   is inflated (default 10). Temperature is scaled by
+#'   \code{pivot / n_obs} when \code{n_obs < pivot}.
 #'
 #' @return List with the same structure as
 #'   \code{align_forecast_pipeline_dilate()} output, plus:
@@ -56,7 +66,11 @@ align_multi_template <- function(currentD,
                                  time_weights        = NULL,
                                  trough_weight       = 0.1,
                                  rise_weight         = 1.0,
-                                 peak_decay          = 0.3) {
+                                 peak_decay          = 0.3,
+                                 slope_weight        = 0.5,
+                                 slope_window        = 4L,
+                                 dynamic_temp        = TRUE,
+                                 dynamic_temp_pivot  = 10L) {
 
   stopifnot(is.matrix(eta_mat), ncol(eta_mat) >= 2)
   n_weeks    <- nrow(eta_mat)
@@ -117,7 +131,7 @@ align_multi_template <- function(currentD,
     )
   })
 
-  # --- 4. Compute softmax weights from NLL ---
+  # --- 4. Compute softmax weights from NLL + slope similarity ---
   valid   <- !vapply(results, is.null, logical(1))
   n_obs   <- nrow(currentD)
   nlls    <- vapply(results, function(r) {
@@ -138,10 +152,44 @@ align_multi_template <- function(currentD,
     ))
   }
 
+  # Dynamic temperature: widen ensemble early (few obs), sharpen late
+  temp_eff <- if (dynamic_temp && n_obs < dynamic_temp_pivot) {
+    temperature * (dynamic_temp_pivot / max(n_obs, 1L))
+  } else {
+    temperature
+  }
+
+  # Growth-rate-aware weighting: compare observed slope to each template's slope
+  slope_factor <- rep(1, length(results))
+  if (slope_weight > 0 && n_obs >= slope_window) {
+    # Observed slope: logit-scale derivative over recent window
+    obs_tail <- utils::tail(currentD[order(currentD$newWeek), ], slope_window)
+    p_obs    <- obs_tail$y / (obs_tail$y + obs_tail$neg)
+    p_obs    <- pmin(pmax(p_obs, 0.001), 0.999)
+    logit_obs <- log(p_obs / (1 - p_obs))
+    t_obs     <- obs_tail$newWeek
+    # Simple linear slope
+    obs_slope <- if (length(unique(t_obs)) >= 2) {
+      stats::coef(stats::lm.fit(cbind(1, t_obs), logit_obs))[2]
+    } else 0
+
+    for (i in seq_along(results)) {
+      if (!valid[i] || !is.finite(nlls[i])) next
+      # Template slope at the same newWeek positions
+      tf <- template_funs[[i]]
+      logit_template <- tf$g_ref_safe(t_obs)
+      tmpl_slope <- if (length(unique(t_obs)) >= 2) {
+        stats::coef(stats::lm.fit(cbind(1, t_obs), logit_template))[2]
+      } else 0
+      # Similarity: exp(-slope_weight * |obs_slope - tmpl_slope|)
+      slope_factor[i] <- exp(-slope_weight * abs(obs_slope - tmpl_slope))
+    }
+  }
+
   # Softmax: shift for numerical stability
   nlls_valid   <- nlls[valid & is.finite(nlls)]
   min_nll      <- min(nlls_valid)
-  w_raw        <- exp(-(nlls - min_nll) / temperature)
+  w_raw        <- exp(-(nlls - min_nll) / temp_eff) * slope_factor
   w_raw[!valid | !is.finite(nlls)] <- 0
   w_s          <- w_raw / sum(w_raw)
   names(w_s)   <- names(results)
@@ -292,24 +340,28 @@ align_multi_template <- function(currentD,
 #' @param blend_alpha Numeric 0--1; template blending.
 #'
 #' @return List with same structure as \code{run_alignment_prospective()} output.
-#' @keywords internal
+#' @export
 run_alignment_prospective_multi <- function(
   currentSeason,
   ref,
   hyper,
   ign_out,
-  use_ci          = TRUE,
-  buffer_weeks    = 0L,
-  allow_scale     = NULL,
-  level           = 0.95,
-  min_obs         = 4L,
-  curvature_ratio = 1.0,
-  trough_weight   = 0.1,
-  rise_weight     = 1.0,
-  peak_decay      = 0.3,
-  temperature     = 1.0,
-  top_k           = NULL,
-  blend_alpha     = 1.0
+  use_ci              = TRUE,
+  buffer_weeks        = 0L,
+  allow_scale         = NULL,
+  level               = 0.95,
+  min_obs             = 4L,
+  curvature_ratio     = 1.0,
+  trough_weight       = 0.1,
+  rise_weight         = 1.0,
+  peak_decay          = 0.3,
+  temperature         = 1.0,
+  top_k               = NULL,
+  blend_alpha         = 1.0,
+  slope_weight        = 0.5,
+  slope_window        = 4L,
+  dynamic_temp        = TRUE,
+  dynamic_temp_pivot  = 10L
 ) {
 
   # Helper: early return in pre-ignition state
@@ -381,7 +433,11 @@ run_alignment_prospective_multi <- function(
       blend_alpha            = blend_alpha,
       trough_weight          = trough_weight,
       rise_weight            = rise_weight,
-      peak_decay             = peak_decay
+      peak_decay             = peak_decay,
+      slope_weight           = slope_weight,
+      slope_window           = slope_window,
+      dynamic_temp           = dynamic_temp,
+      dynamic_temp_pivot     = dynamic_temp_pivot
     ),
     error = function(e) NULL
   )

@@ -30,6 +30,7 @@ source("../R/loso_alignment.R")
 source("../R/utils.R")
 source("../R/prospective_running.R")
 source("../R/prospective_alignment.R")
+source("../R/align_multi_template.R")
 source("../R/getCurrentD.R")
 
 startWeek  <- 27L
@@ -118,7 +119,7 @@ if (file.exists(REF_CACHE)) {
 
   aligned_train <- alignIgnition(train_outs)
   ref  <- estimateRef(alignedD = aligned_train, exSeason = character(0),
-                      k = 8L, n_weeks = 52L)
+                      k = 25L, n_weeks = 52L, method = "fs")
   ref$g_ref_fun_orig <- ref$g_ref_fun   # store unshifted for plotting
   hyper <- learn_alignment_hyperparams(ref$dat, ref$g_ref_fun)
 
@@ -147,7 +148,7 @@ plot_ly() %>%
             name = "Reference curve") %>%
   layout(xaxis = list(title = "newWeek (aligned)"),
          yaxis = list(title = "Positivity"),
-         title = "Production reference curve (k_ref = 8, all training seasons)")
+         title = "Production reference curve (k_ref = 25, FS method, all training seasons)")
 ```
 
 ## Current season data
@@ -202,18 +203,19 @@ if (file.exists(WF_CACHE)) {
     season_data_to_ew <- filter(currentD_full, weekF <= ew)
     n_obs <- nrow(season_data_to_ew)
 
-    ap <- run_alignment_prospective(
+    ap <- run_alignment_prospective_multi(
       currentSeason   = season_data_to_ew,
       ref             = ref,
       hyper           = hyper,
-      params          = NULL,
       ign_out         = ign_out,
       use_ci          = TRUE,
       buffer_weeks    = 0L,
       allow_scale     = NULL,
       level           = 0.95,
       min_obs         = 4L,
-      curvature_ratio = 1.0
+      curvature_ratio = 1.0,
+      temperature     = 0.25,
+      rise_weight     = 1.0
     )
 
     if (ap$state == "pre_ignition") {
