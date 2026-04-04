@@ -88,6 +88,12 @@ WALK_START <- 5L
 DATA_DIR   <- normalizePath("../data", mustWork = TRUE)
 WF_CACHE   <- file.path(DATA_DIR, "deploy_wf_cache.rds")
 
+# ---- Cache control ----
+# Set FORCE_REFRESH = TRUE to rerun the walk-forward (e.g., after new data
+# arrive, changing MANUAL_IGN_WEEK, or updating pipeline code).
+# The cache does NOT auto-invalidate.
+FORCE_REFRESH <- FALSE
+
 # ---- Manual ignition override ----
 # Set to an integer weekF to override M0 detection (e.g., 20L).
 # Set to NA_integer_ to use automatic M0 detection.
@@ -139,10 +145,10 @@ For each evaluation week $w$, the pipeline runs sequentially:
 #| message: false
 #| warning: false
 
-if (file.exists(WF_CACHE)) {
+if (file.exists(WF_CACHE) && !isTRUE(FORCE_REFRESH)) {
   wf  <- readRDS(WF_CACHE)
   ref <- kit$ref
-  message("Loaded walk-forward from cache.")
+  message("Loaded walk-forward from cache. Set FORCE_REFRESH = TRUE to rerun.")
 } else {
   wf <- run_prospective_pipeline(
     kit             = kit,

@@ -368,11 +368,18 @@ run_m0_m1_m2_weekly <- function(currentSeason,
                                  allow_scale   = NULL,
                                  level         = 0.95,
                                  use_m1_template = TRUE,
-                                 exclude       = NULL,
+                                 template_df   = NULL,
+                                 best_mean_nll = NULL,
                                  exclude_season_re = TRUE,
                                  interval      = c("pi", "ci")) {
 
   interval <- match.arg(interval)
+
+  `%||%` <- function(x, y) if (is.null(x)) y else x
+  template_df   <- template_df   %||% kit$m2_production$template_df
+  best_mean_nll <- best_mean_nll %||% kit$best_spec
+  if (is.null(template_df) || is.null(best_mean_nll))
+    stop("Provide template_df and best_mean_nll directly, or pass a kit containing them.")
 
   # --- Step 1: M0 + M1 ---
   m1 <- run_alignment_prospective(
@@ -392,7 +399,8 @@ run_m0_m1_m2_weekly <- function(currentSeason,
   # --- Step 2: Build M2 snapshots ---
   pp <- build_stage2_pseudo_prospective_list(
     currentSeason = currentSeason,
-    kit           = kit,
+    template_df   = template_df,
+    best_mean_nll = best_mean_nll,
     iWeek_hat     = m1$iWeek_hat
   )
 
@@ -410,7 +418,6 @@ run_m0_m1_m2_weekly <- function(currentSeason,
     pp                 = pp,
     stage2_fit         = stage2_fit,
     which              = "latest",
-    exclude            = exclude,
     exclude_season_re  = exclude_season_re,
     interval           = interval,
     level              = level
