@@ -10,10 +10,13 @@ library(mgcv)
 library(gamm4)
 library(gratia)
 
-source("R/estimateRef.R")
-source("R/loso_alignment.R")
+source("R/m1_reference.R")
+source("R/m1_loso.R")
 source("R/utils.R")
-source("R/prospective_running.R")
+source("R/pipeline_runtime_helpers.R")
+source("R/m0_runtime.R")
+source("R/m2_runtime.R")
+source("R/pipeline_runtime.R")
 
 startWeek <- 27
 allD <- read.csv("data/flu_testing_data.csv") %>%

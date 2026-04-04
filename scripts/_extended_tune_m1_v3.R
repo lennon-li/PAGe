@@ -10,11 +10,11 @@ library(MMWRweek)
 library(flualign)
 
 wd <- "C:/Users/lennon.li/Documents/claude/PAGe"
-source(file.path(wd, "R/estimateRef.R"))
-source(file.path(wd, "R/loso_alignment.R"))
+source(file.path(wd, "R/m1_reference.R"))
+source(file.path(wd, "R/m1_loso.R"))
 source(file.path(wd, "R/utils.R"))
-source(file.path(wd, "R/prospective_alignment.R"))
-source(file.path(wd, "R/align_multi_template.R"))
+source(file.path(wd, "R/m1_runtime.R"))
+source(file.path(wd, "R/m1_multi_template.R"))
 
 # Load existing extended tuning to get grid
 tune_prev <- readRDS(file.path(wd, "data/m1_alignment_tuning.rds"))

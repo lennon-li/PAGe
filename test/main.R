@@ -2,9 +2,9 @@
 #
 # Layout expected on server:
 #   test/
-#     R/ignitionTraining.R
-#     R/module_training.R
-#     R/prospective_training.R
+#     R/m0_training.R
+#     R/m2_spec_grid.R
+#     R/m2_training.R
 #     test.RData
 #     main.R          <- this file
 #
@@ -21,9 +21,9 @@ suppressPackageStartupMessages({
 })
 
 # ── source functions ─────────────────────────────────────────────────────────
-source("R/ignitionTraining.R")
-source("R/module_training.R")
-source("R/prospective_training.R")   # wins for shared function names
+source("R/m0_training.R")
+source("R/m2_spec_grid.R")
+source("R/m2_training.R")   # wins for shared function names
 
 # ── load data ────────────────────────────────────────────────────────────────
 load("test.RData")   # loads: alignedD, template_df, ignD
@@ -41,7 +41,7 @@ out_dir <- "results"
 dir.create(out_dir, showWarnings = FALSE)
 
 # ============================================================
-# PATH 1: tune_stage2_loso_shift_template  (prospective_training.R)
+# PATH 1: tune_stage2_loso_shift_template  (m2_training.R)
 #
 # Tunes: shift (delta), ramp K, template smoothness k_f, EWMA alpha, lambda_w
 # Uses:  REML + fs smoothing term (k_s = 6 in default spec_base)
@@ -78,7 +78,7 @@ cat("PATH 1 — top 10 specs by mean NLL:\n")
 print(head(agg1, 10))
 
 # ============================================================
-# PATH 2: tune_stage2_loso_spec_grid_parallel  (module_training.R)
+# PATH 2: tune_stage2_loso_spec_grid_parallel  (m2_spec_grid.R)
 #
 # Tunes: shift (delta), ramp Kr, template smoothness k_f, EWMA alpha,
 #        pre-ignition buffer Kb, lambda_w
@@ -87,7 +87,7 @@ print(head(agg1, 10))
 
 cat("\n=== PATH 2: tune_stage2_loso_spec_grid_parallel ===\n")
 
-source("R/module_training.R")   # restore module version of stage2_make_spec etc.
+source("R/m2_spec_grid.R")   # restore module version of stage2_make_spec etc.
 
 sg <- expand_grid_specs(
   delta_grid  = -2:2,

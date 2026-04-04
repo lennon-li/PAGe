@@ -25,12 +25,15 @@ library(flualign)
 library(future)
 library(furrr)
 
-source("../R/estimateRef.R")
-source("../R/loso_alignment.R")
+source("../R/m1_reference.R")
+source("../R/m1_loso.R")
 source("../R/utils.R")
-source("../R/prospective_running.R")
-source("../R/prospective_alignment.R")
-source("../R/align_multi_template.R")
+source("../R/pipeline_runtime_helpers.R")
+source("../R/m0_runtime.R")
+source("../R/m2_runtime.R")
+source("../R/pipeline_runtime.R")
+source("../R/m1_runtime.R")
+source("../R/m1_multi_template.R")
 source("../R/getCurrentD.R")
 
 startWeek  <- 27L
@@ -139,7 +142,7 @@ hyper <- ref_cache$hyper
 newW_grid <- seq(1, 52, by = 0.5)
 ref_df_plot <- tibble(
   newWeek = newW_grid,
-  p_ref   = plogis(ref$g_ref_fun_orig(newW_grid))
+  p_ref   = plogis(ref$g_ref_fun(newW_grid))
 )
 
 plot_ly() %>%
@@ -393,7 +396,7 @@ if (nrow(s_all) == 0) {
   newW_grid <- seq(1, 52, by = 0.5)
   ref_curve <- tibble(
     newWeek = newW_grid,
-    p_ref   = plogis(ref$g_ref_fun_orig(newW_grid))
+    p_ref   = plogis(ref$g_ref_fun(newW_grid))
   )
 
   obs_s <- currentD_full %>% mutate(p_obs = y / N)

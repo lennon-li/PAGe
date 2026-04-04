@@ -1,6 +1,9 @@
 source("R/utils.R")
-source("R/prospective_running.R")
-source("R/prospective_alignment.R")
+source("R/pipeline_runtime_helpers.R")
+source("R/m0_runtime.R")
+source("R/m2_runtime.R")
+source("R/pipeline_runtime.R")
+source("R/m1_runtime.R")
 
 library(dplyr)
 

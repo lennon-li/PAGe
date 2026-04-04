@@ -37,9 +37,20 @@ h4 {
 </style>
 ```
 
-This document implements the **full M0 → M1 → M2 prospective forecasting pipeline** for the current season. All tuned parameters are assumed fixed from prior LOSO cross-validation. The pipeline produces walk-forward 1- and 2-week-ahead positivity forecasts, updated weekly as new surveillance data arrive.
+::: {.callout-important}
+## What This Page Shows
 
-## Setup
+- The live walk-forward pipeline for the current season.
+- The current state of ignition, alignment, and forecast outputs.
+- How weekly `$M_2$` forecasts evolve as more 2025-26 data arrive.
+
+This page is the runtime view. Training details live in
+[`estimateRef.html`](estimateRef.html),
+[`loso_walkforward.html`](loso_walkforward.html), and
+[`forecast_training.html`](forecast_training.html).
+:::
+
+## Runtime Setup
 
 ```{r setup}
 #| include: false
@@ -51,338 +62,58 @@ library(mgcv)
 library(MMWRweek)
 library(plotly)
 library(gt)
-library(future)
-library(furrr)
-library(data.table)
 
-# Source all pipeline functions (no package install needed)
+# Source all pipeline functions
 r_dir <- normalizePath("../R", mustWork = TRUE)
 r_files <- c(
-  "utils.R", "retro_estimation.R", "reference.R", "estimateRef.R",
-  "hyperparams.R", "fit.R", "identifiability.R",
-  "check_scale_identifiability.R", "prospective_alignment.R",
-  "align_forecast_pipeline_dilate.R", "peak_status_from_align.R",
-  "flagPeak.R", "peak.R", "ignitionTraining.R", "loso_alignment.R",
-  "prospective_training.R", "prospective_running.R",
-  "forecast_post_peak_gam.R", "module_training.R",
-  "m1_m2_bridge.R", "nested_loso.R", "getCurrentD.R"
+  "utils.R", "m0_retro.R", "m1_reference_helpers.R", "m1_reference.R",
+  "m1_hyperparams.R", "m1_fit.R", "identifiability.R",
+  "check_scale_identifiability.R", "m1_runtime.R",
+  "align_forecast_pipeline_dilate.R", "m1_multi_template.R",
+  "m1_peak_status.R",
+  "m1_peak_flags.R", "m1_peak_summary.R", "m0_training.R", "m1_loso.R",
+  "m2_training.R", "pipeline_runtime_helpers.R",
+  "m0_runtime.R", "m2_runtime.R", "pipeline_runtime.R",
+  "forecast_post_peak_gam.R", "m2_spec_grid.R",
+  "pipeline_bridge.R", "m2_nested_loso.R", "getCurrentD.R"
 )
 for (f in r_files) {
   fp <- file.path(r_dir, f)
   if (file.exists(fp)) source(fp)
 }
+source(file.path(normalizePath("../flualign/R", mustWork = TRUE), "flagIgnition.R"))
 
-# flagIgnition lives only in flualign/R/ (not mirrored to R/)
-pkg_r_dir <- normalizePath("../flualign/R", mustWork = TRUE)
-source(file.path(pkg_r_dir, "flagIgnition.R"))
-
-startWeek    <- 27L
-WALK_START   <- 5L
-EXCLUDE_SEAS <- "2015-16"
+startWeek  <- 27L
+WALK_START <- 5L
+DATA_DIR   <- normalizePath("../data", mustWork = TRUE)
+WF_CACHE   <- file.path(DATA_DIR, "deploy_wf_cache.rds")
 
 # ---- Manual ignition override ----
-# Set to an integer weekF to override M0 detection (e.g., 20L for week 20).
-# Set to NA_integer_ to use M0 automatic detection.
+# Set to an integer weekF to override M0 detection (e.g., 20L).
+# Set to NA_integer_ to use automatic M0 detection.
 MANUAL_IGN_WEEK <- NA_integer_
-
-# ---- Tuned M1 alignment params (from m1_alignment_tuning_v3.rds) ----
-M1_PARAMS <- list(
-  k_ref              = 25L,
-  temperature        = 0.25,
-  rise_weight        = 1.0,
-  trough_weight      = 0.1,
-  peak_decay         = 0.3,
-  slope_weight       = 0.5,
-  slope_window       = 4L,
-  dynamic_temp       = TRUE,
-  dynamic_temp_pivot = 10L
-)
-
-# ---- Tuned M0 parameters (from ignition LOSO) ----
-tuned  <- readRDS("../data/stage1_tuning.rds")
-params <- tuned$best_params
-
-manual_labels <- c(
-  "2012-13" = 18L, "2013-14" = 20L, "2014-15" = 20L,
-  "2015-16" = 24L, "2016-17" = 19L, "2017-18" = 20L,
-  "2018-19" = 19L, "2019-20" = 22L, "2022-23" = 15L,
-  "2023-24" = 20L, "2024-25" = 23L
-)
-
-flag_args <- list(
-  p_thresh = 0.01, k1 = 0.4, k_c = 0.01, n_consec = 2L,
-  min_window = 10L, w_min = 21L, w_max = 21L, d2_relax = -0.01
-)
-
-# ---- Historical data (all seasons except current + excluded) ----
-allD_hist <- read.csv("../data/flu_testing_data.csv") %>%
-  select(season, week, year, start_year = seasonstart,
-         date = week_start_date,
-         y = pos_flua, N = test_flu) %>%
-  mutate(neg = N - y, date = as.Date(date),
-         mmwr_year = ifelse(week >= 35L, start_year, start_year + 1L),
-         nW_true   = n_weeks_in_start_year(start_year),
-         weekF     = ((week - startWeek) %% nW_true) + 1L,
-         p = y / N) %>%
-  filter(!season %in% c("2011-12", "2020-21", "2021-22", "2025-26"))
 ```
 
-### Pipeline parameters
+## Inputs
 
-All three stages are fully tuned before deployment. The fixed parameters are:
+All offline-trained components (reference curve, $M_1$ hyperparameters, $M_0$ thresholds,
+$M_2$ model) are loaded from `data/` via `load_prospective_kit()`.
 
-| Stage | Parameter | Source | Description |
-|-------|-----------|--------|-------------|
-| **M0** | `params` | `stage1_tuning.rds` | Ignition detection thresholds (13 params) |
-| **M1** | `k_ref = 25` | M1 LOSO Weibull MAE | Reference curve GAM basis dimension |
-| **M1** | `temperature = 0.25` | M1 LOSO | Multi-template softmax temperature |
-| **M1** | `hyper` | `learn_alignment_hyperparams()` | Tau/delta bounds, curvature gates |
-| **M2** | `spec` | Nested LOSO v4 (189 specs) | `Kr=1, k_f=2, k_e=4, α=0.10` |
-| — | `MANUAL_IGN_WEEK` | Analyst override | Force ignition week (NA = auto) |
-
-
-## Production reference curve
-
-The reference curve is trained on **all** non-excluded historical seasons. It defines the "typical" seasonal positivity shape on the aligned time axis. Cached to avoid re-fitting.
-
-```{r build-ref}
+```{r load-kit}
 #| message: false
-#| warning: false
 
-K_REF     <- M1_PARAMS$k_ref   # 25 — tuned value
-REF_CACHE <- "../data/ref_production.rds"
+kit <- load_prospective_kit(DATA_DIR)
 
-# Invalidate cache if built with different k_ref
-if (file.exists(REF_CACHE)) {
-  ref_cache <- readRDS(REF_CACHE)
-  cached_k  <- ref_cache$k_ref %||% 8L   # old caches have no k_ref field
-  if (cached_k != K_REF) {
-    message("Cache k_ref (", cached_k, ") != current K_REF (", K_REF, ") — rebuilding.")
-    ref_cache <- NULL
-  } else {
-    message("Loaded production ref from cache (k_ref=", K_REF, "): ", REF_CACHE)
-  }
-}
-
-if (is.null(ref_cache) || !file.exists(REF_CACHE)) {
-  train_allD <- filter(allD_hist, !season %in% EXCLUDE_SEAS)
-
-  res_deriv  <- estimateDerivs(train_allD, k = 10L)
-  train_outs <- res_deriv$data %>%
-    group_by(season) %>%
-    group_split(.keep = TRUE) %>%
-    map(~ do.call(flagIgnition,
-                  c(list(df = .x, manual_labels = manual_labels),
-                    flag_args)))
-
-  aligned_train <- alignIgnition(train_outs)
-  ref   <- estimateRef(alignedD = aligned_train, exSeason = character(0),
-                       k = K_REF, n_weeks = 52L)
-  hyper <- learn_alignment_hyperparams(ref$dat, ref$g_ref_fun)
-
-  ref_cache <- list(ref = ref, hyper = hyper, aligned_train = aligned_train,
-                    k_ref = K_REF)
-  saveRDS(ref_cache, REF_CACHE)
-  message("Production ref built and cached (k_ref=", K_REF, "): ", REF_CACHE)
-}
-
-ref   <- ref_cache$ref
-hyper <- ref_cache$hyper
-
-template_df <- ref$pred_df[, c("newWeek", "fit")]
+cat(sprintf(
+  "Kit loaded:\n  k_ref=%d | temperature=%.2f\n  M_2 coefficients: %d\n  anchorWeek: %d\n",
+  kit$M1_PARAMS$k_ref,
+  kit$M1_PARAMS$temperature,
+  length(coef(kit$m2_production$fit)),
+  kit$ref$anchorWeek
+))
 ```
 
-```{r ref-plot}
-#| echo: false
-#| warning: false
-
-newW_grid <- seq(1, 52, by = 0.5)
-ref_df_plot <- tibble(
-  newWeek = newW_grid,
-  p_ref   = plogis(ref$g_ref_fun(newW_grid))
-)
-
-plot_ly() %>%
-  add_lines(data = ref_df_plot, x = ~newWeek, y = ~p_ref,
-            line = list(color = "steelblue", width = 2),
-            name = "Reference curve") %>%
-  layout(xaxis = list(title = "Aligned week (newWeek)"),
-         yaxis = list(title = "Positivity"),
-         title = paste0("Production reference curve (k_ref=", K_REF,
-                        ", ", length(unique(ref$dat$season)), " seasons)"))
-```
-
-
-## Train production M2 model
-
-The M2 model is trained on **all** historical aligned data with M1 walk-forward stacking features. This is the model used for real-time deployment.
-
-### M2 spec (from nested LOSO)
-
-```{r m2-spec}
-#| message: false
-#| warning: false
-
-# ---- Best M2 spec — load from v4 production nested LOSO ----
-# Priority: v4 > v3 > v2 > default
-M2_CACHE    <- "../data/m2_production.rds"
-M2_SPEC_SRC <- NA_character_
-
-for (gs_path in c("../data/nested_loso_v4_production.rds",
-                   "../data/nested_loso_v3_production.rds",
-                   "../data/nested_loso_production.rds")) {
-  if (file.exists(gs_path)) {
-    prod_gs   <- readRDS(gs_path)
-    best_spec <- prod_gs$best_spec
-    M2_SPEC_SRC <- basename(gs_path)
-    cat("M2 spec source:", M2_SPEC_SRC, "\n")
-    cat("Best spec ID:", prod_gs$best_spec_id,
-        "| mean_nll:", round(prod_gs$summary$mean_nll[1], 4), "\n")
-    break
-  }
-}
-if (is.na(M2_SPEC_SRC)) {
-  best_spec <- stage2_make_spec(
-    delta = 0L, Kr = 1L, k_f = 2L, k_e = 4L,
-    alpha_state = 0.10, k_s = 0L, lambda_w = 0, w_floor = 0.05
-  )
-  M2_SPEC_SRC <- "hardcoded default (v4 best spec)"
-  cat("M2 spec source: hardcoded default (v4 tuned spec)\n")
-}
-
-# Invalidate M2 cache if spec source changed
-M2_SPEC_TAG <- file.path(dirname(M2_CACHE), ".m2_spec_tag")
-spec_sig    <- paste(M2_SPEC_SRC, best_spec$Kr, best_spec$k_f,
-                     best_spec$k_e, best_spec$alpha_state, sep = "_")
-if (file.exists(M2_CACHE) && file.exists(M2_SPEC_TAG)) {
-  if (readLines(M2_SPEC_TAG, warn = FALSE)[1] != spec_sig) {
-    message("M2 spec changed — invalidating M2 cache.")
-    file.remove(M2_CACHE)
-  }
-}
-
-# Show spec summary
-skip_slots <- c("best_row", "formula", "exclude_newseason")
-spec_display <- best_spec[!names(best_spec) %in% skip_slots]
-data.frame(
-  Parameter = names(spec_display),
-  Value     = sapply(spec_display, function(x) paste(as.character(x), collapse = ", ")),
-  row.names = NULL
-) |> gt() |>
-  tab_header(title = paste0("Production M2 specification (", M2_SPEC_SRC, ")")) |>
-  tab_options(table.width = pct(70), table.font.size = "14px")
-```
-
-### M1 walk-forward on historical seasons
-
-M1 walk-forward predictions are generated for **every** historical season. These serve as the stacking covariate (`logit_f_eff`) in M2 — replacing the static template curve with M1's adaptive, real-time alignment prediction.
-
-```{r m1-hist}
-#| message: false
-#| warning: false
-
-M1_HIST_CACHE <- "../data/m1_hist_walkforward.rds"
-
-if (file.exists(M1_HIST_CACHE)) {
-  m1_hist_preds <- readRDS(M1_HIST_CACHE)
-  cat("Loaded M1 historical walk-forward predictions from cache\n")
-  cat("Rows:", nrow(m1_hist_preds), "| Seasons:",
-      length(unique(m1_hist_preds$season)), "\n")
-} else {
-  future::plan(future::multisession, workers = min(10L, parallel::detectCores() - 1L))
-
-  aligned_train <- if (!is.null(ref_cache$aligned_train)) {
-    ref_cache$aligned_train
-  } else {
-    # Rebuild alignment if not cached
-    train_allD <- filter(allD_hist, !season %in% EXCLUDE_SEAS)
-    res_deriv  <- estimateDerivs(train_allD, k = 10L)
-    train_outs <- res_deriv$data %>%
-      group_by(season) %>%
-      group_split(.keep = TRUE) %>%
-      map(~ do.call(flagIgnition,
-                    c(list(df = .x, manual_labels = manual_labels),
-                      flag_args)))
-    alignIgnition(train_outs)
-  }
-
-  m1_hist_preds <- m1_walkforward_multi(
-    allD               = allD_hist,
-    ref                = ref,
-    hyper              = hyper,
-    params             = params,
-    seasons            = sort(unique(allD_hist$season)),
-    horizons           = c(1L, 2L),
-    temperature        = M1_PARAMS$temperature,
-    rise_weight        = M1_PARAMS$rise_weight,
-    trough_weight      = M1_PARAMS$trough_weight,
-    peak_decay         = M1_PARAMS$peak_decay,
-    slope_weight       = M1_PARAMS$slope_weight,
-    slope_window       = M1_PARAMS$slope_window,
-    dynamic_temp       = M1_PARAMS$dynamic_temp,
-    dynamic_temp_pivot = M1_PARAMS$dynamic_temp_pivot,
-    parallel           = TRUE,
-    verbose            = TRUE
-  )
-
-  saveRDS(m1_hist_preds, M1_HIST_CACHE)
-  future::plan(future::sequential)
-  cat("M1 historical walk-forward complete:", nrow(m1_hist_preds), "rows\n")
-}
-```
-
-### Fit production M2
-
-```{r m2-train}
-#| message: false
-#| warning: false
-
-if (file.exists(M2_CACHE)) {
-  m2_production <- readRDS(M2_CACHE)
-  cat("Loaded production M2 from cache\n")
-} else {
-  # Prepare aligned historical data with prospective derivatives
-  aligned_train <- if (!is.null(ref_cache$aligned_train)) {
-    ref_cache$aligned_train
-  } else {
-    train_allD <- filter(allD_hist, !season %in% EXCLUDE_SEAS)
-    res_deriv  <- estimateDerivs(train_allD, k = 10L)
-    train_outs <- res_deriv$data %>%
-      group_by(season) %>%
-      group_split(.keep = TRUE) %>%
-      map(~ do.call(flagIgnition,
-                    c(list(df = .x, manual_labels = manual_labels),
-                      flag_args)))
-    alignIgnition(train_outs)
-  }
-
-  alignedD_prosp <- add_prospective_derivs_link(aligned_train)
-  if (!"N" %in% names(alignedD_prosp))
-    alignedD_prosp$N <- alignedD_prosp$y + alignedD_prosp$neg
-
-  # Normalize M1 preds for prep_stage2_joint
-  m1_use <- if (!is.null(m1_hist_preds) && nrow(m1_hist_preds) > 0)
-    m1_hist_preds else NULL
-
-  m2_production <- train_stage2_joint(
-    dat         = alignedD_prosp,
-    template_df = template_df,
-    spec        = best_spec,
-    m1_preds    = m1_use,
-    method      = "REML",
-    verbose     = TRUE
-  )
-
-  saveRDS(m2_production, M2_CACHE)
-  writeLines(spec_sig, M2_SPEC_TAG)
-  cat("Production M2 trained and cached\n")
-}
-
-cat("M2 formula terms:", length(coef(m2_production$fit)), "coefficients\n")
-```
-
-
-## Current season data
+### Current season data
 
 ```{r get-current}
 #| message: false
@@ -396,252 +127,38 @@ cat(sprintf("Season: 2025-26 | Weeks observed: %d | weekF range: %d–%d\n",
             min(currentD_full$weekF), max(currentD_full$weekF)))
 ```
 
+## Walk-forward Results: $M_0$ → $M_1$ → $M_2$
 
-## Walk-forward: M0 → M1 → M2
+For each evaluation week $w$, the pipeline runs sequentially:
 
-For each evaluation week $w$, the pipeline executes:
-
-1. **M0 — Ignition detection**: `run_ignition_weekly()` flags whether the season has ignited. Once locked, the ignition week $\hat{i}$ is fixed for all subsequent weeks.
-2. **M1 — Alignment**: `run_alignment_prospective()` fits $\tau$ (shift) and $\delta$ (dilation) to align the partial season to the reference curve, producing a forecast curve with CI.
-3. **M2 — Forecast**: Using the M1 alignment prediction at target weeks $w+1$ and $w+2$ as the stacking covariate, the production M2 GAM predicts $\hat{p}_{w+1}$ and $\hat{p}_{w+2}$.
+1. **$M_0$ — Ignition detection**: `run_ignition_weekly()` determines whether the season has ignited. Once locked, $\hat{w}^{(\text{ign})}$ is fixed.
+2. **$M_1$ — Alignment**: `run_alignment_prospective_multi()` fits $\tau$, $\delta$, $a$, $b$ to align the partial curve to reference templates, producing a peak estimate and forecast curve.
+3. **$M_2$ — Forecast**: The production GAM predicts $\hat{p}_{w+1}$ and $\hat{p}_{w+2}$ using $M_1$'s aligned prediction as a stacking covariate.
 
 ```{r walk-forward}
 #| message: false
 #| warning: false
 
-WF_CACHE <- "../data/deploy_wf_cache.rds"
-
 if (file.exists(WF_CACHE)) {
-  wf <- readRDS(WF_CACHE)
+  wf  <- readRDS(WF_CACHE)
+  ref <- kit$ref
   message("Loaded walk-forward from cache.")
 } else {
-  walk_end <- max(currentD_full$weekF, na.rm = TRUE)
-
-  # ---- M0: ignition detection ----
-  ign_out <- run_ignition_weekly(
-    currentSeason  = currentD_full,
-    ign_fit_or_gam = NULL,
-    params         = params,
-    start_week     = 1L
+  wf <- run_prospective_pipeline(
+    kit             = kit,
+    current_data    = currentD_full,
+    walk_start      = WALK_START,
+    manual_ign_week = MANUAL_IGN_WEEK,
+    verbose         = TRUE
   )
-
-  # ---- Manual ignition override ----
-  # If MANUAL_IGN_WEEK is set, replace M0's estimate.
-  # resolve_week_override() returns list(final, est, overridden, override).
-  ign_resolved <- resolve_week_override(
-    week_est      = ign_out$iWeek_hat_locked,
-    override_week = MANUAL_IGN_WEEK,
-    mode          = "replace"
-  )
-  if (ign_resolved$overridden) {
-    message(sprintf(
-      "Manual ignition override: M0 estimated week %s, overriding to week %d.",
-      ifelse(is.na(ign_resolved$est), "NA", as.character(ign_resolved$est)),
-      ign_resolved$final
-    ))
-    ign_out$iWeek_hat_locked  <- ign_resolved$final
-    ign_out$ign_week_locked   <- ign_resolved$final
-  } else if (!is.na(ign_resolved$final)) {
-    message(sprintf("M0 ignition: week %d (automatic).", ign_resolved$final))
-  } else {
-    message("M0: no ignition detected yet.")
-  }
-
-  walk_start <- if (!is.na(ign_out$ign_week_locked)) {
-    max(WALK_START, as.integer(ign_out$ign_week_locked))
-  } else {
-    WALK_START
-  }
-  eval_weeks <- seq(walk_start, walk_end)
-
-  # M2 prediction helpers
-  m2_fit    <- m2_production$fit
-  ex_terms  <- best_spec$exclude_newseason
-  if (is.null(ex_terms)) ex_terms <- stage2_exclude_newseason(best_spec)
-  ex_terms  <- unique(c(ex_terms, "s(season)"))
-  lev_lead  <- levels(m2_fit$model$lead)
-
-  week_results <- lapply(eval_weeks, function(ew) {
-    season_to_ew <- filter(currentD_full, weekF <= ew)
-
-    # ---- M1: multi-template alignment (tuned params) ----
-    ap <- tryCatch(
-      run_alignment_prospective_multi(
-        currentSeason      = season_to_ew,
-        ref                = ref,
-        hyper              = hyper,
-        ign_out            = ign_out,
-        use_ci             = TRUE,
-        buffer_weeks       = 0L,
-        allow_scale        = NULL,
-        level              = 0.95,
-        min_obs            = 4L,
-        curvature_ratio    = 1.0,
-        temperature        = M1_PARAMS$temperature,
-        rise_weight        = M1_PARAMS$rise_weight,
-        trough_weight      = M1_PARAMS$trough_weight,
-        peak_decay         = M1_PARAMS$peak_decay,
-        slope_weight       = M1_PARAMS$slope_weight,
-        slope_window       = M1_PARAMS$slope_window,
-        dynamic_temp       = M1_PARAMS$dynamic_temp,
-        dynamic_temp_pivot = M1_PARAMS$dynamic_temp_pivot
-      ),
-      error = function(e) { message("M1 error at week ", ew, ": ", conditionMessage(e)); NULL }
-    )
-
-    if (is.null(ap) || ap$state == "pre_ignition") {
-      return(list(
-        params   = tibble(eval_week = ew, state = "pre_ignition",
-                          iWeek_hat = NA_integer_, tau = NA_real_,
-                          delta = NA_real_, t_peak = NA_real_,
-                          peak_weekF = NA_integer_, peak_passed = FALSE),
-        m1_curve = NULL,
-        m2_preds = NULL
-      ))
-    }
-
-    iWeek_hat  <- ap$iWeek_hat
-    anchorWeek <- ref$anchorWeek
-
-    # M1 parameter row
-    params_row <- tibble(
-      eval_week  = ew,
-      state      = ap$state,
-      iWeek_hat  = iWeek_hat,
-      tau        = ap$tau,
-      delta_m1   = ap$delta,
-      a          = ap$a,
-      b          = ap$b,
-      t_peak     = ap$t_peak,
-      peak_weekF = ap$peak_weekF,
-      peak_passed = ap$peak_passed,
-      fallback   = ap$fallback_reason %||% NA_character_
-    )
-
-    # M1 forecast curve (for alignment visualization)
-    m1_curve <- ap$forecast_df %>%
-      mutate(eval_week = ew)
-
-    # ---- M2: 2-week-ahead forecast ----
-    # Extract M1 predictions at target weeks
-    fdf <- ap$forecast_df
-    horizons <- c(1L, 2L)
-
-    m2_rows <- lapply(horizons, function(h) {
-      target_weekF   <- ew + h
-      target_newWeek <- as.numeric(target_weekF - iWeek_hat + anchorWeek)
-
-      # Interpolate M1 prediction at target week
-      m1_p <- approx(fdf$newWeek, fdf$p_hat, xout = target_newWeek, rule = 2)$y
-      m1_lo <- approx(fdf$newWeek, fdf$p_lo, xout = target_newWeek, rule = 2)$y
-      m1_hi <- approx(fdf$newWeek, fdf$p_hi, xout = target_newWeek, rule = 2)$y
-
-      # Build M2 feature row
-      obs_to_ew <- season_to_ew %>%
-        arrange(weekF) %>%
-        mutate(
-          p_now  = y / pmax(N, 1L),
-          z_now  = qlogis(pmin(pmax(p_now, 1e-6), 1 - 1e-6))
-        )
-
-      # EWA of logit
-      alpha_s <- as.numeric(best_spec$alpha_state %||% 0.25)
-      z_vec <- obs_to_ew$z_now
-      z_ema <- as.numeric(stats::filter(
-        alpha_s * z_vec,
-        filter = 1 - alpha_s,
-        method = "recursive",
-        init = z_vec[1]
-      ))
-      z_ema_now <- tail(z_ema, 1)
-
-      # logN, d1, d2 at eval week
-      logN_now <- log(max(obs_to_ew$N[obs_to_ew$weekF == ew], 1))
-
-      # Prospective derivatives
-      d_deriv <- add_prospective_derivs_link(
-        obs_to_ew %>% transmute(season = "current", weekF, y, neg),
-        k = 5L, eps = 1e-6
-      )
-      d_at_ew <- filter(d_deriv, weekF == ew)
-      d1_now <- if (nrow(d_at_ew) > 0) d_at_ew$d1_link[1] else 0
-      d2_now <- if (nrow(d_at_ew) > 0) d_at_ew$d2_link[1] else 0
-
-      # M1 stacking → logit_f_eff
-      logit_f_eff <- qlogis(pmin(pmax(m1_p, 1e-6), 1 - 1e-6))
-
-      t_since <- as.numeric(ew - iWeek_hat)
-
-      # Build prediction newdata row
-      nd <- tibble(
-        weekF       = as.integer(ew),
-        newWeek     = as.integer(ew - iWeek_hat + anchorWeek),
-        lead        = factor(paste0("h", h), levels = lev_lead),
-        season      = factor(levels(m2_fit$model$season)[1],
-                             levels = levels(m2_fit$model$season)),
-        logit_f_eff = logit_f_eff,
-        z_ema       = z_ema_now,
-        logN_now    = logN_now,
-        d1_now      = d1_now,
-        d2_now      = d2_now,
-        t_since     = t_since,
-        post_ign    = TRUE
-      )
-
-      # Add season_h if model uses it
-      if ("season_h" %in% names(m2_fit$model)) {
-        lev_sh <- levels(m2_fit$model$season_h)
-        nd$season_h <- factor(lev_sh[1], levels = lev_sh)
-      }
-
-      pr <- tryCatch(
-        predict(m2_fit, newdata = nd, type = "link", se.fit = TRUE,
-                exclude = ex_terms),
-        error = function(e) NULL
-      )
-
-      if (is.null(pr)) {
-        return(tibble(
-          eval_week = ew, h = h, target_weekF = target_weekF,
-          m1_p = m1_p, m1_lo = m1_lo, m1_hi = m1_hi,
-          m2_p = NA_real_, m2_lo = NA_real_, m2_hi = NA_real_
-        ))
-      }
-
-      eta <- as.numeric(pr$fit)
-      se  <- as.numeric(pr$se.fit)
-      m2_p  <- plogis(eta)
-      m2_lo <- plogis(eta - 1.96 * se)
-      m2_hi <- plogis(eta + 1.96 * se)
-
-      tibble(
-        eval_week = ew, h = h, target_weekF = target_weekF,
-        m1_p = m1_p, m1_lo = m1_lo, m1_hi = m1_hi,
-        m2_p = m2_p, m2_lo = m2_lo, m2_hi = m2_hi
-      )
-    })
-
-    list(
-      params   = params_row,
-      m1_curve = m1_curve,
-      m2_preds = bind_rows(m2_rows)
-    )
-  })
-
-  wf <- list(
-    params_df = bind_rows(map(week_results, "params")),
-    m1_curves = bind_rows(map(week_results, "m1_curve")),
-    m2_preds  = bind_rows(map(week_results, "m2_preds")),
-    ign_out   = ign_out
-  )
-
+  ref <- kit$ref
   saveRDS(wf, WF_CACHE)
   message("Walk-forward complete. Saved to ", WF_CACHE)
 }
 ```
 
 
-## Current state
+## Current Snapshot
 
 ```{r current-state}
 #| echo: false
@@ -651,7 +168,6 @@ last_row <- wf$params_df %>%
   slice_max(eval_week, n = 1, with_ties = FALSE)
 
 if (nrow(last_row) > 0) {
-  # Latest M2 prediction
   latest_m2 <- wf$m2_preds %>%
     filter(eval_week == last_row$eval_week)
 
@@ -664,10 +180,10 @@ if (nrow(last_row) > 0) {
   ))
 
   if (nrow(latest_m2) > 0) {
-    cat("\nLatest M2 forecasts:\n")
+    cat("\nLatest M_2 forecasts:\n")
     for (i in seq_len(nrow(latest_m2))) {
       r <- latest_m2[i, ]
-      cat(sprintf("  h=%d → target weekF %d: M2=%.1f%% [%.1f, %.1f] | M1=%.1f%%\n",
+      cat(sprintf("  h=%d → target weekF %d: M_2=%.1f%% [%.1f, %.1f] | M_1=%.1f%%\n",
                   r$h, r$target_weekF,
                   r$m2_p * 100, r$m2_lo * 100, r$m2_hi * 100,
                   r$m1_p * 100))
@@ -679,7 +195,7 @@ if (nrow(last_row) > 0) {
 ```
 
 
-## M1 alignment parameters over time
+## $M_1$ alignment parameters over time
 
 ```{r param-evolution}
 #| echo: false
@@ -735,9 +251,12 @@ if (nrow(df_params) > 0) {
 :::
 
 
-## M2 forecast evolution
+## $M_2$ forecast evolution
 
-Each tab shows the M2 2-week-ahead forecast at a given evaluation week, overlaid with M1 alignment and observed data.
+Each tab shows the $M_2$ 2-week-ahead forecast at a given evaluation week, overlaid
+with $M_1$ alignment and observed data. Blue = $M_1$ (solid: fitted, dashed: forecast).
+Red = $M_2$ (solid: past h=1 predictions, dashed: current forecast). Green dashed =
+estimated peak. Vertical black line = current evaluation week.
 
 ```{r m2-forecast-plots}
 #| echo: false
@@ -751,7 +270,6 @@ if (nrow(df_active) == 0) {
 } else {
   obs_s <- currentD_full %>% mutate(p_obs = y / N)
 
-  # Reference curve for background
   newW_grid <- seq(1, 52, by = 0.5)
   ref_curve <- tibble(
     newWeek = newW_grid,
@@ -768,11 +286,11 @@ if (nrow(df_active) == 0) {
     peak_wF      <- pw$peak_weekF[[1]]
     t_peak_ew    <- pw$t_peak[[1]]
 
-    current_newW <- ew - iWeek_hat_ew + anchor_ew
+    current_newW  <- ew - iWeek_hat_ew + anchor_ew
+    ignition_newW <- anchor_ew  # ignition always maps to anchorWeek
 
-    # M1 forecast curve for this eval week
     fc <- wf$m1_curves %>%
-      filter(eval_week == ew) %>%
+      filter(eval_week == ew, kind == "forecast") %>%
       arrange(newWeek)
 
     if (nrow(fc) == 0) return(NULL)
@@ -781,88 +299,109 @@ if (nrow(df_active) == 0) {
     fc_past   <- fc %>% filter(newWeek <= junction)
     fc_future <- fc %>% filter(newWeek >= junction)
 
-    # Observed data aligned
     obs_aligned <- obs_s %>%
       filter(weekF <= ew) %>%
       mutate(newWeek = weekF - iWeek_hat_ew + anchor_ew)
 
-    # M2 predictions for this eval week
     m2_ew <- wf$m2_preds %>% filter(eval_week == ew)
 
-    y_max <- max(c(fc$p_hi, obs_aligned$p_obs, m2_ew$m2_hi), na.rm = TRUE) * 1.15
+    y_max <- max(c(fc$p_hat, obs_aligned$p_obs, m2_ew$m2_hi, obs_s$p_obs), na.rm = TRUE) * 1.15
     y_max <- max(y_max, 0.15)
 
+    obs_future <- obs_s %>%
+      filter(weekF > ew) %>%
+      mutate(newWeek = weekF - iWeek_hat_ew + anchor_ew)
+
     plt <- plot_ly() %>%
-      # Reference curve (grey background)
       add_lines(
         data = ref_curve, x = ~newWeek, y = ~p_ref,
         line = list(color = "rgba(160,160,160,0.4)", width = 1),
         name = "Reference"
       ) %>%
-      # M1 CI ribbon
-      add_ribbons(
-        data = fc, x = ~newWeek, ymin = ~p_lo, ymax = ~p_hi,
-        fillcolor = "rgba(150,150,150,0.12)",
-        line = list(color = "transparent"),
-        name = "M1 95% CI"
-      ) %>%
-      # M1 fitted (past)
       add_lines(
         data = fc_past, x = ~newWeek, y = ~p_hat,
         line = list(color = "steelblue", width = 2),
-        name = "M1 fitted"
+        name = "M_1 fitted"
       ) %>%
-      # M1 forecast (future)
       add_lines(
         data = fc_future, x = ~newWeek, y = ~p_hat,
         line = list(color = "steelblue", width = 2, dash = "dash"),
-        name = "M1 forecast"
+        name = "M_1 forecast"
       ) %>%
-      # Observed
       add_markers(
         data = obs_aligned, x = ~newWeek, y = ~p_obs,
         marker = list(color = "black", size = 5, opacity = 0.75),
         name = "Observed"
       ) %>%
-      # Ignition line
+      add_markers(
+        data = obs_future, x = ~newWeek, y = ~p_obs,
+        marker = list(color = "black", size = 5, opacity = 0.35,
+                      symbol = "circle-open"),
+        name = "Future obs"
+      ) %>%
       add_segments(
         x = anchor_ew, xend = anchor_ew, y = 0, yend = y_max,
         line = list(color = "grey50", dash = "dash", width = 1),
         name = paste0("Ignition (wk ", iWeek_hat_ew, ")")
       ) %>%
-      # Now line
       add_segments(
         x = current_newW, xend = current_newW, y = 0, yend = y_max,
         line = list(color = "black", width = 2),
         name = paste0("Now (wk ", ew, ")")
       )
 
-    # M2 point forecasts
+    # M2 line: solid (past h=1 realized) + dashed (current forecast)
+    # Both start at ignition week to mirror M1
     if (nrow(m2_ew) > 0) {
       m2_aligned <- m2_ew %>%
-        mutate(newWeek = target_weekF - iWeek_hat_ew + anchor_ew)
+        mutate(newWeek = target_weekF - iWeek_hat_ew + anchor_ew) %>%
+        arrange(newWeek)
 
+      # Retrospective M2: h=1 predictions from past eval_weeks, starting at ignition
+      m2_retro <- wf$m2_preds %>%
+        filter(eval_week < ew, h == 1) %>%
+        mutate(newWeek = target_weekF - iWeek_hat_ew + anchor_ew) %>%
+        filter(newWeek >= ignition_newW) %>%
+        select(newWeek, m2_p) %>%
+        arrange(newWeek)
+
+      junction_val <- obs_aligned$p_obs[obs_aligned$weekF == ew]
+      junction_val <- if (length(junction_val) > 0 && !is.na(junction_val[1]))
+        junction_val[1] else NA_real_
+      junction_pt  <- tibble(newWeek = current_newW, m2_p = junction_val)
+
+      # Solid red: ignition → past realized predictions → "now"
+      m2_past_line <- bind_rows(m2_retro, junction_pt) %>% arrange(newWeek)
+      if (nrow(m2_past_line) > 1) {
+        plt <- plt %>%
+          add_lines(
+            data = m2_past_line, x = ~newWeek, y = ~m2_p,
+            line = list(color = "firebrick", width = 2, dash = "solid"),
+            name = "M_2 fitted"
+          )
+      }
+
+      # Dashed red: "now" → h=1, h=2 forecast
+      m2_future_line <- bind_rows(junction_pt, m2_aligned %>% select(newWeek, m2_p))
       plt <- plt %>%
+        add_lines(
+          data = m2_future_line, x = ~newWeek, y = ~m2_p,
+          line = list(color = "firebrick", width = 2, dash = "dash"),
+          name = "M_2 forecast"
+        ) %>%
         add_markers(
           data = m2_aligned, x = ~newWeek, y = ~m2_p,
-          marker = list(color = "firebrick", size = 10, symbol = "diamond"),
-          error_y = list(
-            type = "data",
-            symmetric = FALSE,
-            array = m2_aligned$m2_hi - m2_aligned$m2_p,
-            arrayminus = m2_aligned$m2_p - m2_aligned$m2_lo,
-            color = "firebrick", thickness = 1.5
-          ),
-          name = "M2 forecast"
+          marker = list(color = "firebrick", size = 7, symbol = "diamond"),
+          name = "M_2 forecast pts",
+          showlegend = FALSE
         )
     }
 
-    # Peak line
     if (!is.na(t_peak_ew)) {
       plt <- plt %>%
         add_segments(
           x = t_peak_ew, xend = t_peak_ew, y = 0, yend = y_max,
-          line = list(color = "firebrick", dash = "dash", width = 1),
+          line = list(color = "green", dash = "dash", width = 1.5),
           name = paste0("Est. peak (wk ", peak_wF, ")")
         )
     }
@@ -892,9 +431,9 @@ if (nrow(df_active) == 0) {
 ```
 
 
-## M2 forecast accuracy
+## $M_2$ forecast accuracy
 
-Comparing M2 forecasts against realised observations at target weeks (when available).
+Comparing $M_2$ forecasts against realised observations at target weeks (when available).
 
 ```{r forecast-accuracy}
 #| echo: false
@@ -930,7 +469,7 @@ if (nrow(wf$m2_preds) > 0) {
       )
 
     gt(summary_acc) %>%
-      tab_header(title = "Forecast accuracy: M2 vs M1 (realised weeks only)") %>%
+      tab_header(title = "Forecast accuracy: M_2 vs M_1 (realised weeks only)") %>%
       fmt_number(columns = c(MAE_M2, MAE_M1, RMSE_M2, RMSE_M1), decimals = 4) %>%
       fmt_percent(columns = Coverage, decimals = 0) %>%
       tab_options(table.width = pct(80), table.font.size = "14px")
@@ -938,7 +477,7 @@ if (nrow(wf$m2_preds) > 0) {
     cat("No realised observations at target weeks yet.\n")
   }
 } else {
-  cat("No M2 predictions available.\n")
+  cat("No M_2 predictions available.\n")
 }
 ```
 
@@ -977,7 +516,7 @@ if (nrow(wf$m2_preds) > 0 && any(!is.na(wf$m2_preds$m2_p))) {
       add_lines(
         data = m2_h1, x = ~target_weekF, y = ~m2_p,
         line = list(color = "steelblue", width = 2),
-        name = "M2 h=1"
+        name = "M_2 h=1"
       )
   }
 
@@ -992,13 +531,13 @@ if (nrow(wf$m2_preds) > 0 && any(!is.na(wf$m2_preds$m2_p))) {
       add_lines(
         data = m2_h2, x = ~target_weekF, y = ~m2_p,
         line = list(color = "firebrick", width = 2),
-        name = "M2 h=2"
+        name = "M_2 h=2"
       )
   }
 
   plt_ts <- plt_ts %>%
     layout(
-      title = "M2 forecast time series vs observed",
+      title = "M_2 forecast time series vs observed",
       xaxis = list(title = "Target weekF"),
       yaxis = list(title = "Positivity"),
       legend = list(orientation = "h", y = -0.15)
@@ -1009,7 +548,7 @@ if (nrow(wf$m2_preds) > 0 && any(!is.na(wf$m2_preds$m2_p))) {
 ```
 
 
-## Walk-forward data table
+## Walk-forward Data Table
 
 ```{r data-table}
 #| echo: false
@@ -1021,7 +560,6 @@ if (nrow(wf$params_df) > 0) {
     select(eval_week, state, iWeek_hat, tau, delta_m1,
            peak_weekF, t_peak, peak_passed, fallback)
 
-  # Join latest M2 predictions per eval_week
   if (nrow(wf$m2_preds) > 0) {
     m2_wide <- wf$m2_preds %>%
       filter(!is.na(m2_p)) %>%
@@ -1043,28 +581,4 @@ if (nrow(wf$params_df) > 0) {
     tab_header(title = "Walk-forward alignment + forecast parameters") %>%
     tab_options(table.width = pct(100), table.font.size = "13px")
 }
-```
-
-
-## Build prospective kit
-
-Package the production model into a deployable `prospective_kit.rds` for use by automated weekly runners.
-
-```{r build-kit}
-#| eval: false
-
-kit <- make_prospective_kit(
-  template_df     = template_df,
-  params_stage1   = params,
-  joint_out       = m2_production,
-  defaults = list(
-    align      = TRUE,
-    anchorWeek = ref$anchorWeek,
-    pre_buffer = as.integer(best_spec$pre_buffer %||% 0L),
-    deriv_k    = 5L
-  )
-)
-
-saveRDS(kit, "prospective_kit.rds")
-cat("Prospective kit saved:", format(object.size(kit), units = "MB"), "\n")
 ```

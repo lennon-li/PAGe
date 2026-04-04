@@ -39,7 +39,16 @@ h4 {
 </style>
 ```
 
-## Notation and Objectives
+::: {.callout-important}
+## At A Glance
+
+- `$M_0$` detects ignition prospectively from raw surveillance data.
+- `$M_1$` aligns the current season to historical templates and estimates epidemic phase and peak timing.
+- `$M_2$` consumes alignment-derived covariates plus real-time features to forecast 1- and 2-week-ahead positivity.
+- The linked documents contain the full derivations, tuning runs, and deployment workflow; this page is the map between them.
+:::
+
+## Notation
 
 Let $s = 1,\dots,S$ index influenza seasons and let $w$ denote the within-season flu-week number. For each season–week $(s,w)$, define:
 
@@ -76,8 +85,7 @@ $$
 \pi_{s,w+h} \;=\; \Pr\!\big(\text{positive at } w+h \mid P(s,w)=1,\, M_1\big).
 $$
 
-Primary forecasting targets: one- and two-week-ahead positivity $\pi_{s,w+1}$ and $\pi_{s,w+2}$. Raw surveillance data is loaded and converted to a within-season week index
-(`weekF`) started at MMWR week 27. Each row is one season-week with columns `y` (positive tests), `N` (total tests), `p = y/N`. Seasons with known data quality issues (`2020-21`, `2021-22`) are excluded.
+Primary forecasting targets are one- and two-week-ahead positivity $\pi_{s,w+1}$ and $\pi_{s,w+2}$. Raw surveillance data is converted to a within-season week index (`weekF`) starting at MMWR week 27. Each row is one season-week with columns `y` (positive tests), `N` (total tests), and `p = y/N`. Seasons with known data quality issues (`2020-21`, `2021-22`) are excluded.
 
 
 ---
@@ -126,7 +134,7 @@ The factor-smooth (`"fs"`) method fits a GAM with `s(newWeek, season, bs="fs")`,
 
 ### Training {#sec-m1-training}
 
-All M1 hyperparameters are tuned by leave-one-season-out walk-forward evaluation (153-config grid): each fold re-estimates the reference curve excluding the held-out season, then walks forward week by week producing `params_df`. Peak MAE under Weibull weighting is the primary metric.
+All $M_1$ hyperparameters are tuned by leave-one-season-out walk-forward evaluation (153-config grid): each fold re-estimates the reference curve excluding the held-out season, then walks forward week by week producing `params_df`. Peak MAE under Weibull weighting is the primary metric.
 
 **Tuned configuration:** `k_ref=25`, `temperature=0.25`, `shift=0` → Weibull peak MAE = 1.169 weeks.
 
@@ -136,7 +144,7 @@ All M1 hyperparameters are tuned by leave-one-season-out walk-forward evaluation
 
 ### Deployment {#sec-run}
 
-Each week `align_multi_template()` is called with frozen `ref`, `hyper`, `params`, and tuned ensemble parameters, returning `state` (`"pre_ignition"` / `"aligning"` / `"post_peak"`), peak estimate with CI, and aligned covariates for M2.
+Each week `align_multi_template()` is called with frozen `ref`, `hyper`, `params`, and tuned ensemble parameters, returning `state` (`"pre_ignition"` / `"aligning"` / `"post_peak"`), peak estimate with CI, and aligned covariates for $M_2$.
 
 **Key functions:** `run_alignment_prospective()`, `align_multi_template()`
 
@@ -144,13 +152,13 @@ Each week `align_multi_template()` is called with frozen `ref`, `hyper`, `params
 
 ## $M_2$ — Forecast Model {#sec-m2}
 
-**Goal:** forecast 1- and 2-week-ahead positivity using M1 alignment outputs.
+**Goal:** forecast 1- and 2-week-ahead positivity using $M_1$ alignment outputs.
 
-$M_2$ fits a joint binomial GAM for $h \in \{1,2\}$ on aligned-week space. Covariates from M1 (`newWeek`, template backbone $z_{s,w}(\delta, Kr)$) are leakage-sensitive — they depend on $g_{\mathrm{ref}}$. Real-time covariates (EWMA state $z^{(\mathrm{ema})}_{s,w}$, slope $d1$, curvature $d2$) are computed from raw surveillance data and do not leak.
+$M_2$ fits a joint binomial GAM for $h \in \{1,2\}$ on aligned-week space. Covariates from $M_1$ (`newWeek`, template backbone $z_{s,w}(\delta, Kr)$) are leakage-sensitive — they depend on $g_{\mathrm{ref}}$. Real-time covariates (EWMA state $z^{(\mathrm{ema})}_{s,w}$, slope $d1$, curvature $d2$) are computed from raw surveillance data and do not leak.
 
 ### Training {#sec-m2-training}
 
-Hyperparameters are selected by **nested LOSO**: for each held-out season, the reference curve and all M1 predictions are re-estimated on the remaining seasons only, eliminating template leakage. Phase 1 pre-computes M1 predictions once per fold; Phase 2 sweeps the M2 spec grid in minutes.
+Hyperparameters are selected by **nested LOSO**: for each held-out season, the reference curve and all $M_1$ predictions are re-estimated on the remaining seasons only, eliminating template leakage. Phase 1 pre-computes $M_1$ predictions once per fold; Phase 2 sweeps the $M_2$ spec grid in minutes.
 
 **Tuned spec** (189-spec nested LOSO, 10 seasons, mean NLL = 33.19):
 ```
@@ -164,41 +172,49 @@ alpha_state=0.10, lambda_w=0, w_floor=0.05
 
 ### Deployment {#sec-m2-deploy}
 
-Each week after ignition, $M_2$ is refit on historical data augmented with current-season rows. Hyperparameters are frozen; only GAM coefficients update. $M_2$ runs **after** $M_1$ each week — it requires the aligned covariates M1 just produced.
+Each week after ignition, $M_2$ is refit on historical data augmented with current-season rows. Hyperparameters are frozen; only GAM coefficients update. $M_2$ runs **after** $M_1$ each week — it requires the aligned covariates $M_1$ just produced.
 
 **Key functions:** `refit_stage2_weekly()`, `stage2_predict_series()`
+
+### Retrospective deployment {#sec-m2-retro}
+
+Before the live season begins, $M_2$ is fit on all historical seasons using the best nested-LOSO spec and the production reference curve (`nested_loso_refit_best()`). Because the spec was selected by nested LOSO — which never exposes any fold's test season to its own training — this fit is leakage-free: each season's fitted trajectory reflects only information that would have been available prospectively. The result serves as a sanity check (fitted curves should track observed positivity) and provides the baseline model state before any current-season data arrive.
+
+![$M_2$ fit-back on all historical seasons. Fitted 1- and 2-week-ahead trajectories (lines) overlaid on observed positivity (points) in aligned-week space.](figures/fit_back_by_season.png){width=100%}
+
+**Full code:** [`forecast_training.html §Fit-back`](forecast_training.html)
 
 ---
 
 ## Deployment sequence {#sec-train-deploy}
 
-Within each week: M1 aligns → if `state == "aligning"`, M2 refits and forecasts. Full implementation: [`prospective_deployment.html`](prospective_deployment.html).
+Within each week: $M_1$ aligns → if `state == "aligning"`, $M_2$ refits and forecasts. Full implementation: [`prospective_deployment.html`](prospective_deployment.html).
 
 | Step | What | When |
 |------|------|------|
 | 1 | Reference curve + `hyper` | Offline, once |
-| 2 | M0 ignition thresholds | Offline, once |
-| 3 | M1 LOSO walk-forward → `params_df` | Offline, once |
+| 2 | $M_0$ ignition thresholds | Offline, once |
+| 3 | $M_1$ LOSO walk-forward → `params_df` | Offline, once |
 | 4 | Post-peak flag parameters | Offline, once |
-| 5 | M2 nested LOSO hyperparameter tuning | Offline, once |
-| 6 | M2 initial fit on full historical data | Offline, before season start |
-| **7** | **Weekly: M1 → M2 refit → forecast** | **Online, every week** |
+| 5 | $M_2$ nested LOSO hyperparameter tuning | Offline, once |
+| 6 | $M_2$ initial fit on full historical data | Offline, before season start |
+| **7** | **Weekly: $M_1$ → $M_2$ refit → forecast** | **Online, every week** |
 
 ---
 
-## Document map {#sec-docmap}
+## Linked Documents {#sec-docmap}
 
-| Document | What it covers |
-|----------|---------------|
-| [`estimateRef.html`](estimateRef.html) | §@sec-refcurve — 6 reference curve methods, FS selection, per-season curves |
-| [`ignition_training.html`](ignition_training.html) | §@sec-m0 — ignition gate definitions and LOSO threshold tuning |
-| **[`loso_walkforward.html`](loso_walkforward.html)** | **§@sec-m1 — Multi-template ensemble: grid search tuning, extended boundary exploration, per-season plots** |
-| [`peak_detection_tuning.html`](peak_detection_tuning.html) | §@sec-peak-tuning — post-peak flag parameter tuning |
-| [`forecast_training.html`](forecast_training.html) | §@sec-m2 — $M_2$ forecast model specification, training, and nested LOSO hyperparameter tuning |
-| [`m1_m2_stacking.html`](m1_m2_stacking.html) | $M_1 \to M_2$ stacking — replacing static template with walk-forward $M_1$ predictions |
-| [`prospective_deployment.html`](prospective_deployment.html) | **Full deployment** — M0→M1→M2 walk-forward pipeline for the current season, with forecast evolution visualizations |
-| [`run.html`](run.html) | Current season M1-only prospective alignment (legacy; no M2 forecasts) |
-| *(this document)* | Overview — notation, stage descriptions, deployment sequence, multi-template architecture |
+| Document | Primary purpose |
+|----------|-----------------|
+| [`estimateRef.html`](estimateRef.html) | Build and inspect the aligned historical reference curve and per-season FS curves |
+| [`ignition_training.html`](ignition_training.html) | Define the ignition gates and tune `$M_0$` thresholds by LOSO |
+| **[`loso_walkforward.html`](loso_walkforward.html)** | **Tune `$M_1$` alignment and inspect walk-forward peak estimation behaviour** |
+| [`peak_detection_tuning.html`](peak_detection_tuning.html) | Tune the post-peak stopping rule |
+| [`forecast_training.html`](forecast_training.html) | Specify and tune `$M_2$`, including nested LOSO evaluation |
+| [`m1_m2_stacking.html`](m1_m2_stacking.html) | Describe how walk-forward `$M_1$` predictions replace the static `$M_2$` template feature |
+| [`prospective_deployment.html`](prospective_deployment.html) | Show the live `$M_0 \to M_1 \to M_2$` walk-forward pipeline on the current season |
+| [`run.html`](run.html) | Legacy `$M_1$`-only current-season alignment view |
+| *(this document)* | Provide the cross-document map and stage-level architecture summary |
 
 ---
 
@@ -241,3 +257,19 @@ sufficient data span the curve. The dilation $\delta_w$ is fixed at 0
 (`delta_on = FALSE`) until a further threshold is crossed. This prevents
 numerically unstable estimates early in the season when few observations are
 available.
+
+**Covariate capping for out-of-range extrapolation.** The `s(logN_now)` smooth in $M_2$
+is trained on historical testing volumes (N ≤ 16,310; logN ≤ 9.70). When the current
+season's testing volume exceeds the training range (e.g., 2025–26 peaked at N = 39,290;
+logN = 10.58), the flexible smooth (edf ≈ 5) extrapolates unreliably. At prediction time,
+`logN_now` is capped at the training data range to prevent this.
+
+**Soft ceiling on predicted positivity.** Historical peak positivity never exceeds
+~34%. A smooth soft-ceiling function, derived from the training data distribution,
+prevents the GAM from predicting unrealistically high values in extrapolation
+scenarios. The function is identity below the 95th percentile of training
+positivity (~26%), then tanh-squashes toward a data-driven ceiling
+($p_{\max}^{(\mathrm{train})}$ + buffer ≈ 37%). This provides a principled,
+smooth constraint rather than a hard clip: predictions near the historical
+maximum are barely affected (≤2% reduction), while extreme extrapolations
+(e.g., 57% → 37%) are strongly compressed.

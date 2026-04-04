@@ -3,7 +3,7 @@
 setwd("C:/Users/lennon.li/Documents/claude/PAGe")
 
 load("data/data.RData")
-source("R/ignitionTraining.R")
+source("R/m0_training.R")
 
 ign_fit <- fitIgnition(
   dat=alignedD, event_k=1L, lead=1L,

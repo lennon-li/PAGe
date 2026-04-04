@@ -25,13 +25,16 @@ library(flualign)
 library(future)
 library(furrr)
 
-source("../R/estimateRef.R")
-source("../R/loso_alignment.R")
+source("../R/m1_reference.R")
+source("../R/m1_loso.R")
 source("../R/utils.R")
-source("../R/prospective_running.R")
-source("../R/prospective_alignment.R")
-source("../R/align_multi_template.R")
-source("../R/fit.R")
+source("../R/pipeline_runtime_helpers.R")
+source("../R/m0_runtime.R")
+source("../R/m2_runtime.R")
+source("../R/pipeline_runtime.R")
+source("../R/m1_runtime.R")
+source("../R/m1_multi_template.R")
+source("../R/m1_fit.R")
 startWeek <- 27
 
 tuned  <- readRDS("../data/stage1_tuning.rds")
@@ -101,6 +104,14 @@ h4 {
 </style>
 ```
 
+::: {.callout-important}
+## What This Page Covers
+
+- Evaluate walk-forward `$M_1$` alignment under leave-one-season-out validation.
+- Compare the tuned alignment settings on peak-week accuracy.
+- Inspect parameter trajectories and season-specific behaviour.
+:::
+
 ## Reference curve and alignment
 
 All alignment uses the **FS median reference curve**: `estimateRef(method = "fs", agg = "median")`. This fits a factor-smooth GAM with per-season random curves, then takes the pointwise median across training seasons on the logit scale. The resulting population reference is robust to outlier seasons but retains week-level shape features — including jagged transitions where the median switches between seasons.
@@ -115,7 +126,7 @@ Three week indices appear in this analysis:
 
 All plots below use **newWeek** on the x-axis. A secondary flu-week annotation line at y=0.05 maps newWeek back to epidemiological weeks for clinical context.
 
-## Parameter Tuning via LOSO Grid Search
+## Parameter tuning via LOSO grid search
 
 The alignment hyperparameters were optimized using leave-one-season-out (LOSO) cross-validation over an extended grid search:
 
@@ -232,7 +243,7 @@ if (file.exists(MULTI_CACHE)) {
 
 ## Tuning summary
 
-The M1 alignment hyperparameters were tuned using a LOSO grid search (153 configurations) targeting the Weibull-weighted peak MAE. The selected specification (used above) is:
+The $M_1$ alignment hyperparameters were tuned using a LOSO grid search (153 configurations) targeting the Weibull-weighted peak MAE. The selected specification (used above) is:
 
 - k_ref = 25
 - multi_temperature = 0.25
@@ -240,9 +251,6 @@ The M1 alignment hyperparameters were tuned using a LOSO grid search (153 config
 - align_rise_weight = 1
 
 Best Weibull-weighted peak MAE (LOSO) = 1.1691 (4.0% improvement over previous baseline of 1.2178). These values were applied to the multi-template run and reflected in the short test script under scripts/_test_loso_comparison.R.
-
-
-```
 
 ## Alignment parameters over time
 
@@ -332,7 +340,6 @@ Per-season walkforward alignment using the multi-template ensemble. Grey = FS me
 ```{r season-reports}
 #| echo: false
 #| warning: false
-#| results: asis
 
 all_seasons_wf <- sort(unique(wf$params_df$season))
 
@@ -344,15 +351,20 @@ true_peaks_obs <- allD %>%
   ungroup() %>%
   select(season, true_peak_weekF = weekF)
 
-for (s in all_seasons_wf) {
+report_items <- list()
 
-  cat(sprintf("\n## %s\n\n", s))
+for (s in all_seasons_wf) {
+  season_items <- list(htmltools::tags$h2(s))
 
   s_all <- wf$params_df %>%
     filter(season == s, !is.na(iWeek_hat))
 
   if (nrow(s_all) == 0) {
-    cat("*No forecasts generated (ignition never detected).*\n\n")
+    season_items <- c(
+      season_items,
+      list(htmltools::tags$p("No forecasts generated (ignition never detected)."))
+    )
+    report_items <- c(report_items, season_items)
     next
   }
 
@@ -418,12 +430,10 @@ for (s in all_seasons_wf) {
   newW_grid <- seq(1, 52, by = 0.5)
   ref_curve <- tibble(
     newWeek = newW_grid,
-    p_ref   = plogis(ref_s$g_ref_fun_orig(newW_grid))
+    p_ref   = plogis(ref_s$g_ref_fun(newW_grid))
   )
 
-  cat("::: {.panel-tabset}\n\n")
-
-  tab_chunks <- lapply(s_params$eval_week, function(ew) {
+  season_tabs <- lapply(s_params$eval_week, function(ew) {
     .ref_curve <- ref_curve
 
     pw           <- wf$params_df %>% filter(season == s, eval_week == ew)
@@ -541,26 +551,23 @@ for (s in all_seasons_wf) {
         legend = list(orientation = "h", y = -0.20)
       )
 
-    e <- new.env(parent = globalenv())
-    e$tab_plot <- plt
-    knitr::knit_child(
-      text = c(sprintf("### nW %d", current_newW), "",
-               "```{r echo=FALSE, warning=FALSE}", "tab_plot", "```", ""),
-      envir = e, quiet = TRUE
+    htmltools::tagList(
+      htmltools::tags$h3(sprintf("nW %d", current_newW)),
+      plt
     )
   })
 
-  cat(unlist(tab_chunks), sep = "\n")
-
-  e_tbl <- new.env(parent = globalenv())
-  e_tbl$tbl_obj <- tbl
-  data_tab <- knitr::knit_child(
-    text = c("### Data", "", "```{r echo=FALSE}", "tbl_obj", "```", ""),
-    envir = e_tbl, quiet = TRUE
+  season_items <- c(
+    season_items,
+    season_tabs,
+    list(
+      htmltools::tags$h3("Data"),
+      htmltools::HTML(gt::as_raw_html(tbl))
+    )
   )
-  cat(data_tab)
 
-  cat("\n:::\n\n")
+  report_items <- c(report_items, season_items)
 }
-```
 
+do.call(htmltools::tagList, report_items)
+```

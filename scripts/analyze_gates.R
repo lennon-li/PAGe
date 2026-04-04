@@ -2,7 +2,7 @@
 setwd("C:/Users/lennon.li/Documents/claude/PAGe")
 
 load("data/data.RData")
-source("R/ignitionTraining.R")
+source("R/m0_training.R")
 
 ## Build ign_fit (same call as in QMD)
 ign_fit <- fitIgnition(

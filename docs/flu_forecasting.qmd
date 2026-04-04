@@ -27,11 +27,14 @@ library(MMWRweek)
 library(gt)
 library(flualign)
 
-source("../R/retro_estimation.R")
-source("../R/ignitionTraining.R")
-source("../R/prospective_training.R")
-source("../R/prospective_running.R")
-source("../R/module_training.R")
+source("../R/m0_retro.R")
+source("../R/m0_training.R")
+source("../R/m2_training.R")
+source("../R/pipeline_runtime_helpers.R")
+source("../R/m0_runtime.R")
+source("../R/m2_runtime.R")
+source("../R/pipeline_runtime.R")
+source("../R/m2_spec_grid.R")
 
 # ---- Settings ----
 startWeek   <- 27     # MMWR week number that defines weekF = 1
@@ -579,11 +582,6 @@ tuned$compare %>%  gt()
 ```
 
 
-
-
-
-::: panel-tabset
-
 ### LOSO results
 ```{r, eval = T}
 tuned$runtime
@@ -593,7 +591,7 @@ bp_display  <- tuned$best_params[names(tuned$best_params) %in% keep_params]
 data.frame(Parameter = names(unlist(bp_display)),
            Value     = unlist(bp_display), row.names = NULL) |>
   gt() |>
-  tab_header(title = "Best M0 parameters (LOSO tuned)")
+  tab_header(title = "Best M_0 parameters (LOSO tuned)")
 
 det_all <- detect_ignition_from_tuning(tuned, alignedD)
 det_all$compare |>
@@ -609,17 +607,19 @@ det_all$compare |>
 ```
 
 
-```{r, eval = T, results = 'asis', echo = FALSE}
+```{r, eval = T, echo = FALSE}
 seasons_in_data <- sort(unique(det_all$data$season))
-for (s in seasons_in_data) {
-  cat(paste0("\n\n### ", s, "\n\n"))
-  cat(gt::as_raw_html(plot_season_detection_table(det_all, s)))
-  cat("\n")
-}
+season_tables <- lapply(
+  seasons_in_data,
+  function(s) {
+    htmltools::tagList(
+      htmltools::tags$h3(s),
+      plot_season_detection_table(det_all, s)
+    )
+  }
+)
+do.call(htmltools::tagList, season_tables)
 ```
-
-
-:::
 
 ## $M_1$ - Prospective forecast training (offline training, online use)
 
@@ -995,7 +995,7 @@ data.frame(
     paste(as.character(x), collapse = ", ")
   }),
   row.names = NULL
-) |> gt::gt() |> gt::tab_header(title = "Best M1 spec")
+) |> gt::gt() |> gt::tab_header(title = "Best M_1 spec")
 
 
 
@@ -1032,7 +1032,7 @@ data.frame(
   Specification = names(spec_display_refit),
   Value = sapply(spec_display_refit, function(x) paste(as.character(x), collapse = ", ")),
   row.names = NULL
-) |> gt::gt() |> gt::tab_header(title = "Best M1 spec (refit-LOSO)")
+) |> gt::gt() |> gt::tab_header(title = "Best M_1 spec (refit-LOSO)")
 ```
 
 ```{r refit-loso-plot, eval = F, echo = T, fig.height = 14, fig.width = 14}
@@ -1054,7 +1054,7 @@ ggplotly(plot_stage2_joint_fit_by_season(
 
 # Prospective deployment and forecasting
 
-Data from the 2025-26 season are used prospectively. Each week after ignition detection, we refit the Stage-2 GAM on all historical seasons **plus the current season's data observed so far**, using time-decay weights ($\lambda_w = 0.20$) that down-weight older observations. Season-specific terms ($b_s$, factor-smooth $S_3$) are excluded from predictions because 2025-26 is an unseen factor level in the base model; the correction comes through $z_\text{ema}$ and the updated weighted fit.
+Data from the 2025-26 season are used prospectively. Each week after ignition detection, we refit the $M_1$ GAM on all historical seasons **plus the current season's data observed so far**, using time-decay weights ($\lambda_w = 0.20$) that down-weight older observations. Season-specific terms ($b_s$, factor-smooth $S_3$) are excluded from predictions because 2025-26 is an unseen factor level in the base model; the correction comes through $z_\text{ema}$ and the updated weighted fit.
 
 ## Pre-trained model
 
@@ -1063,9 +1063,9 @@ All trained components are bundled into a single `kit` object. The refit-LOSO sp
 | Variable | Source | Description |
 |---|---|---|
 | `template_df` | `ref$pred_df` | Smoothed reference curve (`newWeek`, `fit`). Drives $x^\delta_{s,w}$ and the ramp weight. |
-| `ign_fit` | `fitIgnition()` | Stage-1 model object; `make_prospective_kit` extracts the GAM classifier automatically. |
-| `tuned$best_params` | `loso_M0v2()` | LOSO-tuned Stage-1 threshold parameters. |
-| `joint_out_refit` | `train_stage2_joint()` | Stage-2 training output using refit-LOSO best spec (includes `lambda_w`, `w_floor`). |
+| `ign_fit` | `fitIgnition()` | $M_0$ model object; `make_prospective_kit` extracts the GAM classifier automatically. |
+| `tuned$best_params` | `loso_M0v2()` | LOSO-tuned $M_0$ threshold parameters. |
+| `joint_out_refit` | `train_stage2_joint()` | $M_1$ training output using refit-LOSO best spec (includes `lambda_w`, `w_floor`). |
 
 ```{r prosp-kit, eval=F, echo=T}
 kit <- make_prospective_kit(
@@ -1116,7 +1116,7 @@ DT::datatable(currentSeason, options = list(pageLength = 25, scrollX = TRUE))
 
 ## $M_0$: Walk-forward ignition detection (from weekF = 5)
 
-`run_ignition_weekly` steps through each week from `start_week` and applies the Stage-1 detector with only data available at that week.
+`run_ignition_weekly` steps through each week from `start_week` and applies the $M_0$ detector with only data available at that week.
 
 ```{r prosp-ignition, eval=F, echo=T}
 ign_out <- run_ignition_weekly(
@@ -1130,8 +1130,6 @@ plots_ign        <- plot_ignition_weekly_snapshots(
 )
 iWeek_hat_locked <- ign_out$iWeek_hat_locked
 ```
-
-::: panel-tabset
 
 ```{r, results="asis", echo=F, eval=F}
 for (nm in names(plots_ign)) {
@@ -1184,8 +1182,6 @@ local({
 })
 ```
 
-:::
-
 ```{r, echo=F}
 cat("Locked ignition week:", iWeek_hat_locked, "\n")
 ```
@@ -1203,11 +1199,11 @@ If `iWeek_used` is `NA` (ignition not yet detected), **stop here**.
 
 ## $M_1$: Walk-forward weekly refit forecast
 
-Starting from the locked ignition week, the Stage-2 GAM is refit at each observed week using all historical seasons plus 2025-26 data up to that week. Season-specific terms are excluded during prediction (2025-26 is unseen at the base-model level); the real-time signal enters through $z_\text{ema}$ and the time-decay-weighted fit.
+Starting from the locked ignition week, the $M_1$ GAM is refit at each observed week using all historical seasons plus 2025-26 data up to that week. Season-specific terms are excluded during prediction (2025-26 is unseen at the base-model level); the real-time signal enters through $z_\text{ema}$ and the time-decay-weighted fit.
 
 ```{r prosp-walkforward, eval=F, echo=T}
 if (is.na(iWeek_used)) {
-  message("Ignition not detected (iWeek_used is NA). Skipping Stage-2 walk-forward.")
+  message("Ignition not detected (iWeek_used is NA). Skipping M_1 walk-forward.")
 } else {
   n_weeks_season <- get_full_cycle_weeks(2025)
 
@@ -1311,8 +1307,6 @@ if (!is.na(iWeek_used) && length(walk_preds) > 0) {
 }
 ```
 
-::: panel-tabset
-
 ```{r, results="asis", echo=F, eval=F}
 if (!is.na(iWeek_used) && exists("plots_wf") && length(plots_wf) > 0) {
   for (nm in names(plots_wf)) {
@@ -1334,8 +1328,6 @@ if (!is.na(iWeek_used) && exists("plots_wf") && length(plots_wf) > 0) {
 }
 ```
 
-:::
-
 
 
 # Summary
@@ -1345,8 +1337,8 @@ if (!is.na(iWeek_used) && exists("plots_wf") && length(plots_wf) > 0) {
 - Retrospective ignition labeling + alignment (for template building): `flagIgnition()` (threshold rule) → `alignIgnition()` adds `iWeek`, `phase`, and aligned `newWeek` (attribute `anchorWeek`).
 - Common template curve: `estimateRef()` fits the pooled cyclic GAMM and returns the template `pred_df` (columns `newWeek`, `fit`, `low`, `high`).
 - Prospective derivatives (no look-ahead): `add_prospective_derivs_link()` adds `d1_link`, `d2_link` week-by-week.
-- Stage 1 ignition detector (prospective gate): `fitIgnition()` → `tuneIgnitionGrid_M0v2()` / `loso_M0v2()` → `detectIgnitionBySeason_M0v2()`.
-- Stage 2 forecast model: `tune_stage2_loso_shift_template()` → `prep_stage2_joint()` → `train_stage2_joint()` (Stage-2 design columns include `logit_f_eff`, `z_ema`, `logN_now`, `d1_now`, `d2_now`).
+- $M_0$ ignition detector (prospective gate): `fitIgnition()` → `tuneIgnitionGrid_M0v2()` / `loso_M0v2()` → `detectIgnitionBySeason_M0v2()`.
+- $M_1$ forecast model: `tune_stage2_loso_shift_template()` → `prep_stage2_joint()` → `train_stage2_joint()` ($M_1$ design columns include `logit_f_eff`, `z_ema`, `logN_now`, `d1_now`, `d2_now`).
 
 
 

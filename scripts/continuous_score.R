@@ -18,7 +18,7 @@ suppressPackageStartupMessages({
   library(future); library(furrr)
 })
 load("data/data.RData")
-source("R/ignitionTraining.R")
+source("R/m0_training.R")
 source("R/getCurrentD.R")
 
 ign_fit <- fitIgnition(

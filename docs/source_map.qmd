@@ -1,0 +1,212 @@
+---
+title: "R Source Map"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+::: {.callout-note}
+This page is a source map for the root-level `R/` directory, which is mirrored into `flualign/R/` for the installable package. It is meant to answer two questions quickly: which file owns a piece of the pipeline, and which functions live in that file.
+:::
+
+## At a glance
+
+```{r}
+file_meta <- data.frame(
+  file = c(
+    "m0_training.R", "m0_retro.R", "m0_runtime.R", "flagIgnition.R",
+    "m1_reference.R", "m1_reference_helpers.R", "m1_reference_loader.R",
+    "m1_fit.R", "m1_hyperparams.R", "m1_loso.R", "m1_runtime.R",
+    "m1_multi_template.R", "m1_peak_status.R", "m1_peak_flags.R",
+    "m1_peak_summary.R", "m1_peak_distribution.R", "m1_alignment_plots.R",
+    "m2_training.R", "m2_spec_grid.R", "m2_nested_loso.R", "m2_runtime.R",
+    "pipeline_bridge.R", "pipeline_runtime_helpers.R", "pipeline_runtime.R",
+    "align_forecast_pipeline_dilate.R", "forecast_post_peak_gam.R",
+    "checkSeasonLength.R", "check_scale_identifiability.R", "identifiability.R",
+    "getCurrentD.R", "score_params.R", "simulate.R",
+    "plot.R", "plotRes.R", "plotSeasonCurves.R",
+    "utils.R", "migrate_r_packages.R"
+  ),
+  area = c(
+    rep("M_0: ignition", 4),
+    rep("M_1: reference and alignment", 13),
+    rep("M_2: forecast training and runtime", 4),
+    rep("Pipeline orchestration", 3),
+    rep("Supporting analyses and utilities", 13)
+  ),
+  purpose = c(
+    "Train and tune the ignition detector, including LOSO utilities and ignition decision helpers.",
+    "Run retrospective ignition grid searches and helper plots for historical alignment to ignition anchors.",
+    "Run weekly M_0 detection on a current season and visualize the weekly snapshots.",
+    "Apply the four-rule threshold detector to flag the ignition week for a single season.",
+    "Estimate the reference epidemic curve and derivative summaries from historical data.",
+    "Define reusable reference-curve closures and helpers that package the fitted GAM as accessors.",
+    "Load example reference objects and built-in package data used in demos and documentation.",
+    "Fit tau and delta by matching a season to the reference curve.",
+    "Learn high-level M_1 alignment hyperparameters from retrospective tuning results.",
+    "Run LOSO and walk-forward evaluation for alignment and hyperparameter tuning.",
+    "Run prospective M_1 alignment, peak detection, and peak calibration.",
+    "Combine multiple reference templates into the multi-template alignment ensemble.",
+    "Turn alignment outputs into a coarse peak-state label such as pre-peak or post-peak.",
+    "Flag whether the season has likely passed its peak in real time.",
+    "Summarize peak timing implied by an alignment fit.",
+    "Estimate the peak-week distribution and candidate peak-rule settings across seasons.",
+    "Plot how alignment trajectories evolve as more weekly data arrive.",
+    "Prepare, train, refit, and score the main Stage-2 forecasting models.",
+    "Define Stage-2 model specifications, feature engineering, and grid-search helpers.",
+    "Run nested LOSO evaluation for the full M_1 to M_2 forecasting stack.",
+    "Build pseudo-prospective Stage-2 snapshots and turn them into forecast series.",
+    "Bridge M_1 outputs into M_2 inputs and run the weekly M_0 -> M_1 -> M_2 chain.",
+    "Provide small shared helpers used across runtime code paths.",
+    "Expose the end-to-end prospective pipeline entry points for one-season runs.",
+    "Legacy exploratory helper for dilation-based alignment plus forecasting in one function.",
+    "Legacy post-peak forecasting helper based on a GAM without further alignment updates.",
+    "Check whether a season has enough observed weeks to support downstream analysis.",
+    "Check whether scale is identifiable early enough for alignment-based forecasting.",
+    "Older identifiability helper retained for comparison with the current rule.",
+    "Extract or derive the current scale parameter used in older alignment workflows.",
+    "Score ignition-threshold parameter settings on historical data.",
+    "Simulate flu seasons and load the built-in historical influenza example data.",
+    "Generic forecast plotting helper.",
+    "Legacy plotting helper for summarizing result objects.",
+    "Plot season-level observed and fitted curves with ignition metadata.",
+    "General mathematical and table-building utilities shared across the codebase.",
+    "Local helper for migrating installed R packages between R versions."
+  ),
+  stringsAsFactors = FALSE
+)
+
+files <- sort(list.files("../R", pattern = "\\.[Rr]$", full.names = TRUE))
+
+extract_desc <- function(lines, i) {
+  j <- i - 1
+  block <- character()
+  while (j >= 1 && grepl("^#'", lines[j])) {
+    block <- c(lines[j], block)
+    j <- j - 1
+  }
+  block <- sub("^#' ?", "", block)
+  block <- trimws(block)
+  block <- block[nzchar(block)]
+  block <- block[!grepl("^@", block)]
+  if (!length(block)) {
+    return(NA_character_)
+  }
+  block[1]
+}
+
+inventory_one <- function(path) {
+  lines <- readLines(path, warn = FALSE)
+  idx <- grep("^[A-Za-z.][A-Za-z0-9._]*\\s*<-\\s*function\\s*\\(", lines)
+  if (!length(idx)) {
+    return(data.frame(
+      file = basename(path),
+      fun = character(),
+      description = character(),
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  out <- data.frame(
+    file = basename(path),
+    fun = sub("^([A-Za-z.][A-Za-z0-9._]*)\\s*<-.*$", "\\1", lines[idx]),
+    description = vapply(idx, function(i) extract_desc(lines, i), character(1)),
+    stringsAsFactors = FALSE
+  )
+
+  out[!duplicated(out[c("file", "fun")]), , drop = FALSE]
+}
+
+fun_inventory <- do.call(rbind, lapply(files, inventory_one))
+
+desc_overrides <- c(
+  checkSeasonLength = "Check whether each season has enough usable observations for the intended analysis window.",
+  getCurrentD = "Extract the current delta or scale estimate from older alignment result objects.",
+  plot_det_facet = "Plot ignition-detection behavior across parameter settings and seasons.",
+  run_ignition_weekly = "Run the weekly M_0 ignition detector on one current-season data stream.",
+  plot_ignition_weekly_snapshots = "Visualize weekly M_0 detection snapshots over a season.",
+  detect_ignition_from_tuning = "Apply tuned ignition parameters to produce weekly ignition decisions.",
+  loso_M0v2 = "Run leave-one-season-out evaluation for the M_0 v2 ignition detector.",
+  negloglik_tau_delta = "Compute the alignment objective used to estimate tau and delta.",
+  tau_profile_se = "Approximate uncertainty for tau from the profile objective.",
+  fit_tau_delta_old = "Older tau-delta fitting routine retained for comparison.",
+  cov_tau_delta_from_profile = "Estimate a covariance matrix for tau and delta from the profile surface.",
+  safe_obj = "Safely evaluate an objective function and return a large penalty on failure.",
+  learn_alignment_hyperparams = "Summarize retrospective tuning results into a chosen M_1 hyperparameter setting.",
+  peak_summary_from_fit = "Summarize predicted peak timing and related quantities from an alignment fit.",
+  stage2_extract_hyperparams = "Extract the Stage-2 hyperparameters needed for runtime prediction from a fitted object.",
+  score_stage2_metrics = "Compute forecast error metrics used to compare Stage-2 models.",
+  train_stage2_joint_prepped = "Fit a Stage-2 model after the training data have already been prepared.",
+  plot_tune_stage2_heatmap = "Visualize Stage-2 tuning scores over a two-dimensional hyperparameter grid.",
+  .plot_stage2_joint_fit_prosp = "Internal plotting helper for prospective Stage-2 fit diagnostics.",
+  load_prospective_kit = "Load the data bundle needed to run the prospective weekly pipeline.",
+  plot_forecast = "Plot observed data alongside forecast trajectories.",
+  plotRes = "Plot legacy result objects in a compact summary view.",
+  simulate_flu_seasons = "Simulate synthetic seasonal flu trajectories for experimentation.",
+  load_flu_hist = "Load the bundled historical influenza dataset used in examples.",
+  num_deriv = "Compute a numerical derivative for a univariate function.",
+  template_peak_u = "Return the reference-curve location of the peak on the template time scale.",
+  is_cov_ok = "Check whether a covariance estimate is numerically usable.",
+  wilson_ci = "Compute a Wilson confidence interval for a binomial proportion.",
+  n_weeks_in_start_year = "Return the number of epidemiological weeks in the starting calendar year of a season.",
+  logit = "Apply the logit transform.",
+  g_ref_safe = "Safely evaluate the reference curve on the link scale.",
+  make_g_ref_fun = "Build a callable reference function from a fitted GAM.",
+  make_g_ref_mu_se = "Build a callable reference mean-and-SE accessor from a fitted GAM.",
+  makeTable = "Create a formatted summary table from vector inputs.",
+  mark_season_weeks = "Mark which observations belong to the active in-season portion of each season.",
+  get_newWeek_from_week = "Map surveillance week numbers into within-season week indices.",
+  remove_global_functions = "Remove globally assigned helper functions created during exploratory work."
+)
+
+missing_desc <- is.na(fun_inventory$description) | !nzchar(fun_inventory$description)
+fun_inventory$description[missing_desc] <- desc_overrides[fun_inventory$fun[missing_desc]]
+fun_inventory$description[is.na(fun_inventory$description) | !nzchar(fun_inventory$description)] <-
+  "No inline description is available; see the source for details."
+
+summary_tbl <- merge(file_meta, aggregate(fun ~ file, fun_inventory, length), by = "file", all.x = TRUE)
+summary_tbl$fun[is.na(summary_tbl$fun)] <- 0L
+names(summary_tbl)[names(summary_tbl) == "fun"] <- "Functions"
+summary_tbl <- summary_tbl[match(file_meta$file, summary_tbl$file), ]
+
+knitr::kable(
+  summary_tbl[, c("file", "area", "Functions", "purpose")],
+  col.names = c("File", "Area", "Functions", "Role"),
+  align = c("l", "l", "r", "l")
+)
+```
+
+## By module
+
+```{r results='asis'}
+areas <- unique(file_meta$area)
+
+for (area in areas) {
+  cat("## ", area, "\n\n", sep = "")
+  area_rows <- file_meta[file_meta$area == area, , drop = FALSE]
+
+  for (i in seq_len(nrow(area_rows))) {
+    file_i <- area_rows$file[i]
+    cat("### `", file_i, "`\n\n", sep = "")
+    cat(area_rows$purpose[i], "\n\n")
+    cat("Mirror: `flualign/R/", file_i, "`.\n\n", sep = "")
+
+    funcs_i <- fun_inventory[fun_inventory$file == file_i, c("fun", "description"), drop = FALSE]
+    if (!nrow(funcs_i)) {
+      cat("This file does not define top-level functions.\n\n")
+      next
+    }
+
+    rownames(funcs_i) <- NULL
+    names(funcs_i) <- c("Function", "Description")
+    print(knitr::kable(funcs_i, align = c("l", "l")))
+    cat("\n")
+  }
+}
+```

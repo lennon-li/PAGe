@@ -3,9 +3,9 @@ suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(mgcv))
 suppressPackageStartupMessages(library(data.table))
 load("data/data.RData")
-source("R/ignitionTraining.R")
-source("R/module_training.R")
-source("R/prospective_training.R")   # wins for shared fns
+source("R/m0_training.R")
+source("R/m2_spec_grid.R")
+source("R/m2_training.R")   # wins for shared fns
 
 alignedD_prosp <- add_prospective_derivs_link(alignedD, k=5L, eps=1e-6, min_obs=4L)
 nc <- min(8L, max(1L, parallel::detectCores() - 1L))
@@ -80,9 +80,9 @@ if (nrow(r1) == nrow(rmc) && !any(!r1$ok) && !any(!rmc$ok)) {
 }
 
 # ============================================================
-# PATH 2: tune_stage2_loso_spec_grid_parallel (module_training.R)
+# PATH 2: tune_stage2_loso_spec_grid_parallel (m2_spec_grid.R)
 # ============================================================
-source("R/module_training.R")   # restore module versions
+source("R/m2_spec_grid.R")   # restore module versions
 
 cat("\n--- PATH 2: tune_stage2_loso_spec_grid_parallel ---\n")
 sg <- expand_grid_specs(

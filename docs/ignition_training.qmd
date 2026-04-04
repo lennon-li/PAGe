@@ -26,10 +26,13 @@ library(MMWRweek)
 library(gt)
 library(flualign)
 
-source("../R/retro_estimation.R")
-source("../R/ignitionTraining.R")
-source("../R/prospective_training.R")
-source("../R/prospective_running.R")
+source("../R/m0_retro.R")
+source("../R/m0_training.R")
+source("../R/m2_training.R")
+source("../R/pipeline_runtime_helpers.R")
+source("../R/m0_runtime.R")
+source("../R/m2_runtime.R")
+source("../R/pipeline_runtime.R")
 
 startWeek <- 27L
 
@@ -98,9 +101,15 @@ h4 {
 </style>
 ```
 
-This document trains the prospective ignition detector ($M_0$) of the PAGe pipeline. The detector uses only information available up to the current week to decide whether the flu season has "ignited" (started rising), and returns the earliest confirmed ignition week.
+::: {.callout-important}
+## What This Page Covers
 
-**Prerequisites:** The reference curve estimation (§1.2 in the [pipeline overview](pipeline_overview.html)) provides the `alignedD` training dataset via retrospective ignition labelling using the manual labels defined below.
+- Define the prospective ignition gates used by `$M_0$`.
+- Tune the gate thresholds by leave-one-season-out evaluation.
+- Inspect per-season detection behaviour and threshold tradeoffs.
+
+The aligned historical data used here come from retrospective ignition labels and reference-curve preparation described in the [pipeline overview](pipeline_overview.html).
+:::
 
 ```{r build-aligned}
 #| message: false
@@ -127,7 +136,7 @@ outs <- res$data %>%
 alignedD <- alignIgnition(outs)
 ```
 
-# $M_0$ — Prospective ignition detection
+## $M_0$ — Prospective ignition detection
 
 We pose ignition detection as a **prospective** decision problem. For each season $s$ and week $w$, the detector uses information available up to week $w$ to decide whether ignition has occurred, and returns the **earliest** ignition week.
 
@@ -383,7 +392,7 @@ bp_display  <- tuned$best_params[names(tuned$best_params) %in% keep_params]
 data.frame(Parameter = names(unlist(bp_display)),
            Value     = unlist(bp_display), row.names = NULL) |>
   gt() |>
-  tab_header(title = "Best M0 parameters (LOSO tuned)")
+  tab_header(title = "Best M_0 parameters (LOSO tuned)")
 
 det_all <- detect_ignition_from_tuning(tuned, alignedD)
 det_all$compare |>
@@ -399,14 +408,18 @@ det_all$compare |>
 ```
 
 ```{r season-tabs}
-#| results: asis
 #| echo: false
 seasons_in_data <- sort(unique(det_all$data$season))
-for (s in seasons_in_data) {
-  cat(paste0("\n\n### ", s, "\n\n"))
-  cat(gt::as_raw_html(plot_season_detection_table(det_all, s)))
-  cat("\n")
-}
+season_tables <- lapply(
+  seasons_in_data,
+  function(s) {
+    htmltools::tagList(
+      htmltools::tags$h3(s),
+      plot_season_detection_table(det_all, s)
+    )
+  }
+)
+do.call(htmltools::tagList, season_tables)
 ```
 
 :::

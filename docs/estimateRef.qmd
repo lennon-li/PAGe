@@ -80,6 +80,14 @@ h4 {
 </style>
 ```
 
+::: {.callout-important}
+## What This Page Covers
+
+- Build the aligned historical dataset used downstream by the rest of the pipeline.
+- Estimate the common reference curve and per-season FS curves.
+- Inspect aligned peaks, derivatives, and the saved reference artifacts.
+:::
+
 ## Notation and data structure
 
 Let $s = 1,\dots,S$ index influenza seasons and let $w$ denote the within-season flu-week number. For each season–week $(s,w)$, define:
@@ -166,7 +174,7 @@ d1_{s,w} = \frac{d}{dw}\tilde p_s(w), \qquad
 d2_{s,w} = \frac{d^2}{dw^2}\tilde p_s(w).
 $$
 
-These are used as features for ignition detection (slope and curvature signals) and downstream in M2 as real-time covariates.
+These are used as features for ignition detection (slope and curvature signals) and downstream in $M_2$ as real-time covariates.
 
 ### Per-season observed vs fitted peaks
 
@@ -237,7 +245,7 @@ for (s in sort(unique(res$data$season))) {
 
 ## Ignition week definition
 
-**For all historical seasons used here, ignition weeks are manually verified labels** supplied via `manual_labels`. The algorithmic gate conditions ($\tilde p > 0.01$, slope $> 0.4$, curvature $> -0.01$, etc.) are bypassed when a season appears in `manual_labels` — `flagIgnition()` uses the supplied week directly. Manual labels are used for reference curve estimation because they give a cleaner, bias-free alignment baseline; the algorithmic detector is trained and evaluated separately in M0.
+**For all historical seasons used here, ignition weeks are manually verified labels** supplied via `manual_labels`. The algorithmic gate conditions ($\tilde p > 0.01$, slope $> 0.4$, curvature $> -0.01$, etc.) are bypassed when a season appears in `manual_labels` — `flagIgnition()` uses the supplied week directly. Manual labels are used for reference curve estimation because they give a cleaner, bias-free alignment baseline; the algorithmic detector is trained and evaluated separately in $M_0$.
 
 The `manual_labels` used here:
 
@@ -294,7 +302,7 @@ anchorWeek
 Using aligned time `newWeek`, we estimate a population-level reference curve $g_{\mathrm{ref}}(w^a)$ that represents the typical seasonal trajectory of flu positivity. This curve serves two purposes:
 
 1. **Alignment**: its peak location anchors the aligned time axis for peak-week estimation.
-2. **M2 covariate**: $g_{\mathrm{ref}}(w^a)$ enters the forecasting model as a template predictor encoding "where in the typical season are we."
+2. **$M_2$ covariate**: $g_{\mathrm{ref}}(w^a)$ enters the forecasting model as a template predictor encoding "where in the typical season are we."
 
 ### Model specification
 

@@ -26,13 +26,15 @@ library(MMWRweek)
 library(gt)
 library(flualign)
 
-source("../R/retro_estimation.R")
-source("../R/ignitionTraining.R")
-source("../R/prospective_training.R")
-source("../R/prospective_running.R")
-source("../R/module_training.R")
-source("../R/nested_loso.R")
-source("../test/R/ignitionTraining.R")
+source("../R/m0_retro.R")
+source("../R/m0_training.R")
+source("../R/m2_training.R")
+source("../R/pipeline_runtime_helpers.R")
+source("../R/m0_runtime.R")
+source("../R/m2_runtime.R")
+source("../R/pipeline_runtime.R")
+source("../R/m2_spec_grid.R")
+source("../R/m2_nested_loso.R")
 # Pull internal helpers missing from R/ mirror
 .plot_stage2_joint_fit_prosp <- flualign:::.plot_stage2_joint_fit_prosp
 
@@ -138,13 +140,20 @@ h4 {
 </style>
 ```
 
-This document covers the $M_2$ positivity forecast model of the PAGe pipeline. $M_2$ is trained offline using all historical seasons and refitted online each week after ignition is detected. It takes alignment outputs from §1–6 of the [pipeline overview](pipeline_overview.html) as inputs.
+::: {.callout-important}
+## What This Page Covers
 
-**Prerequisites:**
+- Define the `$M_2$` model and its feature set.
+- Explain the weekly refit logic used after ignition.
+- Tune the `$M_2$` hyperparameters with nested LOSO.
+- Inspect the fit-back of the production model on historical seasons.
 
-- `alignedD` — historical data aligned using manual ignition labels (§1.2, reference curve estimation)
-- `template_df` — reference curve from `estimateRef()` (§1.2)
-- `det_all` — per-season ignition detections from tuned $M_0$ (§1.1)
+Inputs assumed here:
+
+- `alignedD` — historical data aligned using manual ignition labels
+- `template_df` — reference curve from `estimateRef()`
+- `det_all` — per-season ignition detections from tuned `$M_0$`
+:::
 
 ## Model specification
 
@@ -201,9 +210,9 @@ Below, each term in Eq. (@eq-mod1) has (i) an interpretation, (ii) its hyperpara
 
 ### $z_{s,w}(\delta,Kr)$
 
-- Template backbone covariate: injects the reference curve shape into M2's linear predictor, ramped in gradually after ignition.
+- Template backbone covariate: injects the reference curve shape into $M_2$'s linear predictor, ramped in gradually after ignition.
 
-  The reference curve $g_{\mathrm{ref}}$ (from §M1 training, on response scale) is evaluated at the aligned week `newWeek`, shifted by an integer $\delta$, then logit-transformed and ramped:
+  The reference curve $g_{\mathrm{ref}}$ (from §$M_1$ training, on response scale) is evaluated at the aligned week `newWeek`, shifted by an integer $\delta$, then logit-transformed and ramped:
 
   $$
   f^{(\delta)}_{s,w} = g_{\mathrm{ref}}\!\left(w^a_{s,w} + \delta\right),
@@ -216,7 +225,7 @@ Below, each term in Eq. (@eq-mod1) has (i) an interpretation, (ii) its hyperpara
   $$
   is a linear ramp from 0 at ignition to 1 after $Kr$ weeks (with $Kr=1$ meaning no ramp).
 
-- **Notation warning — $\delta$ here is not M1's dilation $\delta_w$.** In M1, $\tau_w$ (continuous shift) and $\delta_w$ (dilation/stretch) are fitted every week to align the current season to $g_{\mathrm{ref}}$. That alignment has already been absorbed into `newWeek` ($w^a_{s,w}$) by the time M2 sees it. The $\delta$ in M2 is a separate, fixed integer-week nudge applied to the template covariate, tuned once offline by LOSO grid search. It compensates for any systematic residual timing offset between the aligned time axis and the template peak — for example, if M1's alignment consistently centres slightly early. In practice, the tuned value is often $\delta = 0$, confirming that M1's alignment already handles the shift.
+- **Notation warning — $\delta$ here is not $M_1$'s dilation $\delta_w$.** In $M_1$, $\tau_w$ (continuous shift) and $\delta_w$ (dilation/stretch) are fitted every week to align the current season to $g_{\mathrm{ref}}$. That alignment has already been absorbed into `newWeek` ($w^a_{s,w}$) by the time $M_2$ sees it. The $\delta$ in $M_2$ is a separate, fixed integer-week nudge applied to the template covariate, tuned once offline by LOSO grid search. It compensates for any systematic residual timing offset between the aligned time axis and the template peak — for example, if $M_1$'s alignment consistently centres slightly early. In practice, the tuned value is often $\delta = 0$, confirming that $M_1$'s alignment already handles the shift.
 
 - **Hyperparams:**
   - shift $\delta$ (integer weeks; often 0 after tuning)
@@ -360,15 +369,15 @@ ggplotly(
 
 ## Hyperparameter tuning
 
-$M_2$ hyperparameters are selected by **nested leave-one-season-out (LOSO) cross-validation**. Standard LOSO leaks alignment information: it uses a single reference curve fitted on all seasons, including the held-out one. Nested LOSO fixes this by re-estimating the reference curve and all M1 predictions per fold.
+$M_2$ hyperparameters are selected by **nested leave-one-season-out (LOSO) cross-validation**. Standard LOSO leaks alignment information: it uses a single reference curve fitted on all seasons, including the held-out one. Nested LOSO fixes this by re-estimating the reference curve and all $M_1$ predictions per fold.
 
 **Protocol per fold:**
 
 1. Hold out season $s^*$.
 2. Fit $g_{\mathrm{ref}}^{(-s^*)}$ on the remaining seasons → per-fold template.
-3. Run M1 walk-forward on training seasons → M1 stacking features.
-4. Train $M_2$ with the per-fold template and M1 features.
-5. Run M1 walk-forward on $s^*$ → M1 test features.
+3. Run $M_1$ walk-forward on training seasons → $M_1$ stacking features.
+4. Train $M_2$ with the per-fold template and $M_1$ features.
+5. Run $M_1$ walk-forward on $s^*$ → $M_1$ test features.
 6. Evaluate $M_2$ on $s^*$ using uniform-weight NLL over the first 12 post-ignition weeks.
 
 Steps 1–3 (Phase 1) are pre-computed once per fold and cached; Phase 2 (steps 4–6) runs in minutes regardless of grid size.
@@ -381,7 +390,7 @@ The table below lists every hyperparameter, its role in the model, and the value
 #| echo: false
 tibble::tribble(
   ~Parameter,  ~Description,                                                                                                                                                    ~Type,          ~`Grid / value`,
-  "δ (delta)", "Integer-week nudge to the template covariate on the aligned axis. Compensates for residual timing offset after M1 alignment. δ=0 means no nudge.",             "Integer",      "Fixed: 0",
+  "δ (delta)", "Integer-week nudge to the template covariate on the aligned axis. Compensates for residual timing offset after $M_1$ alignment. δ=0 means no nudge.",             "Integer",      "Fixed: 0",
   "Kr",        "Template ramp length in weeks. Kr=1 means full template weight from week 1 of ignition; Kr>1 blends in gradually over Kr weeks.",                              "Integer ≥ 1",  "{1, 2, 3}",
   "k_f",       "Basis dimension for the template smooth $S_1^h$. Controls how nonlinearly the model maps the template covariate to the response. k_f=2 is near-linear.",       "Integer ≥ 2",  "{2, 3, 4}",
   "k_e",       "Basis dimension for the EMA-state smooth $S_4^h$. Controls nonlinearity of the current-level correction.",                                                     "Integer ≥ 0",  "{3, 4, 6}",
@@ -393,7 +402,7 @@ tibble::tribble(
   "k_w",       "Basis dimension for global aligned-time smooth $S_2^h$. k_w=0 disables.",                                                                                      "Integer ≥ 0",  "Fixed: 0"
 ) |>
   gt() |>
-  tab_header(title = "M2 tuning parameters") |>
+  tab_header(title = "M_2 tuning parameters") |>
   cols_width(Parameter ~ px(90), Description ~ px(460),
              Type ~ px(110), `Grid / value` ~ px(240)) |>
   tab_style(style = cell_text(weight = "bold"),
@@ -414,14 +423,16 @@ $$
 
 Evaluation always uses **uniform weights** regardless of $\lambda_w$.
 
+Predicted probabilities $\hat{p}_i$ pass through the **soft positivity ceiling** before NLL is computed, matching the transformation applied at deployment time. The ceiling is a tanh squash above the 95th-percentile of training positivity ($p_{\text{knee}}$), asymptoting toward $p_{\text{ceil}} = p_{\max}^{(\text{train})} + 0.5(p_{\max}^{(\text{train})} - p_{\text{knee}})$. Because historical seasons never exceed $\sim$34% positivity the cap is near-identity within the training distribution and has negligible effect on NLL or spec ranking. Its purpose is to ensure that the model evaluated during training is identical to the model deployed prospectively.
+
 ### Tuning call
 
-The nested LOSO is implemented as a two-phase script (`scripts/run_nested_loso_v4.R`). Phase 1 pre-computes M1 predictions once per fold; Phase 2 loops over all specs.
+The nested LOSO is implemented as a two-phase script (`scripts/run_nested_loso_v4.R`). Phase 1 pre-computes $M_1$ predictions once per fold; Phase 2 loops over all specs.
 
 ```{r tuning-call}
 #| eval: false
 
-# --- Phase 1: build fold + pre-compute M1 (one-time per held-out season) ---
+# --- Phase 1: build fold + pre-compute $M_1$ (one-time per held-out season) ---
 fold <- nested_loso_build_fold(
   allD = allD, test_season = test_s, exclude_seasons = "2015-16",
   k_ref = 25L, ref_method = "fs", manual_labels = manual_labels
@@ -484,10 +495,10 @@ best_spec_nested <- prod_results_v4$best_spec
 The tuned spec is `Kr=1, k_f=2, k_e=4, alpha_state=0.10` with `delta=0, k_s=0, lambda_w=0`.
 
 **`delta = 0` — no template shift.**
-M1's alignment already places the current season correctly on the reference curve. No residual systematic timing offset remains. This validates that multi-template alignment with `k_ref=25` is well-calibrated.
+$M_1$'s alignment already places the current season correctly on the reference curve. No residual systematic timing offset remains. This validates that multi-template alignment with `k_ref=25` is well-calibrated.
 
 **`Kr = 1` — no ramp.**
-The template covariate is applied at full weight from the first week after ignition. There is no benefit to a gradual blend — once ignition fires, the reference curve shape is immediately a reliable anchor. This reflects the high quality of the M1 alignment.
+The template covariate is applied at full weight from the first week after ignition. There is no benefit to a gradual blend — once ignition fires, the reference curve shape is immediately a reliable anchor. This reflects the high quality of the $M_1$ alignment.
 
 **`k_f = 2` — near-linear template smooth.**
 The mapping from the template covariate $z_{s,w}$ to the logit-scale response is essentially linear (k_f=2 is the minimum non-trivial smooth in `mgcv`). The model trusts the reference curve shape and scales it linearly without bending — a tighter basis also reduces overfitting across 10 training seasons.
@@ -504,7 +515,8 @@ Allowing each season its own weekly shape (factor-smooth) hurts out-of-sample. T
 **`lambda_w = 0` — uniform training weights.**
 Down-weighting late-season observations provides no benefit. The model learns equally from all post-ignition weeks, including the declining phase. The late-season pattern is consistent enough across seasons to inform early-season accuracy.
 
-**Summary.** The tuned $M_2$ is a **simple, pooled, near-linear GAM** that trusts the M1 template immediately at ignition, corrects for the current level via a 10-week EMA, and does not adapt per-season. With only 10 training seasons, parsimony generalises better than flexibility.
+**Summary.** The tuned $M_2$ is a **simple, pooled, near-linear GAM** that trusts the $M_1$ template immediately at ignition, corrects for the current level via a 10-week EMA, and does not adapt per-season. With only 10 training seasons, parsimony generalises better than flexibility.
+
 
 ## Fit-back on historical data
 
@@ -520,12 +532,17 @@ joint_out_nested <- nested_loso_refit_best(
   spec           = best_spec_nested
 )
 
-ggplotly(plot_stage2_joint_fit_by_season(
-  joint_out   = joint_out_nested,
-  dat_raw     = alignedD_prosp,
-  ign_hat_df  = det_all$compare,
-  template_df = template_df
-))
+p_fitback <- plot_stage2_joint_fit_by_season(
+  out_m1     = joint_out_nested,
+  feat_full  = joint_out_nested$train_data,
+  dat_raw    = alignedD_prosp,
+  ign_hat_df = det_all$compare
+)
+
+ggsave("figures/fit_back_by_season.png", p_fitback,
+       width = 14, height = 14, dpi = 150)
+
+ggplotly(p_fitback)
 ```
 
 ```{r nested-fit-summary}

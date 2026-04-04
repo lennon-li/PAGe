@@ -59,11 +59,17 @@ h4 {
 </style>
 ```
 
+::: {.callout-important}
+## What This Page Covers
+
+- Why the static `$M_2$` template feature is insufficient.
+- How walk-forward `$M_1$` predictions become the new stacked template feature.
+- What changes in training, deployment, and LOSO evaluation when stacking is used.
+:::
+
 This document describes how the $M_1$ alignment model's **predictions** replace
-$M_2$'s static template backbone, and the implications for training, evaluation,
-and deployment. It supersedes the static template $z_{s,w}(\delta, Kr)$ described
-in the [pipeline overview](pipeline_overview.html) §6 and
-[forecast training](forecast_training.html) §1.
+$M_2$'s static template backbone. It supersedes the static-template description in the
+[pipeline overview](pipeline_overview.html) and [forecast training](forecast_training.html).
 
 ## Motivation: the static-template problem
 
@@ -167,7 +173,7 @@ as four separate covariates. This has two disadvantages:
 This is standard stacking: stage-1 predictions are features for stage-2.
 :::
 
-## Training: walk-forward M1 predictions {#sec-training}
+## Training: walk-forward $M_1$ predictions {#sec-training}
 
 ### The leakage constraint
 
@@ -179,7 +185,7 @@ that are unavailable at forecast time.
 **Requirement:** $M_2$ must be trained on $M_1$ predictions that were generated
 **prospectively** — using only data available at evaluation week $w$.
 
-### Walk-forward M1 generation
+### Walk-forward $M_1$ generation
 
 For each training season $s$ and evaluation week $w \ge w_s^{(\mathrm{ign})}$,
 we run $M_1$ prospectively:
@@ -226,7 +232,7 @@ In each LOSO fold with test season $s^*$:
 2. **$M_1$ walk-forward on training seasons.** For each training season
    $s \ne s^*$, run $M_1$ prospectively week by week. Collect predictions
    $\hat{p}^{M_1}_{s,w,h}$ for all $(s, w, h)$. This uses the same
-   $g_\text{ref}^{(-s^*)}$, so the training seasons' M1 predictions are
+   $g_\text{ref}^{(-s^*)}$, so the training seasons' $M_1$ predictions are
    generated with the test season excluded from the reference curve.
 
 3. **Build $M_2$ training data.** Stack training rows across seasons and
@@ -245,15 +251,15 @@ $$
 ```
 LOSO fold for test season s*:
   ├─ estimateRef(−s*)  →  g_ref, hyper
-  ├─ M0: detect ignition for each season
-  ├─ M1 walk-forward on training seasons  →  m1_train_preds
-  ├─ train_stage2_joint(m1_preds = m1_train_preds)  →  M2 fit
-  ├─ M1 walk-forward on test season s*  →  m1_test_preds
-  └─ score M2 on s* using m1_test_preds  →  NLL
+  ├─ $M_0$: detect ignition for each season
+  ├─ $M_1$ walk-forward on training seasons  →  m1_train_preds
+  ├─ train_stage2_joint(m1_preds = m1_train_preds)  →  $M_2$ fit
+  ├─ $M_1$ walk-forward on test season s*  →  m1_test_preds
+  └─ score $M_2$ on s* using m1_test_preds  →  NLL
 ```
 
 ::: {.callout-warning}
-#### Mild leakage in training-season M1
+#### Mild leakage in training-season $M_1$
 
 When generating $M_1$ predictions for training season $s$, the reference curve
 $g_\text{ref}^{(-s^*)}$ **includes** season $s$ itself (only $s^*$ is excluded).
@@ -285,7 +291,7 @@ $$
 $$
 
 
-## Deployment: weekly M0 → M1 → M2 chain {#sec-deploy}
+## Deployment: weekly $M_0$ → $M_1$ → $M_2$ chain {#sec-deploy}
 
 At runtime during the live season $s^*$, the weekly cycle becomes:
 
@@ -307,7 +313,7 @@ $$
 $M_1$'s `forecast_df` contains the predicted curve $\hat\pi^{M_1}_{s^*,w}(t)$
 on a dense grid of aligned time $t$.
 
-### Step 3: Inject M1 into M2 snapshots
+### Step 3: Inject $M_1$ into $M_2$ snapshots
 
 For each forecast horizon $h \in \{1, 2\}$, interpolate $M_1$'s prediction at
 the target week and replace the template feature:
@@ -316,7 +322,7 @@ $$
 \texttt{logit\_f\_eff}^h_{s^*,w} \;\leftarrow\; \mathrm{logit}_\varepsilon\!\Bigl(\hat\pi^{M_1}_{s^*,w}\!\bigl(w^a_{s^*,w+h}\bigr)\Bigr).
 $$
 
-This is performed by `inject_m1_into_snapshots()`, which modifies the M2
+This is performed by `inject_m1_into_snapshots()`, which modifies the $M_2$
 prediction snapshots in-place.
 
 ### Step 4: $M_2$ — Forecast
@@ -365,7 +371,7 @@ Week w arrives
 
 ## Key functions {#sec-functions}
 
-All new functions live in `R/m1_m2_bridge.R`:
+All new functions live in `R/pipeline_bridge.R`:
 
 | Function | Purpose |
 |---|---|
@@ -375,7 +381,7 @@ All new functions live in `R/m1_m2_bridge.R`:
 | `run_m0_m1_m2_weekly(currentSeason, ref, hyper, stage2_fit, ...)` | Full $M_0 \to M_1 \to M_2$ weekly chain for deployment |
 | `loso_m1_m2_joint(allD, spec, ...)` | Joint $M_0 \to M_1 \to M_2$ LOSO evaluator |
 
-Modified functions in `R/prospective_training.R`:
+Modified functions in `R/m2_training.R`:
 
 | Function | Change |
 |---|---|

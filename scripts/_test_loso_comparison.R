@@ -4,9 +4,12 @@ suppressPackageStartupMessages({
   devtools::load_all("flualign", quiet = TRUE)
 })
 # Source non-package scripts that define detectIgnition_oneSeason etc.
-source("R/retro_estimation.R")
-source("R/ignitionTraining.R")
-source("R/prospective_running.R")
+source("R/m0_retro.R")
+source("R/m0_training.R")
+source("R/pipeline_runtime_helpers.R")
+source("R/m0_runtime.R")
+source("R/m2_runtime.R")
+source("R/pipeline_runtime.R")
 
 startWeek <- 27
 manual_labels <- c(

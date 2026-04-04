@@ -6,11 +6,14 @@ library(data.table)
 library(MMWRweek)
 library(flualign)
 
-source("R/retro_estimation.R")
-source("R/ignitionTraining.R")
-source("R/prospective_training.R")
-source("R/prospective_running.R")
-source("R/module_training.R")
+source("R/m0_retro.R")
+source("R/m0_training.R")
+source("R/m2_training.R")
+source("R/pipeline_runtime_helpers.R")
+source("R/m0_runtime.R")
+source("R/m2_runtime.R")
+source("R/pipeline_runtime.R")
+source("R/m2_spec_grid.R")
 
 # ---- Settings (same as qmd) ----
 startWeek  <- 27
