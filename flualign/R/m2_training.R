@@ -16,6 +16,28 @@ logit_stable <- function(p, eps = 1e-6) {
   stats::qlogis(p)
 }
 
+#' Build a soft positivity cap function from a fitted Stage-2 GAM
+#'
+#' Extracts the training-data positivity distribution from a fitted mgcv GAM
+#' and returns a tanh-based soft ceiling function consistent with the deployment
+#' cap applied in \code{run_m2_forecast()}.
+#'
+#' @param fit_obj A fitted mgcv GAM with a binomial response matrix as \code{model[[1]]}.
+#' @return A function \code{f(p)} mapping predicted probabilities through the soft cap.
+#' @export
+make_soft_cap_fn <- function(fit_obj) {
+  p_train  <- fit_obj$model[[1]][, 1L] / rowSums(fit_obj$model[[1]])
+  p_knee   <- as.numeric(stats::quantile(p_train, 0.95, na.rm = TRUE))
+  p_max_tr <- max(p_train, na.rm = TRUE)
+  p_ceil   <- min(p_max_tr + 0.5 * (p_max_tr - p_knee), 1.0)
+  function(p) {
+    above    <- p > p_knee
+    p[above] <- p_knee + (p_ceil - p_knee) *
+      tanh((p[above] - p_knee) / (p_ceil - p_knee))
+    p
+  }
+}
+
 #' Stage-2 ramp weights (internal)
 #' @keywords internal
 stage2_ramp_weight <- function(t_since, K = 3L) {
@@ -622,6 +644,50 @@ train_stage2_joint <- function(dat,
   )
 }
 
+#' Format current-season observations for Stage-2 refit
+#'
+#' Converts raw current-season surveillance data and M1 alignment outputs into the
+#' column set required by \code{train_stage2_joint()}: \code{season}, \code{weekF},
+#' \code{phase}, \code{newWeek}, \code{y}, \code{N}, \code{neg}, \code{d1_link},
+#' \code{d2_link}.
+#'
+#' @param currentSeason data.frame with columns \code{weekF}, \code{y}, and either
+#'   \code{N} (total tests) or \code{neg} (negative tests).
+#' @param iWeek_used Integer. Ignition week on the \code{weekF} scale.
+#' @param template_df data.frame with columns \code{newWeek} and \code{fit} (unused
+#'   here but retained for signature compatibility with \code{refit_stage2_weekly}).
+#' @param spec Stage-2 spec from \code{stage2_make_spec()}. Must contain
+#'   \code{spec$anchorWeek}.
+#' @param season_label Character label for the current season (default \code{"current"}).
+#' @param k Integer knot count passed to \code{add_prospective_derivs_link()} (default \code{5L}).
+#' @return data.frame with the required Stage-2 columns, ready to \code{rbind} with
+#'   historical aligned data.
+#' @export
+format_current_for_stage2 <- function(currentSeason,
+                                      iWeek_used,
+                                      template_df = NULL,
+                                      spec        = NULL,
+                                      season_label = "current",
+                                      k = 5L) {
+  if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
+  iWeek_used <- as.integer(iWeek_used[1L])
+  anchorWeek <- as.integer(
+    if (!is.null(spec) && !is.null(spec$anchorWeek)) spec$anchorWeek else 20L
+  )
+
+  df <- currentSeason
+  if (!"neg" %in% names(df) && "N" %in% names(df) && "y" %in% names(df))
+    df$neg <- df$N - df$y
+  if (!"N" %in% names(df) && "neg" %in% names(df) && "y" %in% names(df))
+    df$N <- df$y + df$neg
+  df$season  <- as.character(season_label)
+  df$phase   <- as.integer(!is.na(df$weekF) & as.integer(df$weekF) >= iWeek_used)
+  df$newWeek <- as.integer(df$weekF) - iWeek_used + anchorWeek
+
+  df <- add_prospective_derivs_link(df, k = as.integer(k), eps = 1e-6, min_obs = 4L)
+  as.data.frame(df)
+}
+
 #' Refit Stage-2 GAM with current-season data for weekly prospective forecasting
 #'
 #' Combines all historical aligned data with the current season's observations
@@ -649,6 +715,7 @@ refit_stage2_weekly <- function(current_obs,
                                 hist_data,
                                 template_df,
                                 spec,
+                                m1_preds     = NULL,
                                 season_label = "current",
                                 addFS = NULL,
                                 verbose = TRUE) {
@@ -678,10 +745,15 @@ refit_stage2_weekly <- function(current_obs,
     season_label  = season_label
   )
   dat_refit <- dplyr::bind_rows(hist_data, cur_fmt)
+  # m1_preds: M1 walk-forward predictions for historical training seasons.
+  # When supplied, prep_stage2_joint() overrides logit_f_eff with M1-based
+  # values for those seasons, matching how the production frozen GAM was trained.
+  # The current-season rows (cur_fmt) fall back to template-based logit_f_eff.
   train_stage2_joint(
     dat         = dat_refit,
     template_df = template_df,
     spec        = refit_spec,
+    m1_preds    = m1_preds,
     method      = fit_method,
     verbose     = verbose
   )

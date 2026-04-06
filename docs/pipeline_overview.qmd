@@ -172,9 +172,9 @@ alpha_state=0.10, lambda_w=0, w_floor=0.05
 
 ### Deployment {#sec-m2-deploy}
 
-Each week after ignition, $M_2$ predicts from the frozen production GAM (fit offline on all historical seasons before the season starts). Hyperparameters and coefficients are fixed; only the covariates — derived from $M_1$ each week — update. $M_2$ runs **after** $M_1$ and forecasts for any post-ignition state (`"aligning"` or `"post_peak"`).
+Each week after ignition, $M_2$ refits on all historical aligned data plus the current-season observations accumulated so far, then forecasts 1- and 2-weeks ahead. Refitting picks up the live positivity trend and prevents the forecast from drifting from observed data. A frozen-fit fallback (`mode="frozen"`) is available for diagnostics.
 
-**Key functions:** `run_m2_forecast()`, `load_prospective_kit()`
+**Key functions:** `run_m2_forecast()` (`mode="weekly_refit"` default), `refit_stage2_weekly()`, `load_prospective_kit()`
 
 ### Retrospective deployment {#sec-m2-retro}
 
@@ -188,7 +188,7 @@ Before the live season begins, $M_2$ is fit on all historical seasons using the 
 
 ## Deployment sequence {#sec-train-deploy}
 
-Within each week: $M_1$ aligns → for any post-ignition state, $M_2$ forecasts from the frozen production GAM. Full implementation: [`prospective_deployment.html`](prospective_deployment.html).
+Within each week: $M_1$ aligns → for any post-ignition state, $M_2$ refits on historical + current data, then forecasts. Full implementation: [`prospective_deployment.html`](prospective_deployment.html).
 
 | Step | What | When |
 |------|------|------|
@@ -198,7 +198,7 @@ Within each week: $M_1$ aligns → for any post-ignition state, $M_2$ forecasts 
 | 4 | Post-peak flag parameters | Offline, once |
 | 5 | $M_2$ nested LOSO hyperparameter tuning | Offline, once |
 | 6 | $M_2$ initial fit on full historical data | Offline, before season start |
-| **7** | **Weekly: $M_1$ → $M_2$ forecast (frozen production fit)** | **Online, every week** |
+| **7** | **Weekly: $M_1$ aligns → $M_2$ refits (hist + current) → forecast** | **Online, every week** |
 
 ---
 
@@ -222,13 +222,14 @@ Within each week: $M_1$ aligns → for any post-ignition state, $M_2$ forecasts 
 
 **Multi-template ensemble alignment.** Instead of forcing all seasons into one population reference shape, the FS reference method produces per-season curves. M₁ aligns to each training season's curve independently and ensembles forecasts via softmax weighting on NLL. This allows the model to recognize which historical season the current one most resembles (e.g., steep 2022–23 vs gradual 2017–18) without being constrained to a single population template. Temperature controls how strongly the model commits to the best-matching template.
 
-**Frozen production fit at deployment.** $M_2$ is trained once offline on all
-historical seasons (using the best nested-LOSO spec) and the fitted GAM is
-frozen. At runtime, $M_2$ prediction uses updated $M_1$ covariates each week
-but does not refit. All modelling happens in aligned-week space ($w^a_{s,w}$)
-— the GAM smooth terms provide flexibility beyond $M_1$'s coarse alignment.
+**Weekly refit at deployment.** Each week, $M_2$ is refitted on all historical
+aligned seasons plus the current-season observations accumulated to that week.
+This lets the model track the live positivity trend and avoids forecasts that
+diverge from observed data. The historical aligned dataset is precomputed offline
+and stored in `ref_production.rds`; the per-week cost is small (< 1 s on ~275 rows).
 The season random effect is excluded at prediction time (`s(season)` dropped)
-so the frozen fit generalises to the unseen current season.
+so the model generalises to the unseen current season. A `mode="frozen"` fallback
+in `run_m2_forecast()` retains the pre-2026 frozen-fit behaviour for diagnostics.
 
 **Reference curve uses known labels (@sec-refcurve before @sec-m0).** The reference
 curve (and per-season FS curves) are estimated from retrospectively labelled ignition weeks — not from

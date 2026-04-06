@@ -430,17 +430,8 @@ nested_loso_m2_eval <- function(allD,
   # --- Soft positivity ceiling (matches deployment-time cap) ---
   # Derived from the training data of m2_fit so evaluation is consistent
   # with what run_m2_forecast() applies at prediction time.
-  fit_obj   <- m2_fit$fit
-  p_train   <- fit_obj$model[[1]][, 1] / rowSums(fit_obj$model[[1]])
-  p_knee    <- as.numeric(stats::quantile(p_train, 0.95, na.rm = TRUE))
-  p_max_tr  <- max(p_train, na.rm = TRUE)
-  p_ceil    <- min(p_max_tr + 0.5 * (p_max_tr - p_knee), 1.0)
-  soft_cap_fn <- function(p) {
-    above <- p > p_knee
-    p[above] <- p_knee + (p_ceil - p_knee) *
-      tanh((p[above] - p_knee) / (p_ceil - p_knee))
-    p
-  }
+  fit_obj     <- m2_fit$fit
+  soft_cap_fn <- make_soft_cap_fn(fit_obj)
 
   # --- Score ---
   ex_terms <- spec$exclude_newseason
@@ -506,6 +497,249 @@ nested_loso_m2_eval <- function(allD,
     ),
     predictions = preds
   )
+}
+
+
+# ---------- 5b. M2 eval with weekly refit ----------
+
+#' Evaluate a Stage-2 spec using weekly GAM refit on the test season
+#'
+#' Variant of \code{nested_loso_m2_eval()} that uses \code{refit_stage2_weekly()}
+#' instead of predicting from a frozen fit. For each post-ignition evaluation
+#' week on the held-out test season, the GAM is refitted on all training-season
+#' aligned data plus the current-season observations accumulated to that week.
+#'
+#' This matches the deployment semantics of \code{run_m2_forecast(mode="weekly_refit")}.
+#'
+#' @param allD Full multi-season data frame.
+#' @param fold Fold object from \code{nested_loso_build_fold()}.
+#' @param m1_test_preds Output of \code{nested_loso_m1_test()}: tibble with
+#'   columns \code{eval_weekF}, \code{target_weekF}, \code{h}, \code{m1_p_hat},
+#'   \code{m1_tau}.
+#' @param spec Stage-2 spec from \code{stage2_make_spec()}.
+#' @param eval_window Integer; max t_since to evaluate (default 12L).
+#' @param horizons Integer vector of forecast horizons (default \code{c(1L, 2L)}).
+#' @param k_deriv Integer; basis dim for M0 derivative estimation (default 10L).
+#' @param manual_labels Optional named integer vector of manual ignition labels.
+#' @param flag_args Named list forwarded to \code{flagIgnition()}.
+#' @param verbose Logical.
+#' @return Same structure as \code{nested_loso_m2_eval()}: list with
+#'   \code{scores} and \code{predictions}.
+#' @export
+nested_loso_m2_eval_weekly_refit <- function(allD,
+                                             fold,
+                                             m1_test_preds,
+                                             spec,
+                                             m1_train_preds = NULL,
+                                             eval_window   = 12L,
+                                             horizons      = c(1L, 2L),
+                                             k_deriv       = 10L,
+                                             manual_labels = NULL,
+                                             flag_args     = list(
+                                               p_thresh   = 0.01,
+                                               k1         = 0.4,
+                                               k_c        = 0.01,
+                                               n_consec   = 2L,
+                                               min_window = 10L,
+                                               w_min      = 21L,
+                                               w_max      = 21L,
+                                               d2_relax   = -0.01
+                                             ),
+                                             verbose = TRUE) {
+  if (!requireNamespace("dplyr",   quietly = TRUE)) stop("Please install dplyr.")
+  if (!requireNamespace("tibble",  quietly = TRUE)) stop("Please install tibble.")
+  if (!requireNamespace("purrr",   quietly = TRUE)) stop("Please install purrr.")
+  `%||%` <- function(x, y) if (is.null(x)) y else x
+
+  test_s <- fold$test_season
+  na_scores  <- tibble::tibble(season = test_s, n = NA_integer_,
+                               mean_nll = NA_real_, brier = NA_real_, rmse_p = NA_real_)
+  empty_preds <- tibble::tibble(
+    season = character(), weekF = integer(), lead = character(),
+    t_since = numeric(), p_hat = numeric(), p_obs = numeric(),
+    y_lead = integer(), N_lead = integer()
+  )
+
+  if (isTRUE(verbose))
+    message("[m2_eval_wf] Evaluating weekly-refit M2 on test season ", test_s)
+
+  # --- Build aligned test data via M0 (same as nested_loso_m2_eval) ---
+  test_allD  <- dplyr::filter(allD, .data$season == test_s)
+  if (nrow(test_allD) == 0L) return(list(scores = na_scores, predictions = empty_preds))
+
+  test_deriv <- estimateDerivs(test_allD, k = k_deriv)
+  test_outs  <- test_deriv$data %>%
+    dplyr::group_by(.data$season) %>%
+    dplyr::group_split(.keep = TRUE) %>%
+    purrr::map(~ do.call(flagIgnition,
+                         c(list(df = .x, manual_labels = manual_labels), flag_args)))
+  aligned_test <- alignIgnition(test_outs)
+
+  iWeek_used <- suppressWarnings(
+    min(aligned_test$weekF[aligned_test$phase == 1L], na.rm = TRUE)
+  )
+  if (!is.finite(iWeek_used)) return(list(scores = na_scores, predictions = empty_preds))
+
+  # Training history (no leakage — test season excluded by fold construction)
+  hist_aligned <- add_prospective_derivs_link(fold$aligned_train)
+  if (!"N" %in% names(hist_aligned))
+    hist_aligned$N <- hist_aligned$y + hist_aligned$neg
+
+  # alpha used for z_ema computation in the prediction step.
+  # No clamping in LOSO — clamps live only in the deployment pipeline.
+  alpha_s_global <- as.numeric(spec$alpha_state %||% 0.25)
+
+  # M1 predictions provide template forecast at each eval week
+  if (is.null(m1_test_preds) || nrow(m1_test_preds) == 0L)
+    return(list(scores = na_scores, predictions = empty_preds))
+
+  ex_terms   <- spec$exclude_newseason
+  if (is.null(ex_terms)) ex_terms <- stage2_exclude_newseason(spec)
+  anchorWeek <- as.integer(spec$anchorWeek %||% fold$ref$anchorWeek %||% 20L)
+
+  eval_weeks <- sort(unique(m1_test_preds$eval_weekF))
+  eval_weeks <- eval_weeks[eval_weeks >= iWeek_used]
+  if (!is.null(eval_window))
+    eval_weeks <- eval_weeks[eval_weeks - iWeek_used <= as.integer(eval_window)]
+  if (length(eval_weeks) == 0L) return(list(scores = na_scores, predictions = empty_preds))
+
+  all_rows <- vector("list", length(eval_weeks))
+
+  for (i in seq_along(eval_weeks)) {
+    ew        <- eval_weeks[i]
+    t_since_v <- as.numeric(ew - iWeek_used)
+    obs_to_ew <- dplyr::filter(test_allD, .data$weekF <= ew)
+    if (nrow(obs_to_ew) < 2L) next
+
+    refit_out <- tryCatch(
+      refit_stage2_weekly(
+        current_obs  = obs_to_ew,
+        iWeek_used   = iWeek_used,
+        hist_data    = hist_aligned,
+        template_df  = fold$template_df,
+        spec         = spec,
+        m1_preds     = m1_train_preds,
+        season_label = test_s,
+        verbose      = FALSE
+      ),
+      error = function(e) {
+        if (verbose) message("[m2_eval_wf] refit failed at ew=", ew, ": ", conditionMessage(e))
+        NULL
+      }
+    )
+    if (is.null(refit_out)) next
+    fit_ew <- refit_out$fit   # extract actual GAM from train_stage2_joint() list
+
+    soft_cap_fn <- make_soft_cap_fn(fit_ew)
+    lev_lead    <- levels(fit_ew$model$lead)
+    lev_seas    <- levels(fit_ew$model$season)
+
+    obs_arr <- dplyr::arrange(obs_to_ew, .data$weekF) |>
+      dplyr::mutate(
+        p_now = .data$y / pmax(.data$N, 1L),
+        z_now = stats::qlogis(pmin(pmax(.data$p_now, 1e-6), 1 - 1e-6))
+      )
+    z_ema_v   <- as.numeric(stats::filter(
+      alpha_s_global * obs_arr$z_now, filter = 1 - alpha_s_global,
+      method = "recursive", init = obs_arr$z_now[1]
+    ))
+    # No clamping here — LOSO evaluation should match v4 baseline exactly except
+    # for (1) weekly refit and (2) soft cap.  Clamping lives only in the
+    # deployment path (pipeline_runtime.R) where it guards against OOD input.
+    z_ema_now <- utils::tail(z_ema_v, 1L)
+    logN_now  <- log(max(obs_arr$N[obs_arr$weekF == ew], 1L))
+
+    # Compute prospective d1/d2 from data up to eval week (matches v4 derivs)
+    d_deriv_ew <- tryCatch(
+      add_prospective_derivs_link(
+        dplyr::transmute(obs_arr, season = test_s, weekF = .data$weekF,
+                         y = .data$y, neg = .data$N - .data$y),
+        k = 5L, eps = 1e-6, min_obs = 4L
+      ),
+      error = function(e) NULL
+    )
+    d_at_ew <- if (!is.null(d_deriv_ew)) dplyr::filter(d_deriv_ew, .data$weekF == ew) else NULL
+    d1_now_ew <- if (!is.null(d_at_ew) && nrow(d_at_ew) > 0 && !is.na(d_at_ew$d1_link[1L]))
+      d_at_ew$d1_link[1L] else 0
+    d2_now_ew <- if (!is.null(d_at_ew) && nrow(d_at_ew) > 0 && !is.na(d_at_ew$d2_link[1L]))
+      d_at_ew$d2_link[1L] else 0
+
+    for (h in as.integer(horizons)) {
+      m1_row <- dplyr::filter(m1_test_preds,
+                              .data$eval_weekF == ew, .data$h == h)
+      if (nrow(m1_row) == 0L) next
+      m1_p <- m1_row$m1_p_hat[1L]
+      if (is.na(m1_p)) next
+
+      target_weekF <- as.integer(ew) + h
+      obs_target   <- dplyr::filter(test_allD, .data$weekF == target_weekF)
+      if (nrow(obs_target) == 0L) next
+      y_lead <- as.integer(obs_target$y[1L])
+      N_lead <- as.integer(obs_target$N[1L])
+
+      logit_f_eff <- stats::qlogis(pmin(pmax(m1_p, 1e-6), 1 - 1e-6))
+
+      nd <- tibble::tibble(
+        weekF       = as.integer(ew),
+        newWeek     = as.integer(ew) - as.integer(iWeek_used) + anchorWeek,
+        lead        = factor(paste0("h", h), levels = lev_lead),
+        season      = factor(lev_seas[1L], levels = lev_seas),
+        logit_f_eff = logit_f_eff,
+        z_ema       = z_ema_now,
+        logN_now    = logN_now,
+        d1_now      = d1_now_ew,
+        d2_now      = d2_now_ew,
+        t_since     = t_since_v,
+        post_ign    = TRUE
+      )
+      if ("season_h" %in% names(fit_ew$model)) {
+        lev_sh <- levels(fit_ew$model$season_h)
+        nd$season_h <- factor(lev_sh[1L], levels = lev_sh)
+      }
+
+      pr <- tryCatch(
+        stats::predict(fit_ew, newdata = nd, type = "response", exclude = ex_terms),
+        error = function(e) NULL
+      )
+      if (is.null(pr)) next
+
+      p_hat <- soft_cap_fn(pmin(1 - 1e-12, pmax(1e-12, as.numeric(pr))))
+
+      all_rows[[i]] <- c(all_rows[[i]], list(tibble::tibble(
+        season  = test_s,
+        weekF   = as.integer(ew),
+        lead    = paste0("h", h),
+        t_since = t_since_v,
+        p_hat   = p_hat,
+        p_obs   = y_lead / max(N_lead, 1L),
+        y_lead  = y_lead,
+        N_lead  = N_lead
+      )))
+    }
+  }
+
+  preds <- dplyr::bind_rows(unlist(all_rows, recursive = FALSE))
+  if (nrow(preds) == 0L) return(list(scores = na_scores, predictions = empty_preds))
+
+  eps     <- 1e-12
+  p_hat_v <- pmin(1 - eps, pmax(eps, preds$p_hat))
+  ll      <- stats::dbinom(preds$y_lead, preds$N_lead, p_hat_v, log = TRUE)
+  brier   <- mean((p_hat_v - preds$p_obs)^2, na.rm = TRUE)
+  scores  <- tibble::tibble(
+    season   = test_s,
+    n        = nrow(preds),
+    mean_nll = -mean(ll, na.rm = TRUE),
+    brier    = brier,
+    rmse_p   = sqrt(brier)
+  )
+
+  if (isTRUE(verbose))
+    message("[m2_eval_wf] ", test_s,
+            " | mean_nll=", round(scores$mean_nll, 4),
+            " brier=", round(scores$brier, 6),
+            " n=", nrow(preds))
+
+  list(scores = scores, predictions = preds)
 }
 
 
@@ -1112,6 +1346,15 @@ nested_loso_grid_search <- function(allD,
 #' @param template_df Reference curve template (newWeek, fit) — typically
 #'   from the production (full-data) \code{estimateRef()}.
 #' @param spec M2 spec object (from LOSO best or \code{stage2_make_spec()}).
+#' @param m1_preds Optional data frame of M1 walk-forward predictions for all
+#'   training seasons (output of \code{m1_walkforward_multi()}). When supplied,
+#'   \code{logit_f_eff} in the training data is replaced with M1-based values,
+#'   matching the richer feature representation available at deployment time.
+#'   **This should be the same \code{m1_preds} that will be passed to
+#'   \code{refit_stage2_weekly()} at deployment**, so the frozen GAM and the
+#'   weekly refit are trained on the same feature space. Save it in
+#'   \code{m2_production.rds} (as \code{m1_train_preds}) and load via
+#'   \code{load_prospective_kit()}.
 #' @param method GAM fitting method (default \code{"REML"}).
 #' @param verbose Logical; print progress.
 #'
@@ -1122,8 +1365,9 @@ nested_loso_grid_search <- function(allD,
 nested_loso_refit_best <- function(alignedD_prosp,
                                    template_df,
                                    spec,
-                                   method  = "REML",
-                                   verbose = TRUE) {
+                                   m1_preds = NULL,
+                                   method   = "REML",
+                                   verbose  = TRUE) {
 
   if (isTRUE(verbose))
     message("[refit_best] Fitting M2 on full historical data with best spec")
@@ -1135,6 +1379,7 @@ nested_loso_refit_best <- function(alignedD_prosp,
     dat         = alignedD_prosp,
     template_df = template_df,
     spec        = spec,
+    m1_preds    = m1_preds,
     method      = method,
     verbose     = verbose
   )

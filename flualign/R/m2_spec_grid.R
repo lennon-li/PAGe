@@ -73,6 +73,8 @@ stage2_make_spec <- function(
     lambda_w = 0,
     w_floor  = 0.05,
 
+    anchorWeek = 20L,
+
     # --- deprecated aliases ---
     K = NULL,
     pre_buffer = NULL
@@ -113,8 +115,9 @@ stage2_make_spec <- function(
     bs_fs_marginal = bs_fs_marginal,
 
     use_season_re = TRUE,
-    lambda_w = as.numeric(lambda_w),
-    w_floor  = as.numeric(w_floor)
+    lambda_w   = as.numeric(lambda_w),
+    w_floor    = as.numeric(w_floor),
+    anchorWeek = as.integer(anchorWeek)
   )
   
   spec$best_row <- data.frame(
@@ -1111,7 +1114,8 @@ plot_stage2_joint_fit_by_season <- function(out_m1,
                                             ign_hat_df = NULL,
                                             exclude_season_re = FALSE,
                                             exclude_newseason_terms = FALSE,
-                                            facet_by_lead = TRUE) {
+                                            facet_by_lead = TRUE,
+                                            trim_preign = TRUE) {
   stopifnot(is.list(out_m1), !is.null(out_m1$fit), !is.null(out_m1$spec))
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Please install data.table.")
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Please install ggplot2.")
@@ -1183,8 +1187,11 @@ plot_stage2_joint_fit_by_season <- function(out_m1,
   d_fit <- d_all[post_ign == TRUE]
   # predict OUTSIDE data.table NSE using fit_mod (avoids collision with a column named "fit")
   d_fit[, p_hat := as.numeric(stats::predict(fit_mod, newdata = d_fit, type = "response", exclude = ex))]
-  
-  p <- ggplot2::ggplot(d_all, ggplot2::aes(x = weekF)) +
+
+  # trim_preign: only show observations from ignition onward (cleaner plots)
+  d_obs <- if (isTRUE(trim_preign)) d_fit else d_all
+
+  p <- ggplot2::ggplot(d_obs, ggplot2::aes(x = weekF)) +
     ggplot2::geom_point(ggplot2::aes(y = p_obs), colour = "black", size = 1.0, alpha = 0.75) +
     ggplot2::geom_line(
       data = d_fit,

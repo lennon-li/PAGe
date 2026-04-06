@@ -31,6 +31,8 @@ source("../R/utils.R")
 source("../R/pipeline_runtime_helpers.R")
 source("../R/m0_runtime.R")
 source("../R/m2_runtime.R")
+source("../R/m2_spec_grid.R")
+source("../R/m2_training.R")
 source("../R/pipeline_runtime.R")
 source("../R/m1_runtime.R")
 source("../R/m1_multi_template.R")
@@ -126,7 +128,12 @@ if (file.exists(REF_CACHE)) {
   ref$g_ref_fun_orig <- ref$g_ref_fun   # store unshifted for plotting
   hyper <- learn_alignment_hyperparams(ref$dat, ref$g_ref_fun)
 
-  ref_cache <- list(ref = ref, hyper = hyper)
+  # Prospective-safe derivatives for hist_data (needed for weekly M2 refit)
+  alignedD_prosp <- add_prospective_derivs_link(aligned_train, k = 5L, eps = 1e-6, min_obs = 4L)
+  if (!"N" %in% names(alignedD_prosp))
+    alignedD_prosp$N <- alignedD_prosp$y + alignedD_prosp$neg
+
+  ref_cache <- list(ref = ref, hyper = hyper, hist_data = alignedD_prosp)
   saveRDS(ref_cache, REF_CACHE)
   message("Production ref built and cached: ", REF_CACHE)
 }

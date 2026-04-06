@@ -98,11 +98,14 @@ ref_cache <- if (file.exists("../data/ref_production.rds")) {
   list(ref = r)
 }
 ref         <- ref_cache$ref
+hyper       <- ref_cache$hyper
+if (is.null(hyper)) stop("hyper not found in ref_production.rds — re-run docs/run.qmd first")
 template_df <- ref$pred_df
 g_ref_fun   <- ref$g_ref_fun
 
 # Stage-1 tuning (for det_all used in training results plots)
-tuned <- readRDS("../data/stage1_tuning.rds")
+tuned   <- readRDS("../data/stage1_tuning.rds")
+params  <- tuned$best_params  # M0 detection params; used by m1_walkforward_multi
 det_all <- detect_ignition_from_tuning(tuned, alignedD)
 ```
 
@@ -479,8 +482,23 @@ eval_out <- nested_loso_m2_eval(
 ```{r load-production-results}
 #| eval: true
 
-prod_results_v4 <- readRDS("../data/nested_loso_v4_production.rds")
-cat("v4 grid:", nrow(prod_results_v4$summary), "specs × 10 seasons nested LOSO\n")
+# Prefer v8 (weekly refit + soft cap + expanded k_f grid + no clamping in eval).
+# Fall back through v7 → v5 → v4 for older environments.
+if (file.exists("../data/nested_loso_v8_production.rds")) {
+  prod_results_v4 <- readRDS("../data/nested_loso_v8_production.rds")
+  cat("v8 (weekly refit, k_f expanded) grid:", nrow(prod_results_v4$summary),
+      "specs × 10 seasons nested LOSO\n")
+} else if (file.exists("../data/nested_loso_v7_production.rds")) {
+  prod_results_v4 <- readRDS("../data/nested_loso_v7_production.rds")
+  cat("v7 (weekly refit, M1-based logit_f_eff) grid:", nrow(prod_results_v4$summary),
+      "specs × 10 seasons nested LOSO\n")
+} else if (file.exists("../data/nested_loso_v5_production.rds")) {
+  prod_results_v4 <- readRDS("../data/nested_loso_v5_production.rds")
+  cat("v5 (weekly refit) grid:", nrow(prod_results_v4$summary), "specs × 10 seasons nested LOSO\n")
+} else {
+  prod_results_v4 <- readRDS("../data/nested_loso_v4_production.rds")
+  cat("v4 grid (frozen-fit eval):", nrow(prod_results_v4$summary), "specs × 10 seasons nested LOSO\n")
+}
 cat("Best:", prod_results_v4$best_spec_id,
     "| mean_nll =", round(prod_results_v4$summary$mean_nll[1], 4), "\n")
 ```
@@ -492,35 +510,67 @@ cat("Best:", prod_results_v4$best_spec_id,
 best_spec_nested <- prod_results_v4$best_spec
 ```
 
-The tuned spec is `Kr=1, k_f=2, k_e=4, alpha_state=0.10` with `delta=0, k_s=0, lambda_w=0`.
+The tuned spec is `Kr=1, k_f=7, k_e=2, alpha_state=0.02` with `delta=0, k_s=0, lambda_w=0`.
+Selected by v8 nested LOSO (756 specs; weekly refit + soft cap; M1-based `logit_f_eff`; no clamping in eval).
 
 **`delta = 0` — no template shift.**
-$M_1$'s alignment already places the current season correctly on the reference curve. No residual systematic timing offset remains. This validates that multi-template alignment with `k_ref=25` is well-calibrated.
+$M_1$'s alignment already places the current season correctly on the reference curve. No residual systematic timing offset remains, validating multi-template alignment with `k_ref=25`.
 
 **`Kr = 1` — no ramp.**
-The template covariate is applied at full weight from the first week after ignition. There is no benefit to a gradual blend — once ignition fires, the reference curve shape is immediately a reliable anchor. This reflects the high quality of the $M_1$ alignment.
+The template covariate is applied at full weight from the first week after ignition. Once ignition fires the reference curve shape is immediately a reliable anchor — a gradual blend adds no benefit.
 
-**`k_f = 2` — near-linear template smooth.**
-The mapping from the template covariate $z_{s,w}$ to the logit-scale response is essentially linear (k_f=2 is the minimum non-trivial smooth in `mgcv`). The model trusts the reference curve shape and scales it linearly without bending — a tighter basis also reduces overfitting across 10 training seasons.
+**`k_f = 7` — flexible template smooth.**
+The logit-scale mapping from the template covariate $z_{s,w}$ uses 7 knots, capturing nonlinear relationships between the reference curve position and realised positivity. This is notably more flexible than the v4 spec (`k_f=2`) and reflects the fact that weekly refit (which incorporates current-season data at each step) can make effective use of a higher-capacity template basis without overfitting. The boundary check confirms `k_f=7` is interior: `k_f=8` is consistently worse.
 
-**`k_e = 4` — moderate EWMA spline.**
-The EMA state `z_ema` enters with a 4-knot smooth — enough to capture a nonlinear current-level correction (different responses at high vs low baseline positivity) without overfitting. k_e=3 has slightly lower brier but higher NLL; k_e=6 overfits.
+**`k_e = 2` — minimal EWMA smooth.**
+The EMA state `z_ema` enters with a 2-knot (near-linear) smooth. Under weekly refit, the current season's own trajectory is directly observed, so the model needs less nonlinear correction from the EMA. A simpler correction prevents the EMA term from conflicting with the rich template smooth.
 
-**`alpha_state = 0.10` — slow EMA, ≈10-week memory.**
-The effective lookback is $1/\alpha = 10$ weeks. The model wants long-term memory of the positivity level — a slow average that tracks the season's overall trajectory rather than reacting to week-to-week noise. This parameter is genuinely interior: both lower (too sluggish) and higher (too reactive) values hurt. The grid has converged here.
+**`alpha_state = 0.02` — very slow EMA, ≈50-week memory.**
+The effective lookback is $1/\alpha = 50$ weeks — essentially a seasonal-mean tracker rather than a reactive signal. Combined with `k_e=2`, the EMA provides a stable baseline offset, not a dynamic correction. The boundary check confirms `alpha=0.02` is interior: `alpha=0.01` appears in the top 30 but with worse NLL.
 
 **`k_s = 0` — no per-season deviation.**
-Allowing each season its own weekly shape (factor-smooth) hurts out-of-sample. The shared reference curve captures enough cross-season variation — per-season wiggle room overfits on 10 training seasons.
+Allowing each season its own weekly shape hurts out-of-sample. The shared reference curve captures enough cross-season variation.
 
 **`lambda_w = 0` — uniform training weights.**
-Down-weighting late-season observations provides no benefit. The model learns equally from all post-ignition weeks, including the declining phase. The late-season pattern is consistent enough across seasons to inform early-season accuracy.
+Down-weighting late-season observations provides no benefit. The model learns equally from all post-ignition weeks.
 
-**Summary.** The tuned $M_2$ is a **simple, pooled, near-linear GAM** that trusts the $M_1$ template immediately at ignition, corrects for the current level via a 10-week EMA, and does not adapt per-season. With only 10 training seasons, parsimony generalises better than flexibility.
+**Summary.** The v8 tuned $M_2$ uses a **flexible template smooth with a near-linear EMA correction** under weekly refit semantics. The shift toward higher `k_f` relative to v4 is a direct consequence of evaluating specs under the weekly refit path (which makes the template the primary signal) and including the soft cap in the LOSO objective (which prevents the stiff-template shortcut that v4 exploited).
 
 
 ## Fit-back on historical data
 
 Refit $M_2$ on all historical seasons using the best nested-LOSO spec and the production reference curve.
+
+**M1 walk-forward predictions for historical seasons** are computed here and saved with the production kit. They are passed to both `nested_loso_refit_best()` (frozen GAM) and `refit_stage2_weekly()` at deployment so that `logit_f_eff` is M1-based in all three contexts — frozen training, weekly refit, and LOSO evaluation — ensuring no inconsistency. There is no data leakage: the predictions are walk-forward (each season uses only past data) and the current season is never in `m1_train_preds`.
+
+```{r compute-m1-production-preds}
+#| eval: true
+#| message: false
+# Production M1 predictions for ALL training seasons (no leakage — walk-forward).
+# These replace template-based logit_f_eff in the frozen GAM and in every
+# weekly refit at deployment.  Save them in m2_production.rds so
+# load_prospective_kit() can thread them through refit_stage2_weekly().
+EXCLUDE_SEAS <- "2015-16"  # Same exclusion used throughout LOSO evaluation.
+m1_preds_production <- m1_walkforward_multi(
+  allD               = allD,
+  ref                = ref,
+  hyper              = hyper,
+  params             = params,
+  seasons            = sort(setdiff(unique(allD$season), EXCLUDE_SEAS)),
+  temperature        = 0.25,
+  rise_weight        = 1.0,
+  trough_weight      = 0.1,
+  peak_decay         = 0.3,
+  slope_weight       = 0.5,
+  slope_window       = 4L,
+  dynamic_temp       = TRUE,
+  dynamic_temp_pivot = 10L,
+  parallel           = TRUE,
+  verbose            = FALSE
+)
+message("m1_preds_production: ", nrow(m1_preds_production), " rows across ",
+        length(unique(m1_preds_production$season)), " seasons")
+```
 
 ```{r nested-fit-by-season}
 #| eval: true
@@ -529,7 +579,8 @@ Refit $M_2$ on all historical seasons using the best nested-LOSO spec and the pr
 joint_out_nested <- nested_loso_refit_best(
   alignedD_prosp = alignedD_prosp,
   template_df    = template_df,
-  spec           = best_spec_nested
+  spec           = best_spec_nested,
+  m1_preds       = m1_preds_production
 )
 
 p_fitback <- plot_stage2_joint_fit_by_season(
@@ -543,6 +594,30 @@ ggsave("figures/fit_back_by_season.png", p_fitback,
        width = 14, height = 14, dpi = 150)
 
 ggplotly(p_fitback)
+```
+
+```{r save-m2-production}
+#| eval: true
+# Save the production M2 object for use by load_prospective_kit().
+#
+# Contents:
+#   fit            — frozen production GAM (trained with M1-based logit_f_eff)
+#   spec           — best nested-LOSO spec
+#   template_df    — reference curve (newWeek, fit) for refit_stage2_weekly()
+#   m1_train_preds — M1 walk-forward predictions for all historical training
+#                    seasons.  load_prospective_kit() reads this and passes it
+#                    to refit_stage2_weekly() so that logit_f_eff at deployment
+#                    matches the feature space used to train the frozen GAM.
+#                    No data leakage: predictions are walk-forward and the
+#                    current season is never included.
+m2_production <- list(
+  fit            = joint_out_nested$fit,
+  spec           = best_spec_nested,
+  template_df    = template_df[, c("newWeek", "fit")],
+  m1_train_preds = m1_preds_production
+)
+saveRDS(m2_production, "../data/m2_production.rds")
+message("Saved m2_production.rds")
 ```
 
 ```{r nested-fit-summary}

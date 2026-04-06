@@ -69,15 +69,38 @@ load_prospective_kit <- function(data_dir,
     "2023-24" = 20L, "2024-25" = 23L
   )
 
+  # hist_data: historical aligned data with prospective derivatives, stored
+  # in ref_production.rds by docs/run.qmd for use in weekly M2 refit.
+  hist_data <- ref_cache$hist_data
+
+  # m1_train_preds: M1 walk-forward predictions for all historical training
+  # seasons, stored in m2_production.rds by docs/forecast_training.qmd.
+  # Required by refit_stage2_weekly() so that logit_f_eff during the weekly
+  # refit is M1-based (matching the feature space used to train the frozen
+  # production GAM).  If absent (old kit), falls back to template-based
+  # logit_f_eff — predictions remain valid but less accurate.
+  m1_train_preds <- m2_production$m1_train_preds
+
+  # template_df: prefer stored in m2_production, fall back to ref$pred_df
+  template_df <- m2_production$template_df %||% {
+    if (!is.null(ref$pred_df) && all(c("newWeek", "fit") %in% names(ref$pred_df)))
+      ref$pred_df[, c("newWeek", "fit")]
+    else
+      NULL
+  }
+
   list(
-    ref           = ref,
-    hyper         = hyper,
-    M1_PARAMS     = M1_PARAMS,
-    m0_params     = m0_params,
-    m2_production = m2_production,
-    best_spec     = best_spec,
-    flag_args     = flag_args,
-    manual_labels = manual_labels
+    ref            = ref,
+    hyper          = hyper,
+    M1_PARAMS      = M1_PARAMS,
+    m0_params      = m0_params,
+    m2_production  = m2_production,
+    best_spec      = best_spec,
+    flag_args      = flag_args,
+    manual_labels  = manual_labels,
+    hist_data      = hist_data,
+    m1_train_preds = m1_train_preds,
+    template_df    = template_df
   )
 }
 
@@ -277,30 +300,37 @@ run_m1_alignment <- function(kit,
 #' Run M2 forecast using M1 alignment outputs
 #'
 #' For each evaluation week in \code{m1_result$per_week}, builds M2 covariates
-#' from the M1 alignment output and predicts 1- and 2-week-ahead positivity
-#' using the production GAM. Extrapolation guards (logN cap, soft positivity
-#' ceiling) are applied automatically.
+#' from the M1 alignment output and predicts 1- and 2-week-ahead positivity.
+#'
+#' Two modes are supported via \code{mode}:
+#' \describe{
+#'   \item{\code{"weekly_refit"} (default)}{Each week, combines \code{kit$hist_data}
+#'     with current-season observations up to that week and refits the Stage-2 GAM
+#'     via \code{refit_stage2_weekly()}. Requires \code{kit$hist_data} (produced
+#'     by \code{docs/run.qmd} and loaded by \code{load_prospective_kit()}).}
+#'   \item{\code{"frozen"}}{Predicts directly from the frozen production GAM stored
+#'     in \code{kit$m2_production$fit}. Use this as a fallback when
+#'     \code{hist_data} is not available.}
+#' }
 #'
 #' @param kit A kit list returned by \code{load_prospective_kit()}.
-#' @param current_data Data frame for the current season (used for raw covariate
-#'   computation in M2 — the \code{season_to_ew} slices are carried in
-#'   \code{m1_result$per_week}).
+#' @param current_data Data frame for the current season.
 #' @param m1_result Output of \code{run_m1_alignment()}.
+#' @param mode Character. \code{"weekly_refit"} (default) or \code{"frozen"}.
 #' @param verbose Logical. Emit progress messages (default \code{TRUE}).
 #'
-#' @return A list with:
-#'   \describe{
-#'     \item{m2_preds}{Tibble of M2 predictions with columns
-#'       \code{eval_week}, \code{h}, \code{target_weekF},
-#'       \code{m1_p}, \code{m1_lo}, \code{m1_hi},
-#'       \code{m2_p}, \code{m2_lo}, \code{m2_hi}.}
-#'   }
+#' @return A list with \code{m2_preds}: tibble with columns
+#'   \code{eval_week}, \code{h}, \code{target_weekF},
+#'   \code{m1_p}, \code{m1_lo}, \code{m1_hi},
+#'   \code{m2_p}, \code{m2_lo}, \code{m2_hi}.
 #'
 #' @export
 run_m2_forecast <- function(kit,
                              current_data,
                              m1_result,
+                             mode    = c("weekly_refit", "frozen"),
                              verbose = TRUE) {
+  mode <- match.arg(mode)
   if (!requireNamespace("dplyr",  quietly = TRUE)) stop("Please install dplyr.")
   if (!requireNamespace("tibble", quietly = TRUE)) stop("Please install tibble.")
   `%||%` <- function(x, y) if (is.null(x)) y else x
@@ -312,26 +342,37 @@ run_m2_forecast <- function(kit,
 
   ex_terms <- best_spec$exclude_newseason
   if (is.null(ex_terms)) ex_terms <- stage2_exclude_newseason(best_spec)
-  ex_terms   <- unique(c(ex_terms, "s(season)"))
-  lev_lead   <- levels(m2_fit$model$lead)
-  anchorWeek <- ref$anchorWeek
-
-  # Extrapolation guards (derived from training data)
+  ex_terms       <- unique(c(ex_terms, "s(season)"))
+  anchorWeek     <- ref$anchorWeek
   logN_train_max <- max(m2_fit$model$logN_now, na.rm = TRUE)
-  p_train    <- m2_fit$model[[1]][, 1] / rowSums(m2_fit$model[[1]])
-  p_knee     <- as.numeric(stats::quantile(p_train, 0.95, na.rm = TRUE))
-  p_train_max <- max(p_train, na.rm = TRUE)
-  p_ceil     <- min(p_train_max + 0.5 * (p_train_max - p_knee), 1.0)
-  soft_cap_p <- function(p) {
-    above <- p > p_knee
-    p[above] <- p_knee + (p_ceil - p_knee) *
-      tanh((p[above] - p_knee) / (p_ceil - p_knee))
-    p
+  d1_train_range <- range(m2_fit$model$d1_now, na.rm = TRUE)
+  d2_train_range <- range(m2_fit$model$d2_now, na.rm = TRUE)
+
+  # Pre-compute z_ema range from historical training data for clamping
+  alpha_s_global <- as.numeric(best_spec$alpha_state %||% 0.25)
+  z_ema_hist_range <- if (!is.null(kit$hist_data)) {
+    by_seas <- split(kit$hist_data, kit$hist_data$season)
+    all_z   <- unlist(lapply(by_seas, function(d) {
+      d <- d[order(d$weekF), ]
+      p <- d$y / pmax(d$N, 1L)
+      z <- stats::qlogis(pmin(pmax(p, 1e-6), 1 - 1e-6))
+      as.numeric(stats::filter(alpha_s_global * z, filter = 1 - alpha_s_global,
+                               method = "recursive", init = z[1L]))
+    }))
+    range(all_z[is.finite(all_z)])
+  } else {
+    range(m2_fit$model$z_ema, na.rm = TRUE)
   }
-  if (verbose) cat(sprintf(
-    "M2 extrapolation guards: logN cap=%.2f, p_knee=%.3f, p_ceil=%.3f\n",
-    logN_train_max, p_knee, p_ceil
-  ))
+
+  # Frozen-fit soft cap (used when mode=="frozen" or as fallback)
+  soft_cap_frozen <- make_soft_cap_fn(m2_fit)
+  lev_lead_frozen <- levels(m2_fit$model$lead)
+
+  if (verbose) {
+    cat(sprintf("run_m2_forecast: mode=%s, logN_max=%.2f\n", mode, logN_train_max))
+    if (mode == "weekly_refit" && is.null(kit$hist_data))
+      message("[run_m2_forecast] hist_data not found in kit — falling back to frozen fit")
+  }
 
   m2_preds <- dplyr::bind_rows(lapply(m1_result$per_week, function(pw) {
     ew           <- pw$ew
@@ -343,6 +384,34 @@ run_m2_forecast <- function(kit,
     iWeek_hat <- ap$iWeek_hat
     fdf       <- ap$forecast_df
     horizons  <- c(1L, 2L)
+
+    # --- Select fit and soft cap for this eval week ---
+    use_refit <- mode == "weekly_refit" && !is.null(kit$hist_data)
+    if (use_refit) {
+      refit_out <- tryCatch(
+        refit_stage2_weekly(
+          current_obs  = season_to_ew,
+          iWeek_used   = iWeek_hat,
+          hist_data    = kit$hist_data,
+          template_df  = kit$template_df,
+          spec         = best_spec,
+          m1_preds     = kit$m1_train_preds,
+          season_label = "current",
+          verbose      = FALSE
+        ),
+        error = function(e) {
+          if (verbose)
+            message("[run_m2_forecast] weekly refit failed at ew=", ew,
+                    ": ", conditionMessage(e), " — using frozen fit")
+          NULL
+        }
+      )
+      fit_ew <- if (!is.null(refit_out)) refit_out$fit else m2_fit
+    } else {
+      fit_ew <- m2_fit
+    }
+    soft_cap_ew <- make_soft_cap_fn(fit_ew)
+    lev_lead_ew <- levels(fit_ew$model$lead) %||% lev_lead_frozen
 
     dplyr::bind_rows(lapply(horizons, function(h) {
       target_weekF   <- ew + h
@@ -365,7 +434,10 @@ run_m2_forecast <- function(kit,
         alpha_s * z_vec, filter = 1 - alpha_s,
         method = "recursive", init = z_vec[1]
       ))
-      z_ema_now <- utils::tail(z_ema, 1)
+      # Clamp z_ema to historical training range (prevents extrapolation for
+      # seasons with extreme pre-ignition EMA from very low test volumes)
+      z_ema_now <- pmin(z_ema_hist_range[2L],
+                        pmax(z_ema_hist_range[1L], utils::tail(z_ema, 1)))
 
       logN_now <- min(log(max(obs_to_ew$N[obs_to_ew$weekF == ew], 1)),
                       logN_train_max)
@@ -375,8 +447,11 @@ run_m2_forecast <- function(kit,
         k = 5L, eps = 1e-6
       )
       d_at_ew <- dplyr::filter(d_deriv, weekF == ew)
-      d1_now  <- if (nrow(d_at_ew) > 0) d_at_ew$d1_link[1] else 0
-      d2_now  <- if (nrow(d_at_ew) > 0) d_at_ew$d2_link[1] else 0
+      # Clamp d1/d2 to training range to prevent extrapolation on steep early-season rises
+      d1_now  <- if (nrow(d_at_ew) > 0)
+        pmin(d1_train_range[2L], pmax(d1_train_range[1L], d_at_ew$d1_link[1])) else 0
+      d2_now  <- if (nrow(d_at_ew) > 0)
+        pmin(d2_train_range[2L], pmax(d2_train_range[1L], d_at_ew$d2_link[1])) else 0
 
       logit_f_eff <- qlogis(pmin(pmax(m1_p, 1e-6), 1 - 1e-6))
       t_since     <- as.numeric(ew - iWeek_hat)
@@ -384,9 +459,9 @@ run_m2_forecast <- function(kit,
       nd <- tibble::tibble(
         weekF       = as.integer(ew),
         newWeek     = as.integer(ew - iWeek_hat + anchorWeek),
-        lead        = factor(paste0("h", h), levels = lev_lead),
-        season      = factor(levels(m2_fit$model$season)[1],
-                             levels = levels(m2_fit$model$season)),
+        lead        = factor(paste0("h", h), levels = lev_lead_ew),
+        season      = factor(levels(fit_ew$model$season)[1],
+                             levels = levels(fit_ew$model$season)),
         logit_f_eff = logit_f_eff,
         z_ema       = z_ema_now,
         logN_now    = logN_now,
@@ -395,13 +470,13 @@ run_m2_forecast <- function(kit,
         t_since     = t_since,
         post_ign    = TRUE
       )
-      if ("season_h" %in% names(m2_fit$model)) {
-        lev_sh <- levels(m2_fit$model$season_h)
+      if ("season_h" %in% names(fit_ew$model)) {
+        lev_sh <- levels(fit_ew$model$season_h)
         nd$season_h <- factor(lev_sh[1], levels = lev_sh)
       }
 
       pr <- tryCatch(
-        stats::predict(m2_fit, newdata = nd, type = "link",
+        stats::predict(fit_ew, newdata = nd, type = "link",
                        se.fit = TRUE, exclude = ex_terms),
         error = function(e) NULL
       )
@@ -418,9 +493,9 @@ run_m2_forecast <- function(kit,
       tibble::tibble(
         eval_week = ew, h = h, target_weekF = target_weekF,
         m1_p = m1_p, m1_lo = m1_lo, m1_hi = m1_hi,
-        m2_p  = soft_cap_p(stats::plogis(eta)),
-        m2_lo = soft_cap_p(stats::plogis(eta - 1.96 * se)),
-        m2_hi = soft_cap_p(stats::plogis(eta + 1.96 * se))
+        m2_p  = soft_cap_ew(stats::plogis(eta)),
+        m2_lo = soft_cap_ew(stats::plogis(eta - 1.96 * se)),
+        m2_hi = soft_cap_ew(stats::plogis(eta + 1.96 * se))
       )
     }))
   }))
@@ -450,13 +525,15 @@ run_prospective_pipeline <- function(kit,
                                      current_data,
                                      walk_start      = 5L,
                                      manual_ign_week = NA_integer_,
+                                     mode            = c("weekly_refit", "frozen"),
                                      verbose         = TRUE) {
+  mode <- match.arg(mode)
   m0 <- run_m0_detection(kit, current_data,
                           manual_ign_week = manual_ign_week, verbose = verbose)
   m1 <- run_m1_alignment(kit, current_data,
                           m0_result = m0, walk_start = walk_start, verbose = verbose)
   m2 <- run_m2_forecast(kit, current_data,
-                         m1_result = m1, verbose = verbose)
+                         m1_result = m1, mode = mode, verbose = verbose)
   list(
     params_df = m1$params_df,
     m1_curves = m1$m1_curves,
