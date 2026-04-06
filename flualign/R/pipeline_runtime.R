@@ -380,7 +380,7 @@ run_m2_forecast <- function(kit,
     ap           <- pw$ap
     season_to_ew <- pw$season_to_ew
 
-    if (is.null(ap) || ap$state %in% c("pre_ignition", "post_peak")) return(NULL)
+    if (is.null(ap) || ap$state == "pre_ignition") return(NULL)
 
     iWeek_hat <- ap$iWeek_hat
     fdf       <- ap$forecast_df
