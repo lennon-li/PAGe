@@ -1,0 +1,6 @@
+# Generated from `.ai/mcp/servers.R` by `Rscript scripts/sync-agent-context.R`.
+# Merge these entries into `~/.codex/config.toml` to enable the shared MCP servers.
+
+[mcp_servers.openaiDeveloperDocs]
+url = "https://developers.openai.com/mcp"
+

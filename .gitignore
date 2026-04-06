@@ -3,3 +3,4 @@ results/
 .claude/
 *.RData
 *.rds
+docs/*_cache/
