@@ -38,6 +38,133 @@ make_soft_cap_fn <- function(fit_obj) {
   }
 }
 
+#' Predict M2 positivity from a fitted Stage-2 GAM (single row)
+#'
+#' Shared prediction core used by all M2 code paths: LOSO frozen evaluation,
+#' LOSO weekly-refit evaluation, and prospective deployment. By centralising
+#' the newdata construction, factor-level alignment, season-RE handling,
+#' soft-cap application, and CI logic in one place, we guarantee that
+#' training-evaluation-deployment are fully consistent.
+#'
+#' @param fit A fitted \code{mgcv::bam}/\code{gam} object.
+#' @param ew Integer. Current evaluation week (weekF).
+#' @param h Integer. Forecast horizon (1 or 2).
+#' @param iWeek Integer. Locked ignition week.
+#' @param anchorWeek Integer. Reference-curve anchor week.
+#' @param logit_f_eff Numeric. logit(M1 predicted positivity at target week).
+#' @param z_ema Numeric. EWMA of logit-observed positivity.
+#' @param logN_now Numeric. log(N) at eval week.
+#' @param d1_now Numeric. First derivative (logit scale) at eval week.
+#' @param d2_now Numeric. Second derivative (logit scale) at eval week.
+#' @param season_label Character. Season label for newdata: the test/current
+#'   season name (used when the season is in the model's training data,
+#'   i.e. weekly-refit mode), or \code{NULL} to fall back to the first
+#'   historical level (frozen mode).
+#' @param ex_terms Character vector. Terms to exclude from \code{predict()}
+#'   (e.g. exclude_newseason terms). Should NOT include \code{"s(season)"}
+#'   when the season is in the refit training data.
+#' @param include_season_re Logical. If \code{TRUE}, the season random effect
+#'   is included in the prediction (weekly-refit mode). If \code{FALSE},
+#'   \code{"s(season)"} is appended to \code{ex_terms} (frozen mode).
+#' @param soft_cap_fn Optional soft-cap function from \code{make_soft_cap_fn()}.
+#' @param return_ci Logical. If \code{TRUE}, returns \code{m2_lo} and
+#'   \code{m2_hi} (±1.96 SE on the link scale).
+#'
+#' @return A named list with \code{m2_p} (and \code{m2_lo}, \code{m2_hi}
+#'   if \code{return_ci = TRUE}), or \code{NULL} on prediction failure.
+#' @export
+m2_predict_one <- function(fit,
+                           ew,
+                           h,
+                           iWeek,
+                           anchorWeek,
+                           logit_f_eff,
+                           z_ema,
+                           logN_now,
+                           d1_now,
+                           d2_now,
+                           season_label    = NULL,
+                           ex_terms        = NULL,
+                           include_season_re = FALSE,
+                           soft_cap_fn     = NULL,
+                           return_ci       = FALSE) {
+
+  # --- Exclude terms ---
+  ex <- ex_terms %||% character(0)
+  if (!isTRUE(include_season_re)) {
+    ex <- unique(c(ex, "s(season)"))
+  }
+
+  # --- Factor levels from fitted model ---
+  lev_lead <- levels(fit$model$lead)
+  lev_seas <- levels(fit$model$season)
+
+  lead_val <- paste0("h", h)
+  if (!lead_val %in% lev_lead) return(NULL)
+
+  # Season factor: use season_label if it's a valid level (refit mode),
+
+  # otherwise fall back to first historical level (frozen mode).
+  if (!is.null(season_label) && season_label %in% lev_seas) {
+    nd_season <- factor(season_label, levels = lev_seas)
+  } else {
+    nd_season <- factor(lev_seas[1L], levels = lev_seas)
+  }
+
+  nd <- tibble::tibble(
+    weekF       = as.integer(ew),
+    newWeek     = as.integer(ew) - as.integer(iWeek) + as.integer(anchorWeek),
+    lead        = factor(lead_val, levels = lev_lead),
+    season      = nd_season,
+    logit_f_eff = as.numeric(logit_f_eff),
+    z_ema       = as.numeric(z_ema),
+    logN_now    = as.numeric(logN_now),
+    d1_now      = as.numeric(d1_now),
+    d2_now      = as.numeric(d2_now),
+    t_since     = as.numeric(ew - iWeek),
+    post_ign    = TRUE
+  )
+
+  # season_h (factor-smooth interaction term) — use matching level if present
+  if ("season_h" %in% names(fit$model)) {
+    lev_sh <- levels(fit$model$season_h)
+    sh_val <- paste0(as.character(nd_season), ":h", h)
+    if (sh_val %in% lev_sh) {
+      nd$season_h <- factor(sh_val, levels = lev_sh)
+    } else {
+      nd$season_h <- factor(lev_sh[1L], levels = lev_sh)
+    }
+  }
+
+  # --- Predict ---
+  pr <- tryCatch(
+    stats::predict(fit, newdata = nd, type = "link",
+                   se.fit = return_ci, exclude = ex),
+    error = function(e) NULL
+  )
+  if (is.null(pr)) return(NULL)
+
+  # --- Transform to probability scale ---
+  cap <- soft_cap_fn %||% identity
+  eps <- 1e-12
+
+  if (isTRUE(return_ci)) {
+    eta <- as.numeric(pr$fit)
+    se  <- as.numeric(pr$se.fit)
+    list(
+      m2_p  = cap(pmin(1 - eps, pmax(eps, stats::plogis(eta)))),
+      m2_lo = cap(pmin(1 - eps, pmax(eps, stats::plogis(eta - 1.96 * se)))),
+      m2_hi = cap(pmin(1 - eps, pmax(eps, stats::plogis(eta + 1.96 * se))))
+    )
+  } else {
+    eta <- as.numeric(pr)
+    list(
+      m2_p = cap(pmin(1 - eps, pmax(eps, stats::plogis(eta))))
+    )
+  }
+}
+
+
 #' Stage-2 ramp weights (internal)
 #' @keywords internal
 stage2_ramp_weight <- function(t_since, K = 3L) {

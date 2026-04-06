@@ -342,7 +342,8 @@ run_m2_forecast <- function(kit,
 
   ex_terms <- best_spec$exclude_newseason
   if (is.null(ex_terms)) ex_terms <- stage2_exclude_newseason(best_spec)
-  ex_terms       <- unique(c(ex_terms, "s(season)"))
+  # Season RE handling is delegated to m2_predict_one() via include_season_re.
+  # ex_terms here should NOT include "s(season)" — m2_predict_one adds it when needed.
   anchorWeek     <- ref$anchorWeek
   logN_train_max     <- max(m2_fit$model$logN_now, na.rm = TRUE)
   d1_train_range     <- range(m2_fit$model$d1_now, na.rm = TRUE)
@@ -422,9 +423,11 @@ run_m2_forecast <- function(kit,
           NULL
         }
       )
-      fit_ew <- if (!is.null(refit_out)) refit_out$fit else m2_fit
+      refit_ok <- !is.null(refit_out)
+      fit_ew   <- if (refit_ok) refit_out$fit else m2_fit
     } else {
-      fit_ew <- m2_fit
+      refit_ok <- FALSE
+      fit_ew   <- m2_fit
     }
     soft_cap_ew <- make_soft_cap_fn(fit_ew)
     lev_lead_ew <- levels(fit_ew$model$lead) %||% lev_lead_frozen
@@ -472,31 +475,23 @@ run_m2_forecast <- function(kit,
       logit_f_eff <- pmin(lfe_train_range[2L],
                         pmax(lfe_train_range[1L],
                              qlogis(pmin(pmax(m1_p, 1e-6), 1 - 1e-6))))
-      t_since     <- as.numeric(ew - iWeek_hat)
 
-      nd <- tibble::tibble(
-        weekF       = as.integer(ew),
-        newWeek     = as.integer(ew - iWeek_hat + anchorWeek),
-        lead        = factor(paste0("h", h), levels = lev_lead_ew),
-        season      = factor(levels(fit_ew$model$season)[1],
-                             levels = levels(fit_ew$model$season)),
-        logit_f_eff = logit_f_eff,
-        z_ema       = z_ema_now,
-        logN_now    = logN_now,
-        d1_now      = d1_now,
-        d2_now      = d2_now,
-        t_since     = t_since,
-        post_ign    = TRUE
-      )
-      if ("season_h" %in% names(fit_ew$model)) {
-        lev_sh <- levels(fit_ew$model$season_h)
-        nd$season_h <- factor(lev_sh[1], levels = lev_sh)
-      }
-
-      pr <- tryCatch(
-        stats::predict(fit_ew, newdata = nd, type = "link",
-                       se.fit = TRUE, exclude = ex_terms),
-        error = function(e) NULL
+      pr <- m2_predict_one(
+        fit               = fit_ew,
+        ew                = ew,
+        h                 = h,
+        iWeek             = iWeek_hat,
+        anchorWeek        = anchorWeek,
+        logit_f_eff       = logit_f_eff,
+        z_ema             = z_ema_now,
+        logN_now          = logN_now,
+        d1_now            = d1_now,
+        d2_now            = d2_now,
+        season_label      = if (refit_ok) "current" else NULL,
+        ex_terms          = ex_terms,
+        include_season_re = refit_ok,
+        soft_cap_fn       = soft_cap_ew,
+        return_ci         = TRUE
       )
       if (is.null(pr)) {
         return(tibble::tibble(
@@ -506,14 +501,12 @@ run_m2_forecast <- function(kit,
         ))
       }
 
-      eta <- as.numeric(pr$fit)
-      se  <- as.numeric(pr$se.fit)
       tibble::tibble(
         eval_week = ew, h = h, target_weekF = target_weekF,
         m1_p = m1_p, m1_lo = m1_lo, m1_hi = m1_hi,
-        m2_p  = soft_cap_ew(stats::plogis(eta)),
-        m2_lo = soft_cap_ew(stats::plogis(eta - 1.96 * se)),
-        m2_hi = soft_cap_ew(stats::plogis(eta + 1.96 * se))
+        m2_p  = pr$m2_p,
+        m2_lo = pr$m2_lo,
+        m2_hi = pr$m2_hi
       )
     }))
   }))

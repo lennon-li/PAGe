@@ -725,7 +725,9 @@ loso_m1_m2_joint <- function(allD,
       if (anyNA(d_test$season_h)) d_test$season_h[is.na(d_test$season_h)] <- levels(fit_obj$model$season_h)[1]
     }
 
-    p_hat <- as.numeric(stats::predict(fit_obj, newdata = d_test, type = "response", exclude = ex))
+    # Frozen LOSO: test season is NOT in training data — exclude s(season).
+    ex_with_season <- unique(c(ex, "s(season)"))
+    p_hat <- as.numeric(stats::predict(fit_obj, newdata = d_test, type = "response", exclude = ex_with_season))
     p_hat <- pmin(1 - 1e-12, pmax(1e-12, p_hat))
 
     pred_list[[test_s]] <- tibble::tibble(

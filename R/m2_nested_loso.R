@@ -465,8 +465,11 @@ nested_loso_m2_eval <- function(allD,
       d_test$season_h[is.na(d_test$season_h)] <- levels(fit_obj$model$season_h)[1]
   }
 
+  # Frozen LOSO: test season is NOT in training data — exclude s(season).
+  ex_terms_with_season <- unique(c(ex_terms, "s(season)"))
+
   p_hat <- as.numeric(stats::predict(fit_obj, newdata = d_test,
-                                     type = "response", exclude = ex_terms))
+                                     type = "response", exclude = ex_terms_with_season))
   p_hat <- soft_cap_fn(p_hat)
   p_hat <- pmin(1 - 1e-12, pmax(1e-12, p_hat))
 
@@ -595,6 +598,7 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
 
   ex_terms   <- spec$exclude_newseason
   if (is.null(ex_terms)) ex_terms <- stage2_exclude_newseason(spec)
+  # Season RE handling delegated to m2_predict_one() via include_season_re.
   anchorWeek <- as.integer(spec$anchorWeek %||% fold$ref$anchorWeek %||% 20L)
 
   eval_weeks <- sort(unique(m1_test_preds$eval_weekF))
@@ -689,38 +693,35 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
 
       logit_f_eff <- stats::qlogis(pmin(pmax(m1_p, 1e-6), 1 - 1e-6))
 
-      nd <- tibble::tibble(
-        weekF       = as.integer(ew),
-        newWeek     = as.integer(ew) - as.integer(iWeek_used) + anchorWeek,
-        lead        = factor(paste0("h", h), levels = lev_lead),
-        season      = factor(lev_seas[1L], levels = lev_seas),
-        logit_f_eff = logit_f_eff,
-        z_ema       = z_ema_now,
-        logN_now    = logN_now,
-        d1_now      = d1_now_ew,
-        d2_now      = d2_now_ew,
-        t_since     = t_since_v,
-        post_ign    = TRUE
-      )
-      if ("season_h" %in% names(fit_ew$model)) {
-        lev_sh <- levels(fit_ew$model$season_h)
-        nd$season_h <- factor(lev_sh[1L], levels = lev_sh)
-      }
+      # Weekly refit: test season is in the refit model's training data,
+      # so include the season RE.
+      is_refit <- test_s %in% lev_seas
 
-      pr <- tryCatch(
-        stats::predict(fit_ew, newdata = nd, type = "response", exclude = ex_terms),
-        error = function(e) NULL
+      pr <- m2_predict_one(
+        fit               = fit_ew,
+        ew                = ew,
+        h                 = h,
+        iWeek             = iWeek_used,
+        anchorWeek        = anchorWeek,
+        logit_f_eff       = logit_f_eff,
+        z_ema             = z_ema_now,
+        logN_now          = logN_now,
+        d1_now            = d1_now_ew,
+        d2_now            = d2_now_ew,
+        season_label      = if (is_refit) test_s else NULL,
+        ex_terms          = ex_terms,
+        include_season_re = is_refit,
+        soft_cap_fn       = soft_cap_fn,
+        return_ci         = FALSE
       )
       if (is.null(pr)) next
-
-      p_hat <- soft_cap_fn(pmin(1 - 1e-12, pmax(1e-12, as.numeric(pr))))
 
       all_rows[[i]] <- c(all_rows[[i]], list(tibble::tibble(
         season  = test_s,
         weekF   = as.integer(ew),
         lead    = paste0("h", h),
         t_since = t_since_v,
-        p_hat   = p_hat,
+        p_hat   = pr$m2_p,
         p_obs   = y_lead / max(N_lead, 1L),
         y_lead  = y_lead,
         N_lead  = N_lead

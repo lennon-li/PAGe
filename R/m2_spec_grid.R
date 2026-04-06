@@ -665,6 +665,8 @@ tune_stage2_loso_spec_grid <- function(alignedD_prosp,
       if (anyNA(d_test$season_h)) d_test$season_h[is.na(d_test$season_h)] <- lev_sh[1]
       
       ex <- if (isTRUE(exclude_newseason_terms)) sp$exclude_newseason else NULL
+      # Frozen LOSO: always exclude s(season) — test season is NOT in training.
+      ex <- unique(c(ex, "s(season)"))
       eta <- as.numeric(stats::predict(fit_mod, newdata = d_test, type = "link", exclude = ex))
       p   <- plogis(eta)
       
@@ -1016,6 +1018,8 @@ tune_stage2_loso_spec_grid_parallel <- function(alignedD_prosp,
         if (anyNA(d_test$season_h)) d_test$season_h[is.na(d_test$season_h)] <- lev_sh[1]
         
         ex <- if (isTRUE(exclude_newseason_terms)) sp$exclude_newseason else NULL
+        # Frozen LOSO: always exclude s(season) — test season is NOT in training.
+        ex <- unique(c(ex, "s(season)"))
         eta <- as.numeric(stats::predict(fit_mod, newdata = d_test, type = "link", exclude = ex))
         p   <- plogis(eta)
         
