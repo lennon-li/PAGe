@@ -611,6 +611,16 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
     obs_to_ew <- dplyr::filter(test_allD, .data$weekF <= ew)
     if (nrow(obs_to_ew) < 2L) next
 
+    # Combine M1 train + test predictions for refit: the current-season rows
+    # should use M1 predictions (not template-based logit_f_eff) so that
+    # training features match the prediction features at line 680.
+    m1_test_to_ew <- dplyr::filter(m1_test_preds, .data$eval_weekF <= ew)
+    m1_combined   <- if (!is.null(m1_train_preds)) {
+      dplyr::bind_rows(m1_train_preds, m1_test_to_ew)
+    } else {
+      m1_test_to_ew
+    }
+
     refit_out <- tryCatch(
       refit_stage2_weekly(
         current_obs  = obs_to_ew,
@@ -618,7 +628,7 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
         hist_data    = hist_aligned,
         template_df  = fold$template_df,
         spec         = spec,
-        m1_preds     = m1_train_preds,
+        m1_preds     = m1_combined,
         season_label = test_s,
         verbose      = FALSE
       ),

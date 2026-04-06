@@ -373,6 +373,11 @@ run_m0_m1_m2_weekly <- function(currentSeason,
                                  exclude_season_re = TRUE,
                                  interval      = c("pi", "ci")) {
 
+  .Deprecated("run_prospective_pipeline",
+              msg = paste("run_m0_m1_m2_weekly() is deprecated.",
+                          "Use run_prospective_pipeline() from pipeline_runtime.R instead.",
+                          "It supports both frozen-fit and weekly-refit modes."))
+
   interval <- match.arg(interval)
 
   `%||%` <- function(x, y) if (is.null(x)) y else x

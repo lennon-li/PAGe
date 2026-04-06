@@ -313,7 +313,11 @@ prep_stage2_m1_features <- function(alignedD_prosp,
                                     ignD = NULL,
                                     eps = 1e-6,
                                     n_weeks = NULL) {
-  if (!requireNamespace("data.table", quietly = TRUE)) stop("Please install data.table.")
+  .Deprecated("prep_stage2_joint",
+              msg = paste("prep_stage2_m1_features() is deprecated.",
+                          "Use prep_stage2_joint() from m2_training.R instead.",
+                          "The callers of this function (tune_stage2_loso_spec_grid) are also deprecated."))
+  stop("prep_stage2_m1_features() is deprecated. Use prep_stage2_joint() instead.")
   if (!is.list(spec) || !all(c("delta","Kr","alpha_state","T") %in% names(spec))) {
     stop("spec must be a list from stage2_make_spec() with delta/Kr/alpha_state/T.")
   }
@@ -542,6 +546,12 @@ tune_stage2_loso_spec_grid <- function(alignedD_prosp,
                                        strategy = c("auto","multisession","multicore","sequential"),
                                        # raise global export limit (GB); set NULL to not change
                                        max_global_size_gb = 4) {
+  
+  .Deprecated("nested_loso_grid_search",
+              msg = paste("tune_stage2_loso_spec_grid() is deprecated.",
+                          "Use nested_loso_grid_search() from m2_nested_loso.R instead.",
+                          "This function depends on undefined stack_stage2_joint_data()."))
+  stop("tune_stage2_loso_spec_grid() is deprecated. Use nested_loso_grid_search() instead.")
   
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Please install data.table.")
   if (!requireNamespace("future", quietly = TRUE)) stop("Please install future.")
@@ -874,6 +884,12 @@ tune_stage2_loso_spec_grid_parallel <- function(alignedD_prosp,
                                                 nthreads = 1L,
                                                 cache_dir = tempdir(),
                                                 verbose = TRUE) {
+  
+  .Deprecated("nested_loso_grid_search",
+              msg = paste("tune_stage2_loso_spec_grid_parallel() is deprecated.",
+                          "Use nested_loso_grid_search() from m2_nested_loso.R instead.",
+                          "This function depends on undefined stack_stage2_joint_data()."))
+  stop("tune_stage2_loso_spec_grid_parallel() is deprecated. Use nested_loso_grid_search() instead.")
   
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Need data.table")
   if (!requireNamespace("mgcv", quietly = TRUE)) stop("Need mgcv")

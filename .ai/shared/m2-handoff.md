@@ -1,6 +1,6 @@
 # M2 Handoff: What's Done and What's Next
 
-## Status as of 2026-03-30
+## Status as of 2026-07-14
 
 **M0 (Ignition Detection)**: Complete and tuned. Detects season start prospectively.
 
@@ -8,58 +8,39 @@
 - k_ref=25, multi_temperature=0.25, template_shift=0, align_rise_weight=1.0
 - LOSO Weibull-weighted peak MAE = 1.169 weeks (153-spec grid search)
 - Uses factor-smooth (FS) reference curves via `estimateRef(method="fs")`
-- Experimental slope weighting + dynamic temperature added (marginal improvement)
 
-**M2 (Forecast)**: NOT YET IMPLEMENTED — this is the next step.
+**M2 (Forecast)**: Implemented. Joint binomial GAM (`mgcv::bam`) for h=1,2
+week-ahead positivity prediction. Two deployment modes:
 
-## M2 Architecture (from pipeline_overview.qmd)
+- **`frozen`** — Uses pre-trained GAM without refitting. Fastest.
+- **`weekly_refit`** — Refits the GAM each week with current-season data appended
+  to historical training data. Adapts to the live season.
 
-M2 produces 1-2 week ahead positivity forecasts using M1's alignment outputs as covariates.
+Best tuned spec (v8 nested LOSO): `Kr=1, k_f=7, k_e=2, alpha_state=0.02, k_1=4`.
 
-### Inputs from M1 (per eval_week)
-Available in `params_df` from `loso_walkforward()`:
-- `tau` — time shift estimate
-- `delta` — dilation estimate
-- `a`, `b` — intercept and amplitude
-- `t_peak` — estimated peak timing (aligned scale)
-- `peak_weekF` — estimated peak week (calendar scale)
-- `peak_passed` — boolean flag
-- `iWeek_hat` — estimated ignition week
-- `eval_week` — current weekF
+## M2 Architecture
 
-### Raw features to add
-- Current positivity `p` and recent trend (Δp over last 2-3 weeks)
-- Growth rate (logit-scale slope)
-- Weeks since ignition (`eval_week - iWeek_hat`)
-- Template weights from multi-template ensemble (which historical season matches best)
+M2 consumes M1 alignment covariates + raw features to produce 2-week-ahead forecasts.
 
-### Why M2 matters
-M1 alignment is shape-matching — it can't adapt when the current season is unlike any template. 2025-26 peaked at weekF=25 (latest in training data), and M1 overestimated peak by 2-3 weeks consistently. M2 can learn these systematic biases from features like growth rate (steep rise → earlier peak than M1 predicts).
+### GAM Formula (tuned spec)
+```
+cbind(y_lead, N_lead - y_lead) ~ -1 + lead + s(season, bs='re')
+  + s(logit_f_eff, by=lead, bs='ts', k=7)  # M1-based template
+  + s(z_ema, by=lead, bs='ts', k=2)        # EWMA state
+  + s(d1_now, by=lead, bs='ts', k=4)       # logit-scale slope
+```
 
-### Training data
-`loso_walkforward()` produces `params_df` and `forecast_df` per season via LOSO. The `params_df` rows (one per season × eval_week) are the natural training set for M2, with true peak timing and true positivity as targets.
+### Key Functions
+- `prep_stage2_joint()` (m2_training.R) — single source of truth for feature engineering
+- `train_stage2_joint()` (m2_training.R) — GAM training wrapper
+- `refit_stage2_weekly()` (m2_training.R) — weekly refit combining hist + current
+- `run_m2_forecast()` (pipeline_runtime.R) — deployment prediction (both modes)
+- `run_prospective_pipeline()` (pipeline_runtime.R) — full M0→M1→M2 wrapper
+- `nested_loso_grid_search()` (m2_nested_loso.R) — LOSO grid search for tuning
 
-## Key files for M2 development
-
-### Must read first
-- `docs/pipeline_overview.qmd` — full architecture description including M2 section
-- `flualign/R/loso_alignment.R` — `loso_walkforward()` (produces M1 outputs for M2)
-- `flualign/R/align_multi_template.R` — multi-template alignment (produces weights, per-template diagnostics)
-
-### Data files
-- `data/m1_alignment_tuning_v3.rds` — M1 tuning results (153 specs)
-- `data/align_multi_cache.rds` — will be regenerated; LOSO walkforward cache with best M1 params
-- `data/stage1_tuning.rds` — M0 ignition detection tuned params
+### Key Data Files
+- `data/m2_production.rds` — trained M2 GAM + spec
+- `data/ref_production.rds` — reference curve and M1 params
+- `data/m1_alignment_tuning_v3.rds` — M1 tuning results
+- `data/stage1_tuning.rds` — M0 ignition tuned params
 - `data/flu_testing_data.csv` — raw surveillance data
-
-### Existing M2 scaffolding
-Check `docs/pipeline_overview.qmd` section on M2 for the planned architecture. No M2 code exists yet.
-
-## Server setup notes
-
-1. Install R packages: `install.packages(c("dplyr", "tidyr", "ggplot2", "mgcv", "gamm4", "gratia", "furrr", "future", "purrr", "gt", "plotly", "MMWRweek", "data.table"))`
-2. Install flualign: `devtools::install("flualign")` from the repo root
-3. For parallel work: `future::plan(multisession)` — adjust worker count for server cores
-4. Scripts in `scripts/` have hardcoded Windows paths (`C:/Users/lennon.li/...`) — use `here::here()` or set `wd` to repo root on the server
-5. QMDs use relative paths and should work from `docs/` directory
-6. Memory files are in `.claude/memory/` within the repo for reference

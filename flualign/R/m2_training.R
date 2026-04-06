@@ -608,9 +608,9 @@ train_stage2_joint <- function(dat,
   # If spec is NULL and alpha_state was not provided, try to take it from best_mean_nll
   if (is.null(spec) && is.null(alpha_state)) {
     if (is.data.frame(best_mean_nll) && "alpha_state" %in% names(best_mean_nll)) {
-      alpha_state <- best_mean_nll
+      alpha_state <- best_mean_nll$alpha_state[1L]
     } else if (is.list(best_mean_nll) && !is.data.frame(best_mean_nll) && !is.null(best_mean_nll)) {
-      alpha_state <- best_mean_nll
+      alpha_state <- best_mean_nll[["alpha_state"]]
     }
   }
   # ramp is controlled by K (K<=1 => no ramp)
@@ -1322,117 +1322,9 @@ plot_tune_stage2_heatmap <- function(df,
 }
 
 
-expand_grid_specs <- function(
-    # --- grids you want to tune ---
-  delta_grid = -3:3,
-  K_grid     = 1:6,
-  T_grid     = c("O","S"),     # "O" offset, "S" smooth, "N" none (optional)
-  
-  k_f_grid   = c(6L, 8L, 10L), # only used when T == "S"
-  
-  # --- fixed (your request) ---
-  alpha_state = 0.20,
-  k_2 = 0L,
-  
-  # --- other fixed defaults (can override) ---
-  pre_buffer = 1L,
-  leads      = c(1L, 2L),
-  
-  k_w = 8L,
-  k_s = 0L,
-  k_e = 6L,
-  k_n = 6L,
-  k_1 = 6L,
-  
-  bs_week        = "ts",
-  bs_fs_marginal = "ts",
-  
-  # optional: include T="N" in T_grid if you want template off
-  drop_unused_kf_for_offset = TRUE,
-  verbose = TRUE
-) {
-  if (!exists("stage2_make_spec", mode = "function")) {
-    stop("expand_grid_specs() expects stage2_make_spec() to be defined (source your prospective_training file first).")
-  }
-  if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
-  if (!requireNamespace("tidyr", quietly = TRUE)) stop("Please install tidyr.")
-  if (!requireNamespace("purrr", quietly = TRUE)) stop("Please install purrr.")
-  
-  # coerce types
-  delta_grid <- as.integer(delta_grid)
-  K_grid     <- as.integer(K_grid)
-  T_grid     <- as.character(T_grid)
-  k_f_grid   <- as.integer(k_f_grid)
-  
-  alpha_state <- as.numeric(alpha_state)
-  if (!is.finite(alpha_state) || alpha_state <= 0 || alpha_state >= 1)
-    stop("alpha_state must be in (0,1).")
-  
-  # --- build grid: k_f only matters for T="S" ---
-  grid_O <- tidyr::crossing(delta = delta_grid, K = K_grid, T = T_grid[T_grid != "S"]) %>%
-    dplyr::mutate(k_f = if (drop_unused_kf_for_offset) NA_integer_ else k_f_grid[1])
-  
-  grid_S <- tidyr::crossing(delta = delta_grid, K = K_grid, T = "S", k_f = k_f_grid)
-  
-  grid <- dplyr::bind_rows(grid_O, grid_S) %>%
-    dplyr::arrange(.data$T, .data$delta, .data$K, dplyr::coalesce(.data$k_f, 0L)) %>%
-    dplyr::mutate(
-      # stable name that won’t collide
-      spec_id = dplyr::if_else(
-        .data$T == "S",
-        sprintf("T%s_d%+d_K%d_kf%d", .data$T, .data$delta, .data$K, .data$k_f),
-        sprintf("T%s_d%+d_K%d", .data$T, .data$delta, .data$K)
-      )
-    )
-  
-  # --- build specs ---
-  specs <- purrr::pmap(
-    list(grid$delta, grid$K, grid$T, grid$k_f),
-    function(delta, K, T, k_f) {
-      # for non-smooth template, k_f is irrelevant; pass a safe default
-      if (is.na(k_f)) k_f <- k_f_grid[1]
-      
-      stage2_make_spec(
-        delta = delta,
-        K = K,
-        k_f = k_f,
-        alpha_state = alpha_state,
-        pre_buffer = pre_buffer,
-        leads = leads,
-        
-        T = T,
-        
-        k_w = k_w,
-        k_s = k_s,
-        
-        k_e = k_e,
-        k_n = k_n,
-        k_1 = k_1,
-        k_2 = k_2,
-        
-        bs_week = bs_week,
-        bs_fs_marginal = bs_fs_marginal
-      )
-    }
-  )
-  names(specs) <- grid$spec_id
-  
-  if (isTRUE(verbose)) {
-    message("[expand_grid_specs] specs=", length(specs),
-            " | delta=", length(delta_grid),
-            " K=", length(K_grid),
-            " T=", paste(unique(T_grid), collapse = ","),
-            " k_f=", length(k_f_grid), " (only when T='S')",
-            " | alpha_state=", alpha_state,
-            " | fixed: k_2=", k_2, " k_w=", k_w, " k_s=", k_s,
-            " k_e=", k_e, " k_n=", k_n, " k_1=", k_1,
-            " pre_buffer=", pre_buffer,
-            " leads={", paste(leads, collapse=","), "}"
-    )
-  }
-  
-  list(specs = specs, grid = grid, n = nrow(grid))
-}
+# NOTE: expand_grid_specs() has been consolidated into m2_spec_grid.R.
+# Use the version there -- it supports the full hyperparameter grid.
+
 
 #’ Bundle all trained components into a prospective forecasting kit
 #’

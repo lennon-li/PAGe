@@ -88,10 +88,15 @@ WALK_START <- 5L
 DATA_DIR   <- normalizePath("../data", mustWork = TRUE)
 WF_CACHE   <- file.path(DATA_DIR, "deploy_wf_cache.rds")
 
+# ---- M2 mode ----
+# "weekly_refit" refits the GAM each week with current-season data.
+# "frozen" uses the pre-trained GAM without refitting.
+M2_MODE <- "weekly_refit"
+
 # ---- Cache control ----
 # Set FORCE_REFRESH = TRUE to rerun the walk-forward (e.g., after new data
 # arrive, changing MANUAL_IGN_WEEK, or updating pipeline code).
-# The cache does NOT auto-invalidate.
+# The cache auto-invalidates when kit files or data change (via hash check).
 FORCE_REFRESH <- FALSE
 
 # ---- Manual ignition override ----
@@ -146,20 +151,39 @@ For each evaluation week $w$, the pipeline runs sequentially:
 #| warning: false
 
 if (file.exists(WF_CACHE) && !isTRUE(FORCE_REFRESH)) {
-  wf  <- readRDS(WF_CACHE)
-  ref <- kit$ref
-  message("Loaded walk-forward from cache. Set FORCE_REFRESH = TRUE to rerun.")
-} else {
+  # Auto-invalidate cache if kit or data have changed
+  cache_hash <- tools::md5sum(c(
+    file.path(DATA_DIR, "ref_production.rds"),
+    file.path(DATA_DIR, "m2_production.rds")
+  ))
+  cache_meta <- attr(readRDS(WF_CACHE), "cache_hash")
+  stale <- is.null(cache_meta) || !identical(unname(cache_hash), unname(cache_meta))
+  if (stale) {
+    message("Cache stale (kit files changed). Rerunning walk-forward.")
+  } else {
+    wf  <- readRDS(WF_CACHE)
+    ref <- kit$ref
+    message(sprintf("Loaded walk-forward from cache (mode=%s). Set FORCE_REFRESH = TRUE to rerun.",
+                    attr(wf, "m2_mode") %||% "unknown"))
+  }
+}
+if (!exists("wf")) {
   wf <- run_prospective_pipeline(
     kit             = kit,
     current_data    = currentD_full,
     walk_start      = WALK_START,
     manual_ign_week = MANUAL_IGN_WEEK,
+    mode            = M2_MODE,
     verbose         = TRUE
   )
   ref <- kit$ref
+  attr(wf, "m2_mode") <- M2_MODE
+  attr(wf, "cache_hash") <- tools::md5sum(c(
+    file.path(DATA_DIR, "ref_production.rds"),
+    file.path(DATA_DIR, "m2_production.rds")
+  ))
   saveRDS(wf, WF_CACHE)
-  message("Walk-forward complete. Saved to ", WF_CACHE)
+  message(sprintf("Walk-forward complete (mode=%s). Saved to %s", M2_MODE, WF_CACHE))
 }
 ```
 

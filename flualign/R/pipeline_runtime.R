@@ -344,9 +344,10 @@ run_m2_forecast <- function(kit,
   if (is.null(ex_terms)) ex_terms <- stage2_exclude_newseason(best_spec)
   ex_terms       <- unique(c(ex_terms, "s(season)"))
   anchorWeek     <- ref$anchorWeek
-  logN_train_max <- max(m2_fit$model$logN_now, na.rm = TRUE)
-  d1_train_range <- range(m2_fit$model$d1_now, na.rm = TRUE)
-  d2_train_range <- range(m2_fit$model$d2_now, na.rm = TRUE)
+  logN_train_max     <- max(m2_fit$model$logN_now, na.rm = TRUE)
+  d1_train_range     <- range(m2_fit$model$d1_now, na.rm = TRUE)
+  d2_train_range     <- range(m2_fit$model$d2_now, na.rm = TRUE)
+  lfe_train_range    <- range(m2_fit$model$logit_f_eff, na.rm = TRUE)
 
   # Pre-compute z_ema range from historical training data for clamping
   alpha_s_global <- as.numeric(best_spec$alpha_state %||% 0.25)
@@ -379,7 +380,7 @@ run_m2_forecast <- function(kit,
     ap           <- pw$ap
     season_to_ew <- pw$season_to_ew
 
-    if (is.null(ap) || ap$state == "pre_ignition") return(NULL)
+    if (is.null(ap) || ap$state %in% c("pre_ignition", "post_peak")) return(NULL)
 
     iWeek_hat <- ap$iWeek_hat
     fdf       <- ap$forecast_df
@@ -388,6 +389,21 @@ run_m2_forecast <- function(kit,
     # --- Select fit and soft cap for this eval week ---
     use_refit <- mode == "weekly_refit" && !is.null(kit$hist_data)
     if (use_refit) {
+      # Construct M1 predictions for current season from forecast_df so that
+      # refit training features match prediction features (logit_f_eff).
+      cur_weeks <- sort(unique(season_to_ew$weekF))
+      cur_m1 <- dplyr::bind_rows(lapply(horizons, function(h) {
+        nw <- as.numeric(cur_weeks) - iWeek_hat + anchorWeek
+        tibble::tibble(
+          season     = "current",
+          eval_weekF = as.integer(cur_weeks),
+          h          = as.integer(h),
+          m1_p_hat   = stats::approx(fdf$newWeek, fdf$p_hat,
+                                     xout = nw, rule = 2)$y
+        )
+      }))
+      m1_combined <- dplyr::bind_rows(kit$m1_train_preds, cur_m1)
+
       refit_out <- tryCatch(
         refit_stage2_weekly(
           current_obs  = season_to_ew,
@@ -395,7 +411,7 @@ run_m2_forecast <- function(kit,
           hist_data    = kit$hist_data,
           template_df  = kit$template_df,
           spec         = best_spec,
-          m1_preds     = kit$m1_train_preds,
+          m1_preds     = m1_combined,
           season_label = "current",
           verbose      = FALSE
         ),
@@ -453,7 +469,9 @@ run_m2_forecast <- function(kit,
       d2_now  <- if (nrow(d_at_ew) > 0)
         pmin(d2_train_range[2L], pmax(d2_train_range[1L], d_at_ew$d2_link[1])) else 0
 
-      logit_f_eff <- qlogis(pmin(pmax(m1_p, 1e-6), 1 - 1e-6))
+      logit_f_eff <- pmin(lfe_train_range[2L],
+                        pmax(lfe_train_range[1L],
+                             qlogis(pmin(pmax(m1_p, 1e-6), 1 - 1e-6))))
       t_since     <- as.numeric(ew - iWeek_hat)
 
       nd <- tibble::tibble(
