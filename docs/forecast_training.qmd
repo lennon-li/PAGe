@@ -510,23 +510,23 @@ cat("Best:", prod_results_v4$best_spec_id,
 best_spec_nested <- prod_results_v4$best_spec
 ```
 
-The tuned spec is `Kr=1, k_f=7, k_e=2, alpha_state=0.02` with `delta=0, k_s=0, lambda_w=0`.
-Selected by v8 nested LOSO (756 specs; weekly refit + soft cap; M1-based `logit_f_eff`; no clamping in eval).
+The tuned spec is `Kr=1, k_f=5, k_e=2, alpha_state=0.10` with `delta=0, k_s=0, lambda_w=0`.
+Selected by v8 nested LOSO (756 specs; frozen-fit eval + soft cap; M1-based `logit_f_eff`; no clamping in eval; alpha_state bug fixed).
 
 **`delta = 0` — no template shift.**
 $M_1$'s alignment already places the current season correctly on the reference curve. No residual systematic timing offset remains, validating multi-template alignment with `k_ref=25`.
 
 **`Kr = 1` — no ramp.**
-The template covariate is applied at full weight from the first week after ignition. Once ignition fires the reference curve shape is immediately a reliable anchor — a gradual blend adds no benefit.
+The template covariate is applied at full weight from the first week after ignition. Once ignition fires the reference curve shape is immediately a reliable anchor — a gradual blend adds no benefit. The top 6 specs produce identical NLL across `Kr=1,2,3`, confirming the ramp has no effect.
 
-**`k_f = 7` — flexible template smooth.**
-The logit-scale mapping from the template covariate $z_{s,w}$ uses 7 knots, capturing nonlinear relationships between the reference curve position and realised positivity. This is notably more flexible than the v4 spec (`k_f=2`) and reflects the fact that weekly refit (which incorporates current-season data at each step) can make effective use of a higher-capacity template basis without overfitting. The boundary check confirms `k_f=7` is interior: `k_f=8` is consistently worse.
+**`k_f = 5` — moderately flexible template smooth.**
+The logit-scale mapping from the template covariate $z_{s,w}$ uses 5 knots, capturing nonlinear relationships between the reference curve position and realised positivity. This is more flexible than the v4 spec (`k_f=2`) but more parsimonious than the pre-fix v8 choice (`k_f=7`). With the alpha_state bug fixed (EWMA now computed correctly), the model no longer needs excess template flexibility to compensate for corrupted EWMA features. The boundary check confirms `k_f=5` is interior: both `k_f=4` and `k_f=6` have worse NLL.
 
 **`k_e = 2` — minimal EWMA smooth.**
-The EMA state `z_ema` enters with a 2-knot (near-linear) smooth. Under weekly refit, the current season's own trajectory is directly observed, so the model needs less nonlinear correction from the EMA. A simpler correction prevents the EMA term from conflicting with the rich template smooth.
+The EMA state `z_ema` enters with a 2-knot (near-linear) smooth. With correctly computed EWMA features (after bug fix), the model needs only a linear correction from the EMA. `k_e=2` and `k_e=3` produce identical results, confirming the EMA contributes a simple baseline offset.
 
-**`alpha_state = 0.02` — very slow EMA, ≈50-week memory.**
-The effective lookback is $1/\alpha = 50$ weeks — essentially a seasonal-mean tracker rather than a reactive signal. Combined with `k_e=2`, the EMA provides a stable baseline offset, not a dynamic correction. The boundary check confirms `alpha=0.02` is interior: `alpha=0.01` appears in the top 30 but with worse NLL.
+**`alpha_state = 0.10` — moderate EMA, ≈10-week memory.**
+The effective lookback is $1/\alpha = 10$ weeks — a responsive tracker of recent positivity trends rather than a seasonal-mean signal. This contrasts with the pre-fix spec (`alpha=0.02`) which was an artefact of the alpha_state bug: when the entire `best_mean_nll` dataframe was assigned instead of a scalar, the EWMA was effectively broken, and a very slow alpha masked the corruption. With the bug fixed, the model correctly selects a faster decay rate that tracks meaningful within-season dynamics.
 
 **`k_s = 0` — no per-season deviation.**
 Allowing each season its own weekly shape hurts out-of-sample. The shared reference curve captures enough cross-season variation.
@@ -534,7 +534,7 @@ Allowing each season its own weekly shape hurts out-of-sample. The shared refere
 **`lambda_w = 0` — uniform training weights.**
 Down-weighting late-season observations provides no benefit. The model learns equally from all post-ignition weeks.
 
-**Summary.** The v8 tuned $M_2$ uses a **flexible template smooth with a near-linear EMA correction** under weekly refit semantics. The shift toward higher `k_f` relative to v4 is a direct consequence of evaluating specs under the weekly refit path (which makes the template the primary signal) and including the soft cap in the LOSO objective (which prevents the stiff-template shortcut that v4 exploited).
+**Summary.** The v8 tuned $M_2$ uses a **moderately flexible template smooth (`k_f=5`) with a near-linear EMA correction (`k_e=2`, `alpha=0.10`)**. The key change from the pre-fix spec is the shift from `alpha=0.02` to `alpha=0.10`, which is a direct consequence of fixing the alpha_state assignment bug. With correctly computed EWMA features, the model selects a responsive EMA and a slightly less flexible template smooth — a more balanced partition of signal between the two primary covariates.
 
 
 ## Fit-back on historical data

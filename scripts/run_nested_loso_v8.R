@@ -37,11 +37,12 @@ for (f in c(
   "R/utils.R",
   "R/m0_retro.R", "R/flagIgnition.R",
   "R/m1_reference.R", "R/m1_reference_helpers.R",
+  "R/m1_multi_template.R",
   "R/m2_spec_grid.R", "R/m2_training.R", "R/m2_nested_loso.R",
   "R/pipeline_bridge.R", "R/pipeline_runtime_helpers.R"
 )) source(f)
 
-wd <- here::here()
+wd <- getwd()
 setwd(wd)
 cat("Working dir:", wd, "\n")
 
@@ -133,6 +134,7 @@ cat("Cores:", n_cores, "\n\n")
 cat("=== PHASE 1: Loading M1 cache ===\n")
 
 for (src in c(
+  "data/nested_loso_v8_phase1.rds",
   "data/nested_loso_v5_phase1.rds",
   "data/nested_loso_v4_phase1.rds",
   "data/archive/nested_loso_v4_phase1.rds"
@@ -152,7 +154,7 @@ if (!exists("m1_cache")) {
 remaining_p1 <- setdiff(test_seasons, names(m1_cache))
 if (length(remaining_p1) > 0) {
   cat("Computing", length(remaining_p1), "missing folds...\n")
-  future::plan(future::multicore, workers = n_cores)
+  future::plan(future::multisession, workers = n_cores)
   for (test_s in remaining_p1) {
     cat(sprintf("[%s] Building fold + M1...\n", test_s))
     t0 <- proc.time()[["elapsed"]]
@@ -183,6 +185,13 @@ if (length(remaining_p1) > 0) {
   cat("All folds cached — skipping Phase 1.\n\n")
 }
 
+# Save Phase 1 cache for future re-runs
+p1_save <- "data/nested_loso_v8_phase1.rds"
+if (!file.exists(p1_save)) {
+  saveRDS(m1_cache, p1_save)
+  cat("Saved Phase 1 cache to", p1_save, "\n")
+}
+
 cat("Phase 1 complete:", length(m1_cache), "folds.\n\n")
 
 # ============================================================
@@ -210,7 +219,7 @@ if (length(todo_spec_ids) > 0) {
   cat("(", length(todo_spec_ids), "specs x", length(test_seasons), "folds)\n\n")
   batch_size   <- n_cores
   todo_batches <- split(todo_spec_ids, ceiling(seq_along(todo_spec_ids) / batch_size))
-  future::plan(future::multicore, workers = n_cores)
+  future::plan(future::multisession, workers = n_cores)
 
   for (bi in seq_along(todo_batches)) {
     batch <- todo_batches[[bi]]
