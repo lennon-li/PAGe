@@ -36,19 +36,23 @@ load_prospective_kit <- function(data_dir,
          "\nRun forecast_training.html first.")
   m2_production <- readRDS(m2_path)
 
-  # best_spec: prefer stored in m2_production, else scan nested LOSO files
+  # best_spec: prefer stored in m2_production, else scan nested LOSO files (v10 > v9 > older)
   best_spec <- m2_production$spec %||% {
     gs <- NULL
-    for (fn in c("nested_loso_v4_production.rds",
+    for (fn in c("nested_loso_v10_production.rds",
+                 "nested_loso_v9_production.rds",
+                 "nested_loso_v8_production.rds",
+                 "nested_loso_v4_production.rds",
                  "nested_loso_v3_production.rds",
                  "nested_loso_production.rds")) {
       p <- file.path(data_dir, fn)
       if (file.exists(p)) { gs <- readRDS(p); break }
     }
+    # Confirmed best spec from v9/v10 LOSO (NLL=40.143, RMSE=0.0405)
     if (!is.null(gs)) gs$best_spec else
-      stage2_make_spec(delta = 0L, Kr = 1L, k_f = 2L, k_e = 4L,
-                       alpha_state = 0.10, k_s = 0L, lambda_w = 0,
-                       w_floor = 0.05)
+      stage2_make_spec(delta = 0L, Kr = 1L, k_f = 5L, k_e = 3L,
+                       alpha_state = 0.05, k_1 = 0L, k_w = 0L, k_s = 0L,
+                       lambda_w = 0, w_floor = 0.05)
   }
 
   # ---- M0 ignition params ----
