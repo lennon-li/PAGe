@@ -2329,6 +2329,7 @@ window.Quarto = {
   <li><a href="#sec-train-deploy" id="toc-sec-train-deploy" class="nav-link" data-scroll-target="#sec-train-deploy"><span class="header-section-number">5</span> Deployment sequence</a></li>
   <li><a href="#sec-docmap" id="toc-sec-docmap" class="nav-link" data-scroll-target="#sec-docmap"><span class="header-section-number">6</span> Linked Documents</a></li>
   <li><a href="#key-design-choices" id="toc-key-design-choices" class="nav-link" data-scroll-target="#key-design-choices"><span class="header-section-number">7</span> Key design choices</a></li>
+  <li><a href="#function-call-graph" id="toc-function-call-graph" class="nav-link" data-scroll-target="#function-call-graph"><span class="header-section-number">8</span> Function call graph</a></li>
   </ul>
 </nav>
 </div>
@@ -2624,6 +2625,445 @@ alpha_state=0.10, lambda_w=0, w_floor=0.05</code></pre>
 <p><strong>Two-stage identifiability guard.</strong> Two parameters are activated progressively as data accumulate. The slope <span class="math inline">\(b_w\)</span> is fixed at 1 (<code>allow_scale = FALSE</code>) until sufficient data span the curve. The dilation <span class="math inline">\(\delta_w\)</span> is fixed at 0 (<code>delta_on = FALSE</code>) until a further threshold is crossed. This prevents numerically unstable estimates early in the season when few observations are available.</p>
 <p><strong>Covariate capping for out-of-range extrapolation.</strong> The <code>s(logN_now)</code> smooth in <span class="math inline">\(M_2\)</span> is trained on historical testing volumes (N ≤ 16,310; logN ≤ 9.70). When the current season’s testing volume exceeds the training range (e.g., 2025–26 peaked at N = 39,290; logN = 10.58), the flexible smooth (edf ≈ 5) extrapolates unreliably. At prediction time, <code>logN_now</code> is capped at the training data range to prevent this.</p>
 <p><strong>Soft ceiling on predicted positivity.</strong> Historical peak positivity never exceeds ~34%. A smooth soft-ceiling function, derived from the training data distribution, prevents the GAM from predicting unrealistically high values in extrapolation scenarios. The function is identity below the 95th percentile of training positivity (~26%), then tanh-squashes toward a data-driven ceiling (<span class="math inline">\(p_{\max}^{(\mathrm{train})}\)</span> + buffer ≈ 37%). This provides a principled, smooth constraint rather than a hard clip: predictions near the historical maximum are barely affected (≤2% reduction), while extreme extrapolations (e.g., 57% → 37%) are strongly compressed.</p>
+</section>
+<section id="function-call-graph" class="level2" data-number="8">
+<h2 data-number="8" class="anchored" data-anchor-id="function-call-graph"><span class="header-section-number">8</span> Function call graph</h2>
+<p>End-to-end pipeline function map: M0 ignition → M1 alignment → M2 training/LOSO → M2 prediction → deployment.</p>
+<div class="cell" data-fig-width="16" data-fig-height="7" data-layout-align="default">
+<div class="cell-output-display">
+<div>
+<p></p><figure class="figure"><p></p>
+<div>
+<svg width="1536" height="672" viewbox="0.00 0.00 1007.73 747.02" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" style="; max-width: none; max-height: none">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 743.02)">
+<title>PAGe_pipeline</title>
+<polygon fill="white" stroke="transparent" points="-4,4 -4,-743.02 1003.73,-743.02 1003.73,4 -4,4"></polygon>
+<g id="clust1" class="cluster">
+<title>cluster_m0</title>
+<polygon fill="#fff3cd" stroke="#856404" points="345.58,-658.02 345.58,-731.02 622.73,-731.02 622.73,-658.02 345.58,-658.02"></polygon>
+<text text-anchor="middle" x="484.15" y="-717.12" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#856404">M0: Ignition</text>
+</g>
+<g id="clust2" class="cluster">
+<title>cluster_m1</title>
+<polygon fill="#c3e6cb" stroke="#155724" points="532.31,-519.02 532.31,-650.02 821.39,-650.02 821.39,-519.02 532.31,-519.02"></polygon>
+<text text-anchor="middle" x="676.85" y="-636.12" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#155724">M1: Alignment</text>
+</g>
+<g id="clust3" class="cluster">
+<title>cluster_m2spec</title>
+<polygon fill="#cce5ff" stroke="#004085" points="707.62,-9.02 707.62,-198.02 991.73,-198.02 991.73,-9.02 707.62,-9.02"></polygon>
+<text text-anchor="middle" x="849.68" y="-184.12" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#004085">M2: Spec &amp; Features</text>
+</g>
+<g id="clust4" class="cluster">
+<title>cluster_m2train</title>
+<polygon fill="#b8d4f0" stroke="#003060" points="16.61,-206.02 16.61,-361.02 824.46,-361.02 824.46,-206.02 16.61,-206.02"></polygon>
+<text text-anchor="middle" x="420.53" y="-347.12" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#003060">M2: Training / LOSO</text>
+</g>
+<g id="clust5" class="cluster">
+<title>cluster_m2pred</title>
+<polygon fill="#e2ccff" stroke="#4a0080" points="349.75,-438.02 349.75,-511.02 643.57,-511.02 643.57,-438.02 349.75,-438.02"></polygon>
+<text text-anchor="middle" x="496.66" y="-497.12" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#4a0080">M2: Predict</text>
+</g>
+<g id="clust6" class="cluster">
+<title>cluster_deploy</title>
+<polygon fill="#f8d7da" stroke="#721c24" points="8,-392.02 8,-465.02 281.8,-465.02 281.8,-392.02 8,-392.02"></polygon>
+<text text-anchor="middle" x="144.9" y="-451.12" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#721c24">Deployment</text>
+</g>
+<!-- fitIgnition -->
+<g id="node1" class="node">
+<title>fitIgnition</title>
+<polygon fill="lightgrey" stroke="black" points="614.74,-702.02 556.69,-702.02 556.69,-666.02 614.74,-666.02 614.74,-702.02"></polygon>
+<text text-anchor="middle" x="585.71" y="-681.02" font-family="Helvetica,sans-Serif" font-size="10.00">fitIgnition</text>
+</g>
+<!-- run_alignment_prospective -->
+<g id="node2" class="node">
+<title>run_alignment_prospective</title>
+<polygon fill="lightgrey" stroke="black" points="808.86,-621.02 727.11,-621.02 727.11,-585.02 808.86,-585.02 808.86,-621.02"></polygon>
+<text text-anchor="middle" x="767.99" y="-606.02" font-family="Helvetica,sans-Serif" font-size="10.00">run_alignment</text>
+<text text-anchor="middle" x="767.99" y="-594.02" font-family="Helvetica,sans-Serif" font-size="10.00">_prospective</text>
+</g>
+<!-- fitIgnition&#45;&gt;run_alignment_prospective -->
+<!-- train_stage2_joint -->
+<g id="node3" class="node">
+<title>train_stage2_joint</title>
+<polygon fill="lightgrey" stroke="black" points="634.16,-308.02 537.27,-308.02 537.27,-272.02 634.16,-272.02 634.16,-308.02"></polygon>
+<text text-anchor="middle" x="585.71" y="-287.02" font-family="Helvetica,sans-Serif" font-size="10.00">train_stage2_joint</text>
+</g>
+<!-- run_alignment_prospective&#45;&gt;train_stage2_joint -->
+<!-- run_prospective_pipeline -->
+<g id="node4" class="node">
+<title>run_prospective_pipeline</title>
+<polygon fill="lightgrey" stroke="black" points="105.23,-436.02 15.92,-436.02 15.92,-400.02 105.23,-400.02 105.23,-436.02"></polygon>
+<text text-anchor="middle" x="60.58" y="-421.02" font-family="Helvetica,sans-Serif" font-size="10.00">run_prospective</text>
+<text text-anchor="middle" x="60.58" y="-409.02" font-family="Helvetica,sans-Serif" font-size="10.00">_pipeline</text>
+</g>
+<!-- train_stage2_joint&#45;&gt;run_prospective_pipeline -->
+<!-- stage2_make_spec -->
+<g id="node9" class="node">
+<title>stage2_make_spec</title>
+<polygon fill="lightgrey" stroke="black" points="820.21,-169.02 715.76,-169.02 715.76,-133.02 820.21,-133.02 820.21,-169.02"></polygon>
+<text text-anchor="middle" x="767.99" y="-148.02" font-family="Helvetica,sans-Serif" font-size="10.00">stage2_make_spec</text>
+</g>
+<!-- train_stage2_joint&#45;&gt;stage2_make_spec -->
+<g id="edge16" class="edge">
+<title>train_stage2_joint-&gt;stage2_make_spec</title>
+<path fill="none" stroke="black" d="M625.83,-271.94C631.96,-268.59 638.09,-264.91 643.62,-261.02 675.53,-238.62 678.48,-226.92 707.62,-201.02 718.19,-191.63 730.07,-181.54 740.41,-172.89" />
+<polygon fill="black" stroke="black" points="741.78,-174.49 745.04,-169.03 739.09,-171.26 741.78,-174.49"></polygon>
+</g>
+<!-- prep_stage2_joint -->
+<g id="node12" class="node">
+<title>prep_stage2_joint</title>
+<polygon fill="lightgrey" stroke="black" points="816.49,-53.02 719.48,-53.02 719.48,-17.02 816.49,-17.02 816.49,-53.02"></polygon>
+<text text-anchor="middle" x="767.99" y="-32.02" font-family="Helvetica,sans-Serif" font-size="10.00">prep_stage2_joint</text>
+</g>
+<!-- train_stage2_joint&#45;&gt;prep_stage2_joint -->
+<g id="edge15" class="edge">
+<title>train_stage2_joint-&gt;prep_stage2_joint</title>
+<path fill="none" stroke="black" d="M631.25,-271.91C635.83,-268.77 640.1,-265.15 643.62,-261.02 703.41,-191.02 647.25,-133.52 707.62,-64.02 709.88,-61.42 712.42,-59.04 715.15,-56.85" />
+<polygon fill="black" stroke="black" points="716.65,-58.35 720.25,-53.11 714.17,-54.96 716.65,-58.35"></polygon>
+</g>
+<!-- train_stage2_joint_prepped -->
+<g id="node15" class="node">
+<title>train_stage2_joint_prepped</title>
+<polygon fill="lightgrey" stroke="black" points="816.43,-279.02 719.54,-279.02 719.54,-243.02 816.43,-243.02 816.43,-279.02"></polygon>
+<text text-anchor="middle" x="767.99" y="-264.02" font-family="Helvetica,sans-Serif" font-size="10.00">train_stage2_joint</text>
+<text text-anchor="middle" x="767.99" y="-252.02" font-family="Helvetica,sans-Serif" font-size="10.00">_prepped</text>
+</g>
+<!-- train_stage2_joint&#45;&gt;train_stage2_joint_prepped -->
+<g id="edge14" class="edge">
+<title>train_stage2_joint-&gt;train_stage2_joint_prepped</title>
+<path fill="none" stroke="black" d="M634.55,-282.33C658.69,-278.44 688.06,-273.72 713,-269.71" />
+<polygon fill="black" stroke="black" points="713.65,-271.73 719.24,-268.7 712.98,-267.58 713.65,-271.73"></polygon>
+</g>
+<!-- run_m0_detection -->
+<g id="node5" class="node">
+<title>run_m0_detection</title>
+<polygon fill="lightgrey" stroke="black" points="451.66,-702.02 353.56,-702.02 353.56,-666.02 451.66,-666.02 451.66,-702.02"></polygon>
+<text text-anchor="middle" x="402.61" y="-681.02" font-family="Helvetica,sans-Serif" font-size="10.00">run_m0_detection</text>
+</g>
+<!-- run_prospective_pipeline&#45;&gt;run_m0_detection -->
+<g id="edge35" class="edge">
+<title>run_prospective_pipeline-&gt;run_m0_detection</title>
+<path fill="none" stroke="black" d="M84.68,-436.1C145.14,-483.39 307.86,-610.68 373.54,-662.06" />
+<polygon fill="black" stroke="black" points="372.45,-663.88 378.47,-665.92 375.04,-660.57 372.45,-663.88"></polygon>
+</g>
+<!-- run_m2_forecast -->
+<g id="node24" class="node">
+<title>run_m2_forecast</title>
+<polygon fill="lightgrey" stroke="black" points="273.82,-436.02 180.75,-436.02 180.75,-400.02 273.82,-400.02 273.82,-436.02"></polygon>
+<text text-anchor="middle" x="227.29" y="-415.02" font-family="Helvetica,sans-Serif" font-size="10.00">run_m2_forecast</text>
+</g>
+<!-- run_prospective_pipeline&#45;&gt;run_m2_forecast -->
+<g id="edge36" class="edge">
+<title>run_prospective_pipeline-&gt;run_m2_forecast</title>
+<path fill="none" stroke="black" d="M105.28,-418.02C126.54,-418.02 152.24,-418.02 174.47,-418.02" />
+<polygon fill="black" stroke="black" points="174.65,-420.12 180.65,-418.02 174.65,-415.92 174.65,-420.12"></polygon>
+</g>
+<!-- run_m0_detection&#45;&gt;fitIgnition -->
+<g id="edge4" class="edge">
+<title>run_m0_detection-&gt;fitIgnition</title>
+<path fill="none" stroke="black" d="M451.67,-684.02C482.74,-684.02 522.46,-684.02 550.38,-684.02" />
+<polygon fill="black" stroke="black" points="550.5,-686.12 556.5,-684.02 550.5,-681.92 550.5,-686.12"></polygon>
+</g>
+<!-- m1_walkforward_predictions -->
+<g id="node6" class="node">
+<title>m1_walkforward_predictions</title>
+<polygon fill="lightgrey" stroke="black" points="813.29,-563.02 722.68,-563.02 722.68,-527.02 813.29,-527.02 813.29,-563.02"></polygon>
+<text text-anchor="middle" x="767.99" y="-548.02" font-family="Helvetica,sans-Serif" font-size="10.00">m1_walkforward</text>
+<text text-anchor="middle" x="767.99" y="-536.02" font-family="Helvetica,sans-Serif" font-size="10.00">_predictions</text>
+</g>
+<!-- m1_walkforward_multi -->
+<g id="node7" class="node">
+<title>m1_walkforward_multi</title>
+<polygon fill="lightgrey" stroke="black" points="631.02,-563.02 540.41,-563.02 540.41,-527.02 631.02,-527.02 631.02,-563.02"></polygon>
+<text text-anchor="middle" x="585.71" y="-548.02" font-family="Helvetica,sans-Serif" font-size="10.00">m1_walkforward</text>
+<text text-anchor="middle" x="585.71" y="-536.02" font-family="Helvetica,sans-Serif" font-size="10.00">_multi</text>
+</g>
+<!-- m1_walkforward_multi&#45;&gt;run_alignment_prospective -->
+<g id="edge6" class="edge">
+<title>m1_walkforward_multi-&gt;run_alignment_prospective</title>
+<path fill="none" stroke="black" d="M631.27,-559.36C658.73,-568.19 693.83,-579.48 721.46,-588.37" />
+<polygon fill="black" stroke="black" points="720.88,-590.39 727.23,-590.23 722.16,-586.39 720.88,-590.39"></polygon>
+</g>
+<!-- m1_walkforward_multi&#45;&gt;m1_walkforward_predictions -->
+<g id="edge5" class="edge">
+<title>m1_walkforward_multi-&gt;m1_walkforward_predictions</title>
+<path fill="none" stroke="black" d="M631.27,-545.02C657.05,-545.02 689.57,-545.02 716.31,-545.02" />
+<polygon fill="black" stroke="black" points="716.62,-547.12 722.62,-545.02 716.62,-542.92 716.62,-547.12"></polygon>
+</g>
+<!-- inject_m1_into_snapshots -->
+<g id="node8" class="node">
+<title>inject_m1_into_snapshots</title>
+<polygon fill="lightgrey" stroke="black" points="627.2,-621.02 544.23,-621.02 544.23,-585.02 627.2,-585.02 627.2,-621.02"></polygon>
+<text text-anchor="middle" x="585.71" y="-606.02" font-family="Helvetica,sans-Serif" font-size="10.00">inject_m1_into</text>
+<text text-anchor="middle" x="585.71" y="-594.02" font-family="Helvetica,sans-Serif" font-size="10.00">_snapshots</text>
+</g>
+<!-- inject_m1_into_snapshots&#45;&gt;run_alignment_prospective -->
+<g id="edge7" class="edge">
+<title>inject_m1_into_snapshots-&gt;run_alignment_prospective</title>
+<path fill="none" stroke="black" d="M627.17,-603.02C655.08,-603.02 692.24,-603.02 721.23,-603.02" />
+<polygon fill="black" stroke="black" points="721.28,-605.12 727.28,-603.02 721.28,-600.92 721.28,-605.12"></polygon>
+</g>
+<!-- stage2_build_joint_formula -->
+<g id="node10" class="node">
+<title>stage2_build_joint_formula</title>
+<polygon fill="lightgrey" stroke="black" points="978.35,-111.02 897.73,-111.02 897.73,-75.02 978.35,-75.02 978.35,-111.02"></polygon>
+<text text-anchor="middle" x="938.04" y="-96.02" font-family="Helvetica,sans-Serif" font-size="10.00">stage2_build</text>
+<text text-anchor="middle" x="938.04" y="-84.02" font-family="Helvetica,sans-Serif" font-size="10.00">_joint_formula</text>
+</g>
+<!-- stage2_make_spec&#45;&gt;stage2_build_joint_formula -->
+<g id="edge9" class="edge">
+<title>stage2_make_spec-&gt;stage2_build_joint_formula</title>
+<path fill="none" stroke="black" d="M820.32,-133.3C843.09,-125.45 869.66,-116.28 891.69,-108.67" />
+<polygon fill="black" stroke="black" points="892.5,-110.62 897.48,-106.67 891.13,-106.65 892.5,-110.62"></polygon>
+</g>
+<!-- stage2_exclude_newseason -->
+<g id="node11" class="node">
+<title>stage2_exclude_newseason</title>
+<polygon fill="lightgrey" stroke="black" points="982.09,-169.02 893.99,-169.02 893.99,-133.02 982.09,-133.02 982.09,-169.02"></polygon>
+<text text-anchor="middle" x="938.04" y="-154.02" font-family="Helvetica,sans-Serif" font-size="10.00">stage2_exclude</text>
+<text text-anchor="middle" x="938.04" y="-142.02" font-family="Helvetica,sans-Serif" font-size="10.00">_newseason</text>
+</g>
+<!-- stage2_make_spec&#45;&gt;stage2_exclude_newseason -->
+<g id="edge10" class="edge">
+<title>stage2_make_spec-&gt;stage2_exclude_newseason</title>
+<path fill="none" stroke="black" d="M820.32,-151.02C841.76,-151.02 866.56,-151.02 887.77,-151.02" />
+<polygon fill="black" stroke="black" points="887.94,-153.12 893.94,-151.02 887.94,-148.92 887.94,-153.12"></polygon>
+</g>
+<!-- prep_stage2_joint&#45;&gt;m1_walkforward_predictions -->
+<g id="edge8" class="edge">
+<title>prep_stage2_joint-&gt;m1_walkforward_predictions</title>
+<path fill="none" stroke="black" d="M719.03,-44.69C702.38,-50.56 685.5,-59.98 675.62,-75.02 633.79,-138.73 652.05,-345.54 675.62,-418.02 689.14,-459.59 721.95,-498.9 744.59,-522.48" />
+<polygon fill="black" stroke="black" points="743.28,-524.14 748.97,-526.98 746.29,-521.22 743.28,-524.14"></polygon>
+</g>
+<!-- add_prospective_derivs_link -->
+<g id="node13" class="node">
+<title>add_prospective_derivs_link</title>
+<polygon fill="lightgrey" stroke="black" points="983.92,-53.02 892.15,-53.02 892.15,-17.02 983.92,-17.02 983.92,-53.02"></polygon>
+<text text-anchor="middle" x="938.04" y="-38.02" font-family="Helvetica,sans-Serif" font-size="10.00">add_prospective</text>
+<text text-anchor="middle" x="938.04" y="-26.02" font-family="Helvetica,sans-Serif" font-size="10.00">_derivs_link</text>
+</g>
+<!-- prep_stage2_joint&#45;&gt;add_prospective_derivs_link -->
+<g id="edge13" class="edge">
+<title>prep_stage2_joint-&gt;add_prospective_derivs_link</title>
+<path fill="none" stroke="black" d="M816.69,-35.02C838.34,-35.02 863.96,-35.02 885.99,-35.02" />
+<polygon fill="black" stroke="black" points="886.1,-37.12 892.1,-35.02 886.1,-32.92 886.1,-37.12"></polygon>
+</g>
+<!-- format_current_for_stage2 -->
+<g id="node14" class="node">
+<title>format_current_for_stage2</title>
+<polygon fill="lightgrey" stroke="black" points="809.51,-111.02 726.46,-111.02 726.46,-75.02 809.51,-75.02 809.51,-111.02"></polygon>
+<text text-anchor="middle" x="767.99" y="-96.02" font-family="Helvetica,sans-Serif" font-size="10.00">format_current</text>
+<text text-anchor="middle" x="767.99" y="-84.02" font-family="Helvetica,sans-Serif" font-size="10.00">_for_stage2</text>
+</g>
+<!-- format_current_for_stage2&#45;&gt;train_stage2_joint -->
+<g id="edge12" class="edge">
+<title>format_current_for_stage2-&gt;train_stage2_joint</title>
+<path fill="none" stroke="black" d="M726.17,-108.29C719.42,-112.06 712.92,-116.61 707.62,-122.02 660.09,-170.66 690.75,-211.98 643.62,-261.02 641.17,-263.57 638.45,-265.93 635.57,-268.12" />
+<polygon fill="black" stroke="black" points="633.93,-266.7 630.21,-271.86 636.33,-270.15 633.93,-266.7"></polygon>
+</g>
+<!-- format_current_for_stage2&#45;&gt;add_prospective_derivs_link -->
+<g id="edge11" class="edge">
+<title>format_current_for_stage2-&gt;add_prospective_derivs_link</title>
+<path fill="none" stroke="black" d="M809.67,-78.98C832.78,-71 861.92,-60.95 886.49,-52.47" />
+<polygon fill="black" stroke="black" points="887.32,-54.4 892.3,-50.46 885.95,-50.43 887.32,-54.4"></polygon>
+</g>
+<!-- train_stage2_joint_prepped&#45;&gt;stage2_build_joint_formula -->
+<g id="edge17" class="edge">
+<title>train_stage2_joint_prepped-&gt;stage2_build_joint_formula</title>
+<path fill="none" stroke="black" d="M787.04,-242.77C798.04,-231.49 812.28,-216.62 824.46,-203.02 855.8,-168.03 857.17,-153.15 892.35,-122.02 895.17,-119.53 898.22,-117.09 901.36,-114.76" />
+<polygon fill="black" stroke="black" points="902.69,-116.4 906.34,-111.2 900.24,-112.98 902.69,-116.4"></polygon>
+</g>
+<!-- refit_stage2_weekly -->
+<g id="node16" class="node">
+<title>refit_stage2_weekly</title>
+<polygon fill="lightgrey" stroke="black" points="455.99,-250.02 349.23,-250.02 349.23,-214.02 455.99,-214.02 455.99,-250.02"></polygon>
+<text text-anchor="middle" x="402.61" y="-229.02" font-family="Helvetica,sans-Serif" font-size="10.00">refit_stage2_weekly</text>
+</g>
+<!-- refit_stage2_weekly&#45;&gt;train_stage2_joint -->
+<g id="edge20" class="edge">
+<title>refit_stage2_weekly-&gt;train_stage2_joint</title>
+<path fill="none" stroke="black" d="M455.99,-248.8C479.59,-256.35 507.41,-265.27 531.15,-272.87" />
+<polygon fill="black" stroke="black" points="530.73,-274.94 537.09,-274.77 532.01,-270.94 530.73,-274.94"></polygon>
+</g>
+<!-- refit_stage2_weekly&#45;&gt;prep_stage2_joint -->
+<g id="edge19" class="edge">
+<title>refit_stage2_weekly-&gt;prep_stage2_joint</title>
+<path fill="none" stroke="black" d="M431.91,-213.87C439.77,-208.61 448.22,-202.74 455.8,-197.02 515.7,-151.84 515.57,-117.15 584.71,-88.02" />
+<path fill="none" stroke="black" d="M586.71,-88.02C627.92,-70.66 676.68,-56.7 713.1,-47.47" />
+<polygon fill="black" stroke="black" points="713.98,-49.41 719.29,-45.92 712.96,-45.34 713.98,-49.41"></polygon>
+</g>
+<!-- refit_stage2_weekly&#45;&gt;format_current_for_stage2 -->
+<g id="edge18" class="edge">
+<title>refit_stage2_weekly-&gt;format_current_for_stage2</title>
+<path fill="none" stroke="black" d="M586.71,-88.02C629.3,-70.08 682.71,-74.49 720.3,-81.44" />
+<polygon fill="black" stroke="black" points="719.91,-83.5 726.2,-82.58 720.7,-79.38 719.91,-83.5"></polygon>
+</g>
+<!-- score_stage2_metrics -->
+<g id="node17" class="node">
+<title>score_stage2_metrics</title>
+<polygon fill="lightgrey" stroke="black" points="643.54,-250.02 527.89,-250.02 527.89,-214.02 643.54,-214.02 643.54,-250.02"></polygon>
+<text text-anchor="middle" x="585.71" y="-229.02" font-family="Helvetica,sans-Serif" font-size="10.00">score_stage2_metrics</text>
+</g>
+<!-- refit_stage2_weekly&#45;&gt;score_stage2_metrics -->
+<g id="edge21" class="edge">
+<title>refit_stage2_weekly-&gt;score_stage2_metrics</title>
+<path fill="none" stroke="black" d="M455.99,-232.02C476.43,-232.02 500.05,-232.02 521.44,-232.02" />
+<polygon fill="black" stroke="black" points="521.7,-234.12 527.7,-232.02 521.7,-229.92 521.7,-234.12"></polygon>
+</g>
+<!-- nested_loso_grid_search -->
+<g id="node18" class="node">
+<title>nested_loso_grid_search</title>
+<polygon fill="lightgrey" stroke="black" points="265.1,-250.02 189.47,-250.02 189.47,-214.02 265.1,-214.02 265.1,-250.02"></polygon>
+<text text-anchor="middle" x="227.29" y="-235.02" font-family="Helvetica,sans-Serif" font-size="10.00">nested_loso</text>
+<text text-anchor="middle" x="227.29" y="-223.02" font-family="Helvetica,sans-Serif" font-size="10.00">_grid_search</text>
+</g>
+<!-- nested_loso_grid_search&#45;&gt;train_stage2_joint -->
+<g id="edge24" class="edge">
+<title>nested_loso_grid_search-&gt;train_stage2_joint</title>
+<path fill="none" stroke="black" d="M403.61,-331.02C447.17,-332.22 495.23,-320.72 530.88,-309.6" />
+<polygon fill="black" stroke="black" points="531.86,-311.49 536.94,-307.67 530.59,-307.49 531.86,-311.49"></polygon>
+<path fill="none" stroke="black" d="M264.42,-250.05C270.38,-253.45 276.38,-257.17 281.8,-261.02 313.05,-283.2 311.5,-301.52 345.58,-319.02 368.24,-330.66 376.15,-330.32 401.61,-331.02" />
+</g>
+<!-- nested_loso_grid_search&#45;&gt;m1_walkforward_multi -->
+<g id="edge22" class="edge">
+<title>nested_loso_grid_search-&gt;m1_walkforward_multi</title>
+<path fill="none" stroke="black" d="M265.36,-246.78C271.56,-250.64 277.4,-255.34 281.8,-261.02 353.4,-353.34 258,-438.71 345.58,-516.02 397.05,-561.46 480.85,-560.54 534.35,-554.04" />
+<polygon fill="black" stroke="black" points="534.71,-556.11 540.4,-553.27 534.18,-551.95 534.71,-556.11"></polygon>
+</g>
+<!-- nested_loso_grid_search&#45;&gt;stage2_make_spec -->
+<g id="edge25" class="edge">
+<title>nested_loso_grid_search-&gt;stage2_make_spec</title>
+<path fill="none" stroke="black" d="M265.28,-221.67C288.25,-215.55 318.46,-208.03 345.58,-203.02 474.52,-179.22 627.71,-163.39 709.21,-155.94" />
+<polygon fill="black" stroke="black" points="709.65,-158.01 715.44,-155.38 709.27,-153.83 709.65,-158.01"></polygon>
+</g>
+<!-- nested_loso_grid_search&#45;&gt;refit_stage2_weekly -->
+<g id="edge23" class="edge">
+<title>nested_loso_grid_search-&gt;refit_stage2_weekly</title>
+<path fill="none" stroke="black" d="M265.47,-232.02C288.12,-232.02 317.56,-232.02 343.26,-232.02" />
+<polygon fill="black" stroke="black" points="343.37,-234.12 349.37,-232.02 343.37,-229.92 343.37,-234.12"></polygon>
+</g>
+<!-- nested_loso_m2_eval_weekly_refit -->
+<g id="node19" class="node">
+<title>nested_loso_m2_eval_weekly_refit</title>
+<polygon fill="lightgrey" stroke="black" points="277.55,-308.02 177.02,-308.02 177.02,-272.02 277.55,-272.02 277.55,-308.02"></polygon>
+<text text-anchor="middle" x="227.29" y="-293.02" font-family="Helvetica,sans-Serif" font-size="10.00">nested_loso_m2</text>
+<text text-anchor="middle" x="227.29" y="-281.02" font-family="Helvetica,sans-Serif" font-size="10.00">_eval_weekly_refit</text>
+</g>
+<!-- nested_loso_m2_eval_weekly_refit&#45;&gt;refit_stage2_weekly -->
+<g id="edge26" class="edge">
+<title>nested_loso_m2_eval_weekly_refit-&gt;refit_stage2_weekly</title>
+<path fill="none" stroke="black" d="M277.49,-273.56C297.98,-266.7 321.93,-258.68 343.3,-251.53" />
+<polygon fill="black" stroke="black" points="344.23,-253.44 349.25,-249.54 342.9,-249.45 344.23,-253.44"></polygon>
+</g>
+<!-- m2_predict_one -->
+<g id="node22" class="node">
+<title>m2_predict_one</title>
+<polygon fill="lightgrey" stroke="black" stroke-width="2" points="447.32,-482.02 357.9,-482.02 357.9,-446.02 447.32,-446.02 447.32,-482.02"></polygon>
+<text text-anchor="middle" x="402.61" y="-461.02" font-family="Helvetica,sans-Serif" font-size="10.00">m2_predict_one</text>
+</g>
+<!-- nested_loso_m2_eval_weekly_refit&#45;&gt;m2_predict_one -->
+<g id="edge27" class="edge">
+<title>nested_loso_m2_eval_weekly_refit-&gt;m2_predict_one</title>
+<path fill="none" stroke="black" d="M246.51,-308.31C278.45,-340.38 344.44,-406.63 379.15,-441.48" />
+<polygon fill="black" stroke="black" points="377.91,-443.21 383.63,-445.97 380.89,-440.24 377.91,-443.21"></polygon>
+</g>
+<!-- nested_loso_refit_best -->
+<g id="node20" class="node">
+<title>nested_loso_refit_best</title>
+<polygon fill="lightgrey" stroke="black" points="96.51,-291.02 24.65,-291.02 24.65,-255.02 96.51,-255.02 96.51,-291.02"></polygon>
+<text text-anchor="middle" x="60.58" y="-276.02" font-family="Helvetica,sans-Serif" font-size="10.00">nested_loso</text>
+<text text-anchor="middle" x="60.58" y="-264.02" font-family="Helvetica,sans-Serif" font-size="10.00">_refit_best</text>
+</g>
+<!-- nested_loso_refit_best&#45;&gt;train_stage2_joint -->
+<g id="edge29" class="edge">
+<title>nested_loso_refit_best-&gt;train_stage2_joint</title>
+<path fill="none" stroke="black" d="M96.55,-290.41C119,-300.69 149.1,-312.86 177.15,-319.02 274.73,-340.44 301.75,-328.28 401.61,-331.02" />
+</g>
+<!-- nested_loso_refit_best&#45;&gt;nested_loso_grid_search -->
+<g id="edge28" class="edge">
+<title>nested_loso_refit_best-&gt;nested_loso_grid_search</title>
+<path fill="none" stroke="black" d="M96.91,-264.23C122.22,-257.93 156.44,-249.41 183.33,-242.71" />
+<polygon fill="black" stroke="black" points="183.98,-244.72 189.3,-241.23 182.97,-240.64 183.98,-244.72"></polygon>
+</g>
+<!-- loso_m1_m2_joint -->
+<g id="node21" class="node">
+<title>loso_m1_m2_joint</title>
+<polygon fill="lightgrey" stroke="black" points="452.27,-308.02 352.95,-308.02 352.95,-272.02 452.27,-272.02 452.27,-308.02"></polygon>
+<text text-anchor="middle" x="402.61" y="-287.02" font-family="Helvetica,sans-Serif" font-size="10.00">loso_m1_m2_joint</text>
+</g>
+<!-- loso_m1_m2_joint&#45;&gt;train_stage2_joint -->
+<g id="edge32" class="edge">
+<title>loso_m1_m2_joint-&gt;train_stage2_joint</title>
+<path fill="none" stroke="black" d="M452.62,-290.02C476.86,-290.02 506.17,-290.02 531.01,-290.02" />
+<polygon fill="black" stroke="black" points="531.23,-292.12 537.23,-290.02 531.23,-287.92 531.23,-292.12"></polygon>
+</g>
+<!-- loso_m1_m2_joint&#45;&gt;m1_walkforward_predictions -->
+<g id="edge30" class="edge">
+<title>loso_m1_m2_joint-&gt;m1_walkforward_predictions</title>
+<path fill="none" stroke="black" d="M438.77,-308.09C486.8,-333.41 574.82,-382.09 643.62,-433.02 681.49,-461.05 721.1,-498.75 744.92,-522.47" />
+<polygon fill="black" stroke="black" points="743.45,-523.97 749.18,-526.73 746.42,-521 743.45,-523.97"></polygon>
+</g>
+<!-- loso_m1_m2_joint&#45;&gt;prep_stage2_joint -->
+<g id="edge31" class="edge">
+<title>loso_m1_m2_joint-&gt;prep_stage2_joint</title>
+<path fill="none" stroke="black" d="M438.08,-271.97C444.1,-268.51 450.21,-264.79 455.8,-261.02 489.89,-238.07 495.54,-228.48 527.8,-203.02 607.1,-140.45 621.84,-117.36 707.62,-64.02 712.03,-61.28 716.74,-58.6 721.5,-56.05" />
+<polygon fill="black" stroke="black" points="722.76,-57.76 727.1,-53.11 720.81,-54.04 722.76,-57.76"></polygon>
+</g>
+<!-- loso_m1_m2_joint&#45;&gt;score_stage2_metrics -->
+<g id="edge33" class="edge">
+<title>loso_m1_m2_joint-&gt;score_stage2_metrics</title>
+<path fill="none" stroke="black" d="M452.62,-274.33C474.15,-267.43 499.69,-259.25 522.55,-251.93" />
+<polygon fill="black" stroke="black" points="523.22,-253.92 528.29,-250.09 521.94,-249.92 523.22,-253.92"></polygon>
+</g>
+<!-- make_soft_cap_fn -->
+<g id="node23" class="node">
+<title>make_soft_cap_fn</title>
+<polygon fill="lightgrey" stroke="black" points="635.43,-482.02 535.99,-482.02 535.99,-446.02 635.43,-446.02 635.43,-482.02"></polygon>
+<text text-anchor="middle" x="585.71" y="-461.02" font-family="Helvetica,sans-Serif" font-size="10.00">make_soft_cap_fn</text>
+</g>
+<!-- m2_predict_one&#45;&gt;make_soft_cap_fn -->
+<g id="edge34" class="edge">
+<title>m2_predict_one-&gt;make_soft_cap_fn</title>
+<path fill="none" stroke="black" d="M447.45,-464.02C472.16,-464.02 503.27,-464.02 529.62,-464.02" />
+<polygon fill="black" stroke="black" points="529.86,-466.12 535.86,-464.02 529.86,-461.92 529.86,-466.12"></polygon>
+</g>
+<!-- run_m2_forecast&#45;&gt;run_m0_detection -->
+<g id="edge37" class="edge">
+<title>run_m2_forecast-&gt;run_m0_detection</title>
+<path fill="none" stroke="black" d="M240.2,-436.31C270.88,-483.4 352.6,-608.8 386.52,-660.86" />
+<polygon fill="black" stroke="black" points="384.81,-662.08 389.84,-665.96 388.33,-659.79 384.81,-662.08"></polygon>
+</g>
+<!-- run_m2_forecast&#45;&gt;stage2_exclude_newseason -->
+<g id="edge40" class="edge">
+<title>run_m2_forecast-&gt;stage2_exclude_newseason</title>
+<path fill="none" stroke="black" d="M273.82,-419.54C397.17,-422.82 734.54,-425.93 824.46,-366.02 892.27,-320.84 921.88,-221.21 932.3,-175.2" />
+<polygon fill="black" stroke="black" points="934.41,-175.38 933.65,-169.07 930.31,-174.48 934.41,-175.38"></polygon>
+</g>
+<!-- run_m2_forecast&#45;&gt;add_prospective_derivs_link -->
+<g id="edge41" class="edge">
+<title>run_m2_forecast-&gt;add_prospective_derivs_link</title>
+<path fill="none" stroke="black" d="M251.09,-399.86C261.55,-390.61 273.44,-378.66 281.8,-366.02 325.17,-300.45 297.38,-263.13 345.58,-201.02 406.58,-122.43 439.71,-117.25 527.8,-71.02 647.32,-8.3 690.55,10.95 824.46,-6.02 844.96,-8.62 867.08,-13.78 886.23,-19.04" />
+<polygon fill="black" stroke="black" points="885.74,-21.08 892.08,-20.67 886.87,-17.03 885.74,-21.08"></polygon>
+</g>
+<!-- run_m2_forecast&#45;&gt;refit_stage2_weekly -->
+<g id="edge38" class="edge">
+<title>run_m2_forecast-&gt;refit_stage2_weekly</title>
+<path fill="none" stroke="black" d="M249.35,-399.88C259.75,-390.37 272.12,-378.18 281.8,-366.02 315.83,-323.32 305.68,-298.29 345.58,-261.02 348.42,-258.37 351.54,-255.9 354.82,-253.61" />
+<polygon fill="black" stroke="black" points="356.22,-255.2 360.08,-250.15 353.92,-251.69 356.22,-255.2"></polygon>
+</g>
+<!-- run_m2_forecast&#45;&gt;m2_predict_one -->
+<g id="edge39" class="edge">
+<title>run_m2_forecast-&gt;m2_predict_one</title>
+<path fill="none" stroke="black" d="M273.82,-430.11C297.87,-436.49 327.42,-444.33 352.05,-450.87" />
+<polygon fill="black" stroke="black" points="351.53,-452.9 357.87,-452.41 352.61,-448.84 351.53,-452.9"></polygon>
+</g>
+</g>
+</svg>
+</div>
+<p></p></figure><p></p>
+</div>
+</div>
+</div>
 </section>
 
 </main>
