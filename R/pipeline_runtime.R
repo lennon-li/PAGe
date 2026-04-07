@@ -36,10 +36,11 @@ load_prospective_kit <- function(data_dir,
          "\nRun forecast_training.html first.")
   m2_production <- readRDS(m2_path)
 
-  # best_spec: prefer stored in m2_production, else scan nested LOSO files (v10 > v9 > older)
+  # best_spec: prefer stored in m2_production, else scan nested LOSO files (combined > v10 > v9 > older)
   best_spec <- m2_production$spec %||% {
     gs <- NULL
-    for (fn in c("nested_loso_v10_production.rds",
+    for (fn in c("nested_loso_combined_production.rds",
+                 "nested_loso_v10_production.rds",
                  "nested_loso_v9_production.rds",
                  "nested_loso_v8_production.rds",
                  "nested_loso_v4_production.rds",
