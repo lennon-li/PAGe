@@ -31,14 +31,16 @@ file_meta <- data.frame(
     "checkSeasonLength.R", "check_scale_identifiability.R", "identifiability.R",
     "getCurrentD.R", "score_params.R", "simulate.R",
     "plot.R", "plotRes.R", "plotSeasonCurves.R",
-    "utils.R", "migrate_r_packages.R"
+    "utils.R", "migrate_r_packages.R",
+    "retired.R"
   ),
   area = c(
     rep("M_0: ignition", 4),
     rep("M_1: reference and alignment", 13),
     rep("M_2: forecast training and runtime", 4),
     rep("Pipeline orchestration", 3),
-    rep("Supporting analyses and utilities", 13)
+    rep("Supporting analyses and utilities", 13),
+    "Retired"
   ),
   purpose = c(
     "Train and tune the ignition detector, including LOSO utilities and ignition decision helpers.",
@@ -58,13 +60,13 @@ file_meta <- data.frame(
     "Summarize peak timing implied by an alignment fit.",
     "Estimate the peak-week distribution and candidate peak-rule settings across seasons.",
     "Plot how alignment trajectories evolve as more weekly data arrive.",
-    "Prepare, train, refit, and score the main Stage-2 forecasting models.",
-    "Define Stage-2 model specifications, feature engineering, and grid-search helpers.",
-    "Run nested LOSO evaluation for the full M_1 to M_2 forecasting stack.",
-    "Build pseudo-prospective Stage-2 snapshots and turn them into forecast series.",
-    "Bridge M_1 outputs into M_2 inputs and run the weekly M_0 -> M_1 -> M_2 chain.",
+    "Core M_2 prediction functions: m2_predict_one() (shared prediction core), soft-cap, feature derivation, model fitting, and weekly refit.",
+    "M_2 model specification, formula construction, feature engineering helpers, and the grid-search spec builder.",
+    "Nested LOSO evaluation for the full M_1 -> M_2 forecasting stack, including weekly-refit and frozen-fit paths.",
+    "Build pseudo-prospective M_2 snapshots and turn them into forecast series.",
+    "M_1 walk-forward predictions and joint M_1 -> M_2 LOSO evaluation bridge.",
     "Provide small shared helpers used across runtime code paths.",
-    "Expose the end-to-end prospective pipeline entry points for one-season runs.",
+    "End-to-end prospective pipeline entry points: run_prospective_pipeline() and run_m2_forecast().",
     "Legacy exploratory helper for dilation-based alignment plus forecasting in one function.",
     "Legacy post-peak forecasting helper based on a GAM without further alignment updates.",
     "Check whether a season has enough observed weeks to support downstream analysis.",
@@ -77,7 +79,8 @@ file_meta <- data.frame(
     "Legacy plotting helper for summarizing result objects.",
     "Plot season-level observed and fitted curves with ignition metadata.",
     "General mathematical and table-building utilities shared across the codebase.",
-    "Local helper for migrating installed R packages between R versions."
+    "Local helper for migrating installed R packages between R versions.",
+    "Archive of legacy and deprecated functions extracted from active source files. Not sourced by the pipeline."
   ),
   stringsAsFactors = FALSE
 )
@@ -141,9 +144,21 @@ desc_overrides <- c(
   learn_alignment_hyperparams = "Summarize retrospective tuning results into a chosen M_1 hyperparameter setting.",
   peak_summary_from_fit = "Summarize predicted peak timing and related quantities from an alignment fit.",
   stage2_extract_hyperparams = "Extract the Stage-2 hyperparameters needed for runtime prediction from a fitted object.",
-  score_stage2_metrics = "Compute forecast error metrics used to compare Stage-2 models.",
-  train_stage2_joint_prepped = "Fit a Stage-2 model after the training data have already been prepared.",
-  plot_tune_stage2_heatmap = "Visualize Stage-2 tuning scores over a two-dimensional hyperparameter grid.",
+  score_stage2_metrics = "Compute NLL, Brier, and RMSE forecast error metrics for Stage-2 model comparison.",
+  train_stage2_joint_prepped = "Fit a Stage-2 GAM after the training data have already been prepared by prep_stage2_joint().",
+  m2_predict_one = "Shared prediction core for M_2: builds newdata, aligns factor levels, applies season RE inclusion rule, soft cap, and optional CI.",
+  make_soft_cap_fn = "Build the tanh soft-cap function that compresses predictions above the 95th-percentile knee toward a ceiling.",
+  stage2_make_spec = "Construct a fully-specified Stage-2 model spec including formula and exclude terms.",
+  stage2_build_joint_formula = "Build the mgcv GAM formula from a Stage-2 spec object.",
+  stage2_exclude_newseason = "Return the smooth terms to exclude when predicting for a season not in the training data.",
+  nested_loso_grid_search = "Parallel nested LOSO grid search over Stage-2 specs, supporting both weekly-refit and frozen-fit modes.",
+  nested_loso_m2_eval_weekly_refit = "Evaluate one Stage-2 spec on one LOSO fold using weekly refit; calls m2_predict_one().",
+  nested_loso_refit_best = "Refit the production Stage-2 model on all historical data using the best spec from grid search.",
+  m1_walkforward_predictions = "Compute M_1 walk-forward alignment predictions at each evaluation week across a season.",
+  m1_walkforward_multi = "Run m1_walkforward_predictions() for all LOSO folds in parallel.",
+  loso_m1_m2_joint = "Joint M_1 -> M_2 LOSO evaluation: runs walk-forward M_1 per fold then fits and scores Stage-2.",
+  run_prospective_pipeline = "Top-level entry point: run the full M_0 -> M_1 -> M_2 prospective pipeline for one season.",
+  run_m2_forecast = "Run the M_2 weekly refit and produce forecasts for the current season; calls m2_predict_one().",
   .plot_stage2_joint_fit_prosp = "Internal plotting helper for prospective Stage-2 fit diagnostics.",
   load_prospective_kit = "Load the data bundle needed to run the prospective weekly pipeline.",
   plot_forecast = "Plot observed data alongside forecast trajectories.",
@@ -180,6 +195,149 @@ knitr::kable(
   col.names = c("File", "Area", "Functions", "Role"),
   align = c("l", "l", "r", "l")
 )
+```
+
+## Call graph
+
+The diagram below shows which active pipeline functions call which others,
+colour-coded by stage. **Solid boxes** are defined in `R/`; **ellipses** are
+referenced but not found in active source (package internals or implicit).
+Arrows point from caller → callee.
+
+```{dot}
+//| fig-width: 16
+//| fig-height: 7
+digraph PAGe_pipeline {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=11,
+         nodesep=0.3, ranksep=1.0, concentrate=true];
+  node  [fontname="Helvetica", fontsize=10, style=filled,
+         shape=box, margin="0.12,0.05"];
+  edge  [fontname="Helvetica", fontsize=9, arrowsize=0.6];
+
+  // Force left-to-right pipeline order via invisible rank edges
+  fitIgnition -> run_alignment_prospective [style=invis];
+  run_alignment_prospective -> train_stage2_joint [style=invis];
+  train_stage2_joint -> run_prospective_pipeline [style=invis];
+
+  // ── M0: Ignition ──────────────────────────────────────────
+  subgraph cluster_m0 {
+    label="M0: Ignition"; style=filled;
+    color="#856404"; fillcolor="#fff3cd"; fontcolor="#856404";
+    fontsize=11; fontname="Helvetica-Bold";
+    fitIgnition      [label="fitIgnition"];
+    run_m0_detection [label="run_m0_detection"];
+  }
+
+  // ── M1: Alignment ─────────────────────────────────────────
+  subgraph cluster_m1 {
+    label="M1: Alignment"; style=filled;
+    color="#155724"; fillcolor="#c3e6cb"; fontcolor="#155724";
+    fontsize=11; fontname="Helvetica-Bold";
+    run_alignment_prospective  [label="run_alignment\n_prospective"];
+    m1_walkforward_predictions [label="m1_walkforward\n_predictions"];
+    m1_walkforward_multi       [label="m1_walkforward\n_multi"];
+    inject_m1_into_snapshots   [label="inject_m1_into\n_snapshots"];
+  }
+
+  // ── M2: Spec & Features ───────────────────────────────────
+  subgraph cluster_m2spec {
+    label="M2: Spec & Features"; style=filled;
+    color="#004085"; fillcolor="#cce5ff"; fontcolor="#004085";
+    fontsize=11; fontname="Helvetica-Bold";
+    stage2_make_spec            [label="stage2_make_spec"];
+    stage2_build_joint_formula  [label="stage2_build\n_joint_formula"];
+    stage2_exclude_newseason    [label="stage2_exclude\n_newseason"];
+    prep_stage2_joint           [label="prep_stage2_joint"];
+    add_prospective_derivs_link [label="add_prospective\n_derivs_link"];
+    format_current_for_stage2   [label="format_current\n_for_stage2"];
+  }
+
+  // ── M2: Training / LOSO ───────────────────────────────────
+  subgraph cluster_m2train {
+    label="M2: Training / LOSO"; style=filled;
+    color="#003060"; fillcolor="#b8d4f0"; fontcolor="#003060";
+    fontsize=11; fontname="Helvetica-Bold";
+    train_stage2_joint               [label="train_stage2_joint"];
+    train_stage2_joint_prepped       [label="train_stage2_joint\n_prepped"];
+    refit_stage2_weekly              [label="refit_stage2\n_weekly"];
+    score_stage2_metrics             [label="score_stage2\n_metrics"];
+    nested_loso_grid_search          [label="nested_loso\n_grid_search"];
+    nested_loso_m2_eval_weekly_refit [label="nested_loso_m2\n_eval_weekly_refit"];
+    nested_loso_refit_best           [label="nested_loso\n_refit_best"];
+    loso_m1_m2_joint                 [label="loso_m1_m2_joint"];
+  }
+
+  // ── M2: Predict (shared core) ─────────────────────────────
+  subgraph cluster_m2pred {
+    label="M2: Predict"; style=filled;
+    color="#4a0080"; fillcolor="#e2ccff"; fontcolor="#4a0080";
+    fontsize=11; fontname="Helvetica-Bold";
+    m2_predict_one   [label="m2_predict_one", penwidth=2];
+    make_soft_cap_fn [label="make_soft_cap_fn"];
+  }
+
+  // ── Deployment ────────────────────────────────────────────
+  subgraph cluster_deploy {
+    label="Deployment"; style=filled;
+    color="#721c24"; fillcolor="#f8d7da"; fontcolor="#721c24";
+    fontsize=11; fontname="Helvetica-Bold";
+    run_prospective_pipeline [label="run_prospective\n_pipeline"];
+    run_m2_forecast          [label="run_m2_forecast"];
+  }
+
+  // ── Edges ─────────────────────────────────────────────────
+  // M0
+  run_m0_detection -> fitIgnition;
+
+  // M1
+  m1_walkforward_multi     -> m1_walkforward_predictions;
+  m1_walkforward_multi     -> run_alignment_prospective;
+  inject_m1_into_snapshots -> run_alignment_prospective;
+  prep_stage2_joint        -> m1_walkforward_predictions;
+
+  // M2 spec
+  stage2_make_spec          -> stage2_build_joint_formula;
+  stage2_make_spec          -> stage2_exclude_newseason;
+  format_current_for_stage2 -> add_prospective_derivs_link;
+  format_current_for_stage2 -> train_stage2_joint;
+  prep_stage2_joint         -> add_prospective_derivs_link;
+
+  // M2 training
+  train_stage2_joint         -> train_stage2_joint_prepped;
+  train_stage2_joint         -> prep_stage2_joint;
+  train_stage2_joint         -> stage2_make_spec;
+  train_stage2_joint_prepped -> stage2_build_joint_formula;
+  refit_stage2_weekly        -> format_current_for_stage2;
+  refit_stage2_weekly        -> prep_stage2_joint;
+  refit_stage2_weekly        -> train_stage2_joint;
+  refit_stage2_weekly        -> score_stage2_metrics;
+  nested_loso_grid_search    -> m1_walkforward_multi;
+  nested_loso_grid_search    -> refit_stage2_weekly;
+  nested_loso_grid_search    -> train_stage2_joint;
+  nested_loso_grid_search    -> stage2_make_spec;
+  nested_loso_m2_eval_weekly_refit -> refit_stage2_weekly;
+  nested_loso_m2_eval_weekly_refit -> m2_predict_one;
+  nested_loso_m2_eval_weekly_refit -> make_soft_cap_fn;
+  nested_loso_refit_best     -> nested_loso_grid_search;
+  nested_loso_refit_best     -> train_stage2_joint;
+  loso_m1_m2_joint           -> m1_walkforward_predictions;
+  loso_m1_m2_joint           -> prep_stage2_joint;
+  loso_m1_m2_joint           -> train_stage2_joint;
+  loso_m1_m2_joint           -> score_stage2_metrics;
+
+  // M2 predict
+  m2_predict_one -> make_soft_cap_fn;
+
+  // Deployment
+  run_prospective_pipeline -> run_m0_detection;
+  run_prospective_pipeline -> run_m2_forecast;
+  run_m2_forecast          -> run_m0_detection;
+  run_m2_forecast          -> refit_stage2_weekly;
+  run_m2_forecast          -> m2_predict_one;
+  run_m2_forecast          -> make_soft_cap_fn;
+  run_m2_forecast          -> stage2_exclude_newseason;
+  run_m2_forecast          -> add_prospective_derivs_link;
+}
 ```
 
 ## By module
