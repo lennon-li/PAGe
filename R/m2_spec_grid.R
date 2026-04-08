@@ -344,21 +344,32 @@ plot_stage2_joint_fit_by_season <- function(out_m1,
     stop("plot_stage2_joint_fit_by_season: feat_full must provide y_now/N_now/ign_weekF, or compatible y/N/iWeek_used/phase columns.")
   }
   lead_levels <- tryCatch(levels(fit_mod$model$lead), error = function(e) NULL)
+
   if (is.null(lead_levels) || !length(lead_levels)) {
     lead_levels <- paste0("h", H)
   }
-  
-  d_all <- data.table::rbindlist(lapply(H, function(hh) {
-    d <- data.table::copy(DT)
-    d[, `:=`(
-      lead_n = hh,
-      lead   = factor(paste0("h", hh), levels = lead_levels),
-      y_lead = data.table::shift(y_now, n = hh, type = "lead"),
-      N_lead = data.table::shift(N_now, n = hh, type = "lead")
-    ), by = season]
-    d
-  }), use.names = TRUE)
-  
+
+  already_stacked <- all(c("y_lead", "N_lead", "lead") %in% names(DT))
+
+  if (already_stacked) {
+    # Data from prep_stage2_joint is already stacked with correct y_lead/N_lead.
+    # Using shift() on stacked rows gives wrong targets (shifts by row, not week).
+    d_all <- DT
+    d_all[, lead_n := as.integer(sub("^h", "", as.character(lead)))]
+  } else {
+    # Unstacked data: create lead targets via shift (one row per season-weekF).
+    d_all <- data.table::rbindlist(lapply(H, function(hh) {
+      d <- data.table::copy(DT)
+      d[, `:=`(
+        lead_n = hh,
+        lead   = factor(paste0("h", hh), levels = lead_levels),
+        y_lead = data.table::shift(y_now, n = hh, type = "lead"),
+        N_lead = data.table::shift(N_now, n = hh, type = "lead")
+      ), by = season]
+      d
+    }), use.names = TRUE)
+  }
+
   d_all <- d_all[!is.na(y_lead) & !is.na(N_lead)]
   d_all[, p_obs := y_lead / N_lead]
   d_all[, post_ign := weekF >= ign_weekF]
