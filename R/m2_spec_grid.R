@@ -64,6 +64,7 @@ stage2_make_spec <- function(
     k_n = 6L,
     k_1 = 6L,
     k_2 = 6L,
+    k_r = 0L,
     k_w = 0L,
     k_s = 0L,
     
@@ -110,6 +111,7 @@ stage2_make_spec <- function(
     k_n = as.integer(k_n),
     k_1 = as.integer(k_1),
     k_2 = as.integer(k_2),
+    k_r = as.integer(k_r),
     
     bs_week = bs_week,
     bs_fs_marginal = bs_fs_marginal,
@@ -449,6 +451,7 @@ plot_stage2_joint_fit_by_season <- function(out_m1,
 #' @export
 stage2_build_joint_formula <- function(spec) {
   stopifnot(is.list(spec), all(c("T","k_f","k_w","k_s","k_e","k_n","k_1","k_2","bs_week","bs_fs_marginal") %in% names(spec)))
+  if (is.null(spec$k_r)) spec$k_r <- 0L
   
   bs1 <- spec$bs_week %||% "ts"
   
@@ -476,6 +479,11 @@ stage2_build_joint_formula <- function(spec) {
   # EMA state
   if (as.integer(spec$k_e) > 0L) {
     rhs <- c(rhs, sprintf("s(z_ema, by=lead, bs='%s', k=%d)", bs1, as.integer(spec$k_e)))
+  }
+  
+  # amplitude residual: z_resid = z_ema - logit_f_eff
+  if (as.integer(spec$k_r) > 0L) {
+    rhs <- c(rhs, sprintf("s(z_resid, by=lead, bs='%s', k=%d)", bs1, as.integer(spec$k_r)))
   }
   
   # testing volume

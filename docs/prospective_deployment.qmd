@@ -306,6 +306,15 @@ if (nrow(df_active) == 0) {
     p_ref   = plogis(ref$g_ref_fun(newW_grid))
   )
 
+  # Fixed axis ranges across all tabs for visual comparability
+  all_iWeek <- df_active$iWeek_hat[1]
+  all_obs_newW <- obs_s$weekF - all_iWeek + ref$anchorWeek
+  x_range_fixed <- c(
+    min(ref$anchorWeek - 1, min(all_obs_newW, na.rm = TRUE)),
+    max(all_obs_newW, na.rm = TRUE) + 2
+  )
+  y_max_fixed <- max(c(obs_s$p_obs, 0.35), na.rm = TRUE) * 1.15
+
   cat("::: {.panel-tabset}\n\n")
 
   tabs <- lapply(df_active$eval_week, function(ew) {
@@ -334,9 +343,6 @@ if (nrow(df_active) == 0) {
       mutate(newWeek = weekF - iWeek_hat_ew + anchor_ew)
 
     m2_ew <- wf$m2_preds %>% filter(eval_week == ew)
-
-    y_max <- max(c(fc$p_hat, obs_aligned$p_obs, m2_ew$m2_hi, obs_s$p_obs), na.rm = TRUE) * 1.15
-    y_max <- max(y_max, 0.15)
 
     obs_future <- obs_s %>%
       filter(weekF > ew) %>%
@@ -370,12 +376,12 @@ if (nrow(df_active) == 0) {
         name = "Future obs"
       ) %>%
       add_segments(
-        x = anchor_ew, xend = anchor_ew, y = 0, yend = y_max,
+        x = anchor_ew, xend = anchor_ew, y = 0, yend = y_max_fixed,
         line = list(color = "grey50", dash = "dash", width = 1),
         name = paste0("Ignition (wk ", iWeek_hat_ew, ")")
       ) %>%
       add_segments(
-        x = current_newW, xend = current_newW, y = 0, yend = y_max,
+        x = current_newW, xend = current_newW, y = 0, yend = y_max_fixed,
         line = list(color = "black", width = 2),
         name = paste0("Now (wk ", ew, ")")
       )
@@ -431,7 +437,7 @@ if (nrow(df_active) == 0) {
     if (!is.na(t_peak_ew)) {
       plt <- plt %>%
         add_segments(
-          x = t_peak_ew, xend = t_peak_ew, y = 0, yend = y_max,
+          x = t_peak_ew, xend = t_peak_ew, y = 0, yend = y_max_fixed,
           line = list(color = "green", dash = "dash", width = 1.5),
           name = paste0("Est. peak (wk ", peak_wF, ")")
         )
@@ -441,8 +447,8 @@ if (nrow(df_active) == 0) {
       layout(
         title = paste0("weekF=", ew, " | state=", state_ew,
                        if (!is.na(peak_wF)) paste0(" | peak wk ", peak_wF) else ""),
-        xaxis = list(title = "Aligned week (newWeek)"),
-        yaxis = list(title = "Positivity", range = c(0, y_max)),
+        xaxis = list(title = "Aligned week (newWeek)", range = x_range_fixed),
+        yaxis = list(title = "Positivity", range = c(0, y_max_fixed)),
         legend = list(orientation = "h", y = -0.20)
       )
 

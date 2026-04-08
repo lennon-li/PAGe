@@ -118,6 +118,7 @@ m2_predict_one <- function(fit,
     season      = nd_season,
     logit_f_eff = as.numeric(logit_f_eff),
     z_ema       = as.numeric(z_ema),
+    z_resid     = as.numeric(z_ema) - as.numeric(logit_f_eff),
     logN_now    = as.numeric(logN_now),
     d1_now      = as.numeric(d1_now),
     d2_now      = as.numeric(d2_now),
@@ -373,7 +374,8 @@ prep_stage2_joint <- function(dat,
       # - K >  1: linear ramp from 0 at ignition to 1 after K weeks
       omega = if (isTRUE(template_on)) stage2_ramp_weight(.data$t_since, K = K_eff) else 0,
       logit_f = if (isTRUE(template_on)) logit_stable(.data$fit_shift) else 0,
-      logit_f_eff = .data$omega * .data$logit_f
+      logit_f_eff = .data$omega * .data$logit_f,
+      z_resid = .data$z_ema - .data$logit_f_eff
     ) %>%
     dplyr::filter(is.finite(.data$z_ema), is.finite(.data$logN_now))
   
@@ -429,7 +431,8 @@ prep_stage2_joint <- function(dat,
           is.finite(.data$.m1_p_hat) & !is.na(.data$.m1_p_hat),
           logit_stable(.data$.m1_p_hat),
           .data$logit_f_eff  # fallback to static template if M1 missing
-        )
+        ),
+        z_resid = .data$z_ema - .data$logit_f_eff
       ) %>%
       dplyr::select(-dplyr::all_of(c("season_chr", ".h_int", ".m1_p_hat")))
 
