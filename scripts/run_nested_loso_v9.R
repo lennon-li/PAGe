@@ -3,8 +3,9 @@
 # Nested LOSO M2 Grid Search — v9 (comprehensive parameter search)
 #
 # Key differences from v8:
-#   - Searches ALL tunable hyperparameters (delta, k_s, k_w, lambda_w,
+#   - Searches key hyperparameters (delta, k_s, k_w,
 #     k_1, k_2 were fixed at 0 in v4-v8 — now varied).
+#     lambda_w is a training preference (not tuned), fixed at 0.
 #   - Season RE fix: weekly-refit predictions INCLUDE the test season's
 #     random effect (the refit model estimates it), fixing the systematic
 #     underestimation from excluding s(season) for known seasons.
@@ -99,7 +100,7 @@ M1 <- list(
 #   k_2      — basis dim for d2_now (2nd derivative) smooth. 0 = disabled.
 #   k_w      — basis dim for week smooth. 0 = disabled.
 #   k_s      — basis dim for factor-smooth (season-specific trend). 0 = disabled.
-#   lambda_w — Weibull recency weight for LOSO evaluation. 0 = equal weights.
+#   lambda_w — training preference (not tuned): time-decay weight. 0 = uniform.
 
 grid_v9 <- tidyr::crossing(
   delta       = c(-1L, 0L, 1L),

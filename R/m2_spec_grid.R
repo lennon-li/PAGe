@@ -70,7 +70,7 @@ stage2_make_spec <- function(
     bs_week = "ts",
     bs_fs_marginal = "tp",
     use_season_re = TRUE,
-    lambda_w = 0,
+    lambda_w = 0,       # training preference (not tuned): time-decay weight for early-season emphasis
     w_floor  = 0.05,
 
     anchorWeek = 20L,
