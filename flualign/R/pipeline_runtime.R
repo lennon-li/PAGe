@@ -390,9 +390,10 @@ run_m2_forecast <- function(kit,
   # which extrapolates the bias one step ahead.
   bias_alpha  <- 0.3   # EMA decay for bias level
   bias_beta   <- 0.2   # EMA decay for bias trend
-  bias_level  <- list(h1 = 0, h2 = 0)  # per-horizon running level (logit scale)
-  bias_trend  <- list(h1 = 0, h2 = 0)  # per-horizon running trend
-  pred_log    <- list()  # store (target_weekF, m2_p, h) for bias updates
+  bias_level      <- list(h1 = 0, h2 = 0)  # per-horizon running level (logit scale)
+  bias_trend      <- list(h1 = 0, h2 = 0)  # per-horizon running trend
+  peak_passed_prev <- FALSE                  # track first post-peak transition
+  pred_log        <- list()  # store (target_weekF, m2_p, h) for bias updates
 
   m2_rows <- list()
 
@@ -402,6 +403,14 @@ run_m2_forecast <- function(kit,
     season_to_ew <- pw$season_to_ew
 
     if (is.null(ap) || ap$state == "pre_ignition") next
+
+    # Reset bias on first post-peak transition so rising-phase upward drift
+    # does not inflate post-peak predictions.
+    if (isTRUE(ap$peak_passed) && !peak_passed_prev) {
+      bias_level       <- list(h1 = 0, h2 = 0)
+      bias_trend       <- list(h1 = 0, h2 = 0)
+      peak_passed_prev <- TRUE
+    }
 
     # --- Update bias from past h=1 predictions that now have observations ---
     obs_at_ew <- season_to_ew[season_to_ew$weekF == ew, , drop = FALSE]
