@@ -147,7 +147,7 @@ h4 {
 ## What This Page Covers
 
 - Define the `$M_2$` model and its feature set.
-- Explain the weekly refit logic used after ignition.
+- Explain the frozen GAM + online bias correction used after ignition.
 - Tune the `$M_2$` hyperparameters with nested LOSO.
 - Inspect the fit-back of the production model on historical seasons.
 
@@ -177,18 +177,14 @@ $$
   z_{s,w}(\delta,Kr) \\[2pt]
 &+ \mathbb{I}\{\texttt{T="S"}\}\;
   S_{1}^{h}\!\left(z_{s,w}(\delta,Kr);\; k_f\right) \\[2pt]
-&+ \mathbb{I}\{k_w>0\}\;
-  S_{2}^{h}\!\left(w^a_{s,w};\; k_w\right) \\[2pt]
-&+ \mathbb{I}\{k_s>0\}\;
-  S_{3,s}^{h}\!\left(w^a_{s,w};\;S, k_s\right) \\[2pt]
 &+ \mathbb{I}\{k_e>0\}\;
   S_{4}^{h}\!\left(z^{(\mathrm{ema})}_{s,w};\; k_e\right) \\[2pt]
-&+ \mathbb{I}\{k_1>0\}\;
-  S_{6}^{h}\!\left(d1_{s,w};\; k_1\right) \\[2pt]
-&+ \mathbb{I}\{k_2>0\}\;
-  S_{7}^{h}\!\left(d2_{s,w};\; k_2\right).
+&+ \mathbb{I}\{k_r>0\}\;
+  S_{5}^{h}\!\left(z^{(\mathrm{resid})}_{s,w};\; k_r\right).
 \end{aligned}
 $$ {#eq-mod1}
+
+At deployment time, a **trend-augmented bias correction** $\beta^{h}_w$ is added to $\eta^{h}_{s,w}$ before applying the inverse-logit (see @sec-bias-correction).
 
 ### Model terms
 
@@ -246,19 +242,6 @@ Below, each term in Eq. (@eq-mod1) has (i) an interpretation, (ii) its hyperpara
   - `T="O"`: `offset(logit_f_eff)`
   - `T="N"`: (omit template term)
 
-### $S_{2}^{h}(w^a_{s,w};k_w)$
-- Global aligned-time correction, allows the model to "self-align" in real time with observed data
-- **Hyperparams:** $k_w$ (basis dimension).
-- **Toggle:** on if $k_w>0$; off if $k_w=0$.
-- **R:** `s(newWeek, by=lead, bs="ts", k=k_w)`.
-
-### $S^{h}_{3,s}(w^a_{s,w};S,k_s)$
-- Season-specific deviation over aligned time, allows each season to deviate smoothly from the global aligned-time pattern.
-- **Hyperparams:** $k_s$ (basis dimension).
-- **Toggle:** on if $k_s>0$; off if $k_s=0$.
-- **R:** `s(newWeek, by=interaction(season,lead), bs="fs", k=k_s, xt=...)`.
-- **New-season prediction:** typically excluded because a brand-new season has an unseen factor level.
-
 ### $S_{4}^{h}(z^{(\mathrm{ema})}_{s,w};k_e)$
 
 EMA state (current-level memory): provides the model with a smoothed summary of the current level of positivity, estimated causally in real time.
@@ -271,24 +254,25 @@ $$
 
 initialised at $z^{(\mathrm{ema})}_{s,1} = \mathrm{logit}_\varepsilon(p_{s,1})$. The smoothing parameter $\alpha_{\text{state}}\in(0,1)$ controls how quickly the memory adapts.
 
-- **Hyperparams:** $\alpha_{\text{state}}\in(0,1)$ (EWMA decay, tuned jointly with $\lambda_w$) and $k_e$ (smooth basis dimension).
+- **Hyperparams:** $\alpha_{\text{state}}\in(0,1)$ (EWMA decay) and $k_e$ (smooth basis dimension).
 - **Toggle:** on if $k_e>0$; off if $k_e=0$.
 - **R (feature):** `z_ema` computed via `ewma_recursive()` using `alpha_state`.
 - **R (model):** `s(z_ema, by=lead, bs="ts", k=k_e)`.
 
-### $S_{6}^{h}(d1_{s,w};k_1)$
-- Prospective derivative (slope), captures local growth/decline momentum on the logit scale, estimated in real time
-- **Hyperparams:** $k_1$ (basis dimension).
-- **Toggle:** on if $k_1>0$; off if $k_1=0$.
-- **R (feature):** `d1_now`.
-- **R (model):** `s(d1_now, by=lead, bs="ts", k=k_1)`.
+### $S_{5}^{h}(z^{(\mathrm{resid})}_{s,w};k_r)$
 
-### $S_{7}^{h}(d2_{s,w};k_2)$
-- Prospective derivative (curvature), captures acceleration/curvature on the logit scale
-- **Hyperparams:** $k_2$ (basis dimension).
-- **Toggle:** on if $k_2>0$; off if $k_2=0$ (recommended if noisy).
-- **R (feature):** `d2_now`.
-- **R (model):** `s(d2_now, by=lead, bs="ts", k=k_2)`.
+Amplitude residual: captures the deviation of the current season's positivity level from what the template predicts, breaking the collinearity between `z_ema` and `logit_f_eff`.
+
+$$
+z^{(\mathrm{resid})}_{s,w} = z^{(\mathrm{ema})}_{s,w} - z_{s,w}(\delta, Kr).
+$$
+
+When $z^{(\mathrm{resid})}_{s,w} > 0$ the current season is running hotter than the template; when $< 0$ it is cooler. This signal lets $M_2$ adjust amplitude independently of the template's phase position.
+
+- **Hyperparams:** $k_r$ (basis dimension).
+- **Toggle:** on if $k_r > 0$; off if $k_r = 0$.
+- **R (feature):** `z_resid = z_ema - logit_f_eff` computed in `prep_stage2_joint()`.
+- **R (model):** `s(z_resid, by=lead, bs="ts", k=k_r)`.
 
 ### $\lambda_w$ (time-decay weight)
 
@@ -308,7 +292,7 @@ $$
 \ell(\theta) = \sum_s\sum_{w}\sum_h w_{s,w}\;\log\Pr\!\left(x_{s,w+h}\mid n_{s,w+h},\,\pi^h_{s,w}\right).
 $$
 
-**Tuning.** $\lambda_w$ is treated as a hyperparameter and selected jointly with $\alpha_{\text{state}}$ by LOSO. Evaluation during LOSO always uses **uniform weights** over the first `eval_window` post-ignition weeks — $\lambda_w$ governs what the model learns, not what it is judged on.
+**Design choice.** $\lambda_w$ is fixed at 0 (uniform weighting). The pre-peak ignition-to-peak window is already the focus of evaluation and the model naturally emphasises it through the z_ema and z_resid covariates.
 
 #### Late-season weight floor
 
@@ -325,15 +309,37 @@ where $t_{\text{floor}}$ (`t_floor_start`, default 14) activates the floor beyon
 
 :::
 
-## Online weekly refit
+## Frozen GAM with online bias correction {#sec-bias-correction}
 
-Let $s^*$ denote the current live season and $\mathcal{D}_{\text{hist}}$ the full historical dataset. At each week $w \geq w^{(\mathrm{ign})}_{s^*}$ after ignition detection, $M_2$ is refit on the augmented dataset
+$M_2$ is trained **once** on all historical seasons and deployed as a frozen GAM. Instead of weekly refit (which re-estimates the entire GAM each week with the current season appended), we use a **trend-augmented bias correction** applied on the logit scale at prediction time.
+
+### Why frozen + bias replaces weekly refit
+
+Weekly refit provided two benefits: (1) the season random effect $b_{s^*}$ absorbed inter-season amplitude differences, and (2) the smooth re-estimation captured current-season trajectory. Both are now handled more efficiently:
+
+- **Season amplitude** → `z_resid` ($z^{(\mathrm{ema})} - z_{s,w}$) provides continuous, within-week amplitude deviation from the template — richer than a single-season random intercept.
+- **Trajectory tracking** → the Holt EMA bias correction adapts per-horizon, per-week, anticipating trend direction — more responsive than re-estimating smooth basis functions from $\sim$12 new rows added to $\sim$120 historical.
+
+The frozen approach is $\sim$12× faster for grid search (1 GAM fit per fold vs $\sim$12).
+
+### Trend-augmented Holt EMA
+
+At each evaluation week $w$, when a past prediction's target becomes observed, the bias correction is updated per horizon $h$:
 
 $$
-\mathcal{D}_w = \mathcal{D}_{\text{hist}} \;\cup\; \bigl\{\,(s^*,\,w',\,x_{s^*,w'},\,n_{s^*,w'}) : w' \leq w\,\bigr\}.
+\begin{aligned}
+r^h_w &= \mathrm{logit}(p^{(\mathrm{obs})}_w) - \mathrm{logit}(\hat{p}^{h}_{w}), \\[4pt]
+\ell^h_w &= \alpha\, r^h_w + (1-\alpha)\,\bigl(\ell^h_{w-1} + \tau^h_{w-1}\bigr), \\[4pt]
+\tau^h_w &= \beta\,\bigl(\ell^h_w - \ell^h_{w-1}\bigr) + (1-\beta)\,\tau^h_{w-1}, \\[4pt]
+\beta^h_w &= \ell^h_w + \tau^h_w,
+\end{aligned}
 $$
 
-This allows the season random effect $b_{s^*}$ and the factor-smooth $S^h_{3,s^*}$ to be estimated from current-season observations, so both the level and shape of the forecast are corrected as data accumulate. All hyperparameters are fixed at their LOSO-tuned values; only the GAM coefficients are updated each week.
+where $\ell^h_w$ is the bias level, $\tau^h_w$ is the bias trend, and $\beta^h_w$ is the correction added to $\eta^h_{s,w}$ before applying $\mathrm{logit}^{-1}$. Parameters $\alpha = 0.3$ (level smoothing) and $\beta = 0.2$ (trend smoothing) are fixed design choices.
+
+**Why trend-augmented over simple EMA.** A simple EMA always lags behind accelerating seasons — if bias is growing week-over-week (as during the rise phase), the correction arrives too late. The Holt trend term $\tau^h_w$ extrapolates one step ahead, anticipating growing bias and correcting proactively.
+
+**Initialisation.** $\ell^h_0 = 0$, $\tau^h_0 = 0$ (no correction until the first target is observed).
 
 ### Prospective derivatives
 
@@ -393,16 +399,15 @@ The table below lists every hyperparameter, its role in the model, and the value
 #| echo: false
 tibble::tribble(
   ~Parameter,  ~Description,                                                                                                                                                    ~Type,          ~`Grid / value`,
-  "δ (delta)", "Integer-week nudge to the template covariate on the aligned axis. Compensates for residual timing offset after $M_1$ alignment. δ=0 means no nudge.",             "Integer",      "Fixed: 0",
+  "δ (delta)", "Integer-week nudge to the template covariate on the aligned axis. Compensates for residual timing offset after $M_1$ alignment. δ=0 means no nudge.",             "Integer",      "{-1, 0, 1}",
   "Kr",        "Template ramp length in weeks. Kr=1 means full template weight from week 1 of ignition; Kr>1 blends in gradually over Kr weeks.",                              "Integer ≥ 1",  "{1, 2, 3}",
-  "k_f",       "Basis dimension for the template smooth $S_1^h$. Controls how nonlinearly the model maps the template covariate to the response. k_f=2 is near-linear.",       "Integer ≥ 2",  "{2, 3, 4}",
-  "k_e",       "Basis dimension for the EMA-state smooth $S_4^h$. Controls nonlinearity of the current-level correction.",                                                     "Integer ≥ 0",  "{3, 4, 6}",
-  "α_state",   "EWMA smoothing decay for the current-level covariate z_ema. Lower α = slower adaptation, longer effective memory (≈ 1/α weeks).",                             "Real ∈ (0,1)", "{0.03, 0.05, 0.07, 0.10, 0.15, 0.20, 0.25}",
-  "k_s",       "Basis dimension for per-season deviation smooth $S_3^h$. k_s=0 disables season-specific shape correction.",                                                    "Integer ≥ 0",  "Fixed: 0",
+  "k_f",       "Basis dimension for the template smooth $S_1^h$. Controls how nonlinearly the model maps the template covariate to the response.",                             "Integer ≥ 2",  "{3, 5, 7}",
+  "k_e",       "Basis dimension for the EMA-state smooth $S_4^h$. Controls nonlinearity of the current-level correction.",                                                     "Integer ≥ 0",  "{2, 3, 4}",
+  "α_state",   "EWMA smoothing decay for the current-level covariate z_ema. Lower α = slower adaptation, longer effective memory (≈ 1/α weeks).",                             "Real ∈ (0,1)", "{0.03, 0.05, 0.10}",
+  "k_r",       "Basis dimension for amplitude-residual smooth $S_5^h$ (z_resid = z_ema − logit_f_eff). k_r=0 disables.",                                                      "Integer ≥ 0",  "{0, 3, 5}",
   "λ_w",       "Time-decay weight exponent. Down-weights late-season training rows. λ_w=0 is standard uniform MLE.",                                                           "Real ≥ 0",     "Fixed: 0",
-  "k_1",       "Basis dimension for slope smooth $S_6^h$ (prospective first derivative d1).",                                                                                  "Integer ≥ 0",  "Fixed: 4",
-  "k_2",       "Basis dimension for curvature smooth $S_7^h$ (prospective second derivative d2). k_2=0 disables.",                                                             "Integer ≥ 0",  "Fixed: 0",
-  "k_w",       "Basis dimension for global aligned-time smooth $S_2^h$. k_w=0 disables.",                                                                                      "Integer ≥ 0",  "Fixed: 0"
+  "k_1",       "Basis dimension for slope smooth (prospective first derivative d1). Dropped in v11 — derivative is noisy and redundant with z_ema + template.",                "Integer ≥ 0",  "Fixed: 0",
+  "k_2",       "Basis dimension for curvature smooth (prospective second derivative d2). Dropped in v11.",                                                                     "Integer ≥ 0",  "Fixed: 0"
 ) |>
   gt() |>
   tab_header(title = "M_2 tuning parameters") |>
@@ -411,7 +416,7 @@ tibble::tribble(
   tab_style(style = cell_text(weight = "bold"),
             locations = cells_column_labels()) |>
   tab_style(style = cell_fill(color = "#f0f4f8"),
-            locations = cells_body(rows = c(2, 3, 4, 5)))
+            locations = cells_body(rows = c(1, 2, 3, 4, 5, 6)))
 ```
 
 ### Evaluation metric
@@ -430,7 +435,14 @@ Predicted probabilities $\hat{p}_i$ pass through the **soft positivity ceiling**
 
 ### Tuning call
 
-The nested LOSO was run in two stages: a comprehensive grid search (v9, 1,296 specs) followed by a targeted boundary check (v10, 8 specs). Results are combined into `nested_loso_combined_production.rds` (1,303 unique specs). Phase 1 pre-computes $M_1$ predictions once per fold; Phase 2 loops over all specs. The current entry-point script is `scripts/run_nested_loso_v9.R` (v10 is `scripts/run_nested_loso_v10.R`).
+The nested LOSO was run in three stages: v9 (1,296 specs), v10 (8 boundary-check specs), and v11 (729 specs with model simplification + z_resid + frozen GAM + bias correction). Results from v11 supersede earlier runs. The v11 entry-point script is `scripts/run_nested_loso_v11.R`.
+
+**v11 changes from v9/v10:**
+
+- **Dropped terms:** `k_n` (logN_now), `k_w` (aligned-week smooth), `k_s` (per-season factor-smooth), `k_1` (derivative d1) — all fixed at 0.
+- **New covariate:** `z_resid = z_ema − logit_f_eff` (amplitude residual), controlled by `k_r`.
+- **Frozen GAM evaluation** with trend-augmented Holt EMA bias correction (~12× faster than weekly refit).
+- **Grid:** `delta × Kr × k_f × k_e × alpha_state × k_r` = 3×3×3×3×3×3 = 729 specs.
 
 ```{r tuning-call}
 #| eval: false
@@ -455,25 +467,28 @@ m1_test <- m1_walkforward_predictions(
   dynamic_temp = TRUE, dynamic_temp_pivot = 10L
 )
 
-# --- Phase 2: for each candidate spec, train M2 and score held-out season ---
-# v4 grid: Kr x k_f x k_e x alpha_state (189 specs, fixed delta=0, k_s=0, lambda_w=0)
+# --- Phase 2: train frozen GAM once per spec, evaluate with bias correction ---
+# v11 grid: delta × Kr × k_f × k_e × alpha_state × k_r (729 specs)
 grid <- tidyr::crossing(
+  delta       = c(-1L, 0L, 1L),
   Kr          = c(1L, 2L, 3L),
-  k_f         = c(2L, 3L, 4L),
-  k_e         = c(3L, 4L, 6L),
-  alpha_state = c(0.03, 0.05, 0.07, 0.10, 0.15, 0.20, 0.25)
+  k_f         = c(3L, 5L, 7L),
+  k_e         = c(2L, 3L, 4L),
+  alpha_state = c(0.03, 0.05, 0.10),
+  k_r         = c(0L, 3L, 5L)
 )
 spec <- stage2_make_spec(
-  delta = 0L, Kr = Kr, T = "S", k_f = k_f, k_e = k_e,
-  k_1 = 4L, k_2 = 0L, k_w = 0L, k_s = 0L,
+  delta = delta, Kr = Kr, T = "S", k_f = k_f, k_e = k_e,
+  k_r = k_r, k_1 = 0L, k_2 = 0L, k_n = 0L, k_w = 0L, k_s = 0L,
   alpha_state = alpha_state, lambda_w = 0, w_floor = 0.05
 )
 
 m2      <- nested_loso_m2_train(fold = fold, m1_train_preds = m1_train, spec = spec)
-eval_out <- nested_loso_m2_eval(
+eval_out <- nested_loso_m2_eval_frozen_bias(
   allD = allD, fold = fold, m2_fit = m2, m1_test_preds = m1_test,
-  spec = spec, eval_window = 12L, k_deriv = 10L,
-  manual_labels = manual_labels, flag_args = flag_args
+  spec = spec, eval_window = 12L,
+  manual_labels = manual_labels, flag_args = flag_args,
+  bias_alpha = 0.3, bias_beta = 0.2
 )
 ```
 
@@ -482,8 +497,12 @@ eval_out <- nested_loso_m2_eval(
 ```{r load-production-results}
 #| eval: true
 
-# Prefer combined (v9+v10, 1303 specs) > v9 > v8 > older for backward compat.
-if (file.exists("../data/nested_loso_combined_production.rds")) {
+# Load most recent LOSO results: v11 > combined(v9+v10) > v9 > v8 > v4.
+if (file.exists("../data/nested_loso_v11_production.rds")) {
+  prod_results_v4 <- readRDS("../data/nested_loso_v11_production.rds")
+  cat("v11 (frozen GAM + bias correction + z_resid) grid:",
+      nrow(prod_results_v4$summary), "specs × 10 seasons nested LOSO\n")
+} else if (file.exists("../data/nested_loso_combined_production.rds")) {
   prod_results_v4 <- readRDS("../data/nested_loso_combined_production.rds")
   cat("Combined (v9+v10) grid:", nrow(prod_results_v4$summary),
       "specs × 10 seasons nested LOSO\n")
@@ -514,8 +533,15 @@ cat("Best:", prod_results_v4$best_spec_id,
 best_spec_nested <- prod_results_v4$best_spec
 ```
 
-The tuned spec is `Kr=1, k_f=5, k_e=3, alpha_state=0.05` with `delta=0, k_1=0, k_w=0, k_s=0, lambda_w=0`.
-Selected by the combined v9+v10 nested LOSO (1,303 specs total; v9: full grid over all hyperparameters × v10: alpha boundary check).
+The best spec is loaded from the most recent LOSO results file. Below is the interpretation of the v9/v10 production spec; after running the v11 grid search this section will be updated with the new best spec.
+
+**Current production spec (v9/v10):** `Kr=1, k_f=5, k_e=3, alpha_state=0.05` with `delta=0, k_1=0, k_w=0, k_s=0, k_r=0, lambda_w=0`.
+
+**v11 additions to interpret:** The v11 grid adds `k_r` (amplitude residual z_resid) and uses frozen GAM + trend-augmented bias correction instead of weekly refit. Key questions for v11:
+
+- Does `k_r > 0` (z_resid enabled) improve over `k_r = 0`?
+- Are `k_f` and `k_e` ranges still interior?
+- Does `alpha_state` remain at 0.05?
 
 **`delta = 0` — no template shift.**
 $M_1$'s alignment already places the current season correctly on the reference curve. No residual systematic timing offset remains. All three delta values (−1, 0, +1) tie when the other parameters are fixed at the optimum — confirming the template is well-aligned.
@@ -533,27 +559,27 @@ The EMA state `z_ema` enters with 3 basis functions (the mgcv minimum for thin-p
 The effective lookback is $1/\alpha = 20$ weeks — a slow-decay tracker that approximates a running mean of within-season positivity. v9 found `alpha=0.05` best among {0.05, 0.10, 0.20}; v10 extended the search to {0.01, 0.02, 0.03} and confirmed `alpha=0.05` is the global optimum — going lower degrades performance sharply (alpha=0.03: NLL+2.7; alpha=0.01: NLL+40.8).
 
 **`k_1 = 0`, `k_w = 0`, `k_s = 0` — derivative, week-trend and season-specific terms all disabled.**
-Adding first-derivative (`k_1=4`: NLL+26.7), aligned-week trend (`k_w=6`: NLL+17.9), or per-season deviations (`k_s=4`) all hurt substantially. The template + slow EMA is sufficient; additional terms overfit on the small training set of 10 seasons.
+Adding first-derivative (`k_1=4`: NLL+26.7), aligned-week trend (`k_w=6`: NLL+17.9), or per-season deviations (`k_s=4`) all hurt substantially. These terms were formally dropped from the model in v11.
 
 **`lambda_w = 0` — uniform training weights.**
 Down-weighting late-season observations provides no benefit. The model learns equally from all post-ignition weeks.
 
-**Summary.** The v9/v10 tuned $M_2$ uses a **moderately flexible template smooth (`k_f=5`) with a minimal EMA correction (`k_e=3`, `alpha=0.05`)**. The key difference from the v8 spec is the slower alpha (0.05 vs 0.10) — v9 expanded the search to all hyperparameters simultaneously and found that a slower-decay EMA with minimal smoothing outperforms the v8 choice. The model is intentionally parsimonious: only the template covariate and a near-linear EMA enter the formula.
+**Summary.** The v9/v10 tuned $M_2$ uses a **moderately flexible template smooth (`k_f=5`) with a minimal EMA correction (`k_e=3`, `alpha=0.05`)**. v11 builds on this by adding the amplitude residual `z_resid` and trend-augmented bias correction while dropping the derivative, aligned-week, and factor-spline terms.
 
 
 ## Fit-back on historical data
 
 Refit $M_2$ on all historical seasons using the best nested-LOSO spec and the production reference curve.
 
-**M1 walk-forward predictions for historical seasons** are computed here and saved with the production kit. They are passed to both `nested_loso_refit_best()` (frozen GAM) and `refit_stage2_weekly()` at deployment so that `logit_f_eff` is M1-based in all three contexts — frozen training, weekly refit, and LOSO evaluation — ensuring no inconsistency. There is no data leakage: the predictions are walk-forward (each season uses only past data) and the current season is never in `m1_train_preds`.
+**M1 walk-forward predictions for historical seasons** are computed here and saved with the production kit. They are passed to `nested_loso_refit_best()` (frozen GAM) and `run_m2_forecast()` at deployment so that `logit_f_eff` is M1-based in both contexts — ensuring no inconsistency. There is no data leakage: the predictions are walk-forward (each season uses only past data) and the current season is never in `m1_train_preds`.
 
 ```{r compute-m1-production-preds}
 #| eval: true
 #| message: false
 # Production M1 predictions for ALL training seasons (no leakage — walk-forward).
-# These replace template-based logit_f_eff in the frozen GAM and in every
-# weekly refit at deployment.  Save them in m2_production.rds so
-# load_prospective_kit() can thread them through refit_stage2_weekly().
+# These replace template-based logit_f_eff in the frozen GAM.  Save them in
+# m2_production.rds so load_prospective_kit() can thread them through
+# run_m2_forecast() at deployment.
 EXCLUDE_SEAS <- "2015-16"  # Same exclusion used throughout LOSO evaluation.
 m1_preds_production <- m1_walkforward_multi(
   allD               = allD,
@@ -607,10 +633,10 @@ ggplotly(p_fitback)
 # Contents:
 #   fit            — frozen production GAM (trained with M1-based logit_f_eff)
 #   spec           — best nested-LOSO spec
-#   template_df    — reference curve (newWeek, fit) for refit_stage2_weekly()
+#   template_df    — reference curve (newWeek, fit) for run_m2_forecast()
 #   m1_train_preds — M1 walk-forward predictions for all historical training
 #                    seasons.  load_prospective_kit() reads this and passes it
-#                    to refit_stage2_weekly() so that logit_f_eff at deployment
+#                    to run_m2_forecast() so that logit_f_eff at deployment
 #                    matches the feature space used to train the frozen GAM.
 #                    No data leakage: predictions are walk-forward and the
 #                    current season is never included.
