@@ -381,12 +381,45 @@ run_m2_forecast <- function(kit,
       message("[run_m2_forecast] hist_data not found in kit — falling back to frozen fit")
   }
 
-  m2_preds <- dplyr::bind_rows(lapply(m1_result$per_week, function(pw) {
+  # --- Trend-augmented bias correction tracker (Holt EMA) ---
+  # Running level + trend of logit-scale residuals from prior predictions.
+  # At each eval_week, if we have a prediction from a prior week whose
+  # target is now observed, we compute logit(obs) - logit(pred) and update
+  # a Holt-style level + trend.  The correction applied is level + trend,
+  # which extrapolates the bias one step ahead.
+  bias_alpha  <- 0.3   # EMA decay for bias level
+  bias_beta   <- 0.2   # EMA decay for bias trend
+  bias_level  <- list(h1 = 0, h2 = 0)  # per-horizon running level (logit scale)
+  bias_trend  <- list(h1 = 0, h2 = 0)  # per-horizon running trend
+  pred_log    <- list()  # store (target_weekF, m2_p, h) for bias updates
+
+  m2_rows <- list()
+
+  for (pw in m1_result$per_week) {
     ew           <- pw$ew
     ap           <- pw$ap
     season_to_ew <- pw$season_to_ew
 
-    if (is.null(ap) || ap$state == "pre_ignition") return(NULL)
+    if (is.null(ap) || ap$state == "pre_ignition") next
+
+    # --- Update bias from past h=1 predictions that now have observations ---
+    obs_at_ew <- season_to_ew[season_to_ew$weekF == ew, , drop = FALSE]
+    if (nrow(obs_at_ew) > 0) {
+      p_obs_ew <- obs_at_ew$y[1] / max(obs_at_ew$N[1], 1L)
+      logit_obs <- qlogis(pmin(pmax(p_obs_ew, 1e-6), 1 - 1e-6))
+      for (pl in pred_log) {
+        if (pl$target_weekF == ew) {
+          logit_pred <- qlogis(pmin(pmax(pl$m2_p, 1e-6), 1 - 1e-6))
+          resid <- logit_obs - logit_pred
+          hkey <- paste0("h", pl$h)
+          old_level <- bias_level[[hkey]]
+          bias_level[[hkey]] <- bias_alpha * resid +
+            (1 - bias_alpha) * (old_level + bias_trend[[hkey]])
+          bias_trend[[hkey]] <- bias_beta * (bias_level[[hkey]] - old_level) +
+            (1 - bias_beta) * bias_trend[[hkey]]
+        }
+      }
+    }
 
     iWeek_hat <- ap$iWeek_hat
     fdf       <- ap$forecast_df
@@ -437,7 +470,7 @@ run_m2_forecast <- function(kit,
     soft_cap_ew <- make_soft_cap_fn(fit_ew)
     lev_lead_ew <- levels(fit_ew$model$lead) %||% lev_lead_frozen
 
-    dplyr::bind_rows(lapply(horizons, function(h) {
+    ew_result <- dplyr::bind_rows(lapply(horizons, function(h) {
       target_weekF   <- ew + h
       target_newWeek <- as.numeric(target_weekF - iWeek_hat + anchorWeek)
 
@@ -481,6 +514,10 @@ run_m2_forecast <- function(kit,
                         pmax(lfe_train_range[1L],
                              qlogis(pmin(pmax(m1_p, 1e-6), 1 - 1e-6))))
 
+      # Apply running bias correction: level + trend (extrapolate one step)
+      hkey_bl <- paste0("h", h)
+      bl <- bias_level[[hkey_bl]] + bias_trend[[hkey_bl]]
+
       pr <- m2_predict_one(
         fit               = fit_ew,
         ew                = ew,
@@ -496,7 +533,8 @@ run_m2_forecast <- function(kit,
         ex_terms          = ex_terms,
         include_season_re = refit_ok,
         soft_cap_fn       = soft_cap_ew,
-        return_ci         = TRUE
+        return_ci         = TRUE,
+        bias_logit        = bl
       )
       if (is.null(pr)) {
         return(tibble::tibble(
@@ -506,6 +544,11 @@ run_m2_forecast <- function(kit,
         ))
       }
 
+      # Record prediction for future bias updates
+      pred_log[[length(pred_log) + 1L]] <<- list(
+        target_weekF = target_weekF, m2_p = pr$m2_p, h = h
+      )
+
       tibble::tibble(
         eval_week = ew, h = h, target_weekF = target_weekF,
         m1_p = m1_p, m1_lo = m1_lo, m1_hi = m1_hi,
@@ -514,7 +557,10 @@ run_m2_forecast <- function(kit,
         m2_hi = pr$m2_hi
       )
     }))
-  }))
+    m2_rows[[length(m2_rows) + 1L]] <- ew_result
+  }
+
+  m2_preds <- dplyr::bind_rows(m2_rows)
 
   list(m2_preds = m2_preds)
 }

@@ -61,9 +61,9 @@ stage2_make_spec <- function(
     use_ramp = NULL,
     
     k_e = 6L,
-    k_n = 6L,
-    k_1 = 6L,
-    k_2 = 6L,
+    k_n = 0L,
+    k_1 = 0L,
+    k_2 = 0L,
     k_r = 0L,
     k_w = 0L,
     k_s = 0L,

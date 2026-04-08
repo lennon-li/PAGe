@@ -87,7 +87,8 @@ m2_predict_one <- function(fit,
                            ex_terms        = NULL,
                            include_season_re = FALSE,
                            soft_cap_fn     = NULL,
-                           return_ci       = FALSE) {
+                           return_ci       = FALSE,
+                           bias_logit      = 0) {
 
   # --- Exclude terms ---
   ex <- ex_terms %||% character(0)
@@ -148,9 +149,10 @@ m2_predict_one <- function(fit,
   # --- Transform to probability scale ---
   cap <- soft_cap_fn %||% identity
   eps <- 1e-12
+  bl  <- as.numeric(bias_logit %||% 0)
 
   if (isTRUE(return_ci)) {
-    eta <- as.numeric(pr$fit)
+    eta <- as.numeric(pr$fit) + bl
     se  <- as.numeric(pr$se.fit)
     list(
       m2_p  = cap(pmin(1 - eps, pmax(eps, stats::plogis(eta)))),
@@ -158,7 +160,7 @@ m2_predict_one <- function(fit,
       m2_hi = cap(pmin(1 - eps, pmax(eps, stats::plogis(eta + 1.96 * se))))
     )
   } else {
-    eta <- as.numeric(pr)
+    eta <- as.numeric(pr) + bl
     list(
       m2_p = cap(pmin(1 - eps, pmax(eps, stats::plogis(eta))))
     )
@@ -555,7 +557,7 @@ train_stage2_joint_prepped <- function(d_all,
   }
   k_f <- as.integer(get1(best_mean_nll, "k_f", 6L))
   
-  # DEFAULT: full model (everything on) unless user supplies spec
+  # DEFAULT: parsimonious model unless user supplies spec
   if (is.null(spec)) {
     spec <- stage2_make_spec(
       delta = get1(best_mean_nll, "delta", 0L),
@@ -563,13 +565,12 @@ train_stage2_joint_prepped <- function(d_all,
       k_f = k_f,
       alpha_state = get1(best_mean_nll, "alpha_state", 0.30),
       template_mode = "smooth",
-      # full terms ON
-      k_w = 8L,
-      k_s   = 6L,
+      k_w = 0L,
+      k_s = 0L,
       k_e = as.integer(k_e),
-      k_n = as.integer(k_n),
-      k_1   = as.integer(k_1),
-      k_2   = as.integer(k_2),
+      k_n = 0L,
+      k_1 = 0L,
+      k_2 = 0L,
       use_season_re = TRUE
     )
   }
@@ -600,6 +601,7 @@ train_stage2_joint_prepped <- function(d_all,
   if (spec$use_season_re) req <- c(req, "season")
   if (spec$k_s > 0L) req <- c(req, "season_h")
   if (spec$k_e > 0L) req <- c(req, "z_ema")
+  if (!is.null(spec$k_r) && spec$k_r > 0L) req <- c(req, "z_resid")
   if (spec$k_n > 0L) req <- c(req, "logN_now")
   if (spec$k_1   > 0L) req <- c(req, "d1_now")
   if (spec$k_2   > 0L) req <- c(req, "d2_now")

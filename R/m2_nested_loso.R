@@ -503,7 +503,260 @@ nested_loso_m2_eval <- function(allD,
 }
 
 
-# ---------- 5b. M2 eval with weekly refit ----------
+# ---------- 5b. M2 eval with frozen GAM + trend-augmented bias ----------
+
+#' Evaluate M2 using a frozen GAM with walk-forward bias correction
+#'
+#' Variant of \code{nested_loso_m2_eval()} that applies Holt-style
+#' trend-augmented bias correction during walk-forward evaluation. The GAM
+#' is trained once on historical data (frozen); at each evaluation week the
+#' correction is updated from out-of-sample residuals and extrapolated forward.
+#'
+#' This matches the deployment semantics of \code{run_m2_forecast()} and is
+#' much faster than \code{nested_loso_m2_eval_weekly_refit()} (~12x) because
+#' no GAM refitting occurs per eval week.
+#'
+#' @param allD Full multi-season data frame.
+#' @param fold Fold object from \code{nested_loso_build_fold()}.
+#' @param m2_fit Output of \code{nested_loso_m2_train()} (the trained M2 GAM).
+#' @param m1_test_preds Output of \code{nested_loso_m1_test()}: tibble with
+#'   columns \code{eval_weekF}, \code{target_weekF}, \code{h}, \code{m1_p_hat},
+#'   \code{m1_tau}.
+#' @param spec Stage-2 spec from \code{stage2_make_spec()}.
+#' @param eval_window Integer; max t_since to evaluate (default 12L).
+#' @param horizons Integer vector of forecast horizons (default \code{c(1L, 2L)}).
+#' @param bias_alpha Numeric; EMA smoothing for bias level (default 0.3).
+#' @param bias_beta Numeric; EMA smoothing for bias trend (default 0.2).
+#' @param k_deriv Integer; basis dim for M0 derivative estimation (default 10L).
+#' @param manual_labels Optional named integer vector of manual ignition labels.
+#' @param flag_args Named list forwarded to \code{flagIgnition()}.
+#' @param verbose Logical.
+#' @return Same structure as \code{nested_loso_m2_eval()}: list with
+#'   \code{scores} and \code{predictions}.
+#' @export
+nested_loso_m2_eval_frozen_bias <- function(allD,
+                                            fold,
+                                            m2_fit,
+                                            m1_test_preds,
+                                            spec,
+                                            eval_window   = 12L,
+                                            horizons      = c(1L, 2L),
+                                            bias_alpha    = 0.3,
+                                            bias_beta     = 0.2,
+                                            k_deriv       = 10L,
+                                            manual_labels = NULL,
+                                            flag_args     = list(
+                                              p_thresh   = 0.01,
+                                              k1         = 0.4,
+                                              k_c        = 0.01,
+                                              n_consec   = 2L,
+                                              min_window = 10L,
+                                              w_min      = 21L,
+                                              w_max      = 21L,
+                                              d2_relax   = -0.01
+                                            ),
+                                            verbose = TRUE) {
+
+  if (!requireNamespace("dplyr",   quietly = TRUE)) stop("Please install dplyr.")
+  if (!requireNamespace("tibble",  quietly = TRUE)) stop("Please install tibble.")
+  if (!requireNamespace("purrr",   quietly = TRUE)) stop("Please install purrr.")
+  `%||%` <- function(x, y) if (is.null(x)) y else x
+
+  test_s <- fold$test_season
+  na_scores  <- tibble::tibble(season = test_s, n = NA_integer_,
+                               mean_nll = NA_real_, brier = NA_real_, rmse_p = NA_real_)
+  empty_preds <- tibble::tibble(
+    season = character(), weekF = integer(), lead = character(),
+    t_since = numeric(), p_hat = numeric(), p_obs = numeric(),
+    y_lead = integer(), N_lead = integer()
+  )
+
+  if (isTRUE(verbose))
+    message("[m2_eval_fb] Evaluating frozen+bias M2 on test season ", test_s)
+
+  # --- Frozen fit ---
+  if (is.null(m2_fit)) return(list(scores = na_scores, predictions = empty_preds))
+  fit_obj     <- m2_fit$fit
+  soft_cap_fn <- make_soft_cap_fn(fit_obj)
+  lev_lead    <- levels(fit_obj$model$lead)
+  lev_seas    <- levels(fit_obj$model$season)
+
+  # --- Build aligned test data via M0 ---
+  test_allD  <- dplyr::filter(allD, .data$season == test_s)
+  if (nrow(test_allD) == 0L) return(list(scores = na_scores, predictions = empty_preds))
+
+  test_deriv <- estimateDerivs(test_allD, k = k_deriv)
+  test_outs  <- test_deriv$data %>%
+    dplyr::group_by(.data$season) %>%
+    dplyr::group_split(.keep = TRUE) %>%
+    purrr::map(~ do.call(flagIgnition,
+                         c(list(df = .x, manual_labels = manual_labels), flag_args)))
+  aligned_test <- alignIgnition(test_outs)
+
+  iWeek_used <- suppressWarnings(
+    min(aligned_test$weekF[aligned_test$phase == 1L], na.rm = TRUE)
+  )
+  if (!is.finite(iWeek_used)) return(list(scores = na_scores, predictions = empty_preds))
+
+  alpha_s_global <- as.numeric(spec$alpha_state %||% 0.25)
+
+  if (is.null(m1_test_preds) || nrow(m1_test_preds) == 0L)
+    return(list(scores = na_scores, predictions = empty_preds))
+
+  ex_terms   <- spec$exclude_newseason
+  if (is.null(ex_terms)) ex_terms <- stage2_exclude_newseason(spec)
+  anchorWeek <- as.integer(spec$anchorWeek %||% fold$ref$anchorWeek %||% 20L)
+
+  eval_weeks <- sort(unique(m1_test_preds$eval_weekF))
+  eval_weeks <- eval_weeks[eval_weeks >= iWeek_used]
+  if (!is.null(eval_window))
+    eval_weeks <- eval_weeks[eval_weeks - iWeek_used <= as.integer(eval_window)]
+  if (length(eval_weeks) == 0L) return(list(scores = na_scores, predictions = empty_preds))
+
+  all_rows <- vector("list", length(eval_weeks))
+
+  # Trend-augmented bias tracker (Holt EMA)
+  bias_level <- list(h1 = 0, h2 = 0)
+  bias_trend <- list(h1 = 0, h2 = 0)
+  pred_log   <- list()
+
+  for (i in seq_along(eval_weeks)) {
+    ew        <- eval_weeks[i]
+    t_since_v <- as.numeric(ew - iWeek_used)
+
+    # Update bias from past predictions whose targets are now observed
+    obs_at_ew <- dplyr::filter(test_allD, .data$weekF == ew)
+    if (nrow(obs_at_ew) > 0) {
+      p_obs_ew  <- obs_at_ew$y[1L] / max(obs_at_ew$N[1L], 1L)
+      logit_obs <- stats::qlogis(pmin(pmax(p_obs_ew, 1e-6), 1 - 1e-6))
+      for (pl in pred_log) {
+        if (pl$target_weekF == ew) {
+          logit_pred <- stats::qlogis(pmin(pmax(pl$m2_p, 1e-6), 1 - 1e-6))
+          resid <- logit_obs - logit_pred
+          hkey  <- paste0("h", pl$h)
+          old_level <- bias_level[[hkey]]
+          bias_level[[hkey]] <- bias_alpha * resid +
+            (1 - bias_alpha) * (old_level + bias_trend[[hkey]])
+          bias_trend[[hkey]] <- bias_beta * (bias_level[[hkey]] - old_level) +
+            (1 - bias_beta) * bias_trend[[hkey]]
+        }
+      }
+    }
+
+    obs_to_ew <- dplyr::filter(test_allD, .data$weekF <= ew)
+    if (nrow(obs_to_ew) < 2L) next
+
+    # Compute z_ema from observations up to ew
+    obs_arr <- dplyr::arrange(obs_to_ew, .data$weekF) |>
+      dplyr::mutate(
+        p_now = .data$y / pmax(.data$N, 1L),
+        z_now = stats::qlogis(pmin(pmax(.data$p_now, 1e-6), 1 - 1e-6))
+      )
+    z_ema_v   <- as.numeric(stats::filter(
+      alpha_s_global * obs_arr$z_now, filter = 1 - alpha_s_global,
+      method = "recursive", init = obs_arr$z_now[1]
+    ))
+    z_ema_now <- utils::tail(z_ema_v, 1L)
+    logN_now  <- log(max(obs_arr$N[obs_arr$weekF == ew], 1L))
+
+    # Prospective derivatives
+    d_deriv_ew <- tryCatch(
+      add_prospective_derivs_link(
+        dplyr::transmute(obs_arr, season = test_s, weekF = .data$weekF,
+                         y = .data$y, neg = .data$N - .data$y),
+        k = 5L, eps = 1e-6, min_obs = 4L
+      ),
+      error = function(e) NULL
+    )
+    d_at_ew   <- if (!is.null(d_deriv_ew)) dplyr::filter(d_deriv_ew, .data$weekF == ew) else NULL
+    d1_now_ew <- if (!is.null(d_at_ew) && nrow(d_at_ew) > 0 && !is.na(d_at_ew$d1_link[1L]))
+      d_at_ew$d1_link[1L] else 0
+    d2_now_ew <- if (!is.null(d_at_ew) && nrow(d_at_ew) > 0 && !is.na(d_at_ew$d2_link[1L]))
+      d_at_ew$d2_link[1L] else 0
+
+    for (h in as.integer(horizons)) {
+      m1_row <- dplyr::filter(m1_test_preds,
+                              .data$eval_weekF == ew, .data$h == h)
+      if (nrow(m1_row) == 0L) next
+      m1_p <- m1_row$m1_p_hat[1L]
+      if (is.na(m1_p)) next
+
+      target_weekF <- as.integer(ew) + h
+      obs_target   <- dplyr::filter(test_allD, .data$weekF == target_weekF)
+      if (nrow(obs_target) == 0L) next
+      y_lead <- as.integer(obs_target$y[1L])
+      N_lead <- as.integer(obs_target$N[1L])
+
+      logit_f_eff <- stats::qlogis(pmin(pmax(m1_p, 1e-6), 1 - 1e-6))
+
+      # Bias correction: level + trend (extrapolate one step)
+      hkey <- paste0("h", h)
+      bl   <- bias_level[[hkey]] + bias_trend[[hkey]]
+
+      pr <- m2_predict_one(
+        fit               = fit_obj,
+        ew                = ew,
+        h                 = h,
+        iWeek             = iWeek_used,
+        anchorWeek        = anchorWeek,
+        logit_f_eff       = logit_f_eff,
+        z_ema             = z_ema_now,
+        logN_now          = logN_now,
+        d1_now            = d1_now_ew,
+        d2_now            = d2_now_ew,
+        season_label      = NULL,
+        ex_terms          = ex_terms,
+        include_season_re = FALSE,
+        soft_cap_fn       = soft_cap_fn,
+        return_ci         = FALSE,
+        bias_logit        = bl
+      )
+      if (is.null(pr)) next
+
+      # Record prediction for future bias updates
+      pred_log[[length(pred_log) + 1L]] <- list(
+        target_weekF = target_weekF, m2_p = pr$m2_p, h = h
+      )
+
+      all_rows[[i]] <- c(all_rows[[i]], list(tibble::tibble(
+        season  = test_s,
+        weekF   = as.integer(ew),
+        lead    = paste0("h", h),
+        t_since = t_since_v,
+        p_hat   = pr$m2_p,
+        p_obs   = y_lead / max(N_lead, 1L),
+        y_lead  = y_lead,
+        N_lead  = N_lead
+      )))
+    }
+  }
+
+  preds <- dplyr::bind_rows(unlist(all_rows, recursive = FALSE))
+  if (nrow(preds) == 0L) return(list(scores = na_scores, predictions = empty_preds))
+
+  eps     <- 1e-12
+  p_hat_v <- pmin(1 - eps, pmax(eps, preds$p_hat))
+  ll      <- stats::dbinom(preds$y_lead, preds$N_lead, p_hat_v, log = TRUE)
+  brier   <- mean((p_hat_v - preds$p_obs)^2, na.rm = TRUE)
+  scores  <- tibble::tibble(
+    season   = test_s,
+    n        = nrow(preds),
+    mean_nll = -mean(ll, na.rm = TRUE),
+    brier    = brier,
+    rmse_p   = sqrt(brier)
+  )
+
+  if (isTRUE(verbose))
+    message("[m2_eval_fb] ", test_s,
+            " | mean_nll=", round(scores$mean_nll, 4),
+            " brier=", round(scores$brier, 6),
+            " n=", nrow(preds))
+
+  list(scores = scores, predictions = preds)
+}
+
+
+# ---------- 5c. M2 eval with weekly refit (legacy) ----------
 
 #' Evaluate a Stage-2 spec using weekly GAM refit on the test season
 #'
@@ -609,9 +862,35 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
 
   all_rows <- vector("list", length(eval_weeks))
 
+  # Trend-augmented bias correction tracker (Holt EMA, same as frozen_bias)
+  bias_alpha_loso <- 0.3
+  bias_beta_loso  <- 0.2
+  bias_level_loso <- list(h1 = 0, h2 = 0)
+  bias_trend_loso <- list(h1 = 0, h2 = 0)
+  pred_log_loso   <- list()
+
   for (i in seq_along(eval_weeks)) {
     ew        <- eval_weeks[i]
     t_since_v <- as.numeric(ew - iWeek_used)
+
+    # Update bias from past predictions whose targets are now observed
+    obs_at_ew <- dplyr::filter(test_allD, .data$weekF == ew)
+    if (nrow(obs_at_ew) > 0) {
+      p_obs_ew <- obs_at_ew$y[1L] / max(obs_at_ew$N[1L], 1L)
+      logit_obs <- stats::qlogis(pmin(pmax(p_obs_ew, 1e-6), 1 - 1e-6))
+      for (pl in pred_log_loso) {
+        if (pl$target_weekF == ew) {
+          logit_pred <- stats::qlogis(pmin(pmax(pl$m2_p, 1e-6), 1 - 1e-6))
+          resid <- logit_obs - logit_pred
+          hkey <- paste0("h", pl$h)
+          old_level <- bias_level_loso[[hkey]]
+          bias_level_loso[[hkey]] <- bias_alpha_loso * resid +
+            (1 - bias_alpha_loso) * (old_level + bias_trend_loso[[hkey]])
+          bias_trend_loso[[hkey]] <- bias_beta_loso * (bias_level_loso[[hkey]] - old_level) +
+            (1 - bias_beta_loso) * bias_trend_loso[[hkey]]
+        }
+      }
+    }
     obs_to_ew <- dplyr::filter(test_allD, .data$weekF <= ew)
     if (nrow(obs_to_ew) < 2L) next
 
@@ -697,6 +976,10 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
       # so include the season RE.
       is_refit <- test_s %in% lev_seas
 
+      # Apply running bias correction: level + trend
+      hkey_loso <- paste0("h", h)
+      bl <- bias_level_loso[[hkey_loso]] + bias_trend_loso[[hkey_loso]]
+
       pr <- m2_predict_one(
         fit               = fit_ew,
         ew                = ew,
@@ -712,9 +995,15 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
         ex_terms          = ex_terms,
         include_season_re = is_refit,
         soft_cap_fn       = soft_cap_fn,
-        return_ci         = FALSE
+        return_ci         = FALSE,
+        bias_logit        = bl
       )
       if (is.null(pr)) next
+
+      # Record prediction for future bias updates
+      pred_log_loso[[length(pred_log_loso) + 1L]] <- list(
+        target_weekF = target_weekF, m2_p = pr$m2_p, h = h
+      )
 
       all_rows[[i]] <- c(all_rows[[i]], list(tibble::tibble(
         season  = test_s,
@@ -943,8 +1232,8 @@ nested_loso_run_fold <- function(allD,
     }
   }
 
-  # Step 5: Evaluate M2
-  eval_out <- nested_loso_m2_eval(
+  # Step 5: Evaluate M2 (frozen GAM + trend-augmented bias correction)
+  eval_out <- nested_loso_m2_eval_frozen_bias(
     allD          = allD,
     fold          = fold,
     m2_fit        = m2_fit,
