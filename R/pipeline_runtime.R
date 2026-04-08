@@ -49,10 +49,11 @@ load_prospective_kit <- function(data_dir,
       p <- file.path(data_dir, fn)
       if (file.exists(p)) { gs <- readRDS(p); break }
     }
-    # Confirmed best spec from v9/v10 LOSO (NLL=40.143, RMSE=0.0405)
+    # Confirmed best spec from v11+boundary LOSO (NLL=34.03, RMSE=0.0388)
     if (!is.null(gs)) gs$best_spec else
-      stage2_make_spec(delta = 0L, Kr = 1L, k_f = 5L, k_e = 3L,
-                       alpha_state = 0.05, k_1 = 0L, k_w = 0L, k_s = 0L,
+      stage2_make_spec(delta = 0L, Kr = 1L, k_f = 3L, k_e = 2L,
+                       alpha_state = 0.15, k_r = 3L,
+                       k_1 = 0L, k_w = 0L, k_s = 0L,
                        lambda_w = 0, w_floor = 0.05)
   }
 
