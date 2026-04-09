@@ -386,7 +386,7 @@ tibble::tribble(
   "k_e",       "Basis dimension for the EMA-state smooth $S_4^h$. Controls nonlinearity of the current-level correction.",                                                     "Integer ≥ 0",  "{2, 3, 4}",
   "α_state",   "EWMA smoothing decay for the current-level covariate z_ema. Lower α = slower adaptation, longer effective memory (≈ 1/α weeks).",                             "Real ∈ (0,1)", "{0.03, 0.05, 0.10}",
   "k_r",       "Basis dimension for amplitude-residual smooth $S_5^h$ (z_resid = z_ema − logit_f_eff). k_r=0 disables.",                                                      "Integer ≥ 0",  "{0, 2, 3}",
-  "k_de",      "Basis dimension for rate-of-change smooth $S_6^h$ (dz_ema = z_ema[t] − z_ema[t−1]). k_de=0 disables. Added in v12 to capture fast-rise trajectories.",     "Integer ≥ 0",  "{0, 2, 3}",
+  "k_de",      "Basis dimension for rate-of-change smooth $S_6^h$ (dz_ema = z_ema[t] − z_ema[t−1]). k_de=0 disables the term.",     "Integer ≥ 0",  "{0, 2, 3}",
   "λ_w",       "Time-decay weight exponent. Down-weights late-season training rows. λ_w=0 is standard uniform MLE.",                                                           "Real ≥ 0",     "Fixed: 0"
 ) |>
   gt() |>
@@ -415,19 +415,21 @@ Predicted probabilities $\hat{p}_i$ pass through the **soft positivity ceiling**
 
 ### Tuning call
 
-The nested LOSO was run in stages: v9 (1,296 specs), v10 (8 boundary-check specs), v11 (729 specs with model simplification + z_resid + frozen GAM), and v12 (72 specs adding dz_ema). Results from v12 supersede earlier runs. The v12 entry-point script is `scripts/run_nested_loso_v12.R`.
+Hyperparameters were selected by nested leave-one-season-out (LOSO) cross-validation. For each held-out season, M0 detection and M1 alignment were run on the remaining training seasons; M2 was trained on those aligned predictions and evaluated on the held-out season with week-by-week Holt EMA bias correction — exactly replicating the prospective deployment loop. The final grid searched:
 
-**v12 changes from v11:**
+`delta × Kr × k_f × k_e × alpha_state × k_r × k_de` = 72 specs × 10 held-out seasons.
 
-- **New covariate:** `dz_ema = z_ema[t] − z_ema[t−1]` (observation speed), controlled by `k_de`. Purely M1-agnostic — enables faster self-alignment when seasons rise unusually quickly.
-- **Simplified bias correction:** level-only Holt EMA (α=0.4), replacing trend-augmented Holt (α=0.3, β=0.2). The `dz_ema` GAM term now handles structural trajectory trends, making the Holt trend term redundant.
+The entry-point script is `scripts/run_nested_loso_v12.R`.
 
-**v11 changes from v9/v10:**
+**Active hyperparameters:**
 
-- **Dropped terms:** `k_n` (logN_now), `k_w` (aligned-week smooth), `k_s` (per-season factor-smooth), `k_1`/`k_2` (derivatives d1, d2) — all fixed at 0.
-- **New covariate:** `z_resid = z_ema − logit_f_eff` (amplitude residual), controlled by `k_r`.
-- **Frozen GAM evaluation** with level-only Holt EMA bias correction (~12× faster than weekly refit).
-- **Grid:** `delta × Kr × k_f × k_e × alpha_state × k_r` = 3×3×3×3×3×3 = 729 specs.
+- `k_f` ∈ {3, 5} — basis dimension for template-position smooth `s(logit_f_eff)`.
+- `k_e` ∈ {2, 3} — basis dimension for EMA state smooth `s(z_ema)`.
+- `alpha_state` ∈ {0.10, 0.15, 0.20} — EMA decay rate for `z_ema` (faster = more responsive).
+- `k_r` ∈ {2, 3} — basis dimension for amplitude-residual smooth `s(z_resid)`.
+- `k_de` ∈ {0, 2, 3} — basis dimension for rate-of-change covariate `s(dz_ema)`; 0 = ablation baseline (term omitted).
+
+**Fixed parameters (consistently optimal):** `delta = 0`, `Kr = 1`, `lambda_w = 0`, `k_n = k_w = k_s = 0`.
 
 ```{r tuning-call}
 #| eval: false
@@ -482,25 +484,8 @@ eval_out <- nested_loso_m2_eval_frozen_bias(
 
 ```{r load-production-results}
 #| eval: true
-
-# Load most recent LOSO results: v12 > v11 > combined(v9+v10) > v9
-if (file.exists("../data/nested_loso_v12_production.rds")) {
-  prod_results_v4 <- readRDS("../data/nested_loso_v12_production.rds")
-  cat("v12 (dz_ema + level-only Holt α=0.4) grid:",
-      nrow(prod_results_v4$summary), "specs × 10 seasons nested LOSO\n")
-} else if (file.exists("../data/nested_loso_v11_production.rds")) {
-  prod_results_v4 <- readRDS("../data/nested_loso_v11_production.rds")
-  cat("v11 (frozen GAM + bias correction + z_resid) grid:",
-      nrow(prod_results_v4$summary), "specs × 10 seasons nested LOSO\n")
-} else if (file.exists("../data/nested_loso_combined_production.rds")) {
-  prod_results_v4 <- readRDS("../data/nested_loso_combined_production.rds")
-  cat("Combined (v9+v10) grid:", nrow(prod_results_v4$summary),
-      "specs × 10 seasons nested LOSO\n")
-} else {
-  prod_results_v4 <- readRDS("../data/nested_loso_v9_production.rds")
-  cat("v9 (full parameter search) grid:", nrow(prod_results_v4$summary),
-      "specs × 10 seasons nested LOSO\n")
-}
+prod_results_v4 <- readRDS("../data/nested_loso_v12_production.rds")
+cat("Grid:", nrow(prod_results_v4$summary), "specs × 10 seasons nested LOSO\n")
 cat("Best:", prod_results_v4$best_spec_id,
     "| mean_nll =", round(prod_results_v4$summary$mean_nll[1], 4), "\n")
 ```
@@ -512,21 +497,21 @@ cat("Best:", prod_results_v4$best_spec_id,
 best_spec_nested <- prod_results_v4$best_spec
 ```
 
-**v12 production spec:** `k_f=3, k_e=2, alpha_state=0.2, k_r=2, k_de=0` with `delta=0, Kr=1, lambda_w=0`. Mean LOSO NLL = **33.49** (72-spec grid, 10 seasons).
+**Production spec:** `k_f=3, k_e=2, alpha_state=0.2, k_r=2, k_de=0` with `delta=0, Kr=1, lambda_w=0`. Mean LOSO NLL = **33.49** (72-spec grid, 10 seasons).
 
-v12 introduces two changes from v11: (1) `dz_ema` covariate ablation (`k_de ∈ {0,2,3}`) — k_de=0 won, confirming dz_ema adds no predictive signal in LOSO; (2) Holt EMA simplified to level-only with α raised 0.3→0.4. The result is NLL = 33.49, down from 34.03 in v11 — a further 1.6% improvement driven by the higher `alpha_state=0.2`.
+The model uses three effective covariates: template position (`s(logit_f_eff, k=3)`), EMA state (`s(z_ema, k=2)`, α=0.2), and amplitude residual (`s(z_resid, k=2)`). Online level-only Holt EMA bias correction (α=0.4) is applied at deployment and in LOSO evaluation.
 
 **`delta = 0`, `Kr = 1` — template shift and ramp are inert.**
-All delta and Kr values produce identical NLL. Fixed at simplest values.
+All delta and Kr values produce identical NLL. With `z_resid` and bias correction absorbing amplitude and timing adjustments, these parameters have no remaining signal.
 
 **`k_f = 3` — minimal template smooth.**
-Confirmed again in v12 (kf=5 gives NLL+1.0). $z_{\text{resid}}$ carries the nonlinear amplitude information.
+`k_f=5` gives NLL+1.0. $z_{\text{resid}}$ carries the nonlinear amplitude information, leaving the template smooth near-linear.
 
 **`k_e = 2` (mgcv promotes to 3) — minimal EMA smooth.**
-Near-linear EMA correction suffices.
+Near-linear EMA correction suffices. `k_e=4` is substantially worse (NLL+4.9).
 
 **`alpha_state = 0.2` — moderately responsive EMA, ≈5-week memory.**
-Up from 0.15 in v11. With level-only Holt bias correction (no trend term), a higher α keeps the EMA signal fresh:
+With level-only Holt bias correction, a higher α keeps the EMA state signal fresh. Grid results:
 
 | alpha | NLL  |
 |-------|------|
@@ -535,10 +520,10 @@ Up from 0.15 in v11. With level-only Holt bias correction (no trend term), a hig
 | **0.20** | **33.5** |
 
 **`k_r = 2` — amplitude residual with minimal flexibility.**
-$z_{\text{resid}} = z_{\text{ema}} - \text{logit}(f_{\text{eff}})$ with 2 basis functions. `k_r=2` and `k_r=3` tie (NLL identical to 3 d.p.); `k_r=2` chosen for parsimony.
+$z_{\text{resid}} = z_{\text{ema}} - \text{logit}(f_{\text{eff}})$ captures systematic amplitude deviation from the template. `k_r=2` and `k_r=3` tie to 3 d.p.; `k_r=2` chosen for parsimony.
 
-**`k_de = 0` — dz_ema ablation: covariate not needed.**
-v12 tested `dz_ema = z_ema[t] - z_ema[t-1]` as an additional rate-of-change covariate to help fast-rise seasons. In LOSO, k_de=0 outperformed k_de=2 and k_de=3 across all alpha/kr combinations. The GAM with level-only Holt bias (α=0.4) already tracks rapid changes adequately without an explicit derivative term.
+**`k_de = 0` — rate-of-change covariate not needed.**
+The grid included `dz_ema = z_ema[t] - z_ema[t-1]` as a candidate covariate (`k_de ∈ {0,2,3}`) to accelerate self-alignment during fast-rising seasons. The ablation baseline (`k_de=0`) outperformed `k_de=2` and `k_de=3` across all alpha/kr combinations — the level-only Holt bias correction already tracks rapid changes adequately.
 
 **`lambda_w = 0` — uniform training weights.**
 Down-weighting late-season observations provides no benefit.
