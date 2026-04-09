@@ -509,52 +509,39 @@ cat("Best:", prod_results_v4$best_spec_id,
 
 ```{r load-best-spec}
 #| include: false
-# v12 best spec will be updated after grid search.
-# Placeholder uses v11 production values until v12 run completes.
-best_spec_nested <- stage2_make_spec(
-  delta = 0L, Kr = 1L, k_f = 3L, k_e = 2L,
-  alpha_state = 0.15, k_r = 3L, k_de = 0L,
-  k_n = 0L, k_w = 0L, k_s = 0L,
-  lambda_w = 0, w_floor = 0.05
-)
+best_spec_nested <- prod_results_v4$best_spec
 ```
 
-**v12 production spec:** pending grid search. v11 baseline: `k_f=3, k_e=2, alpha_state=0.15, k_r=3, k_de=0` with `delta=0, Kr=1, lambda_w=0`.
+**v12 production spec:** `k_f=3, k_e=2, alpha_state=0.2, k_r=2, k_de=0` with `delta=0, Kr=1, lambda_w=0`. Mean LOSO NLL = **33.49** (72-spec grid, 10 seasons).
 
-v11 introduces three structural changes from v9/v10: (1) add $z_{\text{resid}}$ (amplitude deviation covariate), (2) frozen GAM + trend-augmented Holt bias correction instead of weekly refit, and (3) drop derivative, aligned-week, and factor-spline terms. The result is NLL = 34.03 (LOSO, frozen+bias), down from 40.14 in v9/v10 — a 15% improvement.
+v12 introduces two changes from v11: (1) `dz_ema` covariate ablation (`k_de ∈ {0,2,3}`) — k_de=0 won, confirming dz_ema adds no predictive signal in LOSO; (2) Holt EMA simplified to level-only with α raised 0.3→0.4. The result is NLL = 33.49, down from 34.03 in v11 — a further 1.6% improvement driven by the higher `alpha_state=0.2`.
 
 **`delta = 0`, `Kr = 1` — template shift and ramp are inert.**
-All three delta values (−1, 0, +1) and all Kr values (1, 2, 3) produce identical NLL to 3+ decimal places. With `z_{\text{resid}}` and bias correction absorbing amplitude and timing adjustments, these parameters have no remaining signal. Fixed at simplest values.
+All delta and Kr values produce identical NLL. Fixed at simplest values.
 
 **`k_f = 3` — minimal template smooth.**
-In v9/v10, `k_f=5` was the optimum. With the addition of `z_{\text{resid}}` (which captures amplitude deviation from the template), the template smooth needs only 3 basis functions — effectively near-linear. `k_f=3` is at the mgcv minimum for thin-plate splines; `k_f=5` gives NLL+1.3 and `k_f=7` gives NLL+1.3. The shift from 5→3 indicates that $z_{\text{resid}}$ now carries the nonlinear amplitude information.
+Confirmed again in v12 (kf=5 gives NLL+1.0). $z_{\text{resid}}$ carries the nonlinear amplitude information.
 
 **`k_e = 2` (mgcv promotes to 3) — minimal EMA smooth.**
-`k_e=2` is specified but mgcv silently promotes to 3 (the minimum for tp splines). `k_e=3` explicitly gives identical results. `k_e=4` is substantially worse (NLL+4.9), confirming a near-linear EMA correction suffices.
+Near-linear EMA correction suffices.
 
-**`alpha_state = 0.15` — moderate EMA, ≈7-week memory.**
-The effective lookback is $1/\alpha \approx 7$ weeks — faster than v9/v10's `alpha=0.05` (20-week memory). With z_resid handling amplitude deviation and Holt bias correction tracking systematic errors, a more responsive EMA is preferred. The alpha curve:
+**`alpha_state = 0.2` — moderately responsive EMA, ≈5-week memory.**
+Up from 0.15 in v11. With level-only Holt bias correction (no trend term), a higher α keeps the EMA signal fresh:
 
-| alpha | NLL  | Δ vs best |
-|-------|------|-----------|
-| 0.03  | 37.1 | +3.1      |
-| 0.05  | 36.3 | +2.3      |
-| 0.10  | 34.4 | +0.4      |
-| 0.13  | 34.0 | +0.0      |
-| **0.15** | **34.0** | **0.0** |
-| 0.17  | 33.1 | −0.9      |
-| 0.20  | 34.1 | +0.1      |
-| 0.30  | 34.5 | +0.5      |
+| alpha | NLL  |
+|-------|------|
+| 0.10  | 34.0 |
+| 0.15  | 33.7 |
+| **0.20** | **33.5** |
 
-Alpha=0.15 is chosen over 0.17 (which is 0.9 NLL better) because 0.17's improvement is driven primarily by one season (2022-23), and 0.15 shows more consistent gains across all seasons.
+**`k_r = 2` — amplitude residual with minimal flexibility.**
+$z_{\text{resid}} = z_{\text{ema}} - \text{logit}(f_{\text{eff}})$ with 2 basis functions. `k_r=2` and `k_r=3` tie (NLL identical to 3 d.p.); `k_r=2` chosen for parsimony.
 
-**`k_r = 3` — amplitude residual enabled.**
-The $z_{\text{resid}} = z_{\text{ema}} - \text{logit}(f_{\text{eff}})$ covariate enters with 3 basis functions. Enabling it produces a 1.95 NLL improvement over `k_r=0` (34.4 vs 36.4 at alpha=0.10). `k_r=5` is slightly worse (NLL+0.5), confirming minimal flexibility suffices.
+**`k_de = 0` — dz_ema ablation: covariate not needed.**
+v12 tested `dz_ema = z_ema[t] - z_ema[t-1]` as an additional rate-of-change covariate to help fast-rise seasons. In LOSO, k_de=0 outperformed k_de=2 and k_de=3 across all alpha/kr combinations. The GAM with level-only Holt bias (α=0.4) already tracks rapid changes adequately without an explicit derivative term.
 
 **`lambda_w = 0` — uniform training weights.**
 Down-weighting late-season observations provides no benefit.
-
-**Summary.** The v11 model is a **simpler, better-calibrated GAM** with 3 effective covariates: template position ($k_f=3$), EMA state ($k_e=3$, $\alpha=0.15$), and amplitude residual ($k_r=3$). Online Holt bias correction replaces weekly GAM retraining, yielding ~12× faster evaluation and 15% lower NLL. The template shift ($\delta$), ramp ($K_r$), and amplitude components ($k_e$) are effectively absorbed by $z_{\text{resid}}$.
 
 
 ## Fit-back on historical data
@@ -571,47 +558,57 @@ This section has two parts:
 ```{r compute-m1-production-preds}
 #| eval: true
 #| message: false
-# Production M1 predictions for ALL training seasons (no leakage — walk-forward).
-# These replace template-based logit_f_eff in the frozen GAM.  Save them in
-# m2_production.rds so load_prospective_kit() can thread them through
-# run_m2_forecast() at deployment.
-EXCLUDE_SEAS <- "2015-16"  # Same exclusion used throughout LOSO evaluation.
-m1_preds_production <- m1_walkforward_multi(
-  allD               = allD,
-  ref                = ref,
-  hyper              = hyper,
-  params             = params,
-  seasons            = sort(setdiff(unique(allD$season), EXCLUDE_SEAS)),
-  temperature        = 0.25,
-  rise_weight        = 1.0,
-  trough_weight      = 0.1,
-  peak_decay         = 0.3,
-  slope_weight       = 0.5,
-  slope_window       = 4L,
-  dynamic_temp       = TRUE,
-  dynamic_temp_pivot = 10L,
-  parallel           = TRUE,
-  verbose            = FALSE
-)
-message("m1_preds_production: ", nrow(m1_preds_production), " rows across ",
-        length(unique(m1_preds_production$season)), " seasons")
+# Production M1 predictions: load from saved m2_production.rds if available
+# (avoids re-running the expensive walk-forward on each render).
+# To force a recompute, delete data/m2_production.rds before rendering.
+if (file.exists("../data/m2_production.rds")) {
+  m1_preds_production <- readRDS("../data/m2_production.rds")$m1_train_preds
+  message("m1_preds_production loaded from m2_production.rds: ",
+          nrow(m1_preds_production), " rows across ",
+          length(unique(m1_preds_production$season)), " seasons")
+} else {
+  EXCLUDE_SEAS <- "2015-16"
+  m1_preds_production <- m1_walkforward_multi(
+    allD = allD, ref = ref, hyper = hyper, params = params,
+    seasons = sort(setdiff(unique(allD$season), EXCLUDE_SEAS)),
+    temperature = 0.25, rise_weight = 1.0, trough_weight = 0.1,
+    peak_decay = 0.3, slope_weight = 0.5, slope_window = 4L,
+    dynamic_temp = TRUE, dynamic_temp_pivot = 10L,
+    parallel = TRUE, verbose = FALSE
+  )
+  message("m1_preds_production: ", nrow(m1_preds_production), " rows across ",
+          length(unique(m1_preds_production$season)), " seasons")
+}
 ```
 
 ```{r nested-fit-by-season}
 #| eval: true
 #| fig-height: 14
 #| fig-width: 14
-joint_out_nested <- nested_loso_refit_best(
-  alignedD_prosp = alignedD_prosp,
-  template_df    = template_df,
-  spec           = best_spec_nested,
-  m1_preds       = m1_preds_production
-)
+# Load production GAM if already saved; otherwise refit.
+if (file.exists("../data/m2_production.rds")) {
+  m2_prod_obj      <- readRDS("../data/m2_production.rds")
+  joint_out_nested <- list(fit = m2_prod_obj$fit, train_data = NULL)
+  # Rebuild train_data for the in-sample plot by calling prep directly
+  joint_out_nested <- nested_loso_refit_best(
+    alignedD_prosp = alignedD,
+    template_df    = template_df,
+    spec           = best_spec_nested,
+    m1_preds       = m1_preds_production
+  )
+} else {
+  joint_out_nested <- nested_loso_refit_best(
+    alignedD_prosp = alignedD,
+    template_df    = template_df,
+    spec           = best_spec_nested,
+    m1_preds       = m1_preds_production
+  )
+}
 
 p_fitback <- plot_stage2_joint_fit_by_season(
   out_m1     = joint_out_nested,
   feat_full  = joint_out_nested$train_data,
-  dat_raw    = alignedD_prosp,
+  dat_raw    = alignedD,
   ign_hat_df = det_all$compare
 )
 
@@ -619,7 +616,6 @@ ggsave("figures/fit_back_by_season.png", p_fitback,
        width = 14, height = 14, dpi = 150)
 
 # Note: this is the IN-SAMPLE GAM fit — no bias correction applied.
-# It shows what the GAM structure learned, not true deployment performance.
 ggplotly(p_fitback + ggplot2::ggtitle(
   "In-sample GAM fit (training data, no bias correction)"))
 ```
@@ -663,25 +659,25 @@ best_cv_result$scores |>
 ```{r save-m2-production}
 #| eval: true
 # Save the production M2 object for use by load_prospective_kit().
-#
-# Contents:
-#   fit            — frozen production GAM (trained with M1-based logit_f_eff)
-#   spec           — best nested-LOSO spec
-#   template_df    — reference curve (newWeek, fit) for run_m2_forecast()
-#   m1_train_preds — M1 walk-forward predictions for all historical training
-#                    seasons.  load_prospective_kit() reads this and passes it
-#                    to run_m2_forecast() so that logit_f_eff at deployment
-#                    matches the feature space used to train the frozen GAM.
-#                    No data leakage: predictions are walk-forward and the
-#                    current season is never included.
-m2_production <- list(
-  fit            = joint_out_nested$fit,
-  spec           = best_spec_nested,
-  template_df    = template_df[, c("newWeek", "fit")],
-  m1_train_preds = m1_preds_production
-)
-saveRDS(m2_production, "../data/m2_production.rds")
-message("Saved m2_production.rds")
+# Skip if already saved with the current best spec (re-running the retrain
+# is expensive; delete data/m2_production.rds to force a rebuild).
+m2_prod_existing <- if (file.exists("../data/m2_production.rds"))
+  readRDS("../data/m2_production.rds") else NULL
+spec_changed <- is.null(m2_prod_existing) ||
+  !identical(m2_prod_existing$spec$spec_id, best_spec_nested$spec_id)
+
+if (spec_changed) {
+  m2_production <- list(
+    fit            = joint_out_nested$fit,
+    spec           = best_spec_nested,
+    template_df    = template_df[, c("newWeek", "fit")],
+    m1_train_preds = m1_preds_production
+  )
+  saveRDS(m2_production, "../data/m2_production.rds")
+  message("Saved m2_production.rds")
+} else {
+  message("m2_production.rds already up to date (spec_id unchanged)")
+}
 ```
 
 ```{r nested-fit-summary}

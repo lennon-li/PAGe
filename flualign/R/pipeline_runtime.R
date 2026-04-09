@@ -36,24 +36,22 @@ load_prospective_kit <- function(data_dir,
          "\nRun forecast_training.html first.")
   m2_production <- readRDS(m2_path)
 
-  # best_spec: prefer stored in m2_production, else scan nested LOSO files (combined > v10 > v9 > older)
+  # best_spec: prefer stored in m2_production, else scan nested LOSO files (v12 > v11 > older)
   best_spec <- m2_production$spec %||% {
     gs <- NULL
-    for (fn in c("nested_loso_combined_production.rds",
+    for (fn in c("nested_loso_v12_production.rds",
+                 "nested_loso_v11_production.rds",
+                 "nested_loso_combined_production.rds",
                  "nested_loso_v10_production.rds",
-                 "nested_loso_v9_production.rds",
-                 "nested_loso_v8_production.rds",
-                 "nested_loso_v4_production.rds",
-                 "nested_loso_v3_production.rds",
-                 "nested_loso_production.rds")) {
+                 "nested_loso_v9_production.rds")) {
       p <- file.path(data_dir, fn)
       if (file.exists(p)) { gs <- readRDS(p); break }
     }
-    # Confirmed best spec from v11+boundary LOSO (NLL=34.03, RMSE=0.0388)
+    # Confirmed best spec from v12 LOSO (NLL=33.49, k_de=0 won ablation)
     if (!is.null(gs)) gs$best_spec else
       stage2_make_spec(delta = 0L, Kr = 1L, k_f = 3L, k_e = 2L,
-                       alpha_state = 0.15, k_r = 3L,
-                       k_1 = 0L, k_w = 0L, k_s = 0L,
+                       alpha_state = 0.2, k_r = 2L, k_de = 0L,
+                       k_n = 0L, k_w = 0L, k_s = 0L,
                        lambda_w = 0, w_floor = 0.05)
   }
 
