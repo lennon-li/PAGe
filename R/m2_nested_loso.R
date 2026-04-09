@@ -1703,6 +1703,7 @@ nested_loso_refit_best <- function(alignedD_prosp,
 #' @export
 plot_nested_loso_predictions <- function(cv_result,
                                          dat_raw = NULL,
+                                         y_max   = 0.5,
                                          title   = "Nested LOSO: predicted vs observed by season") {
 
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Please install ggplot2.")
@@ -1713,37 +1714,33 @@ plot_nested_loso_predictions <- function(cv_result,
     return(ggplot2::ggplot() + ggplot2::theme_void())
   }
 
-  p <- ggplot2::ggplot(preds, ggplot2::aes(x = .data$weekF)) +
+  # Use t_since (weeks since ignition) so all seasons start at 0 and the
+  # 13-week evaluation window is directly visible.
+  ggplot2::ggplot(preds, ggplot2::aes(x = .data$t_since)) +
     ggplot2::geom_point(ggplot2::aes(y = .data$p_obs),
-                        colour = "black", size = 1.0, alpha = 0.7) +
+                        colour = "black", size = 1.2, alpha = 0.7) +
     ggplot2::geom_line(ggplot2::aes(y = .data$p_hat, colour = .data$lead),
                        linewidth = 0.9) +
     ggplot2::scale_colour_manual(
-      values = c("1" = "steelblue", "2" = "tomato"),
-      labels = c("1" = "h=1", "2" = "h=2")
+      values = c("h1" = "steelblue", "h2" = "tomato",
+                 "1"  = "steelblue", "2"  = "tomato"),
+      labels = c("h1" = "h=1 week", "h2" = "h=2 weeks",
+                 "1"  = "h=1 week", "2"  = "h=2 weeks")
     ) +
-    ggplot2::labs(x = "weekF", y = "Positivity", colour = "Horizon",
-                  title = title) +
-    ggplot2::theme_bw()
-
-  # Add ignition lines from raw data
-  if (!is.null(dat_raw) && all(c("season", "weekF", "phase") %in% names(dat_raw))) {
-    ign_true <- dat_raw %>%
-      dplyr::group_by(.data$season) %>%
-      dplyr::summarise(
-        iWeek_true = suppressWarnings(min(.data$weekF[.data$phase == 1L], na.rm = TRUE)),
-        .groups = "drop"
-      ) %>%
-      dplyr::filter(is.finite(.data$iWeek_true))
-
-    p <- p + ggplot2::geom_vline(
-      data = ign_true,
-      ggplot2::aes(xintercept = .data$iWeek_true),
-      linewidth = 0.5, linetype = "dashed"
-    )
-  }
-
-  p + ggplot2::facet_wrap(~ season, scales = "free_y", ncol = 3)
+    ggplot2::scale_y_continuous(limits = c(0, y_max)) +
+    ggplot2::labs(
+      x      = "Weeks since ignition",
+      y      = "Positivity",
+      colour = "Horizon",
+      title  = title,
+      caption = paste0(
+        "Dots = observed positivity.  Lines = LOSO out-of-sample predictions ",
+        "(GAM trained on other 9 seasons + Holt bias correction).\n",
+        "x = 0 is ignition week; evaluation window is ignition to ignition + 12 weeks."
+      )
+    ) +
+    ggplot2::theme_bw() +
+    ggplot2::facet_wrap(~ season, scales = "fixed", ncol = 3)
 }
 
 

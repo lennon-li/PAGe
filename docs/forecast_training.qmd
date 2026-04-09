@@ -581,9 +581,14 @@ Down-weighting late-season observations provides no benefit.
 
 ## Fit-back on historical data
 
-Refit $M_2$ on all historical seasons using the best nested-LOSO spec and the production reference curve.
+This section has two parts:
 
-**M1 walk-forward predictions for historical seasons** are computed here and saved with the production kit. They are passed to `nested_loso_refit_best()` (frozen GAM) and `run_m2_forecast()` at deployment so that `logit_f_eff` is M1-based in both contexts — ensuring no inconsistency. There is no data leakage: the predictions are walk-forward (each season uses only past data) and the current season is never in `m1_train_preds`.
+1. **In-sample GAM baseline** (`fit_back_by_season.png`) — the production GAM fitted on *all* historical seasons and predicted back on the same data. **No bias correction. Not deployment-equivalent.** Use this only to check whether the GAM formula is well-specified (i.e., does it capture the seasonal shape?).
+
+2. **Out-of-sample LOSO predictions** (`loso_oos_by_season.png`) — each season held out, GAM trained on the remaining 9 seasons, Holt bias correction applied sequentially week-by-week as in deployment. **This is the honest, deployment-equivalent view.** The x-axis is weeks since ignition (ignition = 0); the evaluation window covers ignition through ignition + 12 weeks.
+
+**M1 walk-forward predictions for historical seasons** are computed here and saved with the production kit. They are passed to `nested_loso_refit_best()` (frozen GAM) and `run_m2_forecast()` at deployment so that `logit_f_eff` is M1-based in both contexts. No data leakage: the predictions are walk-forward and the current season is never included.
+
 
 ```{r compute-m1-production-preds}
 #| eval: true
@@ -635,7 +640,46 @@ p_fitback <- plot_stage2_joint_fit_by_season(
 ggsave("figures/fit_back_by_season.png", p_fitback,
        width = 14, height = 14, dpi = 150)
 
-ggplotly(p_fitback)
+# Note: this is the IN-SAMPLE GAM fit — no bias correction applied.
+# It shows what the GAM structure learned, not true deployment performance.
+ggplotly(p_fitback + ggplot2::ggtitle(
+  "In-sample GAM fit (training data, no bias correction)"))
+```
+
+```{r loso-oos-plot}
+#| eval: true
+#| fig-height: 14
+#| fig-width: 10
+#| message: false
+# LOSO out-of-sample predictions: each season held out, GAM trained on remaining
+# seasons, Holt bias correction applied sequentially week-by-week (= deployment).
+# x-axis = weeks since ignition so all seasons start at 0 and the 13-week
+# evaluation window is directly visible.  y-axis fixed at [0, 0.5].
+best_cv_result <- prod_results_v4$cv_results[[prod_results_v4$best_spec_id]]
+
+p_loso_oos <- plot_nested_loso_predictions(
+  cv_result = best_cv_result,
+  y_max     = 0.5,
+  title     = "M2 LOSO out-of-sample (frozen GAM + Holt bias correction)"
+)
+
+ggsave("figures/loso_oos_by_season.png", p_loso_oos,
+       width = 10, height = 14, dpi = 150)
+
+ggplotly(p_loso_oos)
+```
+
+```{r loso-oos-scores}
+#| eval: true
+# Per-season NLL and RMSE from the best-spec LOSO run.
+best_cv_result$scores |>
+  dplyr::select(season, mean_nll, rmse_p, brier) |>
+  dplyr::mutate(
+    mean_nll = round(mean_nll, 2),
+    rmse_p   = round(rmse_p, 4),
+    brier    = round(brier, 5)
+  ) |>
+  knitr::kable(caption = "Per-season LOSO scores (out-of-sample, bias-corrected)")
 ```
 
 ```{r save-m2-production}
@@ -666,3 +710,6 @@ message("Saved m2_production.rds")
 #| eval: true
 summary(joint_out_nested$fit)
 ```
+
+
+
