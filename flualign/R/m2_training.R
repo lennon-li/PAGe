@@ -53,9 +53,8 @@ make_soft_cap_fn <- function(fit_obj) {
 #' @param anchorWeek Integer. Reference-curve anchor week.
 #' @param logit_f_eff Numeric. logit(M1 predicted positivity at target week).
 #' @param z_ema Numeric. EWMA of logit-observed positivity.
+#' @param dz_ema Numeric. Rate of change of z_ema (z_ema[t] - z_ema[t-1]).
 #' @param logN_now Numeric. log(N) at eval week.
-#' @param d1_now Numeric. First derivative (logit scale) at eval week.
-#' @param d2_now Numeric. Second derivative (logit scale) at eval week.
 #' @param season_label Character. Season label for newdata: the test/current
 #'   season name (used when the season is in the model's training data,
 #'   i.e. weekly-refit mode), or \code{NULL} to fall back to the first
@@ -80,9 +79,8 @@ m2_predict_one <- function(fit,
                            anchorWeek,
                            logit_f_eff,
                            z_ema,
+                           dz_ema          = 0,
                            logN_now,
-                           d1_now,
-                           d2_now,
                            season_label    = NULL,
                            ex_terms        = NULL,
                            include_season_re = FALSE,
@@ -119,10 +117,9 @@ m2_predict_one <- function(fit,
     season      = nd_season,
     logit_f_eff = as.numeric(logit_f_eff),
     z_ema       = as.numeric(z_ema),
+    dz_ema      = as.numeric(dz_ema),
     z_resid     = as.numeric(z_ema) - as.numeric(logit_f_eff),
     logN_now    = as.numeric(logN_now),
-    d1_now      = as.numeric(d1_now),
-    d2_now      = as.numeric(d2_now),
     t_since     = as.numeric(ew - iWeek),
     post_ign    = TRUE
   )
@@ -187,55 +184,6 @@ stage2_ramp_weight <- function(t_since, K = 3L) {
   pmin(1, pmax(0, w))
 }
 
-#' Prospective (real-time safe) derivatives of positivity on the logit scale
-#' @export
-add_prospective_derivs_link <- function(alignedD,
-                                        k = 5L,
-                                        eps = 1e-6,
-                                        min_obs = 4L) {
-  stopifnot(all(c("season","weekF","y","neg") %in% names(alignedD)))
-  if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
-  if (!requireNamespace("purrr", quietly = TRUE)) stop("Please install purrr.")
-  
-  d <- alignedD %>%
-    dplyr::mutate(
-      y_w = .data$y / (.data$y + .data$neg),
-      z_w = stats::qlogis(pmin(pmax(.data$y_w, eps), 1 - eps))
-    ) %>%
-    dplyr::arrange(.data$season, .data$weekF)
-  
-  d %>%
-    dplyr::group_by(.data$season) %>%
-    dplyr::group_modify(function(.x, .g) {
-      ww <- .x$weekF
-      zz <- .x$z_w
-      n  <- nrow(.x)
-      
-      d1 <- purrr::map_dbl(seq_len(n), function(i) {
-        i0 <- max(1L, i - k + 1L)
-        ii <- i0:i
-        if (length(ii) < min_obs || anyNA(zz[ii])) return(NA_real_)
-        w0 <- ww[i]
-        u  <- ww[ii] - w0
-        fit <- stats::lm(zz[ii] ~ u + I(u^2))
-        unname(stats::coef(fit)[["u"]])
-      })
-      
-      d2 <- purrr::map_dbl(seq_len(n), function(i) {
-        i0 <- max(1L, i - k + 1L)
-        ii <- i0:i
-        if (length(ii) < min_obs || anyNA(zz[ii])) return(NA_real_)
-        w0 <- ww[i]
-        u  <- ww[ii] - w0
-        fit <- stats::lm(zz[ii] ~ u + I(u^2))
-        2 * unname(stats::coef(fit)[["I(u^2)"]])
-      })
-      
-      dplyr::mutate(.x, d1_link = d1, d2_link = d2)
-    }) %>%
-    dplyr::ungroup()
-}
-
 # =========================================================
 # Stage-2 prep
 # =========================================================
@@ -243,7 +191,7 @@ add_prospective_derivs_link <- function(alignedD,
 #' Prepare Stage-2 joint stacked data using a spec or tuned row
 #'
 #' @param dat Multi-season data.frame with required cols:
-#'   season, weekF, phase, newWeek, y, N, d1_link, d2_link.
+#'   season, weekF, phase, newWeek, y, N.
 #' @param template_df Template curve with columns newWeek and fit.
 #' @param best_mean_nll 1-row object with delta, K, k_f, alpha_state.
 #' @param use_ramp Logical, passed through.
@@ -272,7 +220,7 @@ prep_stage2_joint <- function(dat,
   if (!all(c("newWeek","fit") %in% names(template_df))) stop("template_df must have columns newWeek, fit")
   template_df <- template_df %>% dplyr::select(.data$newWeek, fit_ref = .data$fit)
   
-  need <- c("season","weekF","phase","newWeek","y","N","d1_link","d2_link")
+  need <- c("season","weekF","phase","newWeek","y","N")
   miss <- setdiff(need, names(dat))
   if (length(miss)) stop("prep_stage2_joint: missing cols: ", paste(miss, collapse = ", "))
   
@@ -339,8 +287,8 @@ prep_stage2_joint <- function(dat,
                                            filter = 1 - alpha_state,
                                            method = "recursive",
                                            init = .data$z_fill[1])),
-      d1_now    = .data$d1_link,
-      d2_now    = .data$d2_link,
+      dz_ema    = .data$z_ema - dplyr::lag(.data$z_ema, n = 1L,
+                                            default = dplyr::first(.data$z_ema)),
       t_since   = as.numeric(.data$weekF - .data$iWeek_used)
     ) %>%
     dplyr::ungroup() %>%
@@ -541,8 +489,6 @@ train_stage2_joint_prepped <- function(d_all,
                                        # Back-compat (only used when spec is NULL)
                                        k_e = 6L,
                                        k_n = 6L,
-                                       k_1 = 6L,
-                                       k_2 = 6L,
                                        method = "REML",
                                        lambda_w = 0,
                                        w_floor  = 0,
@@ -569,8 +515,7 @@ train_stage2_joint_prepped <- function(d_all,
       k_s = 0L,
       k_e = as.integer(k_e),
       k_n = 0L,
-      k_1 = 0L,
-      k_2 = 0L,
+      k_de = 0L,
       use_season_re = TRUE
     )
   }
@@ -601,10 +546,9 @@ train_stage2_joint_prepped <- function(d_all,
   if (spec$use_season_re) req <- c(req, "season")
   if (spec$k_s > 0L) req <- c(req, "season_h")
   if (spec$k_e > 0L) req <- c(req, "z_ema")
-  if (!is.null(spec$k_r) && spec$k_r > 0L) req <- c(req, "z_resid")
+  if (!is.null(spec$k_r)  && spec$k_r  > 0L) req <- c(req, "z_resid")
   if (spec$k_n > 0L) req <- c(req, "logN_now")
-  if (spec$k_1   > 0L) req <- c(req, "d1_now")
-  if (spec$k_2   > 0L) req <- c(req, "d2_now")
+  if (!is.null(spec$k_de) && spec$k_de > 0L) req <- c(req, "dz_ema")
   
   miss <- setdiff(unique(req), names(d_train))
   if (length(miss)) stop("train_stage2_joint_prepped: missing cols: ", paste(miss, collapse = ", "))
@@ -617,7 +561,7 @@ train_stage2_joint_prepped <- function(d_all,
             " | k_f=", k_f,
             " | k_w=", spec$k_w,
             " | k_s=", spec$k_s,
-            " | k_2=", spec$k_2)
+            " | k_de=", spec$k_de %||% 0L)
     message("[train_stage2_joint_prepped] formula: ", deparse(form))
   }
   
@@ -679,8 +623,7 @@ stage2_spec_from_tuning <- function(tuned2) {
     T              = best_row$T,
     k_e            = best_row$k_e,
     k_n            = best_row$k_n,
-    k_1            = best_row$k_1,
-    k_2            = best_row$k_2,
+    k_de           = if ("k_de" %in% names(best_row)) best_row$k_de else 0L,
     k_w            = best_row$k_w,
     k_s            = best_row$k_s,
     pre_buffer     = best_row$Kb,
@@ -717,8 +660,6 @@ train_stage2_joint <- function(dat,
                                alpha_state = NULL,
                                k_e = 6L,
                                k_n = 6L,
-                               k_1 = 6L,
-                               k_2 = 6L,
                                ign_week_df = NULL,
                                method = "REML",
                                lambda_w = 0,
@@ -767,8 +708,6 @@ train_stage2_joint <- function(dat,
     spec = spec,
     k_e = k_e,
     k_n = k_n,
-    k_1 = k_1,
-    k_2 = k_2,
     method = method,
     lambda_w = lambda_w,
     w_floor  = w_floor,
@@ -780,8 +719,7 @@ train_stage2_joint <- function(dat,
 #'
 #' Converts raw current-season surveillance data and M1 alignment outputs into the
 #' column set required by \code{train_stage2_joint()}: \code{season}, \code{weekF},
-#' \code{phase}, \code{newWeek}, \code{y}, \code{N}, \code{neg}, \code{d1_link},
-#' \code{d2_link}.
+#' \code{phase}, \code{newWeek}, \code{y}, \code{N}, \code{neg}.
 #'
 #' @param currentSeason data.frame with columns \code{weekF}, \code{y}, and either
 #'   \code{N} (total tests) or \code{neg} (negative tests).
@@ -791,7 +729,6 @@ train_stage2_joint <- function(dat,
 #' @param spec Stage-2 spec from \code{stage2_make_spec()}. Must contain
 #'   \code{spec$anchorWeek}.
 #' @param season_label Character label for the current season (default \code{"current"}).
-#' @param k Integer knot count passed to \code{add_prospective_derivs_link()} (default \code{5L}).
 #' @return data.frame with the required Stage-2 columns, ready to \code{rbind} with
 #'   historical aligned data.
 #' @export
@@ -799,8 +736,7 @@ format_current_for_stage2 <- function(currentSeason,
                                       iWeek_used,
                                       template_df = NULL,
                                       spec        = NULL,
-                                      season_label = "current",
-                                      k = 5L) {
+                                      season_label = "current") {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   iWeek_used <- as.integer(iWeek_used[1L])
   anchorWeek <- as.integer(
@@ -816,7 +752,6 @@ format_current_for_stage2 <- function(currentSeason,
   df$phase   <- as.integer(!is.na(df$weekF) & as.integer(df$weekF) >= iWeek_used)
   df$newWeek <- as.integer(df$weekF) - iWeek_used + anchorWeek
 
-  df <- add_prospective_derivs_link(df, k = as.integer(k), eps = 1e-6, min_obs = 4L)
   as.data.frame(df)
 }
 

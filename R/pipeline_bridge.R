@@ -458,17 +458,14 @@ loso_m1_m2_joint <- function(allD,
       message("  M1 training predictions: ", nrow(m1_train_preds), " rows across ",
               length(unique(m1_train_preds$season)), " seasons")
 
-    # --- Step 3: Prepare aligned training data with prospective derivatives ---
-    alignedD_prosp <- add_prospective_derivs_link(aligned_train)
-    if (!"N" %in% names(alignedD_prosp))
-      alignedD_prosp$N <- alignedD_prosp$y + alignedD_prosp$neg
-
-    # --- Step 4: Train M2 with M1 predictions as template ---
+    # --- Step 3-4: Train M2 with M1 predictions as template ---
+    if (!"N" %in% names(aligned_train))
+      aligned_train$N <- aligned_train$y + aligned_train$neg
     if (isTRUE(verbose)) message("  Step 3-4: Training M2 with M1-stacked template")
 
     m2_fit <- tryCatch(
       train_stage2_joint(
-        dat         = alignedD_prosp,
+        dat         = aligned_train,
         template_df = template_df,
         spec        = spec,
         method      = method,
@@ -526,14 +523,13 @@ loso_m1_m2_joint <- function(allD,
                            c(list(df = .x, manual_labels = manual_labels), flag_args)))
 
     aligned_test <- alignIgnition(test_outs)
-    aligned_test_prosp <- add_prospective_derivs_link(aligned_test)
-    if (!"N" %in% names(aligned_test_prosp))
-      aligned_test_prosp$N <- aligned_test_prosp$y + aligned_test_prosp$neg
+    if (!"N" %in% names(aligned_test))
+      aligned_test$N <- aligned_test$y + aligned_test$neg
 
     # Build M2 test data with M1 test predictions
     d_test <- tryCatch(
       prep_stage2_joint(
-        dat           = aligned_test_prosp,
+        dat           = aligned_test,
         best_mean_nll = spec$best_row,
         template_df   = template_df,
         leads         = horizons,

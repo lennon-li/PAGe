@@ -32,8 +32,9 @@
 #' @param template_mode Back-compat alias of \code{T}: "smooth"/"offset"/"none".
 #' @param use_ramp Deprecated. If \code{FALSE}, forces \code{Kr=1}.
 #'
-#' @param k_w,k_s,k_e,k_n,k_1,k_2 Integer basis sizes for smooth terms.
+#' @param k_w,k_s,k_e,k_n Integer basis sizes for smooth terms.
 #'   Set any to 0L to disable the corresponding term.
+#' @param k_de Integer basis size for dz_ema smooth term. 0L disables it.
 #' @param bs_week Basis name for week smooths (typical: "ts").
 #' @param bs_fs_marginal Marginal basis used by factor-smooth \code{bs="fs"} via \code{xt=list(bs=...)}.
 #' @param use_season_re Back-compat flag (season RE is always included).
@@ -62,8 +63,7 @@ stage2_make_spec <- function(
     
     k_e = 6L,
     k_n = 0L,
-    k_1 = 0L,
-    k_2 = 0L,
+    k_de = 0L,
     k_r = 0L,
     k_w = 0L,
     k_s = 0L,
@@ -109,8 +109,7 @@ stage2_make_spec <- function(
     k_s = as.integer(k_s),
     k_e = as.integer(k_e),
     k_n = as.integer(k_n),
-    k_1 = as.integer(k_1),
-    k_2 = as.integer(k_2),
+    k_de = as.integer(k_de),
     k_r = as.integer(k_r),
     
     bs_week = bs_week,
@@ -165,7 +164,7 @@ stage2_make_spec <- function(
 #'
 #' @param leads Integer vector of horizons (typically fixed to \code{c(1L,2L)}).
 #'
-#' @param k_w_grid,k_s_grid,k_e_grid,k_n_grid,k_1_grid,k_2_grid Integer vectors for smooth basis sizes.
+#' @param k_w_grid,k_s_grid,k_e_grid,k_n_grid,k_de_grid Integer vectors for smooth basis sizes.
 #' @param bs_week_grid Character vector for week smooth basis.
 #' @param bs_fs_marginal_grid Character vector for fs marginal basis.
 #'
@@ -186,8 +185,7 @@ expand_grid_specs <- function(
     k_s_grid = c(0L),
     k_e_grid = c(6L),
     k_n_grid = c(6L),
-    k_1_grid = c(6L),
-    k_2_grid = c(0L),
+    k_de_grid = c(0L),
     bs_week_grid        = "ts",
     bs_fs_marginal_grid = "tp",
     drop_unused_kf_for_nonS = TRUE,
@@ -210,8 +208,7 @@ expand_grid_specs <- function(
     k_s   = as.integer(k_s_grid),
     k_e   = as.integer(k_e_grid),
     k_n   = as.integer(k_n_grid),
-    k_1   = as.integer(k_1_grid),
-    k_2   = as.integer(k_2_grid),
+    k_de  = as.integer(k_de_grid),
     
     bs_week        = as.character(bs_week_grid),
     bs_fs_marginal = as.character(bs_fs_marginal_grid),
@@ -236,19 +233,19 @@ expand_grid_specs <- function(
   }
   
   grid <- data.table::rbindlist(list(DT_N, DT_S), use.names = TRUE, fill = TRUE)
-  data.table::setorder(grid, T, delta, Kr, k_f, alpha_state, Kb, k_w, k_s, k_e, k_n, k_1, k_2)
+  data.table::setorder(grid, T, delta, Kr, k_f, alpha_state, Kb, k_w, k_s, k_e, k_n, k_de)
   
   grid[, spec_id := ifelse(
     T == "S",
-    sprintf("T%s_d%+d_Kr%d_kf%d_as%.2f_Kb%d_kw%d_ks%d_ke%d_kn%d_k1%d_k2%d",
-            T, delta, Kr, k_f, alpha_state, Kb, k_w, k_s, k_e, k_n, k_1, k_2),
-    sprintf("T%s_d%+d_Kr%d_as%.2f_Kb%d_kw%d_ks%d_ke%d_kn%d_k1%d_k2%d",
-            T, delta, Kr, alpha_state, Kb, k_w, k_s, k_e, k_n, k_1, k_2)
+    sprintf("T%s_d%+d_Kr%d_kf%d_as%.2f_Kb%d_kw%d_ks%d_ke%d_kn%d_kde%d",
+            T, delta, Kr, k_f, alpha_state, Kb, k_w, k_s, k_e, k_n, k_de),
+    sprintf("T%s_d%+d_Kr%d_as%.2f_Kb%d_kw%d_ks%d_ke%d_kn%d_kde%d",
+            T, delta, Kr, alpha_state, Kb, k_w, k_s, k_e, k_n, k_de)
   )]
   
   specs <- Map(
     f = function(delta, Kr, T, k_f, alpha_state, Kb,
-                 k_w, k_s, k_e, k_n, k_1, k_2,
+                 k_w, k_s, k_e, k_n, k_de,
                  bs_week, bs_fs_marginal) {
       if (is.na(k_f)) k_f <- k_f_grid[1]
       stage2_make_spec(
@@ -257,12 +254,12 @@ expand_grid_specs <- function(
         Kb = Kb,
         leads = as.integer(leads),
         
-        k_w = k_w, k_s = k_s, k_e = k_e, k_n = k_n, k_1 = k_1, k_2 = k_2,
+        k_w = k_w, k_s = k_s, k_e = k_e, k_n = k_n, k_de = k_de,
         bs_week = bs_week, bs_fs_marginal = bs_fs_marginal
       )
     },
     grid$delta, grid$Kr, grid$T, grid$k_f, grid$alpha_state, grid$Kb,
-    grid$k_w, grid$k_s, grid$k_e, grid$k_n, grid$k_1, grid$k_2,
+    grid$k_w, grid$k_s, grid$k_e, grid$k_n, grid$k_de,
     grid$bs_week, grid$bs_fs_marginal
   )
   names(specs) <- grid$spec_id
@@ -444,14 +441,15 @@ plot_stage2_joint_fit_by_season <- function(out_m1,
 #'
 #' Required columns in the stacked training data:
 #' y_lead, N_lead, lead, season, season_h, logit_f_eff, newWeek,
-#' z_ema, logN_now, d1_now, d2_now (some may be unused depending on k_*).
+#' z_ema, z_resid, logN_now, dz_ema (some may be unused depending on k_*).
 #'
 #' @param spec A spec list from stage2_make_spec().
 #' @return An R formula suitable for mgcv::bam().
 #' @export
 stage2_build_joint_formula <- function(spec) {
-  stopifnot(is.list(spec), all(c("T","k_f","k_w","k_s","k_e","k_n","k_1","k_2","bs_week","bs_fs_marginal") %in% names(spec)))
-  if (is.null(spec$k_r)) spec$k_r <- 0L
+  stopifnot(is.list(spec), all(c("T","k_f","k_w","k_s","k_e","k_n","bs_week","bs_fs_marginal") %in% names(spec)))
+  if (is.null(spec$k_r))  spec$k_r  <- 0L
+  if (is.null(spec$k_de)) spec$k_de <- 0L
   
   bs1 <- spec$bs_week %||% "ts"
   
@@ -491,12 +489,9 @@ stage2_build_joint_formula <- function(spec) {
     rhs <- c(rhs, sprintf("s(logN_now, by=lead, bs='%s', k=%d)", bs1, as.integer(spec$k_n)))
   }
   
-  # derivatives
-  if (as.integer(spec$k_1) > 0L) {
-    rhs <- c(rhs, sprintf("s(d1_now, by=lead, bs='%s', k=%d)", bs1, as.integer(spec$k_1)))
-  }
-  if (as.integer(spec$k_2) > 0L) {
-    rhs <- c(rhs, sprintf("s(d2_now, by=lead, bs='%s', k=%d)", bs1, as.integer(spec$k_2)))
+  # rate of change of observed EMA (purely observation-driven)
+  if (as.integer(spec$k_de) > 0L) {
+    rhs <- c(rhs, sprintf("s(dz_ema, by=lead, bs='%s', k=%d)", bs1, as.integer(spec$k_de)))
   }
   
   stats::as.formula(paste0("cbind(y_lead, N_lead - y_lead) ~ ", paste(rhs, collapse = " + ")))

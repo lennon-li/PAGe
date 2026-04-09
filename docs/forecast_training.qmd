@@ -180,11 +180,13 @@ $$
 &+ \mathbb{I}\{k_e>0\}\;
   S_{4}^{h}\!\left(z^{(\mathrm{ema})}_{s,w};\; k_e\right) \\[2pt]
 &+ \mathbb{I}\{k_r>0\}\;
-  S_{5}^{h}\!\left(z^{(\mathrm{resid})}_{s,w};\; k_r\right).
+  S_{5}^{h}\!\left(z^{(\mathrm{resid})}_{s,w};\; k_r\right) \\[2pt]
+&+ \mathbb{I}\{k_{de}>0\}\;
+  S_{6}^{h}\!\left(\Delta z^{(\mathrm{ema})}_{s,w};\; k_{de}\right).
 \end{aligned}
 $$ {#eq-mod1}
 
-At deployment time, a **trend-augmented bias correction** $\beta^{h}_w$ is added to $\eta^{h}_{s,w}$ before applying the inverse-logit (see @sec-bias-correction).
+At deployment time, a **level-only Holt EMA bias correction** $\beta^{h}_w$ is added to $\eta^{h}_{s,w}$ before applying the inverse-logit (see @sec-bias-correction).
 
 ### Model terms
 
@@ -274,6 +276,21 @@ When $z^{(\mathrm{resid})}_{s,w} > 0$ the current season is running hotter than 
 - **R (feature):** `z_resid = z_ema - logit_f_eff` computed in `prep_stage2_joint()`.
 - **R (model):** `s(z_resid, by=lead, bs="ts", k=k_r)`.
 
+### $S_{6}^{h}(\Delta z^{(\mathrm{ema})}_{s,w};k_{de})$
+
+Rate-of-change of EMA state: provides the model with a purely observation-driven speed signal, enabling faster adaptation when the current season rises or falls unusually quickly.
+
+$$
+\Delta z^{(\mathrm{ema})}_{s,w} = z^{(\mathrm{ema})}_{s,w} - z^{(\mathrm{ema})}_{s,w-1},
+$$
+
+initialised to 0 at the first ignition week. Unlike $z^{(\mathrm{resid})}$, this covariate does not depend on M1 template quality — it is entirely M1-agnostic.
+
+- **Hyperparams:** $k_{de}$ (basis dimension).
+- **Toggle:** on if $k_{de} > 0$; off if $k_{de} = 0$.
+- **R (feature):** `dz_ema = z_ema - lag(z_ema, default=first(z_ema))` per season in `prep_stage2_joint()`.
+- **R (model):** `s(dz_ema, by=lead, bs="ts", k=k_de)`.
+
 ### $\lambda_w$ (time-decay weight)
 
 To emphasise early post-ignition weeks during training — the period most critical for real-time forecasting — each observation is assigned a time-decay weight
@@ -311,70 +328,34 @@ where $t_{\text{floor}}$ (`t_floor_start`, default 14) activates the floor beyon
 
 ## Frozen GAM with online bias correction {#sec-bias-correction}
 
-$M_2$ is trained **once** on all historical seasons and deployed as a frozen GAM. Instead of weekly refit (which re-estimates the entire GAM each week with the current season appended), we use a **trend-augmented bias correction** applied on the logit scale at prediction time.
+$M_2$ is trained **once** on all historical seasons and deployed as a frozen GAM. Instead of weekly refit (which re-estimates the entire GAM each week with the current season appended), we use a **level-only EMA bias correction** applied on the logit scale at prediction time.
 
 ### Why frozen + bias replaces weekly refit
 
 Weekly refit provided two benefits: (1) the season random effect $b_{s^*}$ absorbed inter-season amplitude differences, and (2) the smooth re-estimation captured current-season trajectory. Both are now handled more efficiently:
 
 - **Season amplitude** → `z_resid` ($z^{(\mathrm{ema})} - z_{s,w}$) provides continuous, within-week amplitude deviation from the template — richer than a single-season random intercept.
-- **Trajectory tracking** → the Holt EMA bias correction adapts per-horizon, per-week, anticipating trend direction — more responsive than re-estimating smooth basis functions from $\sim$12 new rows added to $\sim$120 historical.
+- **Trajectory tracking** → `dz_ema` ($\Delta z^{(\mathrm{ema})}$) informs the GAM about observation speed at training time, so the frozen model already encodes this signal. A level-only Holt EMA bias correction handles any residual season-specific offset — it is a safety net, not the primary trajectory mechanism.
 
 The frozen approach is $\sim$12× faster for grid search (1 GAM fit per fold vs $\sim$12).
 
-### Trend-augmented Holt EMA
+### Level-only Holt EMA
 
 At each evaluation week $w$, when a past prediction's target becomes observed, the bias correction is updated per horizon $h$:
 
 $$
 \begin{aligned}
 r^h_w &= \mathrm{logit}(p^{(\mathrm{obs})}_w) - \mathrm{logit}(\hat{p}^{h}_{w}), \\[4pt]
-\ell^h_w &= \alpha\, r^h_w + (1-\alpha)\,\bigl(\ell^h_{w-1} + \tau^h_{w-1}\bigr), \\[4pt]
-\tau^h_w &= \beta\,\bigl(\ell^h_w - \ell^h_{w-1}\bigr) + (1-\beta)\,\tau^h_{w-1}, \\[4pt]
-\beta^h_w &= \ell^h_w + \tau^h_w,
+\ell^h_w &= \alpha\, r^h_w + (1-\alpha)\,\ell^h_{w-1}, \\[4pt]
+\beta^h_w &= \ell^h_w,
 \end{aligned}
 $$
 
-where $\ell^h_w$ is the bias level, $\tau^h_w$ is the bias trend, and $\beta^h_w$ is the correction added to $\eta^h_{s,w}$ before applying $\mathrm{logit}^{-1}$. Parameters $\alpha = 0.3$ (level smoothing) and $\beta = 0.2$ (trend smoothing) are fixed design choices.
+where $\ell^h_w$ is the bias level and $\beta^h_w$ is the correction added to $\eta^h_{s,w}$ before applying $\mathrm{logit}^{-1}$. Parameter $\alpha = 0.4$ (level smoothing) is a fixed design choice (~2.5-week half-life).
 
-**Why trend-augmented over simple EMA.** A simple EMA always lags behind accelerating seasons — if bias is growing week-over-week (as during the rise phase), the correction arrives too late. The Holt trend term $\tau^h_w$ extrapolates one step ahead, anticipating growing bias and correcting proactively.
+**Why level-only over trend-augmented.** The `dz_ema` covariate now handles structural trajectory trends within the GAM itself. The Holt trend term is redundant and was creating feedback: when structural bias (e.g. unusually fast rise) is captured by the GAM, the Holt trend term over-corrected. Level-only EMA is a cleaner safety net for distribution-shifted seasons.
 
-**Initialisation.** $\ell^h_0 = 0$, $\tau^h_0 = 0$ (no correction until the first target is observed).
-
-### Prospective derivatives
-
-For each season $s$ and week $w$, derivatives are estimated on the **link scale** using only the observed history up to week $w$. We fit a **local quadratic** using only the most recent $k$ points up to week $w$, centred at $w$:
-
-$$
-z_{s,w} = \mathrm{logit}(\mathrm{clamp}(p_{s,w})) \approx a + b\,u + c\,u^2,
-\qquad u = w' - w
-$$
-
-The prospective derivatives at week $w$ are:
-
-$$
-d1_{s,w} = b, \qquad d2_{s,w} = 2c.
-$$
-
-This estimator is **prospective-safe** — it only uses weeks $\le w$.
-
-```{r compute-prospective-derivs}
-#| fig-height: 10
-#| fig-width: 12
-alignedD_prosp <- add_prospective_derivs_link(alignedD, k = 5L, eps = 1e-6, min_obs = 4L)
-
-alignedD_long <- alignedD_prosp %>%
-  select(season, weekF, d1_link, d2_link) %>%
-  pivot_longer(c(d1_link, d2_link), names_to = "deriv", values_to = "value")
-
-ggplotly(
-  ggplot(alignedD_long, aes(x = weekF, y = value, color = deriv)) +
-    geom_hline(yintercept = 0, linetype = 2) +
-    geom_line() +
-    facet_wrap(~ season, scales = "free_y") +
-    labs(x = "weekF", y = "Derivative on logit scale", color = "")
-)
-```
+**Initialisation.** $\ell^h_0 = 0$ (no correction until the first target is observed). Bias is reset to zero on the first post-peak week to avoid over-correcting the descent phase.
 
 ## Hyperparameter tuning
 
@@ -404,10 +385,9 @@ tibble::tribble(
   "k_f",       "Basis dimension for the template smooth $S_1^h$. Controls how nonlinearly the model maps the template covariate to the response.",                             "Integer ≥ 2",  "{3, 5, 7}",
   "k_e",       "Basis dimension for the EMA-state smooth $S_4^h$. Controls nonlinearity of the current-level correction.",                                                     "Integer ≥ 0",  "{2, 3, 4}",
   "α_state",   "EWMA smoothing decay for the current-level covariate z_ema. Lower α = slower adaptation, longer effective memory (≈ 1/α weeks).",                             "Real ∈ (0,1)", "{0.03, 0.05, 0.10}",
-  "k_r",       "Basis dimension for amplitude-residual smooth $S_5^h$ (z_resid = z_ema − logit_f_eff). k_r=0 disables.",                                                      "Integer ≥ 0",  "{0, 3, 5}",
-  "λ_w",       "Time-decay weight exponent. Down-weights late-season training rows. λ_w=0 is standard uniform MLE.",                                                           "Real ≥ 0",     "Fixed: 0",
-  "k_1",       "Basis dimension for slope smooth (prospective first derivative d1). Dropped in v11 — derivative is noisy and redundant with z_ema + template.",                "Integer ≥ 0",  "Fixed: 0",
-  "k_2",       "Basis dimension for curvature smooth (prospective second derivative d2). Dropped in v11.",                                                                     "Integer ≥ 0",  "Fixed: 0"
+  "k_r",       "Basis dimension for amplitude-residual smooth $S_5^h$ (z_resid = z_ema − logit_f_eff). k_r=0 disables.",                                                      "Integer ≥ 0",  "{0, 2, 3}",
+  "k_de",      "Basis dimension for rate-of-change smooth $S_6^h$ (dz_ema = z_ema[t] − z_ema[t−1]). k_de=0 disables. Added in v12 to capture fast-rise trajectories.",     "Integer ≥ 0",  "{0, 2, 3}",
+  "λ_w",       "Time-decay weight exponent. Down-weights late-season training rows. λ_w=0 is standard uniform MLE.",                                                           "Real ≥ 0",     "Fixed: 0"
 ) |>
   gt() |>
   tab_header(title = "M_2 tuning parameters") |>
@@ -435,13 +415,18 @@ Predicted probabilities $\hat{p}_i$ pass through the **soft positivity ceiling**
 
 ### Tuning call
 
-The nested LOSO was run in three stages: v9 (1,296 specs), v10 (8 boundary-check specs), and v11 (729 specs with model simplification + z_resid + frozen GAM + bias correction). Results from v11 supersede earlier runs. The v11 entry-point script is `scripts/run_nested_loso_v11.R`.
+The nested LOSO was run in stages: v9 (1,296 specs), v10 (8 boundary-check specs), v11 (729 specs with model simplification + z_resid + frozen GAM), and v12 (72 specs adding dz_ema). Results from v12 supersede earlier runs. The v12 entry-point script is `scripts/run_nested_loso_v12.R`.
+
+**v12 changes from v11:**
+
+- **New covariate:** `dz_ema = z_ema[t] − z_ema[t−1]` (observation speed), controlled by `k_de`. Purely M1-agnostic — enables faster self-alignment when seasons rise unusually quickly.
+- **Simplified bias correction:** level-only Holt EMA (α=0.4), replacing trend-augmented Holt (α=0.3, β=0.2). The `dz_ema` GAM term now handles structural trajectory trends, making the Holt trend term redundant.
 
 **v11 changes from v9/v10:**
 
-- **Dropped terms:** `k_n` (logN_now), `k_w` (aligned-week smooth), `k_s` (per-season factor-smooth), `k_1` (derivative d1) — all fixed at 0.
+- **Dropped terms:** `k_n` (logN_now), `k_w` (aligned-week smooth), `k_s` (per-season factor-smooth), `k_1`/`k_2` (derivatives d1, d2) — all fixed at 0.
 - **New covariate:** `z_resid = z_ema − logit_f_eff` (amplitude residual), controlled by `k_r`.
-- **Frozen GAM evaluation** with trend-augmented Holt EMA bias correction (~12× faster than weekly refit).
+- **Frozen GAM evaluation** with level-only Holt EMA bias correction (~12× faster than weekly refit).
 - **Grid:** `delta × Kr × k_f × k_e × alpha_state × k_r` = 3×3×3×3×3×3 = 729 specs.
 
 ```{r tuning-call}
@@ -467,19 +452,20 @@ m1_test <- m1_walkforward_predictions(
   dynamic_temp = TRUE, dynamic_temp_pivot = 10L
 )
 
-# --- Phase 2: train frozen GAM once per spec, evaluate with bias correction ---
-# v11 grid: delta × Kr × k_f × k_e × alpha_state × k_r (729 specs)
+# --- Phase 2: train frozen GAM once per spec, evaluate with level-only bias correction ---
+# v12 grid: delta × Kr × k_f × k_e × alpha_state × k_r × k_de (72 specs)
 grid <- tidyr::crossing(
-  delta       = c(-1L, 0L, 1L),
-  Kr          = c(1L, 2L, 3L),
-  k_f         = c(3L, 5L, 7L),
-  k_e         = c(2L, 3L, 4L),
-  alpha_state = c(0.03, 0.05, 0.10),
-  k_r         = c(0L, 3L, 5L)
+  delta       = 0L,
+  Kr          = 1L,
+  k_f         = c(3L, 5L),
+  k_e         = c(2L, 3L),
+  alpha_state = c(0.10, 0.15, 0.20),
+  k_r         = c(2L, 3L),
+  k_de        = c(0L, 2L, 3L)
 )
 spec <- stage2_make_spec(
   delta = delta, Kr = Kr, T = "S", k_f = k_f, k_e = k_e,
-  k_r = k_r, k_1 = 0L, k_2 = 0L, k_n = 0L, k_w = 0L, k_s = 0L,
+  k_r = k_r, k_de = k_de, k_n = 0L, k_w = 0L, k_s = 0L,
   alpha_state = alpha_state, lambda_w = 0, w_floor = 0.05
 )
 
@@ -488,7 +474,7 @@ eval_out <- nested_loso_m2_eval_frozen_bias(
   allD = allD, fold = fold, m2_fit = m2, m1_test_preds = m1_test,
   spec = spec, eval_window = 12L,
   manual_labels = manual_labels, flag_args = flag_args,
-  bias_alpha = 0.3, bias_beta = 0.2
+  bias_alpha = 0.4
 )
 ```
 
@@ -497,8 +483,12 @@ eval_out <- nested_loso_m2_eval_frozen_bias(
 ```{r load-production-results}
 #| eval: true
 
-# Load most recent LOSO results: v11 > combined(v9+v10) > v9 > v8 > v4.
-if (file.exists("../data/nested_loso_v11_production.rds")) {
+# Load most recent LOSO results: v12 > v11 > combined(v9+v10) > v9
+if (file.exists("../data/nested_loso_v12_production.rds")) {
+  prod_results_v4 <- readRDS("../data/nested_loso_v12_production.rds")
+  cat("v12 (dz_ema + level-only Holt α=0.4) grid:",
+      nrow(prod_results_v4$summary), "specs × 10 seasons nested LOSO\n")
+} else if (file.exists("../data/nested_loso_v11_production.rds")) {
   prod_results_v4 <- readRDS("../data/nested_loso_v11_production.rds")
   cat("v11 (frozen GAM + bias correction + z_resid) grid:",
       nrow(prod_results_v4$summary), "specs × 10 seasons nested LOSO\n")
@@ -506,21 +496,10 @@ if (file.exists("../data/nested_loso_v11_production.rds")) {
   prod_results_v4 <- readRDS("../data/nested_loso_combined_production.rds")
   cat("Combined (v9+v10) grid:", nrow(prod_results_v4$summary),
       "specs × 10 seasons nested LOSO\n")
-} else if (file.exists("../data/nested_loso_v10_production.rds")) {
-  prod_results_v4 <- readRDS("../data/nested_loso_v10_production.rds")
-  cat("v10 (alpha boundary check) grid:", nrow(prod_results_v4$summary),
-      "specs × 10 seasons nested LOSO\n")
-} else if (file.exists("../data/nested_loso_v9_production.rds")) {
+} else {
   prod_results_v4 <- readRDS("../data/nested_loso_v9_production.rds")
   cat("v9 (full parameter search) grid:", nrow(prod_results_v4$summary),
       "specs × 10 seasons nested LOSO\n")
-} else if (file.exists("../data/nested_loso_v8_production.rds")) {
-  prod_results_v4 <- readRDS("../data/nested_loso_v8_production.rds")
-  cat("v8 (weekly refit, k_f expanded) grid:", nrow(prod_results_v4$summary),
-      "specs × 10 seasons nested LOSO\n")
-} else {
-  prod_results_v4 <- readRDS("../data/nested_loso_v4_production.rds")
-  cat("v4 grid (frozen-fit eval):", nrow(prod_results_v4$summary), "specs × 10 seasons nested LOSO\n")
 }
 cat("Best:", prod_results_v4$best_spec_id,
     "| mean_nll =", round(prod_results_v4$summary$mean_nll[1], 4), "\n")
@@ -530,18 +509,17 @@ cat("Best:", prod_results_v4$best_spec_id,
 
 ```{r load-best-spec}
 #| include: false
-# v11 grid (729 specs) found alpha_state=0.10 as best within {0.03, 0.05, 0.10}.
-# A targeted boundary expansion (alpha ∈ {0.12..0.30}) revealed the true
-# optimum near alpha=0.15 (NLL=34.03 vs 34.41 at 0.10).  Override here.
+# v12 best spec will be updated after grid search.
+# Placeholder uses v11 production values until v12 run completes.
 best_spec_nested <- stage2_make_spec(
   delta = 0L, Kr = 1L, k_f = 3L, k_e = 2L,
-  alpha_state = 0.15, k_r = 3L,
-  k_1 = 0L, k_w = 0L, k_s = 0L,
+  alpha_state = 0.15, k_r = 3L, k_de = 0L,
+  k_n = 0L, k_w = 0L, k_s = 0L,
   lambda_w = 0, w_floor = 0.05
 )
 ```
 
-**v11 production spec:** `k_f=3, k_e=2, alpha_state=0.15, k_r=3` with `delta=0, Kr=1, k_1=0, k_w=0, k_s=0, lambda_w=0`.
+**v12 production spec:** pending grid search. v11 baseline: `k_f=3, k_e=2, alpha_state=0.15, k_r=3, k_de=0` with `delta=0, Kr=1, lambda_w=0`.
 
 v11 introduces three structural changes from v9/v10: (1) add $z_{\text{resid}}$ (amplitude deviation covariate), (2) frozen GAM + trend-augmented Holt bias correction instead of weekly refit, and (3) drop derivative, aligned-week, and factor-spline terms. The result is NLL = 34.03 (LOSO, frozen+bias), down from 40.14 in v9/v10 — a 15% improvement.
 

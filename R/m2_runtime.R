@@ -59,7 +59,6 @@ stage2_extract_hyperparams <- function(best_mean_nll) {
 #'   If FALSE, uses \code{newWeek = weekF}.
 #' @param anchorWeek Integer anchor week used when \code{align=TRUE}.
 #' @param pre_buffer Integer >= 0. Weeks before ignition included for \code{toFit==1} logic.
-#' @param deriv_k Integer window size passed to \code{add_prospective_derivs_link()}.
 #' @param n_weeks Integer. Length of the full season axis (52 or 53).
 #' @param eps Numeric small constant passed to derivative calculations.
 #' @param date_col Character. Name of the date column in \code{currentSeason} (default tries \code{"date"}).
@@ -79,16 +78,12 @@ build_stage2_pseudo_prospective_list <- function(
     align = TRUE,
     anchorWeek = 19L,
     pre_buffer = 1L,
-    deriv_k = 5L,
     n_weeks = 53L,
     eps = 1e-6,
     date_col = if ("date" %in% names(currentSeason)) "date" else NULL
 ) {
   stopifnot(is.data.frame(currentSeason), is.data.frame(template_df))
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
-  if (!exists("add_prospective_derivs_link", mode = "function")) {
-    stop("add_prospective_derivs_link() not found.")
-  }
   
   get1 <- function(obj, nm, default = NULL) {
     if (is.list(obj) && !is.data.frame(obj) && !is.null(obj[[nm]])) return(obj[[nm]])
@@ -143,20 +138,12 @@ build_stage2_pseudo_prospective_list <- function(
   }
   grid$newWeek <- pmin(pmax(grid$newWeek_raw, nw_min), nw_max)
   
-  d_deriv <- add_prospective_derivs_link(
-    alignedD = grid %>% dplyr::transmute(season="current", weekF, y = y_true, neg = neg_true),
-    k = as.integer(deriv_k),
-    eps = eps
-  ) %>%
-    dplyr::transmute(weekF = as.integer(.data$weekF), d1_link = .data$d1_link, d2_link = .data$d2_link)
-  
   tpl <- dplyr::as_tibble(template_df) %>%
     dplyr::transmute(newWeek = as.integer(.data$newWeek), template_fit = as.numeric(.data$fit))
   tpl_shift <- dplyr::as_tibble(template_df) %>%
     dplyr::transmute(newWeek_shift = as.integer(.data$newWeek), template_fit_shift = as.numeric(.data$fit))
   
   base_full <- grid %>%
-    dplyr::left_join(d_deriv, by = "weekF") %>%
     dplyr::left_join(tpl, by = "newWeek") %>%
     dplyr::mutate(
       iWeek_used = as.integer(iWeek_hat),
@@ -439,9 +426,6 @@ stage2_predict_series <- function(pp,
       dplyr::left_join(base %>% dplyr::select(.data$weekF, .data$z_ema, .data$logN_now),
                        by = "weekF")
     
-    if (!"d1_now" %in% names(d2) && "d1_link" %in% names(d2)) d2$d1_now <- d2$d1_link
-    if (!"d2_now" %in% names(d2) && "d2_link" %in% names(d2)) d2$d2_now <- d2$d2_link
-    
     if (!"season" %in% names(d2)) {
       d2$season <- if (!is.null(lev_season)) factor(lev_season[1], levels = lev_season) else factor("current")
     } else if (!is.null(lev_season)) {
@@ -456,7 +440,7 @@ stage2_predict_series <- function(pp,
       nd <- d2[idx, , drop = FALSE]
       if (!is.null(lev_lead)) nd$lead <- factor(as.character(nd$lead), levels = lev_lead)
       
-      need <- c("logit_f_eff", "z_ema", "logN_now", "d1_now", "d2_now", "lead", "season")
+      need <- c("logit_f_eff", "z_ema", "logN_now", "lead", "season")
       miss <- setdiff(need, names(nd))
       if (length(miss)) stop("Prediction rows missing: ", paste(miss, collapse = ", "))
       

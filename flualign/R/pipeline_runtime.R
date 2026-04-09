@@ -352,8 +352,6 @@ run_m2_forecast <- function(kit,
   # ex_terms here should NOT include "s(season)" — m2_predict_one adds it when needed.
   anchorWeek     <- ref$anchorWeek
   logN_train_max     <- max(m2_fit$model$logN_now, na.rm = TRUE)
-  d1_train_range     <- range(m2_fit$model$d1_now, na.rm = TRUE)
-  d2_train_range     <- range(m2_fit$model$d2_now, na.rm = TRUE)
   lfe_train_range    <- range(m2_fit$model$logit_f_eff, na.rm = TRUE)
 
   # Pre-compute z_ema range from historical training data for clamping
@@ -388,10 +386,9 @@ run_m2_forecast <- function(kit,
   # target is now observed, we compute logit(obs) - logit(pred) and update
   # a Holt-style level + trend.  The correction applied is level + trend,
   # which extrapolates the bias one step ahead.
-  bias_alpha  <- 0.3   # EMA decay for bias level
-  bias_beta   <- 0.2   # EMA decay for bias trend
+  bias_alpha  <- 0.4   # EMA decay for bias level (level-only)
   bias_level      <- list(h1 = 0, h2 = 0)  # per-horizon running level (logit scale)
-  bias_trend      <- list(h1 = 0, h2 = 0)  # per-horizon running trend
+  prev_z_ema      <- 0
   peak_passed_prev <- FALSE                  # track first post-peak transition
   pred_log        <- list()  # store (target_weekF, m2_p, h) for bias updates
 
@@ -408,7 +405,7 @@ run_m2_forecast <- function(kit,
     # does not inflate post-peak predictions.
     if (isTRUE(ap$peak_passed) && !peak_passed_prev) {
       bias_level       <- list(h1 = 0, h2 = 0)
-      bias_trend       <- list(h1 = 0, h2 = 0)
+      prev_z_ema       <- 0
       peak_passed_prev <- TRUE
     }
 
@@ -422,11 +419,8 @@ run_m2_forecast <- function(kit,
           logit_pred <- qlogis(pmin(pmax(pl$m2_p, 1e-6), 1 - 1e-6))
           resid <- logit_obs - logit_pred
           hkey <- paste0("h", pl$h)
-          old_level <- bias_level[[hkey]]
           bias_level[[hkey]] <- bias_alpha * resid +
-            (1 - bias_alpha) * (old_level + bias_trend[[hkey]])
-          bias_trend[[hkey]] <- bias_beta * (bias_level[[hkey]] - old_level) +
-            (1 - bias_beta) * bias_trend[[hkey]]
+            (1 - bias_alpha) * bias_level[[hkey]]
         }
       }
     }
@@ -509,24 +503,16 @@ run_m2_forecast <- function(kit,
       logN_now <- min(log(max(obs_to_ew$N[obs_to_ew$weekF == ew], 1)),
                       logN_train_max)
 
-      d_deriv <- add_prospective_derivs_link(
-        dplyr::transmute(obs_to_ew, season = "current", weekF, y, neg),
-        k = 5L, eps = 1e-6
-      )
-      d_at_ew <- dplyr::filter(d_deriv, weekF == ew)
-      # Clamp d1/d2 to training range to prevent extrapolation on steep early-season rises
-      d1_now  <- if (nrow(d_at_ew) > 0)
-        pmin(d1_train_range[2L], pmax(d1_train_range[1L], d_at_ew$d1_link[1])) else 0
-      d2_now  <- if (nrow(d_at_ew) > 0)
-        pmin(d2_train_range[2L], pmax(d2_train_range[1L], d_at_ew$d2_link[1])) else 0
+      dz_ema_now <- z_ema_now - prev_z_ema
+      prev_z_ema <<- z_ema_now
 
       logit_f_eff <- pmin(lfe_train_range[2L],
                         pmax(lfe_train_range[1L],
                              qlogis(pmin(pmax(m1_p, 1e-6), 1 - 1e-6))))
 
-      # Apply running bias correction: level + trend (extrapolate one step)
+      # Apply running bias correction: level-only
       hkey_bl <- paste0("h", h)
-      bl <- bias_level[[hkey_bl]] + bias_trend[[hkey_bl]]
+      bl <- bias_level[[hkey_bl]]
 
       pr <- m2_predict_one(
         fit               = fit_ew,
@@ -536,9 +522,8 @@ run_m2_forecast <- function(kit,
         anchorWeek        = anchorWeek,
         logit_f_eff       = logit_f_eff,
         z_ema             = z_ema_now,
+        dz_ema            = dz_ema_now,
         logN_now          = logN_now,
-        d1_now            = d1_now,
-        d2_now            = d2_now,
         season_label      = if (refit_ok) "current" else NULL,
         ex_terms          = ex_terms,
         include_season_re = refit_ok,
