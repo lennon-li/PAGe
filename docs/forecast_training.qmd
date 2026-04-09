@@ -455,7 +455,7 @@ m1_test <- m1_walkforward_predictions(
 )
 
 # --- Phase 2: train frozen GAM once per spec, evaluate with level-only bias correction ---
-# v12 grid: delta × Kr × k_f × k_e × alpha_state × k_r × k_de (72 specs)
+# delta × Kr × k_f × k_e × alpha_state × k_r × k_de (72 specs total)
 grid <- tidyr::crossing(
   delta       = 0L,
   Kr          = 1L,
