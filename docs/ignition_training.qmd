@@ -423,3 +423,53 @@ do.call(htmltools::tagList, season_tables)
 ```
 
 :::
+
+## Function call graph
+
+Functions used in this document, showing how `fitIgnition()` and the M0
+detection chain relate to each other.
+
+```{dot}
+//| fig-width: 10
+//| fig-height: 4
+digraph m0_calls {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=11,
+         nodesep=0.4, ranksep=0.9];
+  node  [fontname="Helvetica", fontsize=10, style=filled,
+         shape=box, margin="0.12,0.05"];
+  edge  [fontname="Helvetica", fontsize=9, arrowsize=0.6];
+
+  subgraph cluster_m0train {
+    label="M0: Training (m0_training.R)"; style=filled;
+    color="#856404"; fillcolor="#fff3cd"; fontcolor="#856404";
+    fontsize=11; fontname="Helvetica-Bold";
+    fitIgnition      [label="fitIgnition"];
+    scoreIgnition    [label="scoreIgnition"];
+    loso_M0v2        [label="loso_M0v2"];
+  }
+  subgraph cluster_m0flag {
+    label="M0: Detection (flagIgnition.R, m0_runtime.R)"; style=filled;
+    color="#6d4c00"; fillcolor="#ffe8a1"; fontcolor="#6d4c00";
+    fontsize=11; fontname="Helvetica-Bold";
+    flag_ignition_rules     [label="flag_ignition_rules"];
+    detect_ignition_from_tuning [label="detect_ignition\n_from_tuning"];
+    run_ignition_weekly     [label="run_ignition_weekly"];
+    run_m0_detection        [label="run_m0_detection"];
+  }
+  subgraph cluster_m0retro {
+    label="M0: Retrospective (m0_retro.R)"; style=filled;
+    color="#5a3e00"; fillcolor="#ffd970"; fontcolor="#5a3e00";
+    fontsize=11; fontname="Helvetica-Bold";
+    m0_retro_run   [label="m0_retro_run"];
+    m0_retro_score [label="m0_retro_score"];
+  }
+
+  fitIgnition             -> scoreIgnition;
+  fitIgnition             -> loso_M0v2;
+  detect_ignition_from_tuning -> flag_ignition_rules;
+  run_ignition_weekly     -> detect_ignition_from_tuning;
+  run_m0_detection        -> flag_ignition_rules;
+  m0_retro_run            -> fitIgnition;
+  m0_retro_run            -> m0_retro_score;
+}
+```

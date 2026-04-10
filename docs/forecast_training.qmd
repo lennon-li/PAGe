@@ -670,5 +670,95 @@ if (spec_changed) {
 summary(joint_out_nested$fit)
 ```
 
+## Function call graph
 
+Functions used in this document for M2 model training, LOSO evaluation, and
+the shared `m2_predict_one()` prediction core.
 
+```{dot}
+//| fig-width: 13
+//| fig-height: 6
+digraph m2_train_calls {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=11,
+         nodesep=0.3, ranksep=0.9, concentrate=true];
+  node  [fontname="Helvetica", fontsize=10, style=filled,
+         shape=box, margin="0.12,0.05"];
+  edge  [fontname="Helvetica", fontsize=9, arrowsize=0.6];
+
+  // rank hint
+  nested_loso_refit_best -> train_stage2_joint [style=invis];
+
+  subgraph cluster_spec {
+    label="Spec & Features (m2_spec_grid.R, m2_training.R)"; style=filled;
+    color="#004085"; fillcolor="#cce5ff"; fontcolor="#004085";
+    fontsize=11; fontname="Helvetica-Bold";
+    stage2_make_spec            [label="stage2_make_spec"];
+    stage2_build_joint_formula  [label="stage2_build\n_joint_formula"];
+    stage2_exclude_newseason    [label="stage2_exclude\n_newseason"];
+    prep_stage2_joint           [label="prep_stage2_joint"];
+    add_prospective_derivs_link [label="add_prospective\n_derivs_link"];
+    format_current_for_stage2   [label="format_current\n_for_stage2"];
+  }
+  subgraph cluster_loso {
+    label="LOSO Grid Search (m2_nested_loso.R)"; style=filled;
+    color="#003060"; fillcolor="#b8d4f0"; fontcolor="#003060";
+    fontsize=11; fontname="Helvetica-Bold";
+    nested_loso_grid_search          [label="nested_loso\n_grid_search"];
+    nested_loso_m2_eval_weekly_refit [label="nested_loso_m2\n_eval_weekly_refit"];
+    nested_loso_refit_best           [label="nested_loso\n_refit_best"];
+    loso_m1_m2_joint                 [label="loso_m1_m2_joint"];
+    score_stage2_metrics             [label="score_stage2_metrics"];
+  }
+  subgraph cluster_fit {
+    label="Model Fitting (m2_training.R)"; style=filled;
+    color="#002040"; fillcolor="#9ec5e8"; fontcolor="#002040";
+    fontsize=11; fontname="Helvetica-Bold";
+    train_stage2_joint         [label="train_stage2_joint"];
+    train_stage2_joint_prepped [label="train_stage2_joint\n_prepped"];
+    refit_stage2_weekly        [label="refit_stage2_weekly"];
+  }
+  subgraph cluster_m1 {
+    label="M1 Walk-forward (pipeline_bridge.R)"; style=filled;
+    color="#155724"; fillcolor="#c3e6cb"; fontcolor="#155724";
+    fontsize=11; fontname="Helvetica-Bold";
+    m1_walkforward_multi       [label="m1_walkforward_multi"];
+    m1_walkforward_predictions [label="m1_walkforward\n_predictions"];
+  }
+  subgraph cluster_pred {
+    label="Predict (m2_training.R)"; style=filled;
+    color="#4a0080"; fillcolor="#e2ccff"; fontcolor="#4a0080";
+    fontsize=11; fontname="Helvetica-Bold";
+    m2_predict_one   [label="m2_predict_one", penwidth=2];
+    make_soft_cap_fn [label="make_soft_cap_fn"];
+  }
+
+  stage2_make_spec           -> stage2_build_joint_formula;
+  stage2_make_spec           -> stage2_exclude_newseason;
+  prep_stage2_joint          -> add_prospective_derivs_link;
+  format_current_for_stage2  -> add_prospective_derivs_link;
+  format_current_for_stage2  -> train_stage2_joint;
+  train_stage2_joint         -> train_stage2_joint_prepped;
+  train_stage2_joint         -> prep_stage2_joint;
+  train_stage2_joint         -> stage2_make_spec;
+  train_stage2_joint_prepped -> stage2_build_joint_formula;
+  refit_stage2_weekly        -> format_current_for_stage2;
+  refit_stage2_weekly        -> prep_stage2_joint;
+  refit_stage2_weekly        -> train_stage2_joint;
+  refit_stage2_weekly        -> score_stage2_metrics;
+  nested_loso_grid_search    -> m1_walkforward_multi;
+  nested_loso_grid_search    -> refit_stage2_weekly;
+  nested_loso_grid_search    -> train_stage2_joint;
+  nested_loso_grid_search    -> stage2_make_spec;
+  nested_loso_m2_eval_weekly_refit -> refit_stage2_weekly;
+  nested_loso_m2_eval_weekly_refit -> m2_predict_one;
+  nested_loso_refit_best     -> nested_loso_grid_search;
+  nested_loso_refit_best     -> train_stage2_joint;
+  loso_m1_m2_joint           -> m1_walkforward_predictions;
+  loso_m1_m2_joint           -> prep_stage2_joint;
+  loso_m1_m2_joint           -> train_stage2_joint;
+  loso_m1_m2_joint           -> score_stage2_metrics;
+  m1_walkforward_multi       -> m1_walkforward_predictions;
+  prep_stage2_joint          -> m1_walkforward_predictions;
+  m2_predict_one             -> make_soft_cap_fn;
+}
+```

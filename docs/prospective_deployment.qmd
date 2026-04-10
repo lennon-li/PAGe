@@ -619,3 +619,81 @@ if (nrow(wf$params_df) > 0) {
     tab_options(table.width = pct(100), table.font.size = "13px")
 }
 ```
+
+## Function call graph
+
+Functions used in this document for weekly prospective deployment: M0
+detection, M1 alignment walk-forward, and M2 refit + prediction.
+
+```{dot}
+//| fig-width: 12
+//| fig-height: 5
+digraph deploy_calls {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=11,
+         nodesep=0.35, ranksep=0.9, concentrate=true];
+  node  [fontname="Helvetica", fontsize=10, style=filled,
+         shape=box, margin="0.12,0.05"];
+  edge  [fontname="Helvetica", fontsize=9, arrowsize=0.6];
+
+  // rank hint: M0 -> M1 -> M2 -> deploy
+  fitIgnition -> run_alignment_prospective [style=invis];
+  run_alignment_prospective -> refit_stage2_weekly [style=invis];
+  refit_stage2_weekly -> run_m2_forecast [style=invis];
+
+  subgraph cluster_m0 {
+    label="M0: Ignition"; style=filled;
+    color="#856404"; fillcolor="#fff3cd"; fontcolor="#856404";
+    fontsize=11; fontname="Helvetica-Bold";
+    fitIgnition      [label="fitIgnition"];
+    run_m0_detection [label="run_m0_detection"];
+  }
+  subgraph cluster_m1 {
+    label="M1: Alignment (pipeline_bridge.R)"; style=filled;
+    color="#155724"; fillcolor="#c3e6cb"; fontcolor="#155724";
+    fontsize=11; fontname="Helvetica-Bold";
+    run_alignment_prospective  [label="run_alignment\n_prospective"];
+    m1_walkforward_predictions [label="m1_walkforward\n_predictions"];
+    inject_m1_into_snapshots   [label="inject_m1_into\n_snapshots"];
+  }
+  subgraph cluster_m2 {
+    label="M2: Refit & Features (m2_training.R)"; style=filled;
+    color="#004085"; fillcolor="#cce5ff"; fontcolor="#004085";
+    fontsize=11; fontname="Helvetica-Bold";
+    refit_stage2_weekly         [label="refit_stage2_weekly"];
+    format_current_for_stage2   [label="format_current\n_for_stage2"];
+    prep_stage2_joint           [label="prep_stage2_joint"];
+    add_prospective_derivs_link [label="add_prospective\n_derivs_link"];
+    stage2_exclude_newseason    [label="stage2_exclude\n_newseason"];
+  }
+  subgraph cluster_pred {
+    label="M2: Predict"; style=filled;
+    color="#4a0080"; fillcolor="#e2ccff"; fontcolor="#4a0080";
+    fontsize=11; fontname="Helvetica-Bold";
+    m2_predict_one   [label="m2_predict_one", penwidth=2];
+    make_soft_cap_fn [label="make_soft_cap_fn"];
+  }
+  subgraph cluster_deploy {
+    label="Deployment (pipeline_runtime.R)"; style=filled;
+    color="#721c24"; fillcolor="#f8d7da"; fontcolor="#721c24";
+    fontsize=11; fontname="Helvetica-Bold";
+    run_prospective_pipeline [label="run_prospective\n_pipeline"];
+    run_m2_forecast          [label="run_m2_forecast"];
+  }
+
+  run_prospective_pipeline -> run_m0_detection;
+  run_prospective_pipeline -> run_m2_forecast;
+  run_m0_detection         -> fitIgnition;
+  run_m2_forecast          -> run_m0_detection;
+  run_m2_forecast          -> refit_stage2_weekly;
+  run_m2_forecast          -> m2_predict_one;
+  run_m2_forecast          -> make_soft_cap_fn;
+  run_m2_forecast          -> stage2_exclude_newseason;
+  run_m2_forecast          -> add_prospective_derivs_link;
+  refit_stage2_weekly      -> format_current_for_stage2;
+  refit_stage2_weekly      -> prep_stage2_joint;
+  format_current_for_stage2 -> add_prospective_derivs_link;
+  prep_stage2_joint        -> m1_walkforward_predictions;
+  inject_m1_into_snapshots -> run_alignment_prospective;
+  m2_predict_one           -> make_soft_cap_fn;
+}
+```
