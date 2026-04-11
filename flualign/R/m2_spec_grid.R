@@ -76,6 +76,9 @@ stage2_make_spec <- function(
 
     anchorWeek = 20L,
 
+    bias_alpha = 0.4,   # EMA decay for Holt level
+    bias_beta  = 0.0,   # EMA decay for Holt trend (0 = level-only)
+
     # --- deprecated aliases ---
     K = NULL,
     pre_buffer = NULL
@@ -118,7 +121,9 @@ stage2_make_spec <- function(
     use_season_re = TRUE,
     lambda_w   = as.numeric(lambda_w),
     w_floor    = as.numeric(w_floor),
-    anchorWeek = as.integer(anchorWeek)
+    anchorWeek = as.integer(anchorWeek),
+    bias_alpha = as.numeric(bias_alpha),
+    bias_beta  = as.numeric(bias_beta)
   )
   
   spec$best_row <- data.frame(
@@ -186,8 +191,11 @@ expand_grid_specs <- function(
     k_e_grid = c(6L),
     k_n_grid = c(6L),
     k_de_grid = c(0L),
+    k_r_grid  = c(0L),
     bs_week_grid        = "ts",
     bs_fs_marginal_grid = "tp",
+    bias_alpha_grid = c(0.4),
+    bias_beta_grid  = c(0.0),
     drop_unused_kf_for_nonS = TRUE,
     verbose = TRUE
 ) {
@@ -200,19 +208,22 @@ expand_grid_specs <- function(
     delta = as.integer(delta_grid),
     Kr    = as.integer(Kr_grid),
     T     = as.character(T_grid),
-    
+
     alpha_state = as.numeric(alpha_state),
     Kb    = as.integer(Kb_grid),
-    
+
     k_w   = as.integer(k_w_grid),
     k_s   = as.integer(k_s_grid),
     k_e   = as.integer(k_e_grid),
     k_n   = as.integer(k_n_grid),
     k_de  = as.integer(k_de_grid),
-    
+    k_r   = as.integer(k_r_grid),
+
     bs_week        = as.character(bs_week_grid),
     bs_fs_marginal = as.character(bs_fs_marginal_grid),
-    
+    bias_alpha     = as.numeric(bias_alpha_grid),
+    bias_beta      = as.numeric(bias_beta_grid),
+
     unique = TRUE,
     sorted = FALSE
   )
@@ -233,34 +244,36 @@ expand_grid_specs <- function(
   }
   
   grid <- data.table::rbindlist(list(DT_N, DT_S), use.names = TRUE, fill = TRUE)
-  data.table::setorder(grid, T, delta, Kr, k_f, alpha_state, Kb, k_w, k_s, k_e, k_n, k_de)
-  
+  data.table::setorder(grid, T, delta, Kr, k_f, alpha_state, Kb, k_w, k_s, k_e, k_n, k_de, k_r, bias_alpha, bias_beta)
+
   grid[, spec_id := ifelse(
     T == "S",
-    sprintf("T%s_d%+d_Kr%d_kf%d_as%.2f_Kb%d_kw%d_ks%d_ke%d_kn%d_kde%d",
-            T, delta, Kr, k_f, alpha_state, Kb, k_w, k_s, k_e, k_n, k_de),
-    sprintf("T%s_d%+d_Kr%d_as%.2f_Kb%d_kw%d_ks%d_ke%d_kn%d_kde%d",
-            T, delta, Kr, alpha_state, Kb, k_w, k_s, k_e, k_n, k_de)
+    sprintf("T%s_d%+d_Kr%d_kf%d_as%.2f_Kb%d_kw%d_ks%d_ke%d_kn%d_kde%d_kr%d",
+            T, delta, Kr, k_f, alpha_state, Kb, k_w, k_s, k_e, k_n, k_de, k_r),
+    sprintf("T%s_d%+d_Kr%d_as%.2f_Kb%d_kw%d_ks%d_ke%d_kn%d_kde%d_kr%d",
+            T, delta, Kr, alpha_state, Kb, k_w, k_s, k_e, k_n, k_de, k_r)
   )]
-  
+
   specs <- Map(
     f = function(delta, Kr, T, k_f, alpha_state, Kb,
-                 k_w, k_s, k_e, k_n, k_de,
-                 bs_week, bs_fs_marginal) {
+                 k_w, k_s, k_e, k_n, k_de, k_r,
+                 bs_week, bs_fs_marginal,
+                 bias_alpha, bias_beta) {
       if (is.na(k_f)) k_f <- k_f_grid[1]
       stage2_make_spec(
         delta = delta, Kr = Kr, T = T, k_f = k_f,
         alpha_state = alpha_state,
         Kb = Kb,
         leads = as.integer(leads),
-        
-        k_w = k_w, k_s = k_s, k_e = k_e, k_n = k_n, k_de = k_de,
-        bs_week = bs_week, bs_fs_marginal = bs_fs_marginal
+        k_w = k_w, k_s = k_s, k_e = k_e, k_n = k_n, k_de = k_de, k_r = k_r,
+        bs_week = bs_week, bs_fs_marginal = bs_fs_marginal,
+        bias_alpha = bias_alpha, bias_beta = bias_beta
       )
     },
     grid$delta, grid$Kr, grid$T, grid$k_f, grid$alpha_state, grid$Kb,
-    grid$k_w, grid$k_s, grid$k_e, grid$k_n, grid$k_de,
-    grid$bs_week, grid$bs_fs_marginal
+    grid$k_w, grid$k_s, grid$k_e, grid$k_n, grid$k_de, grid$k_r,
+    grid$bs_week, grid$bs_fs_marginal,
+    grid$bias_alpha, grid$bias_beta
   )
   names(specs) <- grid$spec_id
   

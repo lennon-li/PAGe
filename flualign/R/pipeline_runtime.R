@@ -349,24 +349,12 @@ run_m2_forecast <- function(kit,
   # Season RE handling is delegated to m2_predict_one() via include_season_re.
   # ex_terms here should NOT include "s(season)" — m2_predict_one adds it when needed.
   anchorWeek     <- ref$anchorWeek
-  logN_train_max     <- max(m2_fit$model$logN_now, na.rm = TRUE)
-  lfe_train_range    <- range(m2_fit$model$logit_f_eff, na.rm = TRUE)
-
-  # Pre-compute z_ema range from historical training data for clamping
-  alpha_s_global <- as.numeric(best_spec$alpha_state %||% 0.25)
-  z_ema_hist_range <- if (!is.null(kit$hist_data)) {
-    by_seas <- split(kit$hist_data, kit$hist_data$season)
-    all_z   <- unlist(lapply(by_seas, function(d) {
-      d <- d[order(d$weekF), ]
-      p <- d$y / pmax(d$N, 1L)
-      z <- stats::qlogis(pmin(pmax(p, 1e-6), 1 - 1e-6))
-      as.numeric(stats::filter(alpha_s_global * z, filter = 1 - alpha_s_global,
-                               method = "recursive", init = z[1L]))
-    }))
-    range(all_z[is.finite(all_z)])
-  } else {
-    range(m2_fit$model$z_ema, na.rm = TRUE)
-  }
+  logN_train_max <- max(m2_fit$model$logN_now, na.rm = TRUE)
+  # Use feature_ranges attached at training time (LOSO/deployment parity).
+  # Fall back to deriving from the model for kits built before this change.
+  fr               <- m2_production$feature_ranges
+  lfe_train_range  <- if (!is.null(fr$logit_f_eff)) fr$logit_f_eff else range(m2_fit$model$logit_f_eff, na.rm = TRUE)
+  z_ema_hist_range <- if (!is.null(fr$z_ema))       fr$z_ema       else range(m2_fit$model$z_ema,       na.rm = TRUE)
 
   # Frozen-fit soft cap (used when mode=="frozen" or as fallback)
   soft_cap_frozen <- make_soft_cap_fn(m2_fit)
@@ -378,17 +366,17 @@ run_m2_forecast <- function(kit,
       message("[run_m2_forecast] hist_data not found in kit — falling back to frozen fit")
   }
 
-  # --- Trend-augmented bias correction tracker (Holt EMA) ---
-  # Running level + trend of logit-scale residuals from prior predictions.
-  # At each eval_week, if we have a prediction from a prior week whose
-  # target is now observed, we compute logit(obs) - logit(pred) and update
-  # a Holt-style level + trend.  The correction applied is level + trend,
-  # which extrapolates the bias one step ahead.
-  bias_alpha  <- 0.4   # EMA decay for bias level (level-only)
-  bias_level      <- list(h1 = 0, h2 = 0)  # per-horizon running level (logit scale)
-  prev_z_ema      <- 0
-  peak_passed_prev <- FALSE                  # track first post-peak transition
-  pred_log        <- list()  # store (target_weekF, m2_p, h) for bias updates
+  # --- Holt trend-augmented bias correction tracker ---
+  # Per-horizon level + trend of logit-scale residuals from prior predictions.
+  # Correction applied = level + h * trend  (h=1 or 2).
+  bias_alpha <- as.numeric(best_spec$bias_alpha %||% 0.4)
+  bias_beta  <- as.numeric(best_spec$bias_beta  %||% 0.0)
+  bias_level <- list(h1 = 0, h2 = 0)
+  bias_trend <- list(h1 = 0, h2 = 0)
+  re_hat         <- 0          # online season RE estimate (R2)
+  prev_z_ema     <- NA_real_
+  peak_passed_prev <- FALSE
+  pred_log       <- list()
 
   m2_rows <- list()
 
@@ -403,7 +391,9 @@ run_m2_forecast <- function(kit,
     # does not inflate post-peak predictions.
     if (isTRUE(ap$peak_passed) && !peak_passed_prev) {
       bias_level       <- list(h1 = 0, h2 = 0)
-      prev_z_ema       <- 0
+      bias_trend       <- list(h1 = 0, h2 = 0)
+      re_hat           <- 0
+      prev_z_ema       <- NA_real_
       peak_passed_prev <- TRUE
     }
 
@@ -415,10 +405,14 @@ run_m2_forecast <- function(kit,
       for (pl in pred_log) {
         if (pl$target_weekF == ew) {
           logit_pred <- qlogis(pmin(pmax(pl$m2_p, 1e-6), 1 - 1e-6))
-          resid <- logit_obs - logit_pred
-          hkey <- paste0("h", pl$h)
-          bias_level[[hkey]] <- bias_alpha * resid +
-            (1 - bias_alpha) * bias_level[[hkey]]
+          resid    <- logit_obs - logit_pred
+          hkey     <- paste0("h", pl$h)
+          lev_prev <- bias_level[[hkey]]
+          trn_prev <- bias_trend[[hkey]]
+          lev_new  <- bias_alpha * resid + (1 - bias_alpha) * (lev_prev + trn_prev)
+          trn_new  <- bias_beta  * (lev_new - lev_prev) + (1 - bias_beta) * trn_prev
+          bias_level[[hkey]] <- lev_new
+          bias_trend[[hkey]] <- trn_new
         }
       }
     }
@@ -472,6 +466,32 @@ run_m2_forecast <- function(kit,
     soft_cap_ew <- make_soft_cap_fn(fit_ew)
     lev_lead_ew <- levels(fit_ew$model$lead) %||% lev_lead_frozen
 
+    # Compute EMA state once per eval week (shared across horizons)
+    obs_to_ew_base <- season_to_ew |>
+      dplyr::arrange(weekF) |>
+      dplyr::mutate(
+        p_now = y / pmax(N, 1L),
+        z_now = qlogis(pmin(pmax(p_now, 1e-6), 1 - 1e-6))
+      )
+    alpha_s   <- as.numeric(best_spec$alpha_state %||% 0.25)
+    z_vec_ew  <- obs_to_ew_base$z_now
+    z_ema_ew  <- as.numeric(stats::filter(
+      alpha_s * z_vec_ew, filter = 1 - alpha_s,
+      method = "recursive", init = z_vec_ew[1]
+    ))
+    # Clamp z_ema to historical training range (prevents extrapolation for
+    # seasons with extreme pre-ignition EMA from very low test volumes)
+    z_ema_now  <- pmin(z_ema_hist_range[2L],
+                       pmax(z_ema_hist_range[1L], utils::tail(z_ema_ew, 1)))
+    logN_now   <- min(log(max(obs_to_ew_base$N[obs_to_ew_base$weekF == ew], 1)),
+                      logN_train_max)
+    dz_ema_now <- if (is.na(prev_z_ema)) 0 else z_ema_now - prev_z_ema
+    prev_z_ema <- z_ema_now
+
+    # R2: update online season RE from observations accumulated to this week
+    re_hat <- estimate_season_re_online(fit = fit_ew, obs_df = obs_to_ew_base,
+                                        ex_terms = ex_terms)
+
     ew_result <- dplyr::bind_rows(lapply(horizons, function(h) {
       target_weekF   <- ew + h
       target_newWeek <- as.numeric(target_weekF - iWeek_hat + anchorWeek)
@@ -480,37 +500,13 @@ run_m2_forecast <- function(kit,
       m1_lo <- stats::approx(fdf$newWeek, fdf$p_lo,  xout = target_newWeek, rule = 2)$y
       m1_hi <- stats::approx(fdf$newWeek, fdf$p_hi,  xout = target_newWeek, rule = 2)$y
 
-      obs_to_ew <- season_to_ew |>
-        dplyr::arrange(weekF) |>
-        dplyr::mutate(
-          p_now = y / pmax(N, 1L),
-          z_now = qlogis(pmin(pmax(p_now, 1e-6), 1 - 1e-6))
-        )
-
-      alpha_s   <- as.numeric(best_spec$alpha_state %||% 0.25)
-      z_vec     <- obs_to_ew$z_now
-      z_ema     <- as.numeric(stats::filter(
-        alpha_s * z_vec, filter = 1 - alpha_s,
-        method = "recursive", init = z_vec[1]
-      ))
-      # Clamp z_ema to historical training range (prevents extrapolation for
-      # seasons with extreme pre-ignition EMA from very low test volumes)
-      z_ema_now <- pmin(z_ema_hist_range[2L],
-                        pmax(z_ema_hist_range[1L], utils::tail(z_ema, 1)))
-
-      logN_now <- min(log(max(obs_to_ew$N[obs_to_ew$weekF == ew], 1)),
-                      logN_train_max)
-
-      dz_ema_now <- z_ema_now - prev_z_ema
-      prev_z_ema <<- z_ema_now
-
       logit_f_eff <- pmin(lfe_train_range[2L],
                         pmax(lfe_train_range[1L],
                              qlogis(pmin(pmax(m1_p, 1e-6), 1 - 1e-6))))
 
-      # Apply running bias correction: level-only
+      # Holt correction: level + h * trend; plus online season RE
       hkey_bl <- paste0("h", h)
-      bl <- bias_level[[hkey_bl]]
+      bl <- bias_level[[hkey_bl]] + h * bias_trend[[hkey_bl]] + re_hat
 
       pr <- m2_predict_one(
         fit               = fit_ew,

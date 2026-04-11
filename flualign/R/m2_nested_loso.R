@@ -8,6 +8,71 @@
 # No existing functions are modified.
 # ============================================================
 
+# ---------- 0. Shared utility (package-level definition) ----------
+
+#' Prospective (real-time safe) derivatives of positivity on the logit scale
+#'
+#' For each season in \code{alignedD}, fits a local quadratic to a rolling
+#' window of \code{k} observations on the logit scale and returns the
+#' instantaneous first and second derivatives as \code{d1_link} and
+#' \code{d2_link}. Computation is strictly causal: only observations up to
+#' and including the current week are used.
+#'
+#' @param alignedD Data frame with columns \code{season}, \code{weekF},
+#'   \code{y}, and \code{neg}.
+#' @param k Integer; window size for local quadratic fit (default 5L).
+#' @param eps Numeric; clipping epsilon for logit (default 1e-6).
+#' @param min_obs Integer; minimum observations required (default 4L).
+#' @return \code{alignedD} with additional columns \code{d1_link} and
+#'   \code{d2_link}.
+#' @export
+add_prospective_derivs_link <- function(alignedD,
+                                        k = 5L,
+                                        eps = 1e-6,
+                                        min_obs = 4L) {
+  stopifnot(all(c("season","weekF","y","neg") %in% names(alignedD)))
+  if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
+  if (!requireNamespace("purrr", quietly = TRUE)) stop("Please install purrr.")
+
+  d <- alignedD |>
+    dplyr::mutate(
+      y_w = .data$y / (.data$y + .data$neg),
+      z_w = stats::qlogis(pmin(pmax(.data$y_w, eps), 1 - eps))
+    ) |>
+    dplyr::arrange(.data$season, .data$weekF)
+
+  d |>
+    dplyr::group_by(.data$season) |>
+    dplyr::group_modify(function(.x, .g) {
+      ww <- .x$weekF
+      zz <- .x$z_w
+      n  <- nrow(.x)
+
+      d1 <- purrr::map_dbl(seq_len(n), function(i) {
+        i0 <- max(1L, i - k + 1L)
+        ii <- i0:i
+        if (length(ii) < min_obs || anyNA(zz[ii])) return(NA_real_)
+        w0 <- ww[i]
+        u  <- ww[ii] - w0
+        fit <- stats::lm(zz[ii] ~ u + I(u^2))
+        unname(stats::coef(fit)[["u"]])
+      })
+
+      d2 <- purrr::map_dbl(seq_len(n), function(i) {
+        i0 <- max(1L, i - k + 1L)
+        ii <- i0:i
+        if (length(ii) < min_obs || anyNA(zz[ii])) return(NA_real_)
+        w0 <- ww[i]
+        u  <- ww[ii] - w0
+        fit <- stats::lm(zz[ii] ~ u + I(u^2))
+        2 * unname(stats::coef(fit)[["I(u^2)"]])
+      })
+
+      dplyr::mutate(.x, d1_link = d1, d2_link = d2)
+    }) |>
+    dplyr::ungroup()
+}
+
 # ---------- 1. Build one LOSO fold (M1 training) ----------
 
 #' Build a single LOSO fold: training alignment + reference curve
@@ -525,8 +590,7 @@ nested_loso_m2_eval <- function(allD,
 #' @param spec Stage-2 spec from \code{stage2_make_spec()}.
 #' @param eval_window Integer; max t_since to evaluate (default 12L).
 #' @param horizons Integer vector of forecast horizons (default \code{c(1L, 2L)}).
-#' @param bias_alpha Numeric; EMA smoothing for bias level (default 0.3).
-#' @param bias_beta Numeric; EMA smoothing for bias trend (default 0.2).
+#' @param bias_alpha Numeric; EMA smoothing for level-only bias correction (default 0.4).
 #' @param k_deriv Integer; basis dim for M0 derivative estimation (default 10L).
 #' @param manual_labels Optional named integer vector of manual ignition labels.
 #' @param flag_args Named list forwarded to \code{flagIgnition()}.
@@ -562,11 +626,13 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
 
   test_s <- fold$test_season
   na_scores  <- tibble::tibble(season = test_s, n = NA_integer_,
-                               mean_nll = NA_real_, brier = NA_real_, rmse_p = NA_real_)
+                               mean_nll = NA_real_, bernoulli_nll = NA_real_,
+                               brier = NA_real_, rmse_p = NA_real_)
   empty_preds <- tibble::tibble(
     season = character(), weekF = integer(), lead = character(),
     t_since = numeric(), p_hat = numeric(), p_obs = numeric(),
-    y_lead = integer(), N_lead = integer()
+    y_lead = integer(), N_lead = integer(),
+    p_lo = numeric(), p_hi = numeric()
   )
 
   if (isTRUE(verbose))
@@ -613,16 +679,36 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
 
   all_rows <- vector("list", length(eval_weeks))
 
-  # Level-only Holt EMA bias tracker
-  bias_level <- list(h1 = 0, h2 = 0)
-  pred_log   <- list()
-  prev_z_ema <- 0
+  # Holt trend-augmented bias tracker (R1) + online season RE (R2)
+  bias_alpha_v <- as.numeric(spec$bias_alpha %||% bias_alpha %||% 0.4)
+  bias_beta_v  <- as.numeric(spec$bias_beta  %||% 0.0)
+  bias_level   <- list(h1 = 0, h2 = 0)
+  bias_trend   <- list(h1 = 0, h2 = 0)
+  pred_log     <- list()
+  prev_z_ema   <- NA_real_
+  peak_passed_prev <- FALSE     # Fix B: post-peak reset
+  fr           <- m2_fit$feature_ranges  # Fix A: clamping ranges
 
   for (i in seq_along(eval_weeks)) {
     ew        <- eval_weeks[i]
     t_since_v <- as.numeric(ew - iWeek_used)
 
-    # Update bias from past predictions whose targets are now observed
+    obs_to_ew <- dplyr::filter(test_allD, .data$weekF <= ew)
+
+    # Fix B: prospective peak detection — reset bias on first post-peak week
+    p_to_ew    <- obs_to_ew$y / pmax(obs_to_ew$N, 1L)
+    p_ew       <- p_to_ew[obs_to_ew$weekF == ew]
+    p_max_prev <- suppressWarnings(max(p_to_ew[obs_to_ew$weekF < ew], na.rm = TRUE))
+    peak_now   <- length(p_ew) > 0L && is.finite(p_max_prev) &&
+                  p_ew[1L] < 0.85 * p_max_prev
+    if (isTRUE(peak_now) && !peak_passed_prev) {
+      bias_level       <- list(h1 = 0, h2 = 0)
+      bias_trend       <- list(h1 = 0, h2 = 0)
+      prev_z_ema       <- NA_real_
+      peak_passed_prev <- TRUE
+    }
+
+    # Update Holt bias from past predictions whose targets are now observed
     obs_at_ew <- dplyr::filter(test_allD, .data$weekF == ew)
     if (nrow(obs_at_ew) > 0) {
       p_obs_ew  <- obs_at_ew$y[1L] / max(obs_at_ew$N[1L], 1L)
@@ -630,15 +716,18 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
       for (pl in pred_log) {
         if (pl$target_weekF == ew) {
           logit_pred <- stats::qlogis(pmin(pmax(pl$m2_p, 1e-6), 1 - 1e-6))
-          resid <- logit_obs - logit_pred
-          hkey  <- paste0("h", pl$h)
-          bias_level[[hkey]] <- bias_alpha * resid +
-            (1 - bias_alpha) * bias_level[[hkey]]
+          resid    <- logit_obs - logit_pred
+          hkey     <- paste0("h", pl$h)
+          lev_prev <- bias_level[[hkey]]
+          trn_prev <- bias_trend[[hkey]]
+          lev_new  <- bias_alpha_v * resid + (1 - bias_alpha_v) * (lev_prev + trn_prev)
+          trn_new  <- bias_beta_v  * (lev_new - lev_prev) + (1 - bias_beta_v) * trn_prev
+          bias_level[[hkey]] <- lev_new
+          bias_trend[[hkey]] <- trn_new
         }
       }
     }
 
-    obs_to_ew <- dplyr::filter(test_allD, .data$weekF <= ew)
     if (nrow(obs_to_ew) < 2L) next
 
     # Compute z_ema from observations up to ew
@@ -654,8 +743,15 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
     z_ema_now <- utils::tail(z_ema_v, 1L)
     logN_now  <- log(max(obs_arr$N[obs_arr$weekF == ew], 1L))
 
-    dz_ema_now  <- z_ema_now - prev_z_ema
+    # Fix A: clamp z_ema before dz_ema
+    if (!is.null(fr$z_ema))
+      z_ema_now <- pmin(fr$z_ema[2L], pmax(fr$z_ema[1L], z_ema_now))
+    dz_ema_now  <- if (is.na(prev_z_ema)) 0 else z_ema_now - prev_z_ema
     prev_z_ema  <- z_ema_now
+
+    # R2: online season RE from observations to this week
+    re_hat_loso <- estimate_season_re_online(fit = fit_obj, obs_df = obs_arr,
+                                             ex_terms = ex_terms)
 
     for (h in as.integer(horizons)) {
       m1_row <- dplyr::filter(m1_test_preds,
@@ -671,10 +767,13 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
       N_lead <- as.integer(obs_target$N[1L])
 
       logit_f_eff <- stats::qlogis(pmin(pmax(m1_p, 1e-6), 1 - 1e-6))
+      # Fix A: clamp logit_f_eff to training range
+      if (!is.null(fr$logit_f_eff))
+        logit_f_eff <- pmin(fr$logit_f_eff[2L], pmax(fr$logit_f_eff[1L], logit_f_eff))
 
-      # Bias correction: level-only
+      # Holt correction + online RE
       hkey <- paste0("h", h)
-      bl   <- bias_level[[hkey]]
+      bl   <- bias_level[[hkey]] + h * bias_trend[[hkey]] + re_hat_loso
 
       pr <- m2_predict_one(
         fit               = fit_obj,
@@ -690,7 +789,7 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
         ex_terms          = ex_terms,
         include_season_re = FALSE,
         soft_cap_fn       = soft_cap_fn,
-        return_ci         = FALSE,
+        return_ci         = TRUE,
         bias_logit        = bl
       )
       if (is.null(pr)) next
@@ -708,7 +807,9 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
         p_hat   = pr$m2_p,
         p_obs   = y_lead / max(N_lead, 1L),
         y_lead  = y_lead,
-        N_lead  = N_lead
+        N_lead  = N_lead,
+        p_lo    = pr$m2_lo,
+        p_hi    = pr$m2_hi
       )))
     }
   }
@@ -718,19 +819,25 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
 
   eps     <- 1e-12
   p_hat_v <- pmin(1 - eps, pmax(eps, preds$p_hat))
-  ll      <- stats::dbinom(preds$y_lead, preds$N_lead, p_hat_v, log = TRUE)
+  p_obs_v <- pmin(1 - eps, pmax(eps, preds$p_obs))
+  # Binomial NLL (legacy, N-dependent)
+  ll_binom   <- stats::dbinom(preds$y_lead, preds$N_lead, p_hat_v, log = TRUE)
+  # Bernoulli NLL (primary tuning metric, N-invariant)
+  ll_bern    <- p_obs_v * log(p_hat_v) + (1 - p_obs_v) * log(1 - p_hat_v)
   brier   <- mean((p_hat_v - preds$p_obs)^2, na.rm = TRUE)
   scores  <- tibble::tibble(
-    season   = test_s,
-    n        = nrow(preds),
-    mean_nll = -mean(ll, na.rm = TRUE),
-    brier    = brier,
-    rmse_p   = sqrt(brier)
+    season        = test_s,
+    n             = nrow(preds),
+    mean_nll      = -mean(ll_binom, na.rm = TRUE),
+    bernoulli_nll = -mean(ll_bern,  na.rm = TRUE),
+    brier         = brier,
+    rmse_p        = sqrt(brier)
   )
 
   if (isTRUE(verbose))
     message("[m2_eval_fb] ", test_s,
-            " | mean_nll=", round(scores$mean_nll, 4),
+            " | bernoulli_nll=", round(scores$bernoulli_nll, 4),
+            " mean_nll=", round(scores$mean_nll, 4),
             " brier=", round(scores$brier, 6),
             " n=", nrow(preds))
 
@@ -846,7 +953,7 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
   bias_alpha_loso <- 0.4
   bias_level_loso <- list(h1 = 0, h2 = 0)
   pred_log_loso   <- list()
-  prev_z_ema_loso <- 0
+  prev_z_ema_loso <- NA_real_  # NA triggers safe first-week dz_ema=0
 
   for (i in seq_along(eval_weeks)) {
     ew        <- eval_weeks[i]
@@ -918,7 +1025,7 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
     z_ema_now <- utils::tail(z_ema_v, 1L)
     logN_now  <- log(max(obs_arr$N[obs_arr$weekF == ew], 1L))
 
-    dz_ema_now_loso <- z_ema_now - prev_z_ema_loso
+    dz_ema_now_loso <- if (is.na(prev_z_ema_loso)) 0 else z_ema_now - prev_z_ema_loso
     prev_z_ema_loso <- z_ema_now
 
     for (h in as.integer(horizons)) {
@@ -1568,22 +1675,29 @@ nested_loso_grid_search <- function(allD,
          "Check warnings above — all specs likely failed during fold execution.")
   }
 
+  has_bern <- "bernoulli_nll" %in% names(scores_df)
   summary_df <- scores_df %>%
     dplyr::group_by(.data$spec_id) %>%
     dplyr::summarise(
-      n_seasons = dplyr::n(),
-      mean_nll  = mean(.data$mean_nll, na.rm = TRUE),
-      brier     = mean(.data$brier,    na.rm = TRUE),
-      rmse_p    = mean(.data$rmse_p,   na.rm = TRUE),
-      .groups   = "drop"
+      n_seasons     = dplyr::n(),
+      mean_nll      = mean(.data$mean_nll, na.rm = TRUE),
+      bernoulli_nll = if (has_bern) mean(.data$bernoulli_nll, na.rm = TRUE) else NA_real_,
+      brier         = mean(.data$brier,    na.rm = TRUE),
+      rmse_p        = mean(.data$rmse_p,   na.rm = TRUE),
+      .groups       = "drop"
     ) %>%
-    dplyr::arrange(.data$mean_nll)
+    dplyr::arrange(if (has_bern) .data$bernoulli_nll else .data$mean_nll)
 
   best_id <- summary_df$spec_id[1]
 
   message("\n====== Grid search complete ======")
-  message("  Best spec: ", best_id,
-          " (mean_nll=", round(summary_df$mean_nll[1], 4), ")")
+  if (has_bern)
+    message("  Best spec: ", best_id,
+            " (bernoulli_nll=", round(summary_df$bernoulli_nll[1], 4),
+            " mean_nll=", round(summary_df$mean_nll[1], 4), ")")
+  else
+    message("  Best spec: ", best_id,
+            " (mean_nll=", round(summary_df$mean_nll[1], 4), ")")
 
   list(
     scores       = scores_df,
@@ -1667,6 +1781,7 @@ nested_loso_refit_best <- function(alignedD_prosp,
 plot_nested_loso_predictions <- function(cv_result,
                                          dat_raw = NULL,
                                          y_max   = 0.5,
+                                         show_ci = TRUE,
                                          title   = "Nested LOSO: predicted vs observed by season") {
 
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Please install ggplot2.")
@@ -1677,9 +1792,37 @@ plot_nested_loso_predictions <- function(cv_result,
     return(ggplot2::ggplot() + ggplot2::theme_void())
   }
 
+  # Approximate 95% CI: binomial SE from p_hat and N_lead (sampling uncertainty)
+  if (show_ci && "N_lead" %in% names(preds)) {
+    preds <- preds |>
+      dplyr::mutate(
+        se_hat = sqrt(.data$p_hat * (1 - .data$p_hat) / pmax(.data$N_lead, 1L)),
+        p_lo   = pmax(0, .data$p_hat - 1.96 * .data$se_hat),
+        p_hi   = pmin(1, .data$p_hat + 1.96 * .data$se_hat)
+      )
+  } else {
+    show_ci <- FALSE
+  }
+
+  p <- ggplot2::ggplot(preds, ggplot2::aes(x = .data$t_since))
+
+  if (show_ci) {
+    p <- p + ggplot2::geom_ribbon(
+      ggplot2::aes(ymin = .data$p_lo, ymax = .data$p_hi, fill = .data$lead),
+      alpha = 0.18
+    ) +
+    ggplot2::scale_fill_manual(
+      values = c("h1" = "steelblue", "h2" = "tomato",
+                 "1"  = "steelblue", "2"  = "tomato"),
+      labels = c("h1" = "h=1 week", "h2" = "h=2 weeks",
+                 "1"  = "h=1 week", "2"  = "h=2 weeks"),
+      guide  = "none"
+    )
+  }
+
   # Use t_since (weeks since ignition) so all seasons start at 0 and the
   # 13-week evaluation window is directly visible.
-  ggplot2::ggplot(preds, ggplot2::aes(x = .data$t_since)) +
+  p +
     ggplot2::geom_point(ggplot2::aes(y = .data$p_obs),
                         colour = "black", size = 1.2, alpha = 0.7) +
     ggplot2::geom_line(ggplot2::aes(y = .data$p_hat, colour = .data$lead),
@@ -1699,7 +1842,8 @@ plot_nested_loso_predictions <- function(cv_result,
       caption = paste0(
         "Dots = observed positivity.  Lines = LOSO out-of-sample predictions ",
         "(GAM trained on other 9 seasons + Holt bias correction).\n",
-        "x = 0 is ignition week; evaluation window is ignition to ignition + 12 weeks."
+        "Shaded bands = approx. 95% CI from binomial SE (p\u0302\u00b11.96\u00d7SE, N=lead-week tests).",
+        "\nx = 0 is ignition week; evaluation window is ignition to ignition + 12 weeks."
       )
     ) +
     ggplot2::theme_bw() +

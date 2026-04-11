@@ -70,16 +70,19 @@ align_multi_template <- function(currentD,
                                  slope_weight        = 0.5,
                                  slope_window        = 4L,
                                  dynamic_temp        = TRUE,
-                                 dynamic_temp_pivot  = 10L) {
+                                 dynamic_temp_pivot  = 10L,
+                                 gam_obj             = NULL) {
 
   stopifnot(is.matrix(eta_mat), ncol(eta_mat) >= 2)
-  n_weeks    <- nrow(eta_mat)
-  seas_names <- colnames(eta_mat)
+  n_weeks       <- nrow(eta_mat)
+  seas_names    <- colnames(eta_mat)
   if (is.null(seas_names)) seas_names <- paste0("S", seq_len(ncol(eta_mat)))
+  all_seas_levs <- seas_names  # preserve full level set before top_k filtering
 
   # --- 1. Build per-season template functions ---
-  template_funs <- lapply(seq_along(seas_names), function(s) {
-    g_s_raw <- stats::splinefun(seq_len(n_weeks), eta_mat[, s], method = "natural")
+  template_funs <- lapply(seq_along(seas_names), function(s_idx) {
+    s_name  <- seas_names[s_idx]
+    g_s_raw <- stats::splinefun(seq_len(n_weeks), eta_mat[, s_idx], method = "natural")
     if (blend_alpha < 1) {
       # Blend toward population reference
       alpha <- blend_alpha
@@ -87,10 +90,26 @@ align_multi_template <- function(currentD,
     } else {
       g_s <- g_s_raw
     }
-    g_s_safe   <- function(u) g_s(pmin(pmax(u, 1), n_weeks))
-    g_s_mu_se  <- function(u) list(mu = g_s_safe(u), se = rep(0, length(u)))
+    g_s_safe  <- function(u) g_s(pmin(pmax(u, 1), n_weeks))
+    # SE: use GAM prediction uncertainty if gam_obj provided; else zero (no CI)
+    if (!is.null(gam_obj)) {
+      g_s_mu_se <- (function(gam, sn, levs, n_wk) {
+        function(u) {
+          u_cl <- pmin(pmax(round(u), 1L), n_wk)
+          nd   <- data.frame(newWeek = u_cl,
+                             season  = factor(sn, levels = levs))
+          pr   <- tryCatch(
+            stats::predict(gam, newdata = nd, type = "link", se.fit = TRUE),
+            error = function(e) list(fit = g_s_safe(u), se.fit = rep(0, length(u)))
+          )
+          list(mu = g_s_safe(u), se = as.numeric(pr$se.fit))
+        }
+      })(gam_obj, s_name, all_seas_levs, n_weeks)
+    } else {
+      g_s_mu_se <- function(u) list(mu = g_s_safe(u), se = rep(0, length(u)))
+    }
     list(g_ref_fun = g_s, g_ref_safe = g_s_safe, g_ref_mu_se = g_s_mu_se,
-         season = seas_names[s])
+         season = s_name)
   })
   names(template_funs) <- seas_names
 
@@ -175,7 +194,9 @@ align_multi_template <- function(currentD,
 
     for (i in seq_along(results)) {
       if (!valid[i] || !is.finite(nlls[i])) next
-      # Template slope at the same newWeek positions
+      # Template slope evaluated at the same raw positions as the observation.
+      # Using aligned positions (u_hat) was tried but hurt MAE by ~17% due to
+      # unit inconsistency across templates with different tau/delta — reverted.
       tf <- template_funs[[i]]
       logit_template <- tf$g_ref_safe(t_obs)
       tmpl_slope <- if (length(unique(t_obs)) >= 2) {
@@ -437,7 +458,8 @@ run_alignment_prospective_multi <- function(
       slope_weight           = slope_weight,
       slope_window           = slope_window,
       dynamic_temp           = dynamic_temp,
-      dynamic_temp_pivot     = dynamic_temp_pivot
+      dynamic_temp_pivot     = dynamic_temp_pivot,
+      gam_obj                = if (!is.null(ref$mod2$gam)) ref$mod2$gam else NULL
     ),
     error = function(e) NULL
   )

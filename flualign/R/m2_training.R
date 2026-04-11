@@ -27,9 +27,11 @@ logit_stable <- function(p, eps = 1e-6) {
 #' @export
 make_soft_cap_fn <- function(fit_obj) {
   p_train  <- fit_obj$model[[1]][, 1L] / rowSums(fit_obj$model[[1]])
-  p_knee   <- as.numeric(stats::quantile(p_train, 0.95, na.rm = TRUE))
   p_max_tr <- max(p_train, na.rm = TRUE)
-  p_ceil   <- min(p_max_tr + 0.5 * (p_max_tr - p_knee), 1.0)
+  # Elbow at historical max (no compression within the observed training range);
+  # ceiling at 110% of historical max (gentle compression only for extrapolation).
+  p_knee   <- p_max_tr
+  p_ceil   <- min(p_max_tr * 1.1, 1.0)
   function(p) {
     above    <- p > p_knee
     p[above] <- p_knee + (p_ceil - p_knee) *
@@ -212,6 +214,7 @@ prep_stage2_joint <- function(dat,
                               pre_buffer = 0L,
                               alpha_state = 0.30,
                               m1_preds = NULL,
+                              feature_ranges = NULL,
                               verbose = FALSE) {
   stopifnot(is.data.frame(dat))
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
@@ -328,7 +331,29 @@ prep_stage2_joint <- function(dat,
       z_resid = .data$z_ema - .data$logit_f_eff
     ) %>%
     dplyr::filter(is.finite(.data$z_ema), is.finite(.data$logN_now))
-  
+
+  # ---- clamp features to training ranges for LOSO/deployment parity ----
+  if (!is.null(feature_ranges)) {
+    if (!is.null(feature_ranges$z_ema)) {
+      fr_ze <- feature_ranges$z_ema
+      d0 <- d0 |>
+        dplyr::group_by(.data$season) |>
+        dplyr::mutate(
+          z_ema  = pmin(fr_ze[2L], pmax(fr_ze[1L], .data$z_ema)),
+          dz_ema = .data$z_ema - dplyr::lag(.data$z_ema, n = 1L,
+                                             default = dplyr::first(.data$z_ema))
+        ) |>
+        dplyr::ungroup()
+    }
+    if (!is.null(feature_ranges$logit_f_eff)) {
+      fr_lfe <- feature_ranges$logit_f_eff
+      d0 <- dplyr::mutate(d0,
+        logit_f_eff = pmin(fr_lfe[2L], pmax(fr_lfe[1L], .data$logit_f_eff))
+      )
+    }
+    d0 <- dplyr::mutate(d0, z_resid = .data$z_ema - .data$logit_f_eff)
+  }
+
   out <- lapply(leads, function(h) {
     d0 %>%
       dplyr::group_by(.data$season) %>%
@@ -595,8 +620,45 @@ train_stage2_joint_prepped <- function(d_all,
   }
 
   list(fit = fit, train_data = d_train, tuned = best_mean_nll, spec = spec,
-       lambda_w = lambda_w)
+       lambda_w = lambda_w,
+       feature_ranges = list(
+         logit_f_eff = range(d_train$logit_f_eff, na.rm = TRUE),
+         z_ema       = range(d_train$z_ema,       na.rm = TRUE)
+       ))
 }
+
+#' Estimate season random effect causally from accumulated observations
+#'
+#' Computes a shrinkage scalar for the current season's intercept shift on the
+#' logit scale using only observations up to the current week. The estimate
+#' equals the mean logit-scale residual (observed minus GAM prediction without
+#' season RE), shrunk toward zero by \code{lambda_re}. Adding this scalar to
+#' \code{bias_logit} in \code{m2_predict_one()} replaces the hard exclusion of
+#' \code{s(season)} while remaining causally safe.
+#'
+#' @param fit Fitted mgcv GAM with a season random effect.
+#' @param obs_df Data frame of current-season observations with columns
+#'   \code{y}, \code{N}, and all covariates required by \code{fit}.
+#' @param ex_terms Character vector of additional terms to exclude.
+#' @param lambda_re Shrinkage strength; default 1 (one pseudo-observation at 0).
+#' @return Numeric scalar (the shrinkage RE estimate on the logit scale).
+#' @export
+estimate_season_re_online <- function(fit, obs_df, ex_terms = NULL, lambda_re = 1) {
+  if (nrow(obs_df) == 0L) return(0)
+  eta_no_re <- tryCatch(
+    as.numeric(stats::predict(fit, newdata = obs_df, type = "link",
+                              exclude = unique(c(ex_terms, "s(season)")))),
+    error = function(e) NULL
+  )
+  if (is.null(eta_no_re)) return(0)
+  p_obs     <- obs_df$y / pmax(obs_df$N, 1L)
+  logit_obs <- stats::qlogis(pmin(pmax(p_obs, 1e-6), 1 - 1e-6))
+  resids    <- logit_obs - eta_no_re
+  n         <- sum(is.finite(resids))
+  if (n == 0L) return(0)
+  sum(resids[is.finite(resids)]) / (n + lambda_re)
+}
+
 
 #' Extract best Stage-2 spec from a tuning result
 #'
@@ -615,22 +677,26 @@ stage2_spec_from_tuning <- function(tuned2) {
   best_id  <- tuned2$best$spec_id[[1L]]
   best_row <- tuned2$by_spec_grid[tuned2$by_spec_grid$spec_id == best_id, , drop = FALSE]
   if (nrow(best_row) == 0L) stop("spec_id '", best_id, "' not found in by_spec_grid")
+  .pick <- function(nm, default) {
+    if (nm %in% names(best_row)) best_row[[nm]] else default
+  }
   stage2_make_spec(
     delta          = best_row$delta,
     K              = best_row$Kr,
     k_f            = best_row$k_f,
     alpha_state    = best_row$alpha_state,
-    T              = best_row$T,
-    k_e            = best_row$k_e,
-    k_n            = best_row$k_n,
-    k_de           = if ("k_de" %in% names(best_row)) best_row$k_de else 0L,
-    k_w            = best_row$k_w,
-    k_s            = best_row$k_s,
-    pre_buffer     = best_row$Kb,
-    bs_week        = best_row$bs_week,
-    bs_fs_marginal = best_row$bs_fs_marginal,
-    lambda_w       = if ("lambda_w" %in% names(best_row)) best_row$lambda_w else 0,
-    w_floor        = if ("w_floor"  %in% names(best_row)) best_row$w_floor  else 0
+    T              = .pick("T",    "S"),
+    k_e            = .pick("k_e",  6L),
+    k_n            = .pick("k_n",  6L),
+    k_r            = .pick("k_r",  0L),
+    k_de           = .pick("k_de", 0L),
+    k_w            = .pick("k_w",  0L),
+    k_s            = .pick("k_s",  0L),
+    pre_buffer     = .pick("Kb",   0L),
+    bs_week        = .pick("bs_week",        "ts"),
+    bs_fs_marginal = .pick("bs_fs_marginal", "tp"),
+    lambda_w       = .pick("lambda_w", 0),
+    w_floor        = .pick("w_floor",  0)
   )
 }
 

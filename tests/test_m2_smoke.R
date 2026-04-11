@@ -52,10 +52,9 @@ message("\n--- Test 2: Feature columns are consistent ---")
 if (!is.null(m2_kit$fit)) {
   fit <- m2_kit$fit
   trained_vars <- names(fit$var.summary)
-  expected <- c("lead", "logit_f_eff", "z_ema", "d1_now", "y_lead", "N_lead")
+  expected <- c("lead", "logit_f_eff", "z_ema")
   found <- expected %in% trained_vars
-  check("All expected vars in trained model",
-        all(found[expected != "y_lead" & expected != "N_lead"]))
+  check("All expected vars in trained model", all(found))
   check("No NaN in var.summary",
         !any(sapply(fit$var.summary, function(x) any(is.nan(x)))))
 }

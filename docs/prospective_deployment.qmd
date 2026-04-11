@@ -89,9 +89,9 @@ DATA_DIR   <- normalizePath("../data", mustWork = TRUE)
 WF_CACHE   <- file.path(DATA_DIR, "deploy_wf_cache.rds")
 
 # ---- M2 mode ----
-# "weekly_refit" refits the GAM each week with current-season data.
-# "frozen" uses the pre-trained GAM without refitting.
-M2_MODE <- "weekly_refit"
+# "frozen" uses the pre-trained GAM (v13 best spec) with Holt EMA bias
+# correction + online season RE at deployment time. Replaces weekly_refit.
+M2_MODE <- "frozen"
 
 # ---- Cache control ----
 # Set FORCE_REFRESH = TRUE to rerun the walk-forward (e.g., after new data
@@ -420,7 +420,25 @@ if (nrow(df_active) == 0) {
       # Dashed red: bridge (end of solid) → h=1, h=2 current forecast
       m2_future_line <- bind_rows(bridge_pt, m2_aligned %>% select(newWeek, m2_p)) %>%
         arrange(newWeek)
+
+      # CI ribbon: zero-width at bridge, then opens to h=1/h=2 forecast intervals
+      bridge_ci <- tibble(
+        newWeek = current_newW,
+        m2_lo   = last_retro_val %||% NA_real_,
+        m2_hi   = last_retro_val %||% NA_real_
+      )
+      m2_ci_ribbon <- bind_rows(
+        bridge_ci,
+        m2_aligned %>% select(newWeek, m2_lo, m2_hi)
+      ) %>% arrange(newWeek)
+
       plt <- plt %>%
+        add_ribbons(
+          data = m2_ci_ribbon, x = ~newWeek, ymin = ~m2_lo, ymax = ~m2_hi,
+          fillcolor = "rgba(178, 34, 34, 0.15)",
+          line = list(color = "transparent"),
+          name = "M\u2082 95% CI"
+        ) %>%
         add_lines(
           data = m2_future_line, x = ~newWeek, y = ~m2_p,
           line = list(color = "firebrick", width = 2, dash = "dash"),
