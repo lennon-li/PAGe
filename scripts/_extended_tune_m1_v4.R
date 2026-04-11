@@ -63,12 +63,13 @@ allD <- read.csv("data/flu_testing_data.csv") |>
 
 params <- readRDS("data/stage1_tuning.rds")$best_params
 
-manual_labels <- c(
-  "2012-13" = 18L, "2013-14" = 20L, "2014-15" = 20L,
-  "2015-16" = 24L, "2016-17" = 19L, "2017-18" = 20L,
+manual_labels_orig <- c(
+  "2012-13" = 24L, "2013-14" = 22L, "2014-15" = 17L,
+  "2015-16" = 19L, "2016-17" = 21L, "2017-18" = 18L,
   "2018-19" = 19L, "2019-20" = 22L, "2022-23" = 15L,
   "2023-24" = 20L, "2024-25" = 23L
 )
+manual_labels <- manual_labels_orig - 1L  # matches v3 baseline (MAE = 1.169)
 
 # ---- Grid ----
 # Fix known-best params; ablate slope dimensions.
@@ -108,7 +109,9 @@ tune_v4 <- tune_m1_alignment(
   dynamic_temp       = TRUE,
   dynamic_temp_pivot = 10L,
   align_peak_decay   = 0.3,
-  align_trough_weight = 0.1
+  align_trough_weight = 0.1,
+  peak_weight_boost  = 3,    # matches v3 baseline setting
+  peak_weight_decay  = 0.3
 )
 
 # ---- Results ----

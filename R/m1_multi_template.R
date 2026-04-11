@@ -67,8 +67,8 @@ align_multi_template <- function(currentD,
                                  trough_weight       = 0.1,
                                  rise_weight         = 1.0,
                                  peak_decay          = 0.3,
-                                 slope_weight        = 0.5,
-                                 slope_window        = 4L,
+                                 slope_weight        = 1.0,
+                                 slope_window        = 6L,
                                  dynamic_temp        = TRUE,
                                  dynamic_temp_pivot  = 10L,
                                  gam_obj             = NULL) {
@@ -379,8 +379,8 @@ run_alignment_prospective_multi <- function(
   temperature         = 1.0,
   top_k               = NULL,
   blend_alpha         = 1.0,
-  slope_weight        = 0.5,
-  slope_window        = 4L,
+  slope_weight        = 1.0,
+  slope_window        = 6L,
   dynamic_temp        = TRUE,
   dynamic_temp_pivot  = 10L
 ) {
