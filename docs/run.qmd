@@ -224,8 +224,10 @@ if (file.exists(WF_CACHE)) {
       level           = 0.95,
       min_obs         = 4L,
       curvature_ratio = 1.0,
-      temperature     = 0.25,
-      rise_weight     = 1.0
+      temperature     = 0.25,   # ← TUNED: v5-v7 LOSO grid
+      rise_weight     = 1.0,    # ← TUNED
+      slope_weight    = 8.0,    # ← TUNED: interior optimum (0→30 tested)
+      slope_window    = 6L      # ← TUNED: optimal window
     )
 
     if (ap$state == "pre_ignition") {
