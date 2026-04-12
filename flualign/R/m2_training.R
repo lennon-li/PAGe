@@ -356,6 +356,16 @@ prep_stage2_joint <- function(dat,
     d0 <- dplyr::mutate(d0, z_resid = .data$z_ema - .data$logit_f_eff)
   }
 
+  # ---- standardize dz_ema (unit-variance scaling) ----
+  # Training: compute SD from this fold, carry out via attr for feature_ranges.
+  # LOSO/deployment: divide by stored dz_ema_sd for exact parity.
+  dze_sd <- if (!is.null(feature_ranges) && !is.null(feature_ranges$dz_ema_sd)) {
+    feature_ranges$dz_ema_sd
+  } else {
+    max(stats::sd(d0$dz_ema, na.rm = TRUE), 1e-6)
+  }
+  d0 <- dplyr::mutate(d0, dz_ema = .data$dz_ema / dze_sd)
+
   out <- lapply(leads, function(h) {
     d0 %>%
       dplyr::group_by(.data$season) %>%
@@ -436,7 +446,9 @@ prep_stage2_joint <- function(dat,
             " leads={", paste(leads, collapse=","), "} rows=", nrow(d))
   }
   
-  as.data.frame(d)
+  d <- as.data.frame(d)
+  attr(d, "dz_ema_sd") <- dze_sd  # carry scaling out for feature_ranges
+  d
 }
 
 # =========================================================
@@ -636,7 +648,8 @@ train_stage2_joint_prepped <- function(d_all,
        lambda_w = lambda_w,
        feature_ranges = list(
          logit_f_eff = range(d_train$logit_f_eff, na.rm = TRUE),
-         z_ema       = range(d_train$z_ema,       na.rm = TRUE)
+         z_ema       = range(d_train$z_ema,       na.rm = TRUE),
+         dz_ema_sd   = attr(d_train, "dz_ema_sd") %||% 1.0
        ))
 }
 

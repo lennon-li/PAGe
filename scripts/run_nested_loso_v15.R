@@ -2,17 +2,22 @@
 # ============================================================
 # Nested LOSO M2 Grid Search — v15
 #
-# Changes from v13:
-#   - Phase 1 REBUILT from scratch using fixed M1 code:
+# Changes from v14b:
+#   - Phase 1 REBUILT with LOCKED M1 spec:
+#       * slope_weight=8, slope_window=6 (v5-v7 LOSO optimum, MAE=1.275)
+#       * dynamic_temp=FALSE (locked from ablation)
 #       * slope-similarity uses aligned positions (u_hat per template)
-#       * CI propagated from GAM SE instead of hardcoded zero
-#   - Eval now computes Bernoulli NLL (primary metric, N-invariant)
-#     and stores p_lo/p_hi (GAM ±1.96 SE CI) in predictions
-#   - alpha_state expanded to {0.30, 0.35, 0.40, 0.45, 0.50}
-#     (v14 best was 0.40, which was outside v13's 0.10–0.30 range)
-#   - bias_beta fixed at 0.0 (v13/v14 confirmed bb=0.0 is best)
-#   - bias_alpha search includes 0.1 to capture low-alpha regime
-#   - Grid size: 4 x 2 x 5 x 3 x 4 = 480 specs
+#       * CI propagated from GAM SE (logit_spread now populated)
+#   - New covariate: logit_spread (alignment uncertainty from M1 ensemble)
+#       * k_sp ∈ {0, 2} — tests whether spread improves M2 calibration
+#   - dz_ema now standardized (unit-variance) in prep_stage2_joint():
+#       * dz_ema_sd stored in feature_ranges for LOSO/deployment parity
+#       * k_de ∈ {0, 2} — re-tests growth-rate term after rescaling
+#   - alpha_state centred on v14 optimum: {0.30, 0.35, 0.40, 0.45, 0.50}
+#   - bias_beta fixed at 0.0 (confirmed optimal in v13/v14)
+#   - bias_alpha includes 0.1 (v14 best was 0.2, check lower end)
+#   - Grid: 4(k_f) x 2(k_e) x 5(as) x 3(k_r) x 4(ba) x 2(k_sp) x 2(k_de)
+#           = 960 specs
 #
 # Output: data/nested_loso_v15_phase1.rds
 #         data/nested_loso_v15_phase2.rds (resumable checkpoint)
@@ -81,19 +86,21 @@ flag_args <- list(
   min_window = 10L, w_min = 21L, w_max = 21L, d2_relax = -0.01
 )
 
-# ---- 2. M1 settings (fixed M1: slope-similarity + SE propagation) ----
+# ---- 2. M1 settings (LOCKED spec from v5-v7 LOSO grid, MAE=1.275) ----
 M1 <- list(
   k_ref = 25L, ref_method = "fs", temperature = 0.25,
   rise_weight = 1.0, trough_weight = 0.1, peak_decay = 0.3,
-  slope_weight = 0.5, slope_window = 4L,
-  dynamic_temp = TRUE, dynamic_temp_pivot = 10L
+  slope_weight = 8.0,   # ← LOCKED: interior optimum over {0 … 30}
+  slope_window = 6L,    # ← LOCKED: optimal window (4,6,8,10,12 tested)
+  dynamic_temp = FALSE, dynamic_temp_pivot = 10L
 )
 
 test_seasons <- sort(setdiff(unique(allD$season), EXCLUDE_SEAS))
 cat("Test seasons (", length(test_seasons), "):", paste(test_seasons, collapse = ", "), "\n\n")
 
 # ---- 3. v15 spec grid ----
-# bias_beta fixed at 0.0; alpha_state expanded around 0.40
+# bias_beta=0.0 confirmed optimal; alpha_state centred on v14 best (0.40)
+# New dimensions: k_sp (logit_spread smooth) + k_de (dz_ema, now standardized)
 grid_v15 <- tidyr::crossing(
   delta       = 0L,
   Kr          = 1L,
@@ -101,17 +108,18 @@ grid_v15 <- tidyr::crossing(
   k_e         = c(2L, 3L),
   alpha_state = c(0.30, 0.35, 0.40, 0.45, 0.50),
   k_r         = c(0L, 2L, 3L),
-  k_de        = 0L,
+  k_de        = c(0L, 2L),   # ← NEW: dz_ema term (standardized, safe to test)
+  k_sp        = c(0L, 2L),   # ← NEW: logit_spread alignment uncertainty term
   bias_alpha  = c(0.1, 0.2, 0.3, 0.4),
   bias_beta   = 0.0
 )
 
 specs_v15 <- purrr::pmap(grid_v15, function(delta, Kr, k_f, k_e, alpha_state,
-                                              k_r, k_de, bias_alpha, bias_beta) {
+                                              k_r, k_de, k_sp, bias_alpha, bias_beta) {
   stage2_make_spec(
     delta = delta, Kr = Kr, T = "S",
     k_f = k_f, k_e = k_e, alpha_state = alpha_state,
-    k_r = k_r, k_de = k_de,
+    k_r = k_r, k_de = k_de, k_sp = k_sp,
     k_n = 0L, k_w = 0L, k_s = 0L,
     lambda_w = 0, w_floor = 0.05,
     bias_alpha = bias_alpha, bias_beta = bias_beta
@@ -125,6 +133,7 @@ names(specs_v15) <- paste0(
   "_as", grid_v15$alpha_state,
   "_kr", grid_v15$k_r,
   "_kde", grid_v15$k_de,
+  "_ksp", grid_v15$k_sp,
   "_ba", grid_v15$bias_alpha,
   "_bb", grid_v15$bias_beta
 )
@@ -205,6 +214,7 @@ if (Sys.getenv("SMOKE_TEST", unset = "0") == "1") {
   smoke_id   <- names(specs_v15)[which(
     grid_v15$k_f == 4L & grid_v15$k_e == 2L &
     grid_v15$alpha_state == 0.40 & grid_v15$k_r == 2L &
+    grid_v15$k_de == 0L & grid_v15$k_sp == 0L &
     grid_v15$bias_alpha == 0.2
   )[1]]
   smoke_spec <- specs_v15[[smoke_id]]
