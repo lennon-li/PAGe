@@ -308,51 +308,32 @@ make_param_plot <- function(pvar) {
 }
 ```
 
-### tau - time shift
+::: {.panel-tabset}
 
-```{r param-plot-tau}
+```{r param-tabs}
 #| echo: false
 #| warning: false
-make_param_plot("tau")
+#| results: asis
+
+param_tab_chunks <- lapply(param_vars, function(pvar) {
+  e <- new.env(parent = globalenv())
+  e$p <- make_param_plot(pvar)
+  knitr::knit_child(
+    text = c(sprintf("### %s", param_labels[[pvar]]), "",
+             "```{r echo=FALSE, warning=FALSE}", "p", "```", ""),
+    envir = e, quiet = TRUE
+  )
+})
+cat(unlist(param_tab_chunks), sep = "\n")
 ```
 
-### delta - scale
-
-```{r param-plot-delta}
-#| echo: false
-#| warning: false
-make_param_plot("delta")
-```
-
-### a - lower asymptote
-
-```{r param-plot-a}
-#| echo: false
-#| warning: false
-make_param_plot("a")
-```
-
-### b - upper asymptote
-
-```{r param-plot-b}
-#| echo: false
-#| warning: false
-make_param_plot("b")
-```
-
-### t_peak - predicted peak (newWeek)
-
-```{r param-plot-tpeak}
-#| echo: false
-#| warning: false
-make_param_plot("t_peak")
-```
+:::
 
 ## Results by season
 
-Per-season walkforward alignment using the multi-template ensemble. Grey = FS median reference curve (jagged, for visual reference). Blue = fitted past, red = forecast. Vertical lines: dashed grey = ignition, solid black = current newWeek, dashed red = estimated peak, solid blue = observed peak. All x-axis positions and labels are in **newWeek** (alignment-indexed). Orange markers at y=0.05 show corresponding **flu weeks** for clinical reference.
+Per-season walkforward alignment using the multi-template ensemble. Grey = FS median reference curve. Blue = fitted past, red = forecast. Dashed grey = ignition, solid black = current newWeek, dashed red = estimated peak, solid blue = observed peak. Orange markers at y=0.05 show corresponding flu weeks.
 
-```{r season-reports}
+```{r season-setup}
 #| echo: false
 #| warning: false
 
@@ -366,223 +347,174 @@ true_peaks_obs <- allD %>%
   ungroup() %>%
   select(season, true_peak_weekF = weekF)
 
-report_items <- list()
+make_season_plot <- function(s, ew, s_params, ref_curve, obs_s,
+                              true_peak_weekF, nW_s) {
+  pw           <- wf$params_df %>% filter(season == s, eval_week == ew)
+  iWeek_hat_ew <- pw$iWeek_hat[[1]]
+  anchor_ew    <- pw$anchorWeek[[1]]
+  t_peak_ew    <- pw$t_peak[[1]]
+  peak_nW      <- round(t_peak_ew)
+  current_newW <- ew - iWeek_hat_ew + anchor_ew
+  true_peak_newW <- if (!is.na(true_peak_weekF))
+    true_peak_weekF - iWeek_hat_ew + anchor_ew else NA_real_
 
-for (s in all_seasons_wf) {
-  season_items <- list(htmltools::tags$h2(s))
+  fc_smooth <- wf$forecast_df %>%
+    filter(season == s, eval_week == ew, kind == "forecast") %>%
+    arrange(newWeek)
+  if (nrow(fc_smooth) == 0) return(NULL)
+  junction  <- fc_smooth$newWeek[which.min(abs(fc_smooth$newWeek - current_newW))]
+  fc_past   <- fc_smooth %>% filter(newWeek <= junction)
+  fc_future <- fc_smooth %>% filter(newWeek >= junction)
 
-  s_all <- wf$params_df %>%
-    filter(season == s, !is.na(iWeek_hat))
+  obs_aligned <- obs_s %>%
+    filter(weekF <= ew) %>%
+    mutate(newWeek = weekF - iWeek_hat_ew + anchor_ew)
 
+  y_max <- max(c(fc_smooth$p_hi, obs_aligned$p_obs), na.rm = TRUE) * 1.1
+  y_max <- max(y_max, 0.15)
+
+  nw_range <- range(c(fc_smooth$newWeek, obs_aligned$newWeek), na.rm = TRUE)
+  nw_ticks <- seq(max(1L, floor(nw_range[1])), min(52L, ceiling(nw_range[2])), by = 2L)
+  flu_ticks <- tibble(
+    newWeek  = as.numeric(nw_ticks),
+    flu_week = newWeek_to_fluWeek(nw_ticks, anchor_ew, iWeek_hat_ew, nW_s),
+    y        = 0.05
+  )
+  current_fluWk <- newWeek_to_fluWeek(current_newW, anchor_ew, iWeek_hat_ew, nW_s)
+
+  plt <- plot_ly() %>%
+    add_lines(data = ref_curve, x = ~newWeek, y = ~p_ref,
+              line = list(color = "rgba(160,160,160,0.5)", width = 1.2),
+              name = "FS ref") %>%
+    add_ribbons(data = fc_smooth, x = ~newWeek, ymin = ~p_lo, ymax = ~p_hi,
+                fillcolor = "rgba(150,150,150,0.15)",
+                line = list(color = "transparent"), name = "95% CI") %>%
+    add_lines(data = fc_past, x = ~newWeek, y = ~p_hat,
+              line = list(color = "steelblue", width = 2.5), name = "Fitted") %>%
+    add_lines(data = fc_future, x = ~newWeek, y = ~p_hat,
+              line = list(color = "firebrick", width = 2.5), name = "Forecast") %>%
+    add_markers(data = obs_aligned, x = ~newWeek, y = ~p_obs,
+                marker = list(color = "black", size = 5, opacity = 0.75),
+                name = "Observed") %>%
+    add_text(data = flu_ticks, x = ~newWeek, y = ~y,
+             text = ~as.character(flu_week),
+             textfont = list(size = 9, color = "darkorange"),
+             name = "Flu wk", showlegend = FALSE) %>%
+    add_segments(x = anchor_ew, xend = anchor_ew, y = 0, yend = y_max,
+                 line = list(color = "grey50", dash = "dash", width = 1.5),
+                 name = paste0("Ignition (nW", anchor_ew, ")")) %>%
+    add_segments(x = current_newW, xend = current_newW, y = 0, yend = y_max,
+                 line = list(color = "black", dash = "solid", width = 2),
+                 name = paste0("Now (nW", current_newW, ")")) %>%
+    add_segments(x = t_peak_ew, xend = t_peak_ew, y = 0, yend = y_max,
+                 line = list(color = "firebrick", dash = "dash", width = 1.5),
+                 name = paste0("Est. peak (nW", peak_nW, ")"))
+
+  if (!is.na(true_peak_newW)) {
+    plt <- plt %>%
+      add_segments(x = true_peak_newW, xend = true_peak_newW, y = 0, yend = y_max,
+                   line = list(color = "steelblue", dash = "solid", width = 1.5),
+                   name = paste0("Obs. peak (nW", round(true_peak_newW), ")"))
+  }
+
+  plt %>% layout(
+    title = paste0(s, " | nW ", current_newW, " (flu wk ", current_fluWk,
+                   ") | est peak nW ", peak_nW),
+    xaxis = list(title = "newWeek (aligned)"),
+    yaxis = list(title = "Positivity", range = c(0, y_max)),
+    legend = list(orientation = "h", y = -0.20)
+  )
+}
+```
+
+::: {.panel-tabset}
+
+```{r season-tabs}
+#| echo: false
+#| warning: false
+#| results: asis
+
+season_chunks <- lapply(all_seasons_wf, function(s) {
+  s_all <- wf$params_df %>% filter(season == s, !is.na(iWeek_hat))
   if (nrow(s_all) == 0) {
-    season_items <- c(
-      season_items,
-      list(htmltools::tags$p("No forecasts generated (ignition never detected)."))
-    )
-    report_items <- c(report_items, season_items)
-    next
+    return(knitr::knit_child(
+      text = c(sprintf("## %s", s), "", "*No forecasts — ignition not detected.*", ""),
+      quiet = TRUE
+    ))
   }
 
-  if (!"peak_passed" %in% names(s_all)) {
-    s_all <- s_all %>%
-      mutate(peak_weekF = round(t_peak - anchorWeek + iWeek_hat),
-             peak_passed = FALSE)
-  }
+  if (!"peak_passed" %in% names(s_all))
+    s_all <- s_all %>% mutate(peak_weekF = round(t_peak - anchorWeek + iWeek_hat),
+                               peak_passed = FALSE)
 
   first_peak_ew <- s_all %>% filter(peak_passed) %>%
     slice_min(eval_week, n = 1, with_ties = FALSE) %>% pull(eval_week)
   cutoff_ew <- if (length(first_peak_ew) > 0) first_peak_ew + 2L else max(s_all$eval_week)
+  s_params  <- s_all %>% filter(eval_week <= cutoff_ew)
 
-  s_params <- s_all %>%
-    filter(eval_week <= cutoff_ew) %>%
-    select(eval_week, iWeek_hat, iWeek_true, peak_weekF, anchorWeek,
-           tau, delta, t_peak, t_peak_lo, t_peak_hi, peak_passed)
-
-  # Compute newWeek columns for the data table
-  s_params_display <- s_params %>%
-    mutate(
-      current_nW = eval_week - iWeek_hat + anchorWeek,
-      peak_nW    = round(t_peak)
-    ) %>%
+  # Build data table
+  s_disp <- s_params %>%
+    mutate(current_nW = eval_week - iWeek_hat + anchorWeek,
+           peak_nW    = round(t_peak)) %>%
     select(current_nW, peak_nW, tau, delta, t_peak, t_peak_lo, t_peak_hi, peak_passed)
-
-  tbl <- gt(s_params_display) %>%
-    cols_label(
-      current_nW  = "Current newWeek",
-      peak_nW     = "Est. peak (nW)",
-      tau         = "tau",
-      delta       = "delta",
-      t_peak      = "t_peak",
-      t_peak_lo   = "t_peak lo",
-      t_peak_hi   = "t_peak hi",
-      peak_passed = "Peak passed"
-    ) %>%
+  tbl <- gt(s_disp) %>%
+    cols_label(current_nW = "nW", peak_nW = "Est. peak nW",
+               tau = "τ", delta = "δ", t_peak = "t_peak",
+               t_peak_lo = "lo", t_peak_hi = "hi", peak_passed = "Peak?") %>%
     fmt_number(columns = c(tau, delta, t_peak, t_peak_lo, t_peak_hi), decimals = 2) %>%
     fmt_integer(columns = c(current_nW, peak_nW)) %>%
-    tab_style(
-      style = cell_fill(color = "#f0f4ff"),
-      locations = cells_body(rows = seq(1, nrow(s_params_display), 2))
-    ) %>%
-    tab_style(
-      style = cell_fill(color = "#fff0f0"),
-      locations = cells_body(rows = peak_passed == TRUE)
-    ) %>%
+    tab_style(style = cell_fill(color = "#fff0f0"),
+              locations = cells_body(rows = peak_passed == TRUE)) %>%
     tab_options(table.width = pct(100), table.font.size = "13px")
 
-  obs_s <- allD %>%
-    filter(season == s) %>%
-    mutate(p_obs = y / N)
+  obs_s <- allD %>% filter(season == s) %>% mutate(p_obs = y / N)
+  true_peak_weekF_s <- true_peaks_obs %>% filter(season == s) %>%
+    pull(true_peak_weekF)
+  true_peak_weekF_s <- if (length(true_peak_weekF_s) > 0) true_peak_weekF_s[[1]] else NA_integer_
+  nW_s   <- if (!is.null(obs_s$nW_true[1]) && !is.na(obs_s$nW_true[1])) obs_s$nW_true[1] else 52L
+  ref_s  <- wf$ref_list[[s]]
+  ref_curve_s <- tibble(newWeek = seq(1, 52, 0.5),
+                         p_ref   = plogis(ref_s$g_ref_fun(seq(1, 52, 0.5))))
 
-  true_peak_weekF <- true_peaks_obs %>%
-    filter(season == s) %>% pull(true_peak_weekF)
-  true_peak_weekF <- if (length(true_peak_weekF) > 0) true_peak_weekF[[1]] else NA_integer_
-
-  # nW_true for this season (for flu week conversion)
-  nW_s <- obs_s$nW_true[1]
-  if (is.null(nW_s) || is.na(nW_s)) nW_s <- 52L
-
-  ref_s     <- wf$ref_list[[s]]
-  newW_grid <- seq(1, 52, by = 0.5)
-  ref_curve <- tibble(
-    newWeek = newW_grid,
-    p_ref   = plogis(ref_s$g_ref_fun(newW_grid))
-  )
-
-  season_tabs <- lapply(s_params$eval_week, function(ew) {
-    .ref_curve <- ref_curve
-
-    pw           <- wf$params_df %>% filter(season == s, eval_week == ew)
-    iWeek_hat_ew <- pw$iWeek_hat[[1]]
-    anchor_ew    <- pw$anchorWeek[[1]]
-    t_peak_ew    <- pw$t_peak[[1]]
-    peak_nW      <- round(t_peak_ew)
-
-    current_newW    <- ew - iWeek_hat_ew + anchor_ew
-    true_peak_newW  <- if (!is.na(true_peak_weekF))
-                         true_peak_weekF - iWeek_hat_ew + anchor_ew else NA_real_
-
-    fc_smooth <- wf$forecast_df %>%
-                   filter(season == s, eval_week == ew, kind == "forecast") %>%
-                   arrange(newWeek)
-    junction  <- fc_smooth$newWeek[which.min(abs(fc_smooth$newWeek - current_newW))]
-    fc_past   <- fc_smooth %>% filter(newWeek <= junction)
-    fc_future <- fc_smooth %>% filter(newWeek >= junction)
-
-    obs_aligned <- obs_s %>%
-      filter(weekF <= ew) %>%
-      mutate(newWeek = weekF - iWeek_hat_ew + anchor_ew)
-
-    y_max <- max(c(fc_smooth$p_hi, obs_aligned$p_obs), na.rm = TRUE) * 1.1
-    y_max <- max(y_max, 0.15)
-
-    # Flu week annotation markers at y = 0.05
-    # Place at integer newWeek positions that are within the plot range
-    nw_range <- range(c(fc_smooth$newWeek, obs_aligned$newWeek), na.rm = TRUE)
-    nw_ticks <- seq(max(1L, floor(nw_range[1])), min(52L, ceiling(nw_range[2])), by = 2L)
-    flu_ticks <- tibble(
-      newWeek  = as.numeric(nw_ticks),
-      flu_week = newWeek_to_fluWeek(nw_ticks, anchor_ew, iWeek_hat_ew, nW_s),
-      y        = 0.05
-    )
-
-    # Current flu week for title
-    current_fluWk <- newWeek_to_fluWeek(current_newW, anchor_ew, iWeek_hat_ew, nW_s)
-
-    plt <- plot_ly() %>%
-      # FS median reference curve (jagged)
-      add_lines(
-        data = .ref_curve, x = ~newWeek, y = ~p_ref,
-        line = list(color = "rgba(160,160,160,0.5)", width = 1.2),
-        name = "FS median ref"
-      ) %>%
-      # CI ribbon
-      add_ribbons(
-        data = fc_smooth, x = ~newWeek, ymin = ~p_lo, ymax = ~p_hi,
-        fillcolor = "rgba(150,150,150,0.15)",
-        line = list(color = "transparent"),
-        name = "95% CI", showlegend = TRUE
-      ) %>%
-      # Fitted past (blue)
-      add_lines(
-        data = fc_past, x = ~newWeek, y = ~p_hat,
-        line = list(color = "steelblue", width = 2.5),
-        name = "Fitted (past)"
-      ) %>%
-      # Forecast (red)
-      add_lines(
-        data = fc_future, x = ~newWeek, y = ~p_hat,
-        line = list(color = "firebrick", width = 2.5),
-        name = "Forecast"
-      ) %>%
-      # Observed data
-      add_markers(
-        data = obs_aligned, x = ~newWeek, y = ~p_obs,
-        marker = list(color = "black", size = 5, opacity = 0.75),
-        name = "Observed"
-      ) %>%
-      # Flu week annotations at y=0.05
-      add_text(
-        data = flu_ticks, x = ~newWeek, y = ~y,
-        text = ~as.character(flu_week),
-        textfont = list(size = 9, color = "darkorange"),
-        name = "Flu week", showlegend = FALSE
-      ) %>%
-      # Ignition (dashed grey)
-      add_segments(
-        x = anchor_ew, xend = anchor_ew, y = 0, yend = y_max,
-        line = list(color = "grey50", dash = "dash", width = 1.5),
-        name = paste0("Ignition (nW ", anchor_ew, ")"), showlegend = TRUE
-      ) %>%
-      # Current week (solid black)
-      add_segments(
-        x = current_newW, xend = current_newW, y = 0, yend = y_max,
-        line = list(color = "black", dash = "solid", width = 2),
-        name = paste0("Now (nW ", current_newW, ")"), showlegend = TRUE
-      ) %>%
-      # Estimated peak (dashed red)
-      add_segments(
-        x = t_peak_ew, xend = t_peak_ew, y = 0, yend = y_max,
-        line = list(color = "firebrick", dash = "dash", width = 1.5),
-        name = paste0("Est. peak (nW ", peak_nW, ")"), showlegend = TRUE
-      )
-
-    # Observed peak (solid blue)
-    if (!is.na(true_peak_newW)) {
-      plt <- plt %>%
-        add_segments(
-          x = true_peak_newW, xend = true_peak_newW, y = 0, yend = y_max,
-          line = list(color = "steelblue", dash = "solid", width = 1.5),
-          name = paste0("Obs. peak (nW ", round(true_peak_newW), ")"), showlegend = TRUE
-        )
-    }
-
-    plt <- plt %>%
-      layout(
-        title = paste0(s, " | newWeek ", current_newW,
-                       " (flu wk ", current_fluWk, ")",
-                       " | est peak nW ", peak_nW),
-        xaxis = list(title = "newWeek (aligned)"),
-        yaxis = list(title = "Positivity", range = c(0, y_max)),
-        legend = list(orientation = "h", y = -0.20)
-      )
-
-    htmltools::tagList(
-      htmltools::tags$h3(sprintf("nW %d", current_newW)),
-      plt
+  # Per-eval-week sub-tabs
+  week_chunks <- lapply(s_params$eval_week, function(ew) {
+    e <- new.env(parent = globalenv())
+    e$plt <- make_season_plot(s, ew, s_params, ref_curve_s, obs_s,
+                               true_peak_weekF_s, nW_s)
+    if (is.null(e$plt)) return(NULL)
+    anchor_ew <- wf$params_df %>% filter(season == s, eval_week == ew) %>%
+      pull(anchorWeek) %>% `[[`(1)
+    iWeek_hat_ew <- wf$params_df %>% filter(season == s, eval_week == ew) %>%
+      pull(iWeek_hat) %>% `[[`(1)
+    current_nW <- ew - iWeek_hat_ew + anchor_ew
+    knitr::knit_child(
+      text = c(sprintf("#### nW %d (wkF %d)", as.integer(current_nW), ew), "",
+               "```{r echo=FALSE, warning=FALSE}", "plt", "```", ""),
+      envir = e, quiet = TRUE
     )
   })
+  week_chunks <- Filter(Negate(is.null), week_chunks)
 
-  season_items <- c(
-    season_items,
-    season_tabs,
-    list(
-      htmltools::tags$h3("Data"),
-      htmltools::HTML(gt::as_raw_html(tbl))
-    )
+  # Data tab
+  e2 <- new.env(parent = globalenv())
+  e2$tbl_obj <- tbl
+  data_chunk <- knitr::knit_child(
+    text = c("#### Data", "",
+             "```{r echo=FALSE}", "gt::as_raw_html(tbl_obj) |> htmltools::HTML() |> print()", "```", ""),
+    envir = e2, quiet = TRUE
   )
 
-  report_items <- c(report_items, season_items)
-}
+  knitr::knit_child(
+    text = c(sprintf("## %s", s), "",
+             "::: {.panel-tabset}", "",
+             unlist(week_chunks), "",
+             data_chunk,
+             ":::", ""),
+    quiet = TRUE
+  )
+})
 
-do.call(htmltools::tagList, report_items)
+cat(unlist(season_chunks), sep = "\n")
 ```
+
+:::
