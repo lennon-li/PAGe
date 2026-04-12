@@ -54,18 +54,22 @@ alignment-derived covariates from M1.
 - Built-in historical data lives in `flualign/inst/extdata/flu_hist.csv` and
   `flualign/ref_curve.RData`.
 
-## Current Status (2026-03-30)
+## Current Status (2026-04-12)
 
 **M0 (Ignition)** and **M1 (Alignment)** are complete and tuned. M1 uses
-multi-template ensemble alignment: k_ref=25, temperature=0.25, shift=0
-(LOSO Weibull-weighted peak MAE = 1.169 weeks across 153-spec grid search).
+multi-template ensemble alignment with slope-similarity weighting:
+k_ref=25, temperature=0.25, shift=0, slope_window=6, slope_weight=8
+(LOSO Weibull-weighted peak MAE = 1.275 weeks across 67-spec grid search, v5–v7).
+Ensemble operates on logit scale; outputs logit_spread (alignment uncertainty)
+propagated to M2.
 
-**M2 (Forecast)** is the next step. It should consume M1's alignment covariates
-(τ, δ, peak_weekF, etc.) plus raw features (growth rate, current positivity) to
-produce 2-week-ahead forecasts. See `docs/pipeline_overview.qmd` for M2 design.
+**M2 (Forecast)** is tuned through v14b. Production kit at `data/m2_production.rds`
+(v14 spec: k_f=4, k_e=2, alpha_state=0.40, k_r=2, bias_alpha=0.2).
+Next step: re-tune M2 as v15 with logit_spread as covariate (k_sp > 0).
 
 Key data for M2 development:
-- `data/m1_alignment_tuning_v3.rds` — M1 tuning results
+- `data/m1_alignment_tuning_combined.rds` — full M1 grid (67 specs, v5–v7)
+- `data/m1_alignment_tuning_v7.rds` — latest M1 grid (k_ref × slope_weight)
 - `data/stage1_tuning.rds` — M0 ignition tuned params
 - `data/flu_testing_data.csv` — raw surveillance data
 - `.claude/memory/` — project memory files for Claude continuity

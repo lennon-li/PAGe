@@ -67,6 +67,7 @@ stage2_make_spec <- function(
     k_r = 0L,
     k_w = 0L,
     k_s = 0L,
+    k_sp = 0L,   # knots for template-spread smooth s(logit_spread, by=lead)
     
     bs_week = "ts",
     bs_fs_marginal = "tp",
@@ -108,12 +109,13 @@ stage2_make_spec <- function(
     T = T,
     template_mode = template_mode2,
     
-    k_w = as.integer(k_w),
-    k_s = as.integer(k_s),
-    k_e = as.integer(k_e),
-    k_n = as.integer(k_n),
+    k_w  = as.integer(k_w),
+    k_s  = as.integer(k_s),
+    k_e  = as.integer(k_e),
+    k_n  = as.integer(k_n),
     k_de = as.integer(k_de),
-    k_r = as.integer(k_r),
+    k_r  = as.integer(k_r),
+    k_sp = as.integer(k_sp),
     
     bs_week = bs_week,
     bs_fs_marginal = bs_fs_marginal,
@@ -463,6 +465,7 @@ stage2_build_joint_formula <- function(spec) {
   stopifnot(is.list(spec), all(c("T","k_f","k_w","k_s","k_e","k_n","bs_week","bs_fs_marginal") %in% names(spec)))
   if (is.null(spec$k_r))  spec$k_r  <- 0L
   if (is.null(spec$k_de)) spec$k_de <- 0L
+  if (is.null(spec$k_sp)) spec$k_sp <- 0L
   
   bs1 <- spec$bs_week %||% "ts"
   
@@ -506,7 +509,14 @@ stage2_build_joint_formula <- function(spec) {
   if (as.integer(spec$k_de) > 0L) {
     rhs <- c(rhs, sprintf("s(dz_ema, by=lead, bs='%s', k=%d)", bs1, as.integer(spec$k_de)))
   }
-  
+
+  # M1 template spread: weighted SD of logit template predictions across the
+  # ensemble. High spread = templates disagree = M1 alignment is uncertain.
+  # When spread is high, M2 should down-weight logit_f_eff and rely more on z_ema.
+  if (as.integer(spec$k_sp) > 0L) {
+    rhs <- c(rhs, sprintf("s(logit_spread, by=lead, bs='%s', k=%d)", bs1, as.integer(spec$k_sp)))
+  }
+
   stats::as.formula(paste0("cbind(y_lead, N_lead - y_lead) ~ ", paste(rhs, collapse = " + ")))
 }
 

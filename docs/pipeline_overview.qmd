@@ -134,9 +134,9 @@ The factor-smooth (`"fs"`) method fits a GAM with `s(newWeek, season, bs="fs")`,
 
 ### Training {#sec-m1-training}
 
-All $M_1$ hyperparameters are tuned by leave-one-season-out walk-forward evaluation (153-config grid): each fold re-estimates the reference curve excluding the held-out season, then walks forward week by week producing `params_df`. Peak MAE under Weibull weighting is the primary metric.
+All $M_1$ hyperparameters are tuned by leave-one-season-out walk-forward evaluation (67-config grid across v5–v7): each fold re-estimates the reference curve excluding the held-out season, then walks forward week by week producing `params_df`. Peak MAE under Weibull weighting is the primary metric.
 
-**Tuned configuration:** `k_ref=25`, `temperature=0.25`, `shift=0` → Weibull peak MAE = 1.169 weeks.
+**Locked configuration:** `k_ref=25`, `temperature=0.25`, `shift=0`, `slope_window=6`, `slope_weight=8` → Weibull peak MAE = 1.275 weeks. The slope-similarity bonus (weighting templates by matching current growth rate) is the primary driver of improvement from the 1.929 baseline.
 
 **Key functions:** `loso_walkforward()`, `tune_m1_alignment()`
 

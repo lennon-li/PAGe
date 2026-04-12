@@ -215,16 +215,15 @@ align_multi_template <- function(currentD,
   w_s          <- w_raw / sum(w_raw)
   names(w_s)   <- names(results)
 
-  # --- 5. Ensemble forecasts (probability scale) ---
+  # --- 5. Ensemble forecasts (logit scale) ---
   # Collect forecast-only rows from each valid result
   valid_idx <- which(valid & w_s > 0)
   ref_pred  <- results[[valid_idx[1]]]$pred_df
 
-  # Ensemble p_hat as weighted average; CIs as weighted quantiles
   future_rows <- ref_pred$kind == "forecast"
   obs_rows    <- ref_pred$kind == "observed"
 
-  # Stack forecast p_hat from each template into matrix
+  # Stack forecast p_hat from each template; work on logit scale throughout
   fw_weeks <- ref_pred$newWeek[future_rows]
   n_fw     <- length(fw_weeks)
 
@@ -242,25 +241,47 @@ align_multi_template <- function(currentD,
     wts <- w_s[valid_idx]
     wts <- wts / sum(wts)
 
-    p_hat_ens <- drop(p_mat %*% wts)
+    # Logit-scale ensemble: average and quantiles on log-odds, then back-transform.
+    # This respects the binomial model geometry (log-odds is the linear predictor)
+    # and avoids probability-scale distortion near 0/1.
+    eps       <- 1e-9
+    logit_mat <- log(pmax(p_mat, eps) / pmax(1 - p_mat, eps))
 
-    # Weighted quantile CIs
-    z <- stats::qnorm((1 + level) / 2)
+    # Weighted mean on logit scale
+    logit_mean_ens <- drop(logit_mat %*% wts)
+    p_hat_ens      <- stats::plogis(logit_mean_ens)
+
+    # Weighted median on logit scale
+    logit_med_ens <- vapply(seq_len(n_fw), function(i) {
+      .weighted_quantile(logit_mat[i, ], wts, 0.5)
+    }, numeric(1))
+    p_hat_median_ens <- stats::plogis(logit_med_ens)
+
+    # Template spread: weighted SD on logit scale (alignment uncertainty signal)
+    logit_spread_ens <- vapply(seq_len(n_fw), function(i) {
+      lv <- logit_mat[i, ]
+      mu <- sum(wts * lv)
+      sqrt(sum(wts * (lv - mu)^2))
+    }, numeric(1))
+
+    # CIs: weighted quantiles on logit scale, back-transformed
     alpha_lo <- (1 - level) / 2
     alpha_hi <- 1 - alpha_lo
-    p_lo_ens <- vapply(seq_len(n_fw), function(i) {
-      .weighted_quantile(p_mat[i, ], wts, alpha_lo)
-    }, numeric(1))
-    p_hi_ens <- vapply(seq_len(n_fw), function(i) {
-      .weighted_quantile(p_mat[i, ], wts, alpha_hi)
-    }, numeric(1))
+    p_lo_ens <- stats::plogis(vapply(seq_len(n_fw), function(i) {
+      .weighted_quantile(logit_mat[i, ], wts, alpha_lo)
+    }, numeric(1)))
+    p_hi_ens <- stats::plogis(vapply(seq_len(n_fw), function(i) {
+      .weighted_quantile(logit_mat[i, ], wts, alpha_hi)
+    }, numeric(1)))
 
     forecast_block <- tibble::tibble(
-      newWeek = fw_weeks,
-      p_hat   = p_hat_ens,
-      p_lo    = p_lo_ens,
-      p_hi    = p_hi_ens,
-      kind    = "forecast"
+      newWeek          = fw_weeks,
+      p_hat            = p_hat_ens,
+      p_hat_median     = p_hat_median_ens,
+      logit_spread     = logit_spread_ens,
+      p_lo             = p_lo_ens,
+      p_hi             = p_hi_ens,
+      kind             = "forecast"
     )
   } else {
     forecast_block <- tibble::tibble()
@@ -283,16 +304,18 @@ align_multi_template <- function(currentD,
   pk_valid <- is.finite(t_peaks)
 
   if (any(pk_valid)) {
-    pk_wts    <- wts[pk_valid] / sum(wts[pk_valid])
-    t_peak    <- sum(t_peaks[pk_valid] * pk_wts)
+    pk_wts       <- wts[pk_valid] / sum(wts[pk_valid])
+    t_peak       <- sum(t_peaks[pk_valid] * pk_wts)
+    t_peak_med   <- .weighted_quantile(t_peaks[pk_valid], pk_wts, 0.5)
 
     # CI from weighted distribution of peaks
     t_peak_lo <- .weighted_quantile(t_peaks[pk_valid], pk_wts, (1 - level) / 2)
     t_peak_hi <- .weighted_quantile(t_peaks[pk_valid], pk_wts, 1 - (1 - level) / 2)
   } else {
-    t_peak    <- NA_real_
-    t_peak_lo <- NA_real_
-    t_peak_hi <- NA_real_
+    t_peak     <- NA_real_
+    t_peak_med <- NA_real_
+    t_peak_lo  <- NA_real_
+    t_peak_hi  <- NA_real_
   }
 
   # Weighted average alignment parameters
@@ -306,8 +329,9 @@ align_multi_template <- function(currentD,
   best_res <- results[[best_idx]]
 
   peak_out <- list(
-    t_peak    = t_peak,
-    t_peak_ci = c(t_peak_lo, t_peak_hi),
+    t_peak        = t_peak,
+    t_peak_median = t_peak_med,
+    t_peak_ci     = c(t_peak_lo, t_peak_hi),
     u_star    = if (!is.null(best_res$peak)) best_res$peak$u_star else NA_real_,
     p_peak    = if (is.finite(t_peak) && n_fw > 0) {
       # Interpolate ensemble p_hat at t_peak

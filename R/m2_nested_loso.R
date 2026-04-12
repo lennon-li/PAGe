@@ -757,8 +757,10 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
       m1_row <- dplyr::filter(m1_test_preds,
                               .data$eval_weekF == ew, .data$h == h)
       if (nrow(m1_row) == 0L) next
-      m1_p <- m1_row$m1_p_hat[1L]
+      m1_p      <- m1_row$m1_p_hat[1L]
       if (is.na(m1_p)) next
+      m1_spread <- if ("m1_logit_spread" %in% names(m1_row)) m1_row$m1_logit_spread[1L] else 0
+      if (is.na(m1_spread)) m1_spread <- 0
 
       target_weekF <- as.integer(ew) + h
       obs_target   <- dplyr::filter(test_allD, .data$weekF == target_weekF)
@@ -767,7 +769,6 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
       N_lead <- as.integer(obs_target$N[1L])
 
       logit_f_eff <- stats::qlogis(pmin(pmax(m1_p, 1e-6), 1 - 1e-6))
-      # Fix A: clamp logit_f_eff to training range
       if (!is.null(fr$logit_f_eff))
         logit_f_eff <- pmin(fr$logit_f_eff[2L], pmax(fr$logit_f_eff[1L], logit_f_eff))
 
@@ -784,6 +785,7 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
         logit_f_eff       = logit_f_eff,
         z_ema             = z_ema_now,
         dz_ema            = dz_ema_now,
+        logit_spread      = m1_spread,
         logN_now          = logN_now,
         season_label      = NULL,
         ex_terms          = ex_terms,
@@ -1032,8 +1034,10 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
       m1_row <- dplyr::filter(m1_test_preds,
                               .data$eval_weekF == ew, .data$h == h)
       if (nrow(m1_row) == 0L) next
-      m1_p <- m1_row$m1_p_hat[1L]
+      m1_p      <- m1_row$m1_p_hat[1L]
       if (is.na(m1_p)) next
+      m1_spread <- if ("m1_logit_spread" %in% names(m1_row)) m1_row$m1_logit_spread[1L] else 0
+      if (is.na(m1_spread)) m1_spread <- 0
 
       target_weekF <- as.integer(ew) + h
       obs_target   <- dplyr::filter(test_allD, .data$weekF == target_weekF)
@@ -1060,6 +1064,7 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
         logit_f_eff       = logit_f_eff,
         z_ema             = z_ema_now,
         dz_ema            = dz_ema_now_loso,
+        logit_spread      = m1_spread,
         logN_now          = logN_now,
         season_label      = if (is_refit) test_s else NULL,
         ex_terms          = ex_terms,

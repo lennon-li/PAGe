@@ -135,25 +135,31 @@ m1_walkforward_predictions <- function(seasonD,
       target_weekF   <- ew + h
       target_newWeek <- as.numeric(target_weekF - iWeek_hat + anchorWeek)
 
-      # Interpolate M1's prediction at target_newWeek
-      p_hat <- stats::approx(fdf$newWeek, fdf$p_hat, xout = target_newWeek,
-                             rule = 2)$y
-      p_lo  <- stats::approx(fdf$newWeek, fdf$p_lo,  xout = target_newWeek,
-                             rule = 2)$y
-      p_hi  <- stats::approx(fdf$newWeek, fdf$p_hi,  xout = target_newWeek,
-                             rule = 2)$y
+      # Interpolate M1's prediction and spread at target_newWeek.
+      # logit_spread is the weighted SD of logit-scale template predictions —
+      # high values indicate M1 ensemble disagreement (alignment uncertainty).
+      p_hat  <- stats::approx(fdf$newWeek, fdf$p_hat, xout = target_newWeek,
+                              rule = 2)$y
+      p_lo   <- stats::approx(fdf$newWeek, fdf$p_lo,  xout = target_newWeek,
+                              rule = 2)$y
+      p_hi   <- stats::approx(fdf$newWeek, fdf$p_hi,  xout = target_newWeek,
+                              rule = 2)$y
+      spread <- if ("logit_spread" %in% names(fdf))
+        stats::approx(fdf$newWeek, fdf$logit_spread, xout = target_newWeek, rule = 2)$y
+      else NA_real_
 
       rows[[j]] <- tibble::tibble(
-        season         = season_name,
-        eval_weekF     = ew,
-        target_weekF   = target_weekF,
-        h              = h,
-        m1_p_hat       = p_hat,
-        m1_p_lo        = p_lo,
-        m1_p_hi        = p_hi,
-        m1_tau         = ap$tau,
-        m1_delta       = ap$delta,
-        m1_state       = ap$state
+        season           = season_name,
+        eval_weekF       = ew,
+        target_weekF     = target_weekF,
+        h                = h,
+        m1_p_hat         = p_hat,
+        m1_p_lo          = p_lo,
+        m1_p_hi          = p_hi,
+        m1_logit_spread  = spread,
+        m1_tau           = ap$tau,
+        m1_delta         = ap$delta,
+        m1_state         = ap$state
       )
     }
     results[[i]] <- dplyr::bind_rows(rows)

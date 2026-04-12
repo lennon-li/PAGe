@@ -82,6 +82,7 @@ m2_predict_one <- function(fit,
                            logit_f_eff,
                            z_ema,
                            dz_ema          = 0,
+                           logit_spread    = 0,
                            logN_now,
                            season_label    = NULL,
                            ex_terms        = NULL,
@@ -113,17 +114,18 @@ m2_predict_one <- function(fit,
   }
 
   nd <- tibble::tibble(
-    weekF       = as.integer(ew),
-    newWeek     = as.integer(ew) - as.integer(iWeek) + as.integer(anchorWeek),
-    lead        = factor(lead_val, levels = lev_lead),
-    season      = nd_season,
-    logit_f_eff = as.numeric(logit_f_eff),
-    z_ema       = as.numeric(z_ema),
-    dz_ema      = as.numeric(dz_ema),
-    z_resid     = as.numeric(z_ema) - as.numeric(logit_f_eff),
-    logN_now    = as.numeric(logN_now),
-    t_since     = as.numeric(ew - iWeek),
-    post_ign    = TRUE
+    weekF        = as.integer(ew),
+    newWeek      = as.integer(ew) - as.integer(iWeek) + as.integer(anchorWeek),
+    lead         = factor(lead_val, levels = lev_lead),
+    season       = nd_season,
+    logit_f_eff  = as.numeric(logit_f_eff),
+    z_ema        = as.numeric(z_ema),
+    dz_ema       = as.numeric(dz_ema),
+    logit_spread = as.numeric(logit_spread),
+    z_resid      = as.numeric(z_ema) - as.numeric(logit_f_eff),
+    logN_now     = as.numeric(logN_now),
+    t_since      = as.numeric(ew - iWeek),
+    post_ign     = TRUE
   )
 
   # season_h (factor-smooth interaction term) — use matching level if present
@@ -378,9 +380,11 @@ prep_stage2_joint <- function(dat,
 
   # ---- Override logit_f_eff with M1 walk-forward predictions ----
   # When m1_preds is supplied (output of m1_walkforward_predictions()),
-  # replace the static template feature with M1's aligned prediction.
-  # M1 provides p_hat at each (season, eval_weekF, h) — this is the
-  # stacking architecture: M1 = base model, M2 = meta-learner.
+  # replace the static template feature with M1's aligned prediction, and
+  # add logit_spread (weighted SD of logit template predictions — alignment
+  # uncertainty signal). High spread → templates disagree → M2 should lean
+  # more on z_ema and less on logit_f_eff.
+  d$logit_spread <- 0  # default: zero spread (no uncertainty info)
   if (!is.null(m1_preds)) {
     stopifnot(is.data.frame(m1_preds))
     stopifnot(all(c("season", "eval_weekF", "h", "m1_p_hat") %in% names(m1_preds)))
@@ -390,10 +394,11 @@ prep_stage2_joint <- function(dat,
 
     m1_join <- m1_preds %>%
       dplyr::transmute(
-        season      = as.character(.data$season),
-        weekF       = as.integer(.data$eval_weekF),
-        .h_int      = as.integer(.data$h),
-        .m1_p_hat   = as.numeric(.data$m1_p_hat)
+        season           = as.character(.data$season),
+        weekF            = as.integer(.data$eval_weekF),
+        .h_int           = as.integer(.data$h),
+        .m1_p_hat        = as.numeric(.data$m1_p_hat),
+        .m1_logit_spread = if ("m1_logit_spread" %in% names(.)) as.numeric(.data$m1_logit_spread) else NA_real_
       )
 
     d <- d %>%
@@ -407,12 +412,19 @@ prep_stage2_joint <- function(dat,
           logit_stable(.data$.m1_p_hat),
           .data$logit_f_eff  # fallback to static template if M1 missing
         ),
+        logit_spread = dplyr::if_else(
+          is.finite(.data$.m1_logit_spread) & !is.na(.data$.m1_logit_spread),
+          .data$.m1_logit_spread,
+          0  # fallback: zero spread when not available
+        ),
         z_resid = .data$z_ema - .data$logit_f_eff
       ) %>%
-      dplyr::select(-dplyr::all_of(c("season_chr", ".h_int", ".m1_p_hat")))
+      dplyr::select(-dplyr::all_of(c("season_chr", ".h_int", ".m1_p_hat", ".m1_logit_spread")))
 
     if (isTRUE(verbose)) {
-      message("[prep_stage2_joint] M1 stacking mode: logit_f_eff replaced with M1 predictions")
+      n_spread <- sum(d$logit_spread > 0, na.rm = TRUE)
+      message("[prep_stage2_joint] M1 stacking mode: logit_f_eff replaced with M1 predictions",
+              sprintf(" | logit_spread populated for %d/%d rows", n_spread, nrow(d)))
     }
   }
   
@@ -567,6 +579,7 @@ train_stage2_joint_prepped <- function(d_all,
 
   req <- c("post_ign","lead","y_lead","N_lead")
   if (spec$template_mode != "none") req <- c(req, "logit_f_eff")
+  if (!is.null(spec$k_sp) && spec$k_sp > 0L) req <- c(req, "logit_spread")
   if (spec$k_w > 0L || spec$k_s > 0L) req <- c(req, "newWeek")
   if (spec$use_season_re) req <- c(req, "season")
   if (spec$k_s > 0L) req <- c(req, "season_h")

@@ -529,7 +529,7 @@ loso_walkforward <- function(allD,
           iWeek_hat = iWeek_hat_ew, iWeek_true = .iWeek_true,
           tau = NA_real_, delta = NA_real_, a = NA_real_, b = NA_real_,
           allow_scale = NA, delta_on = NA,
-          t_peak = NA_real_, t_peak_lo = NA_real_, t_peak_hi = NA_real_,
+          t_peak = NA_real_, t_peak_median = NA_real_, t_peak_lo = NA_real_, t_peak_hi = NA_real_,
           peak_weekF = NA_integer_, peak_passed = FALSE,
           fallback_reason = reason,
           n_train = length(.tr_seasons), anchorWeek = .ref$anchorWeek
@@ -550,6 +550,7 @@ loso_walkforward <- function(allD,
         allow_scale     = ap$allow_scale,
         delta_on        = ap$delta_on,
         t_peak          = ap$t_peak,
+        t_peak_median   = ap$t_peak_median,
         t_peak_lo       = ap$t_peak_ci[1],
         t_peak_hi       = ap$t_peak_ci[2],
         peak_weekF      = ap$peak_weekF,
@@ -922,40 +923,51 @@ tune_m1_alignment <- function(allD,
 
     if (is.null(wf)) {
       row <- tibble::tibble(
-        spec_id      = sid,
-        mae_uniform  = NA_real_,
-        mae_exp      = NA_real_,
-        mae_weibull  = NA_real_,
-        n_seasons    = 0L
+        spec_id         = sid,
+        mae_uniform     = NA_real_,
+        mae_exp         = NA_real_,
+        mae_weibull     = NA_real_,
+        mae_med_uniform = NA_real_,
+        mae_med_exp     = NA_real_,
+        mae_med_weibull = NA_real_,
+        n_seasons       = 0L
       )
     } else {
-      score_df <- wf$params_df %>%
-        dplyr::filter(!is.na(t_peak), !is.na(iWeek_true)) %>%
-        dplyr::mutate(
-          pred_peak_weekF = round(t_peak - anchorWeek + iWeek_hat)
-        ) %>%
+      base_df <- wf$params_df %>%
         dplyr::left_join(true_peaks, by = "season") %>%
-        dplyr::filter(!is.na(true_peak_weekF),
-                      eval_week <= true_peak_weekF) %>%
+        dplyr::filter(!is.na(true_peak_weekF), eval_week <= true_peak_weekF) %>%
         dplyr::mutate(
-          error    = abs(pred_peak_weekF - true_peak_weekF),
-          t        = eval_week - iWeek_true,
-          w_unif   = 1,
-          w_exp    = exp(-(0.1 * t)^1),
-          w_weib   = exp(-(0.1 * t)^2)
+          t      = eval_week - iWeek_true,
+          w_unif = 1,
+          w_exp  = exp(-(0.1 * t)^1),
+          w_weib = exp(-(0.1 * t)^2)
         )
 
-      wmae <- function(w) {
-        if (nrow(score_df) == 0 || sum(w) == 0) NA_real_
-        else sum(w * score_df$error) / sum(w)
+      # Score using weighted mean peak
+      score_mean <- base_df %>%
+        dplyr::filter(!is.na(t_peak)) %>%
+        dplyr::mutate(error = abs(round(t_peak - anchorWeek + iWeek_hat) - true_peak_weekF))
+
+      # Score using weighted median peak
+      score_med <- base_df %>%
+        dplyr::filter(!is.na(t_peak_median)) %>%
+        dplyr::mutate(error = abs(round(t_peak_median - anchorWeek + iWeek_hat) - true_peak_weekF))
+
+      wmae <- function(df, w_col) {
+        w <- df[[w_col]]
+        if (nrow(df) == 0 || sum(w) == 0) NA_real_
+        else sum(w * df$error) / sum(w)
       }
 
       row <- tibble::tibble(
-        spec_id      = sid,
-        mae_uniform  = wmae(score_df$w_unif),
-        mae_exp      = wmae(score_df$w_exp),
-        mae_weibull  = wmae(score_df$w_weib),
-        n_seasons    = dplyr::n_distinct(score_df$season)
+        spec_id          = sid,
+        mae_uniform      = wmae(score_mean, "w_unif"),
+        mae_exp          = wmae(score_mean, "w_exp"),
+        mae_weibull      = wmae(score_mean, "w_weib"),
+        mae_med_uniform  = wmae(score_med,  "w_unif"),
+        mae_med_exp      = wmae(score_med,  "w_exp"),
+        mae_med_weibull  = wmae(score_med,  "w_weib"),
+        n_seasons        = dplyr::n_distinct(score_mean$season)
       )
     }
 
@@ -967,8 +979,8 @@ tune_m1_alignment <- function(allD,
     saveRDS(all_scores, results_cache)
 
     if (verbose) {
-      message(sprintf("  -> mae_weibull = %.3f   [%d / %d done]",
-                      row$mae_weibull, length(done_ids), n_specs))
+      message(sprintf("  -> mae_weibull = %.3f  mae_med_weibull = %.3f   [%d / %d done]",
+                      row$mae_weibull, row$mae_med_weibull, length(done_ids), n_specs))
     }
   }
 

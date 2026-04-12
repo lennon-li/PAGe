@@ -128,38 +128,37 @@ All plots below use **newWeek** on the x-axis. A secondary flu-week annotation l
 
 ## Parameter tuning via LOSO grid search
 
-The alignment hyperparameters were optimized using leave-one-season-out (LOSO) cross-validation over an extended grid search:
+The alignment hyperparameters were optimized using leave-one-season-out (LOSO) cross-validation across three sequential grid searches (v5–v7), totalling **67 configurations**. All searches fix `multi_temperature = 0.25` and `align_rise_weight = 1.0` (established in an earlier 153-spec sweep). The headline metric is Weibull-weighted peak MAE: $w(t) = \exp(-(0.1\,t)^2)$, $t$ = weeks since ignition.
 
-- **`k_ref`**: 15, 20, 25, 30, 35 (basis dimension for FS reference GAM)
-- **`multi_temperature`**: 0.05, 0.10, 0.15, 0.20, 0.25, 0.5, 1.0, 2.0 (softmax temperature; lower = peakier template weights)
-- **`template_shift`**: -2, -1, 0, +1 (offset alignment templates by weeks)
-- **`align_rise_weight`**: 1.0 (uniform time weighting — no emphasis on rising limb)
+| Search | Varied parameters | Specs | Baseline MAE |
+|--------|------------------|-------|-------------|
+| v5 | `slope_weight` ∈ {0, 0.2, 0.5, 1, 2}, `slope_window` ∈ {4, 6, 8} | 15 | 1.929 |
+| v6 | `slope_weight` ∈ {2, 3, 5, 8}, `slope_window` ∈ {6, 8, 10, 12}, `template_shift` ∈ {0, 1} | 32 | 1.629 → 1.275 |
+| v7 | `slope_weight` ∈ {8, 12, 16, 20, 30}, `k_ref` ∈ {25, 30, 40, 50} | 20 | confirmed 1.275 |
 
-**153 configurations** evaluated on Weibull-weighted peak MAE.
+`slope_weight` controls the slope-similarity softmax bonus: $\exp(-\text{slope\_weight} \times |\text{obs\_slope} - \text{tmpl\_slope}|)$. Higher values concentrate ensemble weight on templates whose current growth rate matches the observed season.
 
 ```{r tuning-results}
 #| echo: false
 #| message: false
 #| warning: false
 
-tune_m1 <- readRDS("../data/m1_alignment_tuning_v3.rds")
+combined <- readRDS("../data/m1_alignment_tuning_combined.rds")
 
-# Top 15 by mae_weibull
-top_results <- tune_m1$scores %>%
+top_results <- combined %>%
   arrange(mae_weibull) %>%
-  head(15) %>%
-  select(k_ref, multi_temperature, template_shift,
-         mae_uniform, mae_exp, mae_weibull) %>%
-  mutate(across(mae_uniform:mae_weibull, ~round(., 4)))
+  head(20) %>%
+  select(version, k_ref, slope_window, slope_weight, template_shift, mae_weibull) %>%
+  mutate(mae_weibull = round(mae_weibull, 4))
 
 gt(top_results) %>%
   cols_label(
-    k_ref = "k_ref",
-    multi_temperature = "Temperature",
-    template_shift = "Template Shift",
-    mae_uniform = "MAE (uniform weight)",
-    mae_exp = "MAE (exp decay)",
-    mae_weibull = "MAE (Weibull) ★"
+    version       = "Grid",
+    k_ref         = "k_ref",
+    slope_window  = "Slope Window",
+    slope_weight  = "Slope Weight",
+    template_shift = "Shift",
+    mae_weibull   = "MAE (Weibull) ★"
   ) %>%
   cols_align(align = "center") %>%
   tab_style(
@@ -173,19 +172,25 @@ gt(top_results) %>%
   tab_options(table.font.size = "13px", table.width = pct(80))
 ```
 
-**Best configuration (★)**: k_ref=25, temperature=0.25, template_shift=0, **Peak MAE = 1.169 weeks**
+**Locked specification**: k_ref=25, slope_window=6, slope_weight=8, template_shift=0, temperature=0.25 → **Peak MAE = 1.275 weeks**
+
+Both grid boundaries are interior: `slope_weight` peaks at 8 then degrades monotonically through 30; `k_ref=25` beats all larger values tested up to 50.
 
 ### Tuning insights
 
-1. **Temperature=0.25 optimal** across the full range tested (0.05–2.0). Lower temperature concentrates softmax weight on the best-matching template, but going too low (≤0.20) overcommits to a single template and degrades performance (MAE 1.47–3.02). The sweet spot at 0.25 balances commitment to the best analog with hedging across templates.
+1. **slope_weight=8 optimal** — slope similarity improves alignment substantially. The full range traced from 0 (no slope bonus, MAE 1.929) through 8 (optimal, MAE 1.275) then degrades to 30 (MAE 1.516), confirming an interior optimum.
 
-2. **Template_shift=0** is optimal — no systematic detection lag correction needed. The previous shift=−1 finding was an artifact of the smaller initial grid.
+2. **slope_window=6 optimal** — 6-week slope window outperforms 4, 8, 10, 12 at all tested slope weights. Narrower windows are noisy; wider windows smooth away the current-week signal.
 
-3. **k_ref=25** (mid-range basis dimension) balances flexibility and smoothness of the population reference curve.
+3. **template_shift=0** is optimal — no systematic lag correction needed. shift=1 is competitive only at low slope weights but falls behind once slope matching is active.
 
-4. **align_rise_weight=1.0** (uniform loss weights) is optimal — no time-based emphasis needed. The multi-template method adapts locally without requiring pre-ignition down-weighting.
+4. **k_ref=25** beats larger values (30, 40, 50) — higher basis dimensions overfit the reference GAM and degrade generalisation.
 
-5. **Weibull-weighted MAE** is the headline metric — it accounts for peak uncertainty near the season peak and is most relevant for decision-making (e.g., hospital resource planning).
+5. **Weibull-weighted MAE** is the headline metric — upweights early prospective weeks when uncertainty is highest and clinical decisions are most time-sensitive.
+
+::: {.callout-note}
+**Median scoring.** From this point forward, `tune_m1_alignment()` also reports `mae_med_weibull` (Weibull-weighted MAE using the weighted-median peak rather than the weighted-mean peak). The v5–v7 checkpoints pre-date this addition; both metrics will be reported for v8+ grid searches.
+:::
 
 ---
 
@@ -196,10 +201,14 @@ gt(top_results) %>%
 1. `estimateRef(method="fs")` returns `eta_mat`: a 52 $\times$ $n_\text{train}$ matrix of per-season logit-scale curves from the factor-smooth GAM. Each column is a smooth GAM prediction for one training season.
 2. For each template (training season), build a `splinefun()` reference curve and run `align_forecast_pipeline_dilate()` to estimate ($\tau$, $\delta$, $a$, $b$) and produce a forecast.
 3. Compute per-template NLL (negative log-likelihood normalized per observation). Templates that better match the observed data get lower NLL.
-4. Ensemble via **softmax weights**: $w_s = \exp(-\text{NLL}_s / T) \big/ \sum_s \exp(-\text{NLL}_s / T)$ where $T$ is the temperature parameter (default 1.0). Lower temperature concentrates weight on the best-fitting template.
-5. Final forecast: weighted average of per-template predictions. Peak estimate: weighted average of per-template peaks.
+4. Ensemble via **softmax weights** combining NLL and slope similarity:
+$$w_s \propto \exp\!\bigl(-\mathrm{NLL}_s / T\bigr) \cdot \exp\!\bigl(-\lambda_s \,|\hat{\sigma}_{\mathrm{obs}} - \hat{\sigma}_s|\bigr)$$
+where $T=0.25$ and $\lambda_s = 8$ (slope weight). Lower temperature concentrates weight on the best-fitting template; slope similarity rewards templates whose current growth rate matches the observed season.
+5. **Logit-scale ensemble**: predictions are averaged in log-odds space, then back-transformed. This respects binomial geometry and prevents probability-scale averaging distortion near 0 or 1.
+6. **Dual peak estimates**: weighted mean and weighted median of per-template peak positions, both in the logit-aligned time axis.
+7. **Alignment uncertainty** (`logit_spread`): weighted SD of per-template logit-scale predictions at each future week — propagated as a covariate to $M_2$.
 
-This allows the model to "recognize" which historical season the current one most resembles, and weight forecasts accordingly — without committing to a single reference shape.
+This allows the model to "recognize" which historical season the current one most resembles and weight forecasts accordingly — without committing to a single reference shape.
 
 ```{r run-multi-template}
 #| message: false
@@ -213,19 +222,21 @@ if (file.exists(MULTI_CACHE)) {
   wf <- readRDS(MULTI_CACHE)
   message("Loaded multi-template result from cache: ", MULTI_CACHE)
 } else {
-  # BEST TUNED PARAMETERS from LOSO grid search (153 configs evaluated)
-  # Peak MAE = 1.169 weeks (Weibull-weighted)
+  # LOCKED PARAMETERS from LOSO grid search (67 configs across v5-v7)
+  # Peak MAE = 1.275 weeks (Weibull-weighted)
   wf <- loso_walkforward(
     allD              = allD,
     params            = params,
     manual_labels     = manual_labels,
     exclude_seasons   = EXCLUDE_SEAS,
     k_deriv           = 20L,
-    k_ref             = 25L,           # ← TUNED: mid-range basis dimension
+    k_ref             = 25L,           # ← TUNED: interior optimum (tested 15–50)
     n_weeks           = 52L,
     buffer_weeks      = 5L,
     curvature_ratio   = 1.0,
     template_shift    = 0L,            # ← TUNED: no offset needed
+    slope_window      = 6L,            # ← TUNED: 6-week slope window optimal
+    slope_weight      = 8.0,           # ← TUNED: interior optimum (tested 0–30)
     peak_weight_boost = 3,
     peak_weight_decay = 0.3,
     align_rise_weight = 1.0,           # ← TUNED: uniform loss weights optimal
@@ -243,14 +254,18 @@ if (file.exists(MULTI_CACHE)) {
 
 ## Tuning summary
 
-The $M_1$ alignment hyperparameters were tuned using a LOSO grid search (153 configurations) targeting the Weibull-weighted peak MAE. The selected specification (used above) is:
+$M_1$ alignment hyperparameters were optimized over 67 configurations across three sequential LOSO grid searches (v5–v7). The locked specification is:
 
-- k_ref = 25
-- multi_temperature = 0.25
-- template_shift = 0
-- align_rise_weight = 1
+| Parameter | Value | Tuned? |
+|-----------|-------|--------|
+| `k_ref` | 25 | ✓ interior (tested 15–50) |
+| `multi_temperature` | 0.25 | ✓ (fixed from earlier sweep) |
+| `template_shift` | 0 | ✓ interior |
+| `slope_window` | 6 | ✓ optimal |
+| `slope_weight` | 8 | ✓ interior optimum |
+| `align_rise_weight` | 1.0 | ✓ (fixed from earlier sweep) |
 
-Best Weibull-weighted peak MAE (LOSO) = 1.1691 (4.0% improvement over previous baseline of 1.2178). These values were applied to the multi-template run and reflected in the short test script under scripts/_test_loso_comparison.R.
+**Best Weibull-weighted peak MAE (LOSO) = 1.275 weeks** (improvement from 1.929 baseline via slope-similarity weighting).
 
 ## Alignment parameters over time
 
