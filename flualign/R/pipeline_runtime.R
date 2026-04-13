@@ -369,10 +369,14 @@ run_m2_forecast <- function(kit,
   # --- Holt trend-augmented bias correction tracker ---
   # Per-horizon level + trend of logit-scale residuals from prior predictions.
   # Correction applied = level + h * trend  (h=1 or 2).
-  bias_alpha <- as.numeric(best_spec$bias_alpha %||% 0.2)
-  bias_beta  <- as.numeric(best_spec$bias_beta  %||% 0.0)
-  bias_level <- list(h1 = 0, h2 = 0)
-  bias_trend <- list(h1 = 0, h2 = 0)
+  bias_alpha      <- as.numeric(best_spec$bias_alpha %||% 0.2)
+  bias_alpha_high <- 0.7   # α when ≥2 consecutive same-sign residuals detected
+  bias_beta       <- as.numeric(best_spec$bias_beta  %||% 0.0)
+  bias_level      <- list(h1 = 0, h2 = 0)
+  bias_trend      <- list(h1 = 0, h2 = 0)
+  # Adaptive α state: track sign-run per horizon to detect "not catching up"
+  prev_resid_pos  <- list(h1 = NA, h2 = NA)   # TRUE = last resid was positive
+  consec_ss       <- list(h1 = 0L, h2 = 0L)   # consecutive same-sign count
   re_hat         <- 0          # online season RE estimate (R2)
   prev_z_ema     <- NA_real_
   peak_passed_prev <- FALSE
@@ -394,6 +398,8 @@ run_m2_forecast <- function(kit,
       bias_trend       <- list(h1 = 0, h2 = 0)
       re_hat           <- 0
       prev_z_ema       <- NA_real_
+      prev_resid_pos   <- list(h1 = NA, h2 = NA)
+      consec_ss        <- list(h1 = 0L, h2 = 0L)
       peak_passed_prev <- TRUE
     }
 
@@ -409,8 +415,18 @@ run_m2_forecast <- function(kit,
           hkey     <- paste0("h", pl$h)
           lev_prev <- bias_level[[hkey]]
           trn_prev <- bias_trend[[hkey]]
-          lev_new  <- bias_alpha * resid + (1 - bias_alpha) * (lev_prev + trn_prev)
-          trn_new  <- bias_beta  * (lev_new - lev_prev) + (1 - bias_beta) * trn_prev
+          # Adaptive α: boost to bias_alpha_high after ≥2 consecutive same-sign
+          # residuals (model "not catching up" per user intent).
+          cur_pos <- resid > 0
+          if (!is.na(prev_resid_pos[[hkey]]) && cur_pos == prev_resid_pos[[hkey]]) {
+            consec_ss[[hkey]] <- consec_ss[[hkey]] + 1L
+          } else {
+            consec_ss[[hkey]] <- 0L
+          }
+          prev_resid_pos[[hkey]] <- cur_pos
+          alpha_t  <- if (consec_ss[[hkey]] >= 2L) bias_alpha_high else bias_alpha
+          lev_new  <- alpha_t * resid + (1 - alpha_t) * (lev_prev + trn_prev)
+          trn_new  <- bias_beta * (lev_new - lev_prev) + (1 - bias_beta) * trn_prev
           bias_level[[hkey]] <- lev_new
           bias_trend[[hkey]] <- trn_new
         }

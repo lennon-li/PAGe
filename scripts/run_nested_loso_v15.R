@@ -101,9 +101,11 @@ cat("Test seasons (", length(test_seasons), "):", paste(test_seasons, collapse =
 # ---- 3. v15 spec grid ----
 # bias_beta=0.0 confirmed optimal; alpha_state centred on v14 best (0.40)
 # New dimensions: k_sp (logit_spread smooth) + k_de (dz_ema, now standardized)
-BIAS_ALPHA <- 0.2   # fixed deployment parameter — not a LOSO grid dimension
-                    # LOSO showed NLL flat from 0.1–0.3; optimal value for
-                    # extreme seasons (fast peaks) cannot be estimated from LOSO.
+BIAS_ALPHA <- 0.4   # fixed deployment parameter — not a LOSO grid dimension
+                    # LOSO NLL flat 0.1–0.3 (Bernoulli); 0.4 was original binomial
+                    # optimum and gives ~2x faster peak correction than 0.2.
+                    # Faster adaptation matters for extreme fast-peaking seasons
+                    # (e.g., 2025-26) where the peak window is only 2-3 weeks.
 
 grid_v15 <- tidyr::crossing(
   delta       = 0L,

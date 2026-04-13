@@ -90,7 +90,8 @@ WF_CACHE   <- file.path(DATA_DIR, "deploy_wf_cache.rds")
 
 # ---- M2 mode ----
 # "frozen" uses the pre-trained GAM (v14/v15 best spec: k_f=4, k_e=2,
-# alpha_state=0.40, k_r=2, bias_alpha=0.2) with Holt EMA bias correction
+# alpha_state=0.40, k_r=2, bias_alpha=0.4) with adaptive Holt EMA bias
+# correction (α raised to 0.7 after ≥2 consecutive same-sign residuals)
 # + online season RE at deployment time.
 M2_MODE <- "frozen"
 
@@ -145,7 +146,7 @@ For each evaluation week $w$, the pipeline runs sequentially:
 
 1. **$M_0$ — Ignition detection**: `run_ignition_weekly()` determines whether the season has ignited. Once locked, $\hat{w}^{(\text{ign})}$ is fixed.
 2. **$M_1$ — Alignment**: `run_alignment_prospective_multi()` fits $\tau$, $\delta$, $a$, $b$ to align the partial curve to reference templates, producing a peak estimate and forecast curve.
-3. **$M_2$ — Forecast**: The production GAM predicts $\hat{p}_{w+1}$ and $\hat{p}_{w+2}$ using $M_1$'s aligned prediction as a stacking covariate.
+3. **$M_2$ — Forecast**: The production GAM predicts $\hat{p}_{w+1}$ and $\hat{p}_{w+2}$ using $M_1$'s aligned prediction as a stacking covariate. An online Holt EMA bias corrector (base $\alpha = 0.4$; raised to $\alpha = 0.7$ after $\geq 2$ consecutive same-sign residuals) adjusts for systematic under- or over-prediction within the season. The corrector resets at the post-peak transition.
 
 ```{r walk-forward}
 #| message: false
