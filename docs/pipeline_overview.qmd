@@ -160,21 +160,22 @@ $M_2$ fits a joint binomial GAM for $h \in \{1,2\}$ on aligned-week space. Covar
 
 Hyperparameters are selected by **nested LOSO**: for each held-out season, the reference curve and all $M_1$ predictions are re-estimated on the remaining seasons only, eliminating template leakage. Phase 1 pre-computes $M_1$ predictions once per fold; Phase 2 sweeps the $M_2$ spec grid in minutes.
 
-**Tuned spec** (189-spec nested LOSO, 10 seasons, mean NLL = 33.19):
+**Tuned spec** (v14/v15 confirmed, 1920-spec nested LOSO, 10 seasons, Bernoulli NLL = 0.406):
 ```
-delta=0, Kr=1, k_f=2, k_e=4, k_1=4, k_2=0, k_w=0, k_s=0
-alpha_state=0.10, lambda_w=0, w_floor=0.05
+delta=0, Kr=1, k_f=4, k_e=2, k_r=2, k_de=0, k_sp=0
+alpha_state=0.40, bias_alpha=0.2, bias_beta=0.0, lambda_w=0, w_floor=0.05
 ```
+Mode: **frozen GAM** (pre-trained once on all historical seasons) + **Holt EMA bias correction** (α=0.2, level-only) + online season random effect, applied week-by-week at deployment. v15 confirmed that rate-of-change (`k_de`) and alignment-uncertainty (`k_sp`) terms provide no improvement.
 
-**Key functions:** `nested_loso_build_fold()`, `m1_walkforward_multi()`, `nested_loso_m2_train()`, `nested_loso_m2_eval()`, `prep_stage2_joint()`, `train_stage2_joint()`
+**Key functions:** `nested_loso_build_fold()`, `m1_walkforward_multi()`, `nested_loso_m2_train()`, `nested_loso_m2_eval_frozen_bias()`, `prep_stage2_joint()`, `train_stage2_joint()`
 
 **Full design:** [`forecast_training.html`](forecast_training.html)
 
 ### Deployment {#sec-m2-deploy}
 
-Each week after ignition, $M_2$ refits on all historical aligned data plus the current-season observations accumulated so far, then forecasts 1- and 2-weeks ahead. Refitting picks up the live positivity trend and prevents the forecast from drifting from observed data. A frozen-fit fallback (`mode="frozen"`) is available for diagnostics.
+The production GAM is pre-trained on all historical seasons (frozen). Each week after ignition, a Holt EMA bias corrector and online season random effect are updated sequentially, then the frozen GAM forecasts 1- and 2-weeks ahead. No weekly refit is needed — the bias corrector absorbs systematic drift within-season.
 
-**Key functions:** `run_m2_forecast()` (`mode="weekly_refit"` default), `refit_stage2_weekly()`, `load_prospective_kit()`
+**Key functions:** `run_m2_forecast()` (mode=`"frozen"`), `m2_predict_one()`, `load_prospective_kit()`
 
 ### Retrospective deployment {#sec-m2-retro}
 

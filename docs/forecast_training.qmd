@@ -433,7 +433,7 @@ Four rounds of search have been run:
 - **v13b** (15 specs) extended `alpha_state` to 0.50 and confirmed `0.30` is a genuine interior optimum under raw binomial NLL.
 - **v14** re-scored v13 results using **Bernoulli NLL** (N-invariant; prevents post-COVID high-volume seasons from dominating). Best `bias_alpha` flipped 0.4 → 0.2; `alpha_state` optimum shifted to 0.40.
 - **v14b** extended `alpha_state` under Bernoulli NLL and found the optimum is flat from 0.30–0.50 (interior).
-- **v15** (in progress, 960 specs = 4×k_f × 2×k_e × 5×alpha_state × 3×k_r × 2×k_de × 2×k_sp × 4×bias_alpha) adds `k_de` (rate-of-change, now feasible after `dz_ema` standardization) and `k_sp` (alignment uncertainty `logit_spread`). Entry-point: `scripts/run_nested_loso_v15.R`.
+- **v15** (1920 specs = 4×k_f × 2×k_e × 5×alpha_state × 3×k_r × 2×k_de × 2×k_sp × 4×bias_alpha) tested `k_de` (rate-of-change, after `dz_ema` standardization) and `k_sp` (alignment uncertainty `logit_spread`). Both new terms produced identical NLL to `k_de=0, k_sp=0`. **v14 spec confirmed as production model.** Entry-point: `scripts/run_nested_loso_v15.R`.
 
 **Active hyperparameters (v15):**
 
@@ -526,9 +526,9 @@ cat("Best:", prod_results$best_spec_id,
 best_spec_nested <- prod_results$best_spec
 ```
 
-**Production spec (v14):** `k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0, bias_alpha=0.2, bias_beta=0.0` with `delta=0, Kr=1, lambda_w=0`. Mean LOSO Bernoulli NLL = **0.40628** (v14 Bernoulli re-scoring of v13 960-spec grid, 10 seasons). The switch from raw binomial NLL to Bernoulli NLL (N-invariant) prevents post-COVID high-volume seasons from dominating the objective and flipped the optimal `bias_alpha` from 0.4 → 0.2 and `alpha_state` from 0.30 → 0.40.
+**Production spec (v14/v15):** `k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0, bias_alpha=0.2, bias_beta=0.0` with `delta=0, Kr=1, lambda_w=0`. Mean LOSO Bernoulli NLL = **0.40628** (v14/v15, 1920 specs across 10 seasons). v15 (1920-spec grid adding `k_de ∈ {0,2}` and `k_sp ∈ {0,2}`) confirmed that neither rate-of-change nor alignment uncertainty improve over the v14 spec — Bernoulli NLL is identical at 0.406 for both `k_de=0` and `k_de=2`, and for both `k_sp=0` and `k_sp=2`. The v14 spec is therefore confirmed as the production model.
 
-The model uses three effective covariates: template position (`s(logit_f_eff, k=4)`), EMA state (`s(z_ema, k=2)`, α=0.40), and amplitude residual (`s(z_resid, k=2)`). Holt EMA bias correction (α=0.2, β=0.0) plus online season random effect are applied at deployment and in LOSO evaluation. **v15** (in progress) additionally tests `k_sp` (alignment uncertainty `logit_spread`) and `k_de` (rate-of-change `dz_ema`, standardized to unit variance).
+The model uses three effective covariates: template position (`s(logit_f_eff, k=4)`), EMA state (`s(z_ema, k=2)`, α=0.40), and amplitude residual (`s(z_resid, k=2)`). Holt EMA bias correction (α=0.2, β=0.0) plus online season random effect are applied at deployment and in LOSO evaluation.
 
 **`delta = 0`, `Kr = 1` — template shift and ramp are inert.**
 All delta and Kr values produce identical NLL. With `z_resid` and bias correction absorbing amplitude and timing adjustments, these parameters have no remaining signal.
@@ -539,27 +539,30 @@ All delta and Kr values produce identical NLL. With `z_resid` and bias correctio
 **`k_e = 2` — minimal EMA smooth, k_e=3 ties.**
 `k_e=2` and `k_e=3` produce identical NLL at all alpha_state levels; `k_e=2` chosen for parsimony.
 
-**`alpha_state = 0.40` — ≈2.5-week EMA memory (Bernoulli NLL).**
-Under Bernoulli NLL (v14b), the optimum is flat from 0.30–0.50:
+**`alpha_state = 0.40` — ≈2.5-week EMA memory.**
+The optimum is flat from 0.30–0.50 across both v14b and v15:
 
 | alpha_state | best Bernoulli NLL |
 |-------------|---------------------|
-| 0.30 | 0.40642 |
-| **0.35–0.50** | **≈0.40628** (flat) |
+| 0.30 | 0.406 |
+| 0.35 | 0.406 |
+| **0.40** | **0.406** |
+| 0.45 | 0.406 |
+| 0.50 | 0.406 |
 
-`alpha_state=0.40` chosen as the representative interior point.
+`alpha_state=0.40` chosen as the representative interior point. The model is insensitive to EMA speed across the full 0.30–0.50 range.
 
 **`k_r = 2` — amplitude residual is load-bearing.**
 `k_r=0` (drop `z_resid`) loses by Bernoulli NLL ≈ 0.013 nats. Under N-invariant scoring, `z_resid` still provides meaningful signal; `k_r=2` and `k_r=3` tie.
 
-**`k_de = 0` — rate-of-change covariate (v13/v14).**
-`k_de > 0` catastrophically failed in v13/v14 (NLL > 117) due to poor conditioning of unscaled `dz_ema`. In v15, `dz_ema` is standardized to unit variance (SD computed from training fold, stored in `feature_ranges$dz_ema_sd`) before entering the GAM, enabling `k_de ∈ {0, 2}` to be tuned.
+**`k_de = 0` — rate-of-change covariate provides no benefit.**
+`k_de > 0` catastrophically failed in v13/v14 (NLL > 117) due to poor conditioning of unscaled `dz_ema`. In v15, `dz_ema` was standardized to unit variance (SD stored in `feature_ranges$dz_ema_sd`) — but even after rescaling, `k_de=2` and `k_de=0` produce identical Bernoulli NLL (0.406). The growth-rate signal is already captured by `z_resid` and the Holt bias corrector.
 
-**`k_sp = 0` — alignment uncertainty (v15 tunable).**
-`logit_spread` is the weighted SD of per-template logit predictions from M1's ensemble alignment, capturing how much templates disagree about the current epidemic phase. Higher `logit_spread` indicates ambiguous alignment → the GAM may learn to widen or attenuate predictions. Tested in v15 via `k_sp ∈ {0, 2}`.
+**`k_sp = 0` — alignment uncertainty provides no benefit.**
+`logit_spread` (weighted SD of per-template logit predictions from M1's ensemble) was tested in v15 via `k_sp ∈ {0, 2}`. `k_sp=2` and `k_sp=0` produce identical Bernoulli NLL (0.406). The alignment uncertainty from M1 does not carry additional predictive signal beyond the existing covariates.
 
-**`bias_alpha = 0.2`, `bias_beta = 0.0` — level-only Holt (Bernoulli NLL).**
-`bias_beta = 0` (level-only) wins at every `bias_alpha` level. Under Bernoulli NLL, `bias_alpha=0.2` (~4.5-week half-life) outperforms 0.3–0.5; the slower adaptation prevents over-weighting noisy early-season observations in low-N weeks.
+**`bias_alpha = 0.2`, `bias_beta = 0.0` — level-only Holt.**
+`bias_beta = 0` (level-only) wins at every `bias_alpha` level. Under Bernoulli NLL, `bias_alpha ∈ {0.1, 0.2, 0.3}` all produce Bernoulli NLL ≈ 0.406 (flat); `bias_alpha=0.4` slightly degrades. `bias_alpha=0.2` is chosen as the representative interior point with a ~4.5-week half-life, preventing over-weighting of noisy early-season observations in low-N weeks.
 
 **`lambda_w = 0` — uniform training weights.**
 Down-weighting late-season observations provides no benefit.
@@ -651,7 +654,7 @@ ggplotly(p_fitback + ggplot2::ggtitle(
 # seasons, Holt bias correction applied sequentially week-by-week (= deployment).
 # x-axis = weeks since ignition so all seasons start at 0 and the 13-week
 # evaluation window is directly visible.  y-axis fixed at [0, 0.5].
-best_cv_result <- prod_results_v4$cv_results[[prod_results_v4$best_spec_id]]
+best_cv_result <- prod_results$cv_results[[prod_results$best_spec_id]]
 
 p_loso_oos <- plot_nested_loso_predictions(
   cv_result = best_cv_result,

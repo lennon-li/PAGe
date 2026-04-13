@@ -16,8 +16,8 @@
 #   - alpha_state centred on v14 optimum: {0.30, 0.35, 0.40, 0.45, 0.50}
 #   - bias_beta fixed at 0.0 (confirmed optimal in v13/v14)
 #   - bias_alpha includes 0.1 (v14 best was 0.2, check lower end)
-#   - Grid: 4(k_f) x 2(k_e) x 5(as) x 3(k_r) x 4(ba) x 2(k_sp) x 2(k_de)
-#           = 960 specs
+#   - Grid: 4(k_f) x 2(k_e) x 5(as) x 3(k_r) x 2(k_de) x 2(k_sp) x 4(ba) x 1(bb)
+#           = 1920 specs
 #
 # Output: data/nested_loso_v15_phase1.rds
 #         data/nested_loso_v15_phase2.rds (resumable checkpoint)

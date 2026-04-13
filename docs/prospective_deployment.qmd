@@ -89,8 +89,9 @@ DATA_DIR   <- normalizePath("../data", mustWork = TRUE)
 WF_CACHE   <- file.path(DATA_DIR, "deploy_wf_cache.rds")
 
 # ---- M2 mode ----
-# "frozen" uses the pre-trained GAM (v13 best spec) with Holt EMA bias
-# correction + online season RE at deployment time. Replaces weekly_refit.
+# "frozen" uses the pre-trained GAM (v14/v15 best spec: k_f=4, k_e=2,
+# alpha_state=0.40, k_r=2, bias_alpha=0.2) with Holt EMA bias correction
+# + online season RE at deployment time.
 M2_MODE <- "frozen"
 
 # ---- Cache control ----

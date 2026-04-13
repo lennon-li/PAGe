@@ -7,7 +7,11 @@ cat("=== Rebuild production kit (v15 spec, locked M1) ===\n")
 
 suppressPackageStartupMessages({
   library(flualign); library(dplyr); library(purrr); library(mgcv); library(MMWRweek)
+  library(future); library(furrr)
 })
+n_cores <- max(1L, parallel::detectCores() - 1L)
+future::plan(future::multisession, workers = n_cores)
+cat("Parallel plan: multisession with", n_cores, "workers\n")
 for (f in c('R/utils.R', 'R/m0_retro.R', 'R/flagIgnition.R',
             'R/m1_reference.R', 'R/m1_reference_helpers.R', 'R/m1_multi_template.R',
             'R/m2_spec_grid.R', 'R/m2_training.R', 'R/m2_nested_loso.R',
@@ -88,7 +92,7 @@ m1_train_preds <- m1_walkforward_multi(
   slope_window = M1_PARAMS$slope_window,
   dynamic_temp = M1_PARAMS$dynamic_temp,
   dynamic_temp_pivot = M1_PARAMS$dynamic_temp_pivot,
-  parallel     = FALSE,
+  parallel     = TRUE,
   verbose      = FALSE
 )
 cat('m1_train_preds:', nrow(m1_train_preds), 'rows\n\n')
