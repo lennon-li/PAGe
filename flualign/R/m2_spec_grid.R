@@ -77,8 +77,8 @@ stage2_make_spec <- function(
 
     anchorWeek = 20L,
 
-    bias_alpha = 0.4,   # EMA decay for Holt level
-    bias_beta  = 0.0,   # EMA decay for Holt trend (0 = level-only)
+    bias_alpha = 0.2,   # Holt level EMA — deployment only, not a LOSO grid dimension
+    bias_beta  = 0.0,   # Holt trend EMA (0 = level-only; trend confirmed uninformative)
 
     # --- deprecated aliases ---
     K = NULL,

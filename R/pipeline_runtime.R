@@ -369,7 +369,7 @@ run_m2_forecast <- function(kit,
   # --- Holt trend-augmented bias correction tracker ---
   # Per-horizon level + trend of logit-scale residuals from prior predictions.
   # Correction applied = level + h * trend  (h=1 or 2).
-  bias_alpha <- as.numeric(best_spec$bias_alpha %||% 0.4)
+  bias_alpha <- as.numeric(best_spec$bias_alpha %||% 0.2)
   bias_beta  <- as.numeric(best_spec$bias_beta  %||% 0.0)
   bias_level <- list(h1 = 0, h2 = 0)
   bias_trend <- list(h1 = 0, h2 = 0)

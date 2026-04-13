@@ -590,7 +590,9 @@ nested_loso_m2_eval <- function(allD,
 #' @param spec Stage-2 spec from \code{stage2_make_spec()}.
 #' @param eval_window Integer; max t_since to evaluate (default 12L).
 #' @param horizons Integer vector of forecast horizons (default \code{c(1L, 2L)}).
-#' @param bias_alpha Numeric; EMA smoothing for level-only bias correction (default 0.4).
+#' @param bias_alpha Numeric; EMA smoothing for level-only Holt bias correction (default 0.2).
+#'   Not read from \code{spec} — this is a deployment-time parameter fixed outside the LOSO
+#'   spec grid. LOSO showed it is unidentifiable in-distribution (flat NLL from 0.1–0.3).
 #' @param k_deriv Integer; basis dim for M0 derivative estimation (default 10L).
 #' @param manual_labels Optional named integer vector of manual ignition labels.
 #' @param flag_args Named list forwarded to \code{flagIgnition()}.
@@ -605,7 +607,7 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
                                             spec,
                                             eval_window   = 12L,
                                             horizons      = c(1L, 2L),
-                                            bias_alpha    = 0.4,
+                                            bias_alpha    = 0.2,
                                             manual_labels = NULL,
                                             flag_args     = list(
                                               p_thresh   = 0.01,
@@ -680,8 +682,10 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
   all_rows <- vector("list", length(eval_weeks))
 
   # Holt trend-augmented bias tracker (R1) + online season RE (R2)
-  bias_alpha_v <- as.numeric(spec$bias_alpha %||% bias_alpha %||% 0.4)
-  bias_beta_v  <- as.numeric(spec$bias_beta  %||% 0.0)
+  # bias_alpha is a deployment-time parameter, not a LOSO-tuned spec param.
+  # Use the function argument directly; spec$bias_alpha is ignored here.
+  bias_alpha_v <- as.numeric(bias_alpha)
+  bias_beta_v  <- 0.0  # level-only confirmed optimal; trend term never tuned
   bias_level   <- list(h1 = 0, h2 = 0)
   bias_trend   <- list(h1 = 0, h2 = 0)
   pred_log     <- list()

@@ -369,7 +369,7 @@ run_m2_forecast <- function(kit,
   # --- Holt trend-augmented bias correction tracker ---
   # Per-horizon level + trend of logit-scale residuals from prior predictions.
   # Correction applied = level + h * trend  (h=1 or 2).
-  bias_alpha <- as.numeric(best_spec$bias_alpha %||% 0.4)
+  bias_alpha <- as.numeric(best_spec$bias_alpha %||% 0.2)
   bias_beta  <- as.numeric(best_spec$bias_beta  %||% 0.0)
   bias_level <- list(h1 = 0, h2 = 0)
   bias_trend <- list(h1 = 0, h2 = 0)
@@ -496,9 +496,12 @@ run_m2_forecast <- function(kit,
       target_weekF   <- ew + h
       target_newWeek <- as.numeric(target_weekF - iWeek_hat + anchorWeek)
 
-      m1_p  <- stats::approx(fdf$newWeek, fdf$p_hat, xout = target_newWeek, rule = 2)$y
-      m1_lo <- stats::approx(fdf$newWeek, fdf$p_lo,  xout = target_newWeek, rule = 2)$y
-      m1_hi <- stats::approx(fdf$newWeek, fdf$p_hi,  xout = target_newWeek, rule = 2)$y
+      m1_p      <- stats::approx(fdf$newWeek, fdf$p_hat, xout = target_newWeek, rule = 2)$y
+      m1_lo     <- stats::approx(fdf$newWeek, fdf$p_lo,  xout = target_newWeek, rule = 2)$y
+      m1_hi     <- stats::approx(fdf$newWeek, fdf$p_hi,  xout = target_newWeek, rule = 2)$y
+      m1_spread <- if ("logit_spread" %in% names(fdf))
+        stats::approx(fdf$newWeek, fdf$logit_spread, xout = target_newWeek, rule = 2)$y
+      else 0
 
       logit_f_eff <- pmin(lfe_train_range[2L],
                         pmax(lfe_train_range[1L],
@@ -517,6 +520,7 @@ run_m2_forecast <- function(kit,
         logit_f_eff       = logit_f_eff,
         z_ema             = z_ema_now,
         dz_ema            = dz_ema_now,
+        logit_spread      = m1_spread,
         logN_now          = logN_now,
         season_label      = if (refit_ok) "current" else NULL,
         ex_terms          = ex_terms,

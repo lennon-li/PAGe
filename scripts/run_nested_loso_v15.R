@@ -15,9 +15,9 @@
 #       * k_de ∈ {0, 2} — re-tests growth-rate term after rescaling
 #   - alpha_state centred on v14 optimum: {0.30, 0.35, 0.40, 0.45, 0.50}
 #   - bias_beta fixed at 0.0 (confirmed optimal in v13/v14)
-#   - bias_alpha includes 0.1 (v14 best was 0.2, check lower end)
-#   - Grid: 4(k_f) x 2(k_e) x 5(as) x 3(k_r) x 2(k_de) x 2(k_sp) x 4(ba) x 1(bb)
-#           = 1920 specs
+#   - bias_alpha REMOVED from grid (fixed at 0.2); unidentifiable in LOSO (flat NLL 0.1–0.3)
+#   - Grid: 4(k_f) x 2(k_e) x 5(as) x 3(k_r) x 2(k_de) x 2(k_sp)
+#           = 480 specs
 #
 # Output: data/nested_loso_v15_phase1.rds
 #         data/nested_loso_v15_phase2.rds (resumable checkpoint)
@@ -101,6 +101,10 @@ cat("Test seasons (", length(test_seasons), "):", paste(test_seasons, collapse =
 # ---- 3. v15 spec grid ----
 # bias_beta=0.0 confirmed optimal; alpha_state centred on v14 best (0.40)
 # New dimensions: k_sp (logit_spread smooth) + k_de (dz_ema, now standardized)
+BIAS_ALPHA <- 0.2   # fixed deployment parameter — not a LOSO grid dimension
+                    # LOSO showed NLL flat from 0.1–0.3; optimal value for
+                    # extreme seasons (fast peaks) cannot be estimated from LOSO.
+
 grid_v15 <- tidyr::crossing(
   delta       = 0L,
   Kr          = 1L,
@@ -108,21 +112,19 @@ grid_v15 <- tidyr::crossing(
   k_e         = c(2L, 3L),
   alpha_state = c(0.30, 0.35, 0.40, 0.45, 0.50),
   k_r         = c(0L, 2L, 3L),
-  k_de        = c(0L, 2L),   # ← NEW: dz_ema term (standardized, safe to test)
-  k_sp        = c(0L, 2L),   # ← NEW: logit_spread alignment uncertainty term
-  bias_alpha  = c(0.1, 0.2, 0.3, 0.4),
-  bias_beta   = 0.0
+  k_de        = c(0L, 2L),
+  k_sp        = c(0L, 2L)
 )
 
 specs_v15 <- purrr::pmap(grid_v15, function(delta, Kr, k_f, k_e, alpha_state,
-                                              k_r, k_de, k_sp, bias_alpha, bias_beta) {
+                                              k_r, k_de, k_sp) {
   stage2_make_spec(
     delta = delta, Kr = Kr, T = "S",
     k_f = k_f, k_e = k_e, alpha_state = alpha_state,
     k_r = k_r, k_de = k_de, k_sp = k_sp,
     k_n = 0L, k_w = 0L, k_s = 0L,
     lambda_w = 0, w_floor = 0.05,
-    bias_alpha = bias_alpha, bias_beta = bias_beta
+    bias_alpha = BIAS_ALPHA  # fixed deployment parameter
   )
 })
 names(specs_v15) <- paste0(
@@ -133,9 +135,7 @@ names(specs_v15) <- paste0(
   "_as", grid_v15$alpha_state,
   "_kr", grid_v15$k_r,
   "_kde", grid_v15$k_de,
-  "_ksp", grid_v15$k_sp,
-  "_ba", grid_v15$bias_alpha,
-  "_bb", grid_v15$bias_beta
+  "_ksp", grid_v15$k_sp
 )
 
 cat("Grid size:", length(specs_v15), "specs\n\n")
@@ -214,8 +214,7 @@ if (Sys.getenv("SMOKE_TEST", unset = "0") == "1") {
   smoke_id   <- names(specs_v15)[which(
     grid_v15$k_f == 4L & grid_v15$k_e == 2L &
     grid_v15$alpha_state == 0.40 & grid_v15$k_r == 2L &
-    grid_v15$k_de == 0L & grid_v15$k_sp == 0L &
-    grid_v15$bias_alpha == 0.2
+    grid_v15$k_de == 0L & grid_v15$k_sp == 0L
   )[1]]
   smoke_spec <- specs_v15[[smoke_id]]
   cat("Test season:", test_s, " | Spec:", smoke_id, "\n")
@@ -234,6 +233,7 @@ if (Sys.getenv("SMOKE_TEST", unset = "0") == "1") {
     m1_test_preds = if (!is.null(fc$m1_test) && nrow(fc$m1_test) > 0) fc$m1_test else NULL,
     spec          = smoke_spec,
     eval_window   = 12L,
+    bias_alpha    = BIAS_ALPHA,
     manual_labels = manual_labels,
     flag_args     = flag_args,
     verbose       = FALSE
@@ -307,6 +307,7 @@ if (length(todo_spec_ids) > 0) {
               m1_test_preds = if (!is.null(fc$m1_test) && nrow(fc$m1_test) > 0) fc$m1_test else NULL,
               spec          = spec,
               eval_window   = 12L,
+              bias_alpha    = BIAS_ALPHA,
               manual_labels = manual_labels,
               flag_args     = flag_args,
               verbose       = FALSE
