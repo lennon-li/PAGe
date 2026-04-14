@@ -58,14 +58,17 @@ alignment-derived covariates from M1.
 
 **M0 (Ignition)** and **M1 (Alignment)** are complete and tuned. M1 uses
 multi-template ensemble alignment with slope-similarity weighting:
-k_ref=25, temperature=0.25, shift=0, slope_window=6, slope_weight=8
+k_ref=25, temperature=0.25, slope_weight=8.0, slope_window=6, dynamic_temp=FALSE, ref_method="fs"
 (LOSO Weibull-weighted peak MAE = 1.275 weeks across 67-spec grid search, v5–v7).
 Ensemble operates on logit scale; outputs logit_spread (alignment uncertainty)
 propagated to M2.
 
-**M2 (Forecast)** is tuned through v14b. Production kit at `data/m2_production.rds`
-(v14 spec: k_f=4, k_e=2, alpha_state=0.40, k_r=2, bias_alpha=0.2).
-Next step: re-tune M2 as v15 with logit_spread as covariate (k_sp > 0).
+**M2 (Forecast)** is tuned through v15. Production kit at `data/m2_production.rds`
+(v15 spec: k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0, delta=0, Kr=1).
+Frozen GAM + adaptive Holt EMA bias correction (level-only β=0; bias_alpha is a
+deployment parameter set per season, NOT part of the LOSO grid — NLL is flat across
+0.1–0.3 making it unidentifiable as a structural parameter). 480-spec nested LOSO
+(v15), Bernoulli NLL = 0.406. Entry-point: `scripts/run_nested_loso_v15.R`.
 
 Key data for M2 development:
 - `data/m1_alignment_tuning_combined.rds` — full M1 grid (67 specs, v5–v7)
