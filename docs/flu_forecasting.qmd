@@ -11,6 +11,15 @@ format:
       body-width: 1200px
 ---
 
+::: {.callout-warning}
+## Legacy document — pre-v13 architecture
+
+This document describes the original PAGe implementation using **weekly GAM refit at deployment**, which has been superseded by the frozen GAM + adaptive Holt EMA bias correction architecture (v13+). Model formula, hyperparameter values, and tuning grid structure are all outdated.
+
+For current M2 specification and tuning results, see [`forecast_training.html`](forecast_training.html).  
+For the live 2025-26 deployment, see [`prospective_deployment.html`](prospective_deployment.html).
+:::
+
 ```{r}
 #| label: setup
 #| include: false

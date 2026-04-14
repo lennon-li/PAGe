@@ -1,5 +1,38 @@
 # M0 runtime utilities for weekly ignition monitoring
 
+#' Run M0 ignition detection week-by-week (walk-forward)
+#'
+#' Applies \code{detectIgnition_oneSeason()} at each evaluation week in
+#' \code{currentSeason}, building an as-of snapshot for each week from
+#' \code{start_week} onward. Returns the full week-by-week detection table
+#' together with scalar summary values for the locked ignition week and
+#' the estimated ignition \code{iWeek_hat}.
+#'
+#' @param currentSeason Data frame for the season to evaluate. Must contain
+#'   \code{weekF} (or the column named in \code{week_col}), \code{y}, and
+#'   either \code{N} or \code{neg}. Optional columns: \code{season}, \code{p}.
+#' @param ign_fit_or_gam Fitted ignition classifier (output of
+#'   \code{fitIgnition()} or an \code{mgcv} GAM), or \code{NULL} when
+#'   \code{params$use_cls = FALSE}.
+#' @param params Named list of M0 threshold parameters (e.g.
+#'   \code{tuned$best_params}).
+#' @param start_week Integer; first \code{weekF} value to evaluate
+#'   (default 5L).
+#' @param week_col Character; name of the week column in \code{currentSeason}
+#'   (default \code{"weekF"}).
+#'
+#' @return A list with four elements:
+#' \describe{
+#'   \item{df}{Tibble with one row per evaluated week containing per-week
+#'     signals, gate conditions (\code{ok_*}), and \code{iWeek_hat_dynamic}.}
+#'   \item{iWeek_hat_dynamic_last}{Integer; dynamic ignition estimate at the
+#'     last evaluated week.}
+#'   \item{iWeek_hat_locked}{Integer; earliest \code{iWeek_hat_dynamic}
+#'     across all weeks (lock-in value).}
+#'   \item{ign_week_locked}{Integer; first week where detection fired
+#'     (\code{ignite_ok_now == TRUE}).}
+#' }
+#' @export
 run_ignition_weekly <- function(currentSeason,
                                 ign_fit_or_gam = NULL,
                                 params,
@@ -134,6 +167,38 @@ run_ignition_weekly <- function(currentSeason,
 #' @return A list with elements \code{delta}, \code{K}, \code{leads}, \code{use_ramp}, and \code{extra}.
 
 
+#' Plot walk-forward ignition detection snapshots
+#'
+#' Creates a faceted ggplot (or named list of ggplots) showing the observed
+#' positivity series at each as-of week evaluated by
+#' \code{run_ignition_weekly()}. The current-week observation is highlighted,
+#' detected weeks are coloured red, and a dashed vertical line marks the
+#' locked ignition estimate when detection has fired.
+#'
+#' @param ign_out List returned by \code{run_ignition_weekly()}. Must contain
+#'   \code{$df} with at least columns \code{weekF} and \code{p_now}.
+#' @param currentSeason Optional data frame with observed series columns
+#'   (week, positivity and/or counts, optionally date). When \code{NULL},
+#'   \code{p_now} from \code{ign_out$df} is used as the observed series.
+#' @param facet Logical; if \code{TRUE} (default) returns a single faceted
+#'   ggplot; if \code{FALSE} returns a named list of per-snapshot ggplots.
+#' @param ncol Integer; columns in the facet layout when \code{facet = TRUE}
+#'   (default 4).
+#' @param base_size Numeric; ggplot base font size (default 11).
+#' @param y_max Numeric; upper y-axis limit across all panels (default 0.20).
+#' @param start_week Integer; first \code{weekF} to include (default 5L).
+#' @param maxWeek Numeric; last \code{weekF} to include (default \code{Inf}).
+#' @param week_col Character; name of the week column in \code{currentSeason}
+#'   (default \code{"weekF"}).
+#' @param y_col Character; name of the positive-count column
+#'   (default \code{"y"}).
+#' @param N_col Character; name of the total-test column (default \code{"N"}).
+#' @param p_col Character; name of the positivity column (default \code{"p"}).
+#' @param date_col Character; name of the date column (default \code{"date"}).
+#'
+#' @return A ggplot object (when \code{facet = TRUE}) or a named list of
+#'   ggplot objects (when \code{facet = FALSE}).
+#' @export
 plot_ignition_weekly_snapshots <- function(ign_out,
                                            currentSeason = NULL,
                                            facet = TRUE,

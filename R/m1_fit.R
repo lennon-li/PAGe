@@ -10,6 +10,29 @@ negloglik_tau_delta <- function(par, t, y, n, gfun, allow_scale = TRUE,
   nll + lam * del^2
 }
 
+#' Estimate tau and its profile standard error
+#'
+#' Fits the temporal alignment shift \code{tau} by 1-D golden-section
+#' optimisation over profile log-likelihood (marginalising over the intercept
+#' via GLM), then approximates the standard error of \code{tau_hat} from the
+#' numerical second derivative of the profile \emph{deviance}.
+#'
+#' @param currentD Data frame for one season with columns \code{newWeek},
+#'   \code{y} (positives), and \code{neg} (negatives).
+#' @param g_ref Reference curve function on the logit scale,
+#'   \code{g_ref(u) = logit(p_ref(u))}.
+#' @param allow_scale Logical; if \code{TRUE} fits an intercept + slope
+#'   (\code{a + b * g_ref}) rather than offset-only (default \code{FALSE}).
+#' @param h Numeric step size for numerical second derivative (default
+#'   \code{1e-3}).
+#' @param tau0 Numeric starting value for the search interval centre
+#'   (default 0).
+#' @param tau_bounds Numeric vector of length 2; hard limits for \code{tau}
+#'   (default \code{c(-12, 12)}).
+#'
+#' @return A list with \code{tau_hat} (numeric) and \code{se_tau}
+#'   (numeric, \code{NA} when the Hessian is non-positive).
+#' @keywords internal
 tau_profile_se <- function(currentD, g_ref, allow_scale = FALSE,
                            h = 1e-3, tau0 = 0, tau_bounds = c(-12, 12)) {
   dat <- currentD %>% dplyr::mutate(n = y + neg) %>% dplyr::filter(n > 0)
@@ -41,6 +64,31 @@ tau_profile_se <- function(currentD, g_ref, allow_scale = FALSE,
   list(tau_hat = tau_hat, se_tau = se_tau)
 }
 
+#' Fit tau and delta alignment parameters (legacy version)
+#'
+#' Older implementation of the joint \eqn{(\tau, \delta)} fitting step.
+#' Uses \code{nloptr::sbplx()} to minimise the penalised binomial NLL
+#' \eqn{-\sum w \, \ell(\tau, a, b, \delta) / n + \lambda \delta^2}.
+#' Replaced by the multi-template ensemble approach; retained for reference.
+#'
+#' @param currentD Data frame with columns \code{newWeek}, \code{y}, and
+#'   \code{neg} for one season.
+#' @param g_ref_fun Reference curve function (unrestricted domain).
+#' @param tau_bounds Numeric vector of length 2; box constraint on \code{tau}.
+#' @param delta_bounds Numeric vector of length 2; box constraint on
+#'   \code{delta}.
+#' @param allow_scale Logical or \code{NULL}. If \code{NULL} (default),
+#'   scale is enabled once \code{max(newWeek) >= 28}.
+#' @param week_threshold_delta Integer; \code{delta} is freed only when
+#'   \code{max(newWeek) >= week_threshold_delta}.
+#' @param lam_delta Numeric; ridge penalty coefficient on \code{delta}.
+#' @param use_weights Logical; if \code{TRUE} (default) weights each
+#'   observation by \code{n = y + neg}.
+#'
+#' @return A list with \code{tau}, \code{a}, \code{b}, \code{delta},
+#'   \code{allow_scale}, \code{delta_on}, \code{value}, \code{status}, and
+#'   \code{predict_prob}.
+#' @keywords internal
 fit_tau_delta_old <- function(currentD, g_ref_fun,
                           tau_bounds, delta_bounds,
                           allow_scale = NULL,
@@ -397,6 +445,26 @@ fit_tau_delta <- function(currentD, g_ref_fun,
 }
 
 
+#' Compute 2x2 profile-likelihood covariance for (tau, delta)
+#'
+#' Estimates the joint covariance matrix of the alignment parameters
+#' \eqn{(\hat\tau, \hat\delta)} via a numerical 2×2 Hessian of the profile
+#' NLL (marginalised over the intercept \code{a} and scale \code{b} using
+#' Nelder-Mead at each grid point). Uses nine NLL evaluations via central
+#' differences.
+#'
+#' @param fit List returned by \code{fit_tau_delta()} (or
+#'   \code{fit_tau_delta_old()}). Must contain \code{tau}, \code{delta},
+#'   \code{a}, \code{b}, \code{allow_scale}, \code{t}, \code{y}, \code{n},
+#'   \code{w}, and \code{g_ref_fun}.
+#' @param h_tau Numeric step size for the \code{tau} derivative (default
+#'   0.1).
+#' @param h_del Numeric step size for the \code{delta} derivative (default
+#'   0.005).
+#'
+#' @return A list with \code{V} (2×2 covariance matrix, \code{NA}-filled when
+#'   the Hessian is singular) and \code{center} (\code{c(tau_hat, delta_hat)}).
+#' @keywords internal
 cov_tau_delta_from_profile <- function(fit, h_tau = 0.1, h_del = 0.005) {
   tau0 <- fit$tau; del0 <- fit$delta
   t <- fit$t; y <- fit$y; n <- fit$n; w <- fit$w
@@ -439,6 +507,28 @@ cov_tau_delta_from_profile <- function(fit, h_tau = 0.1, h_del = 0.005) {
   list(V = V, center = c(tau0, del0))
 }
 
+#' Safe penalised NLL objective for tau/delta optimisation
+#'
+#' Evaluates the normalised negative binomial log-likelihood penalised by a
+#' ridge term on \code{delta}. Returns the large sentinel value \code{1e9}
+#' whenever the reference curve is non-finite, any log-likelihood term is
+#' non-finite, or an error occurs, so that the outer optimiser can safely
+#' continue.
+#'
+#' @param par Numeric vector \code{c(tau, a, b, delta)} when
+#'   \code{allow_scale = TRUE}, or \code{c(tau, a, delta)} otherwise.
+#' @param t Numeric vector of \code{newWeek} values (observed data).
+#' @param y Integer vector of positive-test counts.
+#' @param n Integer vector of total-test counts.
+#' @param gfun Reference curve function on the logit scale.
+#' @param allow_scale Logical; whether the \code{b} scale parameter is
+#'   included in \code{par}.
+#' @param lam Numeric; ridge penalty coefficient on \code{delta}.
+#' @param w Numeric vector of observation weights.
+#'
+#' @return A single numeric scalar (the penalised NLL, or \code{1e9} on
+#'   failure).
+#' @keywords internal
 safe_obj <- function(par, t, y, n, gfun, allow_scale, lam, w) {
   out <- try({
     tau <- par[1]; a <- par[2]

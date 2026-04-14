@@ -1,4 +1,4 @@
-# =========================================================================
+﻿# =========================================================================
 # retired.R - Legacy / deprecated functions
 #
 # These functions are no longer used by the active M2 pipeline but are
@@ -17,6 +17,12 @@
 
 # --- from R/m2_spec_grid.R ---
 
+#' Retired: prepare Stage-2 M1 features
+#'
+#' Retired. Use \code{prep_stage2_joint()} from \code{m2_training.R} instead.
+#' Calling this function stops with an error via \code{.Deprecated()}.
+#'
+#' @keywords internal
 prep_stage2_m1_features <- function(alignedD_prosp,
                                     template_df,
                                     spec,
@@ -109,14 +115,9 @@ prep_stage2_m1_features <- function(alignedD_prosp,
 # 4) train_stage2_joint_m1()
 # ============================================================
 
-#' Fit the Stage-2 joint M1 model for a given spec
+#' Retired: fit Stage-2 joint M1 model for a given spec
 #'
-#' Internally stacks data across \code{spec$leads} and fits \code{mgcv::bam()} using \code{spec$formula}.
-#' Training window is applied via:
-#' \code{weekF >= ign_weekF - Kb}, where \code{Kb = spec$Kb}.
-#'
-#' Creates \code{season_h = interaction(season, lead)} to match your formula usage.
-#' Saves \code{fit$stage2_levels} for safe LOSO/new-season prediction alignment.
+#' Retired. Use \code{train_stage2_joint()} from \code{m2_training.R} instead.
 #'
 #' @param feat Output of \code{prep_stage2_m1_features()}.
 #' @param spec Output of \code{stage2_make_spec()} (must contain \code{formula}, \code{Kb}, \code{leads}).
@@ -129,7 +130,7 @@ prep_stage2_m1_features <- function(alignedD_prosp,
 #' @param ... Passed to \code{mgcv::bam()}.
 #'
 #' @return List with \code{fit}, \code{spec}, and optionally \code{d_train}.
-#' @export
+#' @keywords internal
 
 # --- from R/m2_spec_grid.R ---
 
@@ -198,49 +199,12 @@ train_stage2_joint_m1 <- function(feat,
 # 5) tune_stage2_loso_spec_grid()
 # ============================================================
 
-#' LOSO tuning over a spec grid with weighted scoring near ignition
+#' Retired: LOSO tuning over a spec grid with weighted scoring near ignition
 #'
-#' For each spec_id in \code{spec_grid$specs}:
-#' \enumerate{
-#'   \item Prepare features once via \code{prep_stage2_m1_features()}.
-#'   \item For each held-out season, fit \code{train_stage2_joint_m1()} on the remaining seasons.
-#'   \item Predict on held-out season excluding season-dependent terms (new-season evaluation).
-#'   \item Score using weighted NLL / Brier / RMSE(p).
-#' }
+#' Retired. Use \code{nested_loso_grid_search()} from \code{m2_nested_loso.R}
+#' instead. Calling this function stops with an error via \code{.Deprecated()}.
 #'
-#' Weighting uses **target-week time since ignition**:
-#' \deqn{t_\text{target} = (w + h) - w^{(ign)}}
-#' Rows with \code{0 <= t_target <= k_t} get weight \code{w_early} (default 2),
-#' later rows weight 1.
-#'
-#' @param alignedD_prosp Raw aligned dataset.
-#' @param template_df Template reference df.
-#' @param spec_grid Output of \code{expand_grid_specs()} (must include \code{$specs} and \code{$grid}).
-#' @param ignD Optional ignition rule table (fallback).
-#' @param seasons Optional subset of seasons to include. Must be >=3 for LOSO.
-#' @param k_t Integer emphasized window length (weeks since ignition on TARGET week).
-#' @param w_early Numeric multiplier for emphasized window.
-#' @param exclude_newseason_terms If TRUE, exclude \code{spec$exclude_newseason} when predicting held-out season.
-#' @param nthreads Threads for bam fits
-#' #' Parallelization uses future.apply and works on Windows (multisession) and Linux/macOS (multicore).
-#' Best practice: parallelize over "spec" and set mgcv::bam(nthreads=1) to avoid oversubscription.
-#'
-#' @param parallel Logical; if TRUE uses future.apply.
-#' @param parallel_over "spec" (recommended) or "fold".
-#' @param workers Integer; number of workers. Default uses future::availableCores().
-#' @param strategy "auto"|"multisession"|"multicore"|"sequential".
-#' @param verbose Logical.
-#'
-#' @return List with:
-#' \itemize{
-#'   \item \code{by_season}: per-spec per-heldout-season metrics
-#'   \item \code{by_spec}: aggregated metrics per spec_id
-#'   \item \code{by_spec_grid}: by_spec joined back to the grid
-#'   \item \code{best}: best spec row
-#'   \item \code{scoring}: k_t and w_early used
-#'   \item \code{timing}: elapsed and cpu seconds
-#' }
-#' @export
+#' @keywords internal
 
 # --- from R/m2_spec_grid.R ---
 
@@ -495,97 +459,12 @@ tune_stage2_loso_spec_grid <- function(alignedD_prosp,
 
 
 
-#' LOSO tuning over a Stage-2 spec grid (disk-backed parallel; Linux + Windows)
+#' Retired: LOSO tuning over a Stage-2 spec grid (disk-backed parallel; Linux + Windows)
 #'
-#' Performs leave-one-season-out (LOSO) tuning for Stage-2 by evaluating each
-#' hyperparameter setting (spec) against held-out seasons, using weighted scoring
-#' near ignition. This implementation is designed for **large grids** and
-#' **cross-platform parallelism** (Windows + Linux/macOS) without hitting
-#' `future.globals.maxSize` limits.
+#' Retired. Use \code{nested_loso_grid_search()} from \code{m2_nested_loso.R}
+#' instead. Calling this function stops with an error via \code{.Deprecated()}.
 #'
-#' ## Key design
-#' - Writes large inputs (\code{alignedD_prosp}, \code{template_df}, \code{ignD}, \code{spec_grid$grid})
-#'   to temporary \code{.rds} files once, then parallel workers receive only file paths + indices.
-#' - Workers process \code{chunk_size} specs sequentially per job to reduce overhead.
-#'
-#' ## Requirements / dependencies
-#' This function assumes these project functions already exist:
-#' \itemize{
-#'   \item \code{stage2_make_spec()}
-#'   \item \code{prep_stage2_m1_features()}
-#'   \item \code{stack_stage2_joint_data()}
-#'   \item \code{train_stage2_joint_m1()}
-#'   \item \code{stage2_exclude_newseason()} and \code{stage2_build_joint_formula()} (indirectly via spec)
-#' }
-#'
-#' Also requires packages: \code{future}, \code{future.apply}, \code{data.table}, \code{mgcv}.
-#'
-#' ## Scoring weights
-#' Uses **target-week** time-since-ignition:
-#' \deqn{t_\mathrm{target} = (w + h) - w^{(\mathrm{ign})}}
-#' Rows with \code{0 <= t_target <= k_t} are weighted \code{w_early} (default 2),
-#' otherwise weight 1.
-#'
-#' ## Spec grid format
-#' Uses \code{spec_grid$grid} (data.frame / data.table) with at least the columns:
-#' \code{spec_id}, \code{delta}, \code{Kr}, \code{Kb}, \code{T}, \code{k_f},
-#' \code{alpha_state}, \code{k_w}, \code{k_s}, \code{k_e}, \code{k_n},
-#' \code{k_1}, \code{k_2}, \code{bs_week}, \code{bs_fs_marginal}.
-#'
-#' @param alignedD_prosp Aligned prospective dataset (all seasons) used for feature prep.
-#'   Must contain your required columns (season/weekF/newWeek plus y/N etc).
-#' @param template_df Template reference data.frame with columns \code{newWeek} and \code{fit}
-#'   (logit-scale template).
-#' @param spec_grid Output from \code{expand_grid_specs()}, containing \code{$grid} with
-#'   the hyperparameter combinations and a unique \code{spec_id} per row.
-#' @param ignD Optional ignition-rule table used as a fallback to derive ignition week
-#'   when \code{iWeek} / \code{ignition} are not present in \code{alignedD_prosp}.
-#' @param seasons Optional character vector of seasons to include in LOSO.
-#'   If NULL, uses all seasons in \code{alignedD_prosp}. Must be >= 3.
-#' @param k_t Integer. Number of **target weeks since ignition** to upweight in scoring.
-#' @param w_early Numeric. Weight multiplier for the emphasized window (default 2).
-#' @param exclude_newseason_terms Logical. If TRUE, predictions on the held-out season
-#'   exclude season-dependent terms using \code{spec$exclude_newseason}.
-#' @param workers Integer. Number of parallel workers.
-#' @param strategy Future plan strategy. \code{"auto"} chooses \code{"multisession"} on Windows
-#'   and \code{"multicore"} on Linux/macOS. You can force \code{"multisession"} for portability.
-#' @param chunk_size Integer. Number of specs evaluated per worker job (reduces overhead).
-#'   Typical values 4–16.
-#' @param nthreads Integer. Threads passed to \code{mgcv::bam()} inside each worker.
-#'   When \code{workers>1}, set \code{nthreads=1} to avoid CPU oversubscription.
-#' @param cache_dir Directory for temporary \code{.rds} files. Defaults to \code{tempdir()}.
-#'   Files are removed automatically on exit.
-#' @param verbose Logical. If TRUE, prints a short run header and timing summary.
-#'
-#' @return A list with:
-#' \itemize{
-#'   \item \code{by_season}: data.table of per-spec per-heldout-season metrics
-#'   \item \code{by_spec}: aggregated metrics per \code{spec_id} (ordered by \code{mean_nll})
-#'   \item \code{by_spec_grid}: \code{by_spec} joined back onto \code{spec_grid$grid}
-#'   \item \code{best}: best row of \code{by_spec}
-#'   \item \code{scoring}: list(k_t, w_early)
-#'   \item \code{timing}: list(start, end, elapsed_sec, cpu_sec)
-#'   \item \code{parallel}: list(strategy, workers, chunk_size, bam_nthreads)
-#' }
-#'
-#' @export
-#'
-#' @examples
-#' \dontrun{
-#' spec_grid <- expand_grid_specs(
-#'   delta_grid = -1:1,
-#'   Kr_grid = 1:3,
-#'   Kb_grid = c(0L,1L),
-#'   T_grid = c("O","S"),
-#'   k_f_grid = c(6L,8L),
-#'   alpha_state = c(0.25,0.35),
-#'   k_w_grid = c(6L,8L),
-#'   k_s_grid = c(0L),
-#'   k_e_grid = c(0L,6L),
-#'   k_n_grid = c(0L,6L),
-#'   k_1_grid = c(4L,6L),
-#'   k_2_grid = c(0L)
-#' )
+#' @keywords internal
 
 # --- from R/m2_spec_grid.R ---
 
@@ -829,27 +708,18 @@ tune_stage2_loso_spec_grid_parallel <- function(alignedD_prosp,
 }
 
 # ============================================================
-# 6) plot_stage2_joint_fit_by_season()
+# 6) tune_stage2_loso_specs()
 # ============================================================
-
-#' Plot Stage-2 fit vs observed by season (observed all weeks; fit post-ignition only)
-#'
-#' Black points: observed lead positivity for all observed target weeks in \code{feat_full}.
-#' Red lines: fitted probabilities drawn only for weeks at/after ignition.
-#'
-#' @param out_m1 Output of \code{train_stage2_joint_m1(return_data=TRUE)}.
-#' @param feat_full Full feature table from \code{prep_stage2_m1_features()} (used for pre-ignition points).
-#' @param dat_raw Optional raw data with columns season/weekF/phase to compute a "true" ignition line.
-#' @param ign_hat_df Optional df with columns season, iWeek_hat (dashed line).
-#' @param exclude_season_re If TRUE, exclude only \code{s(season)} in prediction.
-#' @param exclude_newseason_terms If TRUE, exclude \code{out_m1$spec$exclude_newseason} in prediction.
-#' @param facet_by_lead If TRUE use \code{facet_grid(lead ~ season)} else \code{facet_wrap(~season)}.
-#'
-#' @return A ggplot object.
-#' @export
 
 # --- from R/m2_training.R ---
 
+#' Retired: LOSO spec comparison for Stage-2 models
+#'
+#' Retired. Use \code{nested_loso_grid_search()} from \code{m2_nested_loso.R}
+#' instead. Evaluates a list of \code{stage2_make_spec()} specs via LOSO and
+#' returns per-spec NLL/Brier/RMSE metrics.
+#'
+#' @keywords internal
 tune_stage2_loso_specs <- function(
     dat,
     template_df,
@@ -1062,26 +932,12 @@ tune_stage2_loso_specs <- function(
   list(results = results, best_by_season = best_by_season, best_overall = best_overall)
 }
 
-#' Tune Stage-2 over (delta,K,k_f,alpha_state) with a fixed model structure
+#' Retired: tune Stage-2 over (delta,K,k_f,alpha_state) with a fixed model structure
 #'
-#' This is a compatibility wrapper that replicates the QMD workflow, but internally
-#' it expands a grid of specs and calls \code{tune_stage2_loso_specs()}.
+#' Retired. Use \code{nested_loso_grid_search()} from \code{m2_nested_loso.R}
+#' instead. Calling this function stops with an error via \code{.Deprecated()}.
 #'
-#' If \code{spec_base} is NULL, it uses the **full model** (all terms on) as the default.
-#' That means your Stage-2 now includes:
-#' \code{s(logit_f_eff)} + \code{s(newWeek)} + \code{fs(newWeek,season_h)} + \code{z_ema, logN_now, d1, d2} + season RE.
-#'
-#' @param dat Multi-season input data.
-#' @param template_df Template curve.
-#' @param spec_base A spec that defines model structure (k's, template_mode, etc.).
-#' @param shift_grid,K_grid,k_f_grid,alpha_grid Grids to tune.
-#' @param ign_hat_df Optional ignition week estimates by season.
-#' @param pre_buffer Weeks before ignition included.
-#' @param leads Forecast horizons.
-#' @param num.cores Parallel workers.
-#'
-#' @return list(results, best_by_season, best_overall)
-#' @export
+#' @keywords internal
 
 # --- from R/m2_training.R ---
 
@@ -1194,6 +1050,12 @@ tune_stage2_loso_shift_template <- function(
 
 # --- from R/m2_training.R ---
 
+#' Retired: heatmap plot for Stage-2 LOSO tuning results
+#'
+#' Retired. Use \code{plot_nested_loso_scores()} from \code{m2_nested_loso.R}
+#' or build a custom ggplot from the \code{by_spec_grid} table instead.
+#'
+#' @keywords internal
 plot_tune_stage2_heatmap <- function(df,
                                      metric = "mean_nll",
                                      agg = TRUE,
@@ -1401,68 +1263,14 @@ plot_tune_stage2_heatmap <- function(df,
 # Use the version there — it supports the full hyperparameter grid.
 
 
-#’ Bundle all trained components into a prospective forecasting kit
-#’
-#’ Packages Stage-1 ignition detection and Stage-2 forecasting into a single list
-#’ for prospective deployment. The weekly-refit workflow refits the Stage-2 GAM
-#’ with current-season data each week; no offline calibration or online updater is stored.
-#’
-#’ Accepts either high-level training output objects (\code{ign_fit}, \code{joint_out})
-#’ or the individual pieces directly. High-level objects take precedence only when the
-#’ corresponding individual argument is \code{NULL}.
-#’
-#’ @param template_df Data frame with columns \code{newWeek} and \code{fit} defining
-#’   the reference template curve.
-#’ @param ign_fit Output of \code{fitIgnition()}. Used to extract \code{gam_cls} when
-#’   \code{gam_cls} is \code{NULL}.
-#’ @param gam_cls A trained \pkg{mgcv} \code{gam}/\code{bam} classifier, or a container
-#’   accepted by \code{get_gam_cls()}. Overrides extraction from \code{ign_fit}.
-#’ @param params_stage1 List of tuned Stage-1 threshold parameters (e.g.
-#’   \code{tuned$best_params}).
-#’ @param joint_out Output of \code{train_stage2_joint()}. Used to extract
-#’   \code{spec_stage2}, \code{stage2_fit}, and \code{train_data_stage2} when those
-#’   are \code{NULL}.
-#’ @param spec_stage2 Stage-2 spec list from \code{stage2_make_spec()} or
-#’   \code{stage2_spec_from_tuning()}. Overrides extraction from \code{joint_out}.
-#’ @param stage2_fit Fitted \pkg{mgcv} \code{gam}/\code{bam} Stage-2 model. Overrides
-#’   extraction from \code{joint_out}.
-#’ @param train_data_stage2 Stage-2 training design data frame (preserves factor levels).
-#’   Overrides extraction from \code{joint_out}.
-#’ @param best_mean_nll 1-row data frame or list with \code{delta}/\code{K}/\code{leads}.
-#’   Derived from \code{spec_stage2$best_row} when \code{NULL}.
-#’ @param exclude_stage2 Character vector of model terms to exclude for new-season
-#’   prediction. Derived from \code{spec_stage2$exclude_newseason} when \code{NULL}.
-#’ @param defaults Named list of prospective pipeline run-time defaults:
-#’   \code{align}, \code{anchorWeek}, \code{pre_buffer}, \code{deriv_k}.
-#’
-#’ @return A named list with components \code{stage1}, \code{stage2}, and \code{defaults},
-#’   ready to be passed to the prospective pipeline.
-#’
-#’ @examples
-#’ \dontrun{
-#’ # Preferred: pass training objects directly
-#’ kit <- make_prospective_kit(
-#’   template_df   = template_df,
-#’   ign_fit       = ign_fit,
-#’   params_stage1 = tuned$best_params,
-#’   joint_out     = joint_out,
-#’ )
-#’
-#’ # Legacy: pass individual components
-#’ kit <- make_prospective_kit(
-#’   template_df       = template_df,
-#’   gam_cls           = gam_cls,
-#’   params_stage1     = params_stage1,
-#’   spec_stage2       = spec_stage2,
-#’   stage2_fit        = joint_out$fit,
-#’   train_data_stage2 = joint_out$train_data
-#’ )
-#’ }
-#’
-#’ @export
-
 # --- from R/m2_training.R ---
 
+#' Retired: bundle all trained components into a prospective forecasting kit
+#'
+#' Retired. Use \code{load_prospective_kit()} from \code{pipeline_runtime.R}
+#' instead.
+#'
+#' @keywords internal
 make_prospective_kit <- function(template_df,
                                  ign_fit = NULL,
                                  gam_cls = NULL,
@@ -1534,6 +1342,12 @@ make_prospective_kit <- function(template_df,
 
 # --- from R/m2_training.R ---
 
+#' Retired: validate a prospective forecasting kit
+#'
+#' Retired. Use \code{load_prospective_kit()} from \code{pipeline_runtime.R}
+#' instead, which validates structure on load.
+#'
+#' @keywords internal
 check_prospective_kit <- function(kit) {
   stopifnot(is.list(kit))
   req <- list(
@@ -1563,6 +1377,13 @@ check_prospective_kit <- function(kit) {
 
 # --- from R/pipeline_bridge.R ---
 
+#' Retired: run the full M0/M1/M2 weekly prospective pipeline
+#'
+#' Retired. Use \code{run_prospective_pipeline()} from
+#' \code{pipeline_runtime.R} instead. Calling this function issues a
+#' deprecation warning via \code{.Deprecated()}.
+#'
+#' @keywords internal
 run_m0_m1_m2_weekly <- function(currentSeason,
                                  ref,
                                  hyper,

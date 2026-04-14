@@ -391,22 +391,21 @@ tibble::tribble(
   "Kr",         "Template ramp length in weeks. Kr=1 means full template weight from week 1 of ignition; Kr>1 blends in gradually over Kr weeks.",                              "Integer ≥ 1",  "Fixed: 1",
   "k_f",        "Basis dimension for the template smooth $S_1^h$. Controls how nonlinearly the model maps the template covariate to the response.",                             "Integer ≥ 2",  "{2, 3, 4, 5}",
   "k_e",        "Basis dimension for the EMA-state smooth $S_4^h$. Controls nonlinearity of the current-level correction.",                                                     "Integer ≥ 0",  "{2, 3}",
-  "α_state",    "EWMA smoothing decay for the current-level covariate z_ema. Lower α = slower adaptation, longer effective memory (≈ 1/α weeks).",                             "Real ∈ (0,1)", "{0.10, 0.15, 0.20, 0.25, 0.30}",
+  "α_state",    "EWMA smoothing decay for the current-level covariate z_ema. Lower α = slower adaptation, longer effective memory (≈ 1/α weeks).",                             "Real ∈ (0,1)", "{0.30, 0.35, 0.40, 0.45, 0.50}",
   "k_r",        "Basis dimension for amplitude-residual smooth $S_5^h$ (z_resid = z_ema − logit_f_eff). k_r=0 disables.",                                                      "Integer ≥ 0",  "{0, 2, 3}",
-  "k_de",       "Basis dimension for rate-of-change smooth $S_6^h$ (dz_ema). k_de>0 failed in v13/v14 due to poor dz_ema conditioning; standardized to unit-variance in v15, enabling tuning.",  "Integer ≥ 0",  "{0, 2} (v15)",
-  "k_sp",       "Basis dimension for alignment-uncertainty smooth $S_7^h$ (logit_spread = weighted SD of per-template logit predictions from M1 ensemble). k_sp=0 disables.", "Integer ≥ 0",  "{0, 2} (v15)",
-  "α (bias)",   "Holt EMA level-smoothing for the logit-scale bias corrector. Controls how quickly the bias adapts (~1/α week half-life).",                                     "Real ∈ (0,1)", "{0.1, 0.2, 0.3, 0.4}",
-  "β (bias)",   "Holt EMA trend-smoothing for the bias corrector. β=0 collapses to level-only EMA.",                                                                           "Real ∈ [0,1)", "Fixed: 0.0",
+  "k_de",       "Basis dimension for rate-of-change smooth $S_6^h$ (dz_ema, unit-variance standardized). k_de=0 disables.",                                                    "Integer ≥ 0",  "{0, 2}",
+  "k_sp",       "Basis dimension for alignment-uncertainty smooth $S_7^h$ (logit_spread = weighted SD of per-template logit predictions from M1 ensemble). k_sp=0 disables.", "Integer ≥ 0",  "{0, 2}",
+  "α (bias)",   "Holt EMA level-smoothing for the logit-scale bias corrector. Deployment-time parameter, not tuned by LOSO (NLL is flat across 0.1–0.3; the optimal value depends on season speed and is set adaptively). β=0 collapses to level-only EMA.", "Real ∈ (0,1)", "Deployment parameter (adaptive)",
   "λ_w",        "Time-decay weight exponent. Down-weights late-season training rows. λ_w=0 is standard uniform MLE.",                                                           "Real ≥ 0",     "Fixed: 0"
 ) |>
   gt() |>
   tab_header(title = "M_2 tuning parameters") |>
-  cols_width(Parameter ~ px(90), Description ~ px(440),
-             Type ~ px(110), `Grid / value` ~ px(240)) |>
+  cols_width(Parameter ~ px(90), Description ~ px(480),
+             Type ~ px(110), `Grid / value` ~ px(200)) |>
   tab_style(style = cell_text(weight = "bold"),
             locations = cells_column_labels()) |>
   tab_style(style = cell_fill(color = "#f0f4f8"),
-            locations = cells_body(rows = c(3, 4, 5, 6, 7, 9, 10)))
+            locations = cells_body(rows = c(3, 4, 5, 6, 7, 8)))
 ```
 
 ### Evaluation metric
@@ -427,13 +426,13 @@ Predicted probabilities $\hat{p}_i$ pass through the **soft positivity ceiling**
 
 Hyperparameters were selected by nested leave-one-season-out (LOSO) cross-validation. For each held-out season, M0 detection and M1 alignment were run on the remaining training seasons; M2 was trained on those aligned predictions and evaluated on the held-out season with week-by-week Holt EMA bias correction and online season RE — exactly replicating the prospective deployment loop.
 
-Four rounds of search have been run:
+Four rounds of grid search were run:
 
 - **v13** (960 specs = 4×k_f × 2×k_e × 5×alpha_state × 3×k_r × 4×bias_alpha × 2×bias_beta) confirmed `alpha_state=0.30` was at the grid boundary.
 - **v13b** (15 specs) extended `alpha_state` to 0.50 and confirmed `0.30` is a genuine interior optimum under raw binomial NLL.
-- **v14** re-scored v13 results using **Bernoulli NLL** (N-invariant; prevents post-COVID high-volume seasons from dominating). Best `bias_alpha` flipped 0.4 → 0.2; `alpha_state` optimum shifted to 0.40.
+- **v14** re-scored v13 results using **Bernoulli NLL** (N-invariant; prevents post-COVID high-volume seasons from dominating). `alpha_state` optimum shifted to 0.40.
 - **v14b** extended `alpha_state` under Bernoulli NLL and found the optimum is flat from 0.30–0.50 (interior).
-- **v15** (1920 specs = 4×k_f × 2×k_e × 5×alpha_state × 3×k_r × 2×k_de × 2×k_sp × 4×bias_alpha) tested `k_de` (rate-of-change, after `dz_ema` standardization) and `k_sp` (alignment uncertainty `logit_spread`). Both new terms produced identical NLL to `k_de=0, k_sp=0`. **v14 spec confirmed as production model.** Entry-point: `scripts/run_nested_loso_v15.R`.
+- **v15** (480 specs = 4×k_f × 2×k_e × 5×alpha_state × 3×k_r × 2×k_de × 2×k_sp) tested `k_de` (rate-of-change, after `dz_ema` standardization) and `k_sp` (alignment uncertainty `logit_spread`). Both new terms produced identical NLL to `k_de=0, k_sp=0`. **v14 GAM spec confirmed as production model.** `bias_alpha` was removed from the grid: it is unidentifiable in LOSO (NLL flat across 0.1–0.3) and is a deployment-time parameter, not a model structure parameter. Entry-point: `scripts/run_nested_loso_v15.R`.
 
 **Active hyperparameters (v15):**
 
@@ -443,10 +442,10 @@ Four rounds of search have been run:
 - `k_r` ∈ {0, 2, 3} — basis dimension for amplitude-residual smooth `s(z_resid)`; k_r=0 loses by Bernoulli NLL ≈ 0.013 nats.
 - `k_de` ∈ {0, 2} — basis dimension for rate-of-change smooth `s(dz_ema)`; enabled after standardizing `dz_ema` to unit variance.
 - `k_sp` ∈ {0, 2} — basis dimension for alignment uncertainty smooth `s(logit_spread)`, where `logit_spread` is the weighted SD of per-template logit predictions from M1.
-- `bias_alpha` ∈ {0.1, 0.2, 0.3, 0.4} — Holt level smoothing; best (v14 Bernoulli) = 0.2.
-- `bias_beta` fixed at 0.0 (level-only EMA; trend term provides no benefit).
 
 **Fixed parameters:** `delta = 0`, `Kr = 1`, `lambda_w = 0`, `k_n = k_w = k_s = 0`.
+
+**Deployment-only parameter (not part of LOSO grid):** `bias_alpha` — NLL is flat across 0.1–0.3 in LOSO, making it unidentifiable as a structural parameter. It is set adaptively at deployment based on season speed (see @sec-deployment-bias).
 
 ```{r tuning-call}
 #| eval: false
@@ -472,8 +471,9 @@ m1_test <- m1_walkforward_predictions(
   dynamic_temp = FALSE, dynamic_temp_pivot = 10L
 )
 
-# --- Phase 2: train frozen GAM once per spec, evaluate with Holt bias + online RE ---
-# v15 grid: k_f × k_e × alpha_state × k_r × k_de × k_sp × bias_alpha = 960 specs
+# --- Phase 2: train frozen GAM once per spec, evaluate with adaptive Holt bias + online RE ---
+# v15 grid: k_f × k_e × alpha_state × k_r × k_de × k_sp = 480 specs
+# bias_alpha is a deployment parameter, not part of LOSO grid (NLL flat 0.1–0.3; set adaptively per season)
 # k_de now feasible after dz_ema standardization; k_sp tests alignment uncertainty
 grid <- tidyr::crossing(
   delta       = 0L, Kr = 1L,
@@ -482,15 +482,14 @@ grid <- tidyr::crossing(
   alpha_state = c(0.30, 0.35, 0.40, 0.45, 0.50),
   k_r         = c(0L, 2L, 3L),
   k_de        = c(0L, 2L),
-  k_sp        = c(0L, 2L),
-  bias_alpha  = c(0.1, 0.2, 0.3, 0.4),
-  bias_beta   = 0.0
+  k_sp        = c(0L, 2L)
 )
+BIAS_ALPHA <- 0.4  # deployment default; tuned per season at runtime
 spec <- stage2_make_spec(
   delta = delta, Kr = Kr, T = "S", k_f = k_f, k_e = k_e,
   k_r = k_r, k_de = k_de, k_sp = k_sp, k_n = 0L, k_w = 0L, k_s = 0L,
   alpha_state = alpha_state, lambda_w = 0, w_floor = 0.05,
-  bias_alpha = bias_alpha, bias_beta = bias_beta
+  bias_alpha = BIAS_ALPHA, bias_beta = 0.0
 )
 
 m2       <- nested_loso_m2_train(fold = fold, m1_train_preds = m1_train, spec = spec)
@@ -526,9 +525,9 @@ cat("Best:", prod_results$best_spec_id,
 best_spec_nested <- prod_results$best_spec
 ```
 
-**Production spec (v14/v15):** `k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0, bias_alpha=0.2, bias_beta=0.0` with `delta=0, Kr=1, lambda_w=0`. Mean LOSO Bernoulli NLL = **0.40628** (v14/v15, 1920 specs across 10 seasons). v15 (1920-spec grid adding `k_de ∈ {0,2}` and `k_sp ∈ {0,2}`) confirmed that neither rate-of-change nor alignment uncertainty improve over the v14 spec — Bernoulli NLL is identical at 0.406 for both `k_de=0` and `k_de=2`, and for both `k_sp=0` and `k_sp=2`. The v14 spec is therefore confirmed as the production model.
+**Production spec (v15):** `k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0` with `delta=0, Kr=1, lambda_w=0`. Mean LOSO Bernoulli NLL = **0.40628** (480 specs, 10 seasons). v15 confirmed that neither rate-of-change (`k_de`) nor alignment uncertainty (`k_sp`) improve over the baseline spec — Bernoulli NLL is identical at 0.406 for both `k_de=0` and `k_de=2`, and for both `k_sp=0` and `k_sp=2`. The v14 GAM structure is therefore confirmed as the production model.
 
-The model uses three effective covariates: template position (`s(logit_f_eff, k=4)`), EMA state (`s(z_ema, k=2)`, α=0.40), and amplitude residual (`s(z_resid, k=2)`). Holt EMA bias correction (α=0.2, β=0.0) plus online season random effect are applied at deployment and in LOSO evaluation.
+The model uses three effective covariates: template position (`s(logit_f_eff, k=4)`), EMA state (`s(z_ema, k=2)`, α=0.40), and amplitude residual (`s(z_resid, k=2)`). Adaptive Holt EMA bias correction (level-only, β=0.0) plus online season random effect are applied at deployment; the base smoothing rate is set per season based on observed season speed (see @sec-deployment-bias).
 
 **`delta = 0`, `Kr = 1` — template shift and ramp are inert.**
 All delta and Kr values produce identical NLL. With `z_resid` and bias correction absorbing amplitude and timing adjustments, these parameters have no remaining signal.
@@ -561,8 +560,8 @@ The optimum is flat from 0.30–0.50 across both v14b and v15:
 **`k_sp = 0` — alignment uncertainty provides no benefit.**
 `logit_spread` (weighted SD of per-template logit predictions from M1's ensemble) was tested in v15 via `k_sp ∈ {0, 2}`. `k_sp=2` and `k_sp=0` produce identical Bernoulli NLL (0.406). The alignment uncertainty from M1 does not carry additional predictive signal beyond the existing covariates.
 
-**`bias_alpha = 0.2`, `bias_beta = 0.0` — level-only Holt.**
-`bias_beta = 0` (level-only) wins at every `bias_alpha` level. Under Bernoulli NLL, `bias_alpha ∈ {0.1, 0.2, 0.3}` all produce Bernoulli NLL ≈ 0.406 (flat); `bias_alpha=0.4` slightly degrades. `bias_alpha=0.2` is chosen as the representative interior point with a ~4.5-week half-life, preventing over-weighting of noisy early-season observations in low-N weeks.
+**`bias_alpha` — level-only Holt EMA, deployment parameter only.** {#sec-deployment-bias}
+`bias_beta = 0` (level-only) is set by design: the trend term provides no benefit and can cause oscillation. `bias_alpha` controls how quickly the corrector adapts to observed residuals (~`1/bias_alpha` week half-life). It is a **deployment-time parameter**, not part of the LOSO grid: under Bernoulli NLL, all values in 0.1–0.3 are indistinguishable (NLL flat at 0.406), making it unidentifiable as a structural model parameter. The appropriate value depends on the season — faster-peaking seasons (e.g. 2025-26) warrant a higher `bias_alpha` (~0.4) for quicker adaptation, while slower seasons can use a lower value (~0.2). An adaptive mechanism automatically boosts `bias_alpha` to 0.7 when ≥2 consecutive same-sign residuals are detected. The corrector resets at the first post-peak week.
 
 **`lambda_w = 0` — uniform training weights.**
 Down-weighting late-season observations provides no benefit.

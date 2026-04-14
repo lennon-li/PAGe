@@ -1,5 +1,21 @@
 # M2 runtime utilities for pseudo-prospective forecasting
 
+#' Extract Stage-2 hyperparameters from tuning output
+#'
+#' Pulls the commonly used Stage-2 hyperparameters from a list or 1-row
+#' data frame, supporting alternate column names (\code{shift} as an alias
+#' for \code{delta}). Any keys not recognised as core hyperparameters are
+#' collected in \code{extra}.
+#'
+#' @param best_mean_nll A list or 1-row data frame containing tuned
+#'   parameters. Recognised keys: \code{delta} (or \code{shift}), \code{K},
+#'   \code{leads}, \code{use_ramp}.
+#'
+#' @return A list with \code{delta} (integer template shift), \code{K}
+#'   (integer EMA half-life), \code{leads} (integer vector of forecast
+#'   horizons), \code{use_ramp} (logical), and \code{extra} (list of any
+#'   remaining keys).
+#' @keywords internal
 stage2_extract_hyperparams <- function(best_mean_nll) {
   get1 <- function(obj, nm, default = NULL) {
     if (is.list(obj) && !is.data.frame(obj) && !is.null(obj[[nm]])) return(obj[[nm]])

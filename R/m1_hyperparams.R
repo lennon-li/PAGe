@@ -1,3 +1,37 @@
+#' Learn tau/delta bounds and penalty from historical seasons
+#'
+#' Fits \eqn{(\tau, \delta)} for each historical season to empirically derive
+#' the alignment search bounds (\code{TAU_BOUNDS}, \code{DELTA_BOUNDS}), the
+#' week at which \code{delta} becomes estimable
+#' (\code{WEEK_THRESHOLD_DELTA}), and the ridge penalty coefficient
+#' (\code{LAMBDA_DELTA}). Bounds are the empirical quantile range (controlled
+#' by \code{robust_q}) plus a buffer. The penalty is calibrated from the
+#' median curvature of the NLL surface with respect to \code{delta}.
+#'
+#' @param theD Data frame of aligned historical seasons with columns
+#'   \code{season}, \code{newWeek}, \code{y}, and \code{neg}.
+#' @param g_ref_fun Reference curve function on the logit scale.
+#' @param tau_range_init,delta_range_init Numeric vectors of length 2;
+#'   initial search bounds for the optimisation over historical seasons
+#'   (defaults \code{c(-12, 12)} and \code{c(-0.35, 0.35)}).
+#' @param robust_q Numeric vector of length 2; lower/upper quantile
+#'   probabilities used to derive empirical bounds (default \code{c(0.05,
+#'   0.95)}).
+#' @param buffer_tau,buffer_delta Numeric; extra margin added to each side of
+#'   the empirical bounds (defaults 1.0 and 0.05).
+#' @param obs_cuts Integer vector; observation-week cutoffs used to assess
+#'   when \code{delta} stabilises (default \code{seq(12, 44, by = 4)}).
+#' @param rel_sd_target Numeric; relative SD threshold below which \code{delta}
+#'   is considered stable across seasons (default 0.25).
+#' @param lambda_scale Numeric; fraction of the median NLL curvature used as
+#'   \code{LAMBDA_DELTA} (default 0.20).
+#' @param h_delta Numeric; step size for the NLL curvature finite difference
+#'   (default 0.01).
+#'
+#' @return A list with \code{TAU_BOUNDS}, \code{DELTA_BOUNDS},
+#'   \code{WEEK_THRESHOLD_DELTA}, \code{LAMBDA_DELTA}, \code{tau_delta_hist},
+#'   \code{delta_stability}, \code{stability_summary}, and
+#'   \code{curvature_Dpp}.
 #' @export
 # Learn tau/delta ranges and penalties from historical seasons
 learn_alignment_hyperparams <- function(

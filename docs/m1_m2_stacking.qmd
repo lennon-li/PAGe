@@ -322,25 +322,25 @@ $$
 \texttt{logit\_f\_eff}^h_{s^*,w} \;\leftarrow\; \mathrm{logit}_\varepsilon\!\Bigl(\hat\pi^{M_1}_{s^*,w}\!\bigl(w^a_{s^*,w+h}\bigr)\Bigr).
 $$
 
-This is performed by `inject_m1_into_snapshots()`, which modifies the $M_2$
-prediction snapshots in-place.
+This is performed inside `run_m2_forecast()`, which builds the prediction snapshots
+with the M1-derived template feature already injected.
 
 ### Step 4: $M_2$ — Forecast
 
 $$
-\hat\pi^h_{s^*,w} \;\leftarrow\; \texttt{stage2\_predict\_series}(\text{snapshots with } \tilde{z}^h,\; \text{M}_2\text{ fit}).
+\hat\pi^h_{s^*,w} \;\leftarrow\; \texttt{m2\_predict\_one}(\text{snapshots with } \tilde{z}^h,\; \text{M}_2\text{ fit}).
 $$
 
-The full chain is wrapped in `run_m0_m1_m2_weekly()`:
+The full chain is coordinated by `run_m0_detection()` → `run_m1_alignment()` → `run_m2_forecast()`:
 
 ```
 Week w arrives
-  └─ M₀:  run_ignition_weekly(data[1:w], params)
+  └─ M₀:  run_m0_detection(data[1:w], params)
        └─ if ignited:
-            M₁:  run_alignment_prospective(data[1:w], ref, hyper)
+            M₁:  run_m1_alignment(data[1:w], ref, hyper)
                  └─ forecast_df  →  interpolate at target weeks
-                      └─ inject_m1_into_snapshots(pp, m1_result, ref)
-                           └─ M₂:  stage2_predict_series(pp, stage2_fit)
+                      └─ M₂:  run_m2_forecast(kit, currentSeason, weekF, m1_result)
+                               └─ adaptive Holt bias + online RE + frozen GAM
                                     └─ π̂_{s*,w+1},  π̂_{s*,w+2}
 ```
 
@@ -353,8 +353,8 @@ Week w arrives
 |---|---|
 | **$M_2$ template feature** | `logit_f_eff` now computed from $M_1$'s prediction instead of static $g_\text{ref}(w^a + \delta)$ |
 | **$M_2$ hyperparameters** | $\delta$ (template shift) is **eliminated** — $M_1$ handles alignment |
-| **$M_2$ LOSO** | Now requires $M_1$ walk-forward per fold; use `loso_m1_m2_joint()` instead of `tune_stage2_loso_spec_grid_parallel()` |
-| **Deployment pipeline** | Use `run_m0_m1_m2_weekly()` for full chain |
+| **$M_2$ LOSO** | Now requires $M_1$ walk-forward per fold; use `nested_loso_build_fold()` + `nested_loso_m2_train()` + `nested_loso_m2_eval_frozen_bias()` |
+| **Deployment pipeline** | Use `run_m0_detection()` + `run_m1_alignment()` + `run_m2_forecast()` for full chain |
 
 ### What does NOT change
 
@@ -366,7 +366,7 @@ Week w arrives
 | **Reference curve estimation** | Unchanged — `estimateRef()` is still the foundation |
 | **$M_2$ model structure** | All other terms ($b_s$, $S_2^h$, $S_4^h$, $S_6^h$, $S_7^h$) unchanged |
 | **$M_2$ hyperparameters** | $Kr$, $\alpha_\text{state}$, $\lambda_w$, $k_*$ all still tunable |
-| **$M_2$ weekly refit** | Same mechanism — only template source differs |
+| **$M_2$ weekly refit** | Replaced by **frozen GAM** + adaptive Holt EMA bias correction — no in-season refit needed |
 
 
 ## Key functions {#sec-functions}
@@ -377,9 +377,12 @@ All new functions live in `R/pipeline_bridge.R`:
 |---|---|
 | `m1_walkforward_predictions(seasonD, ...)` | Run $M_1$ walk-forward for one season, return predictions at target weeks as a data frame with columns `(season, eval_weekF, h, m1_p_hat)` |
 | `m1_walkforward_multi(allD, ...)` | Parallelised wrapper — runs `m1_walkforward_predictions` across multiple seasons using `future`/`furrr` |
-| `inject_m1_into_snapshots(pp, m1_result, ref)` | Replace `logit_f_eff` in $M_2$ prediction snapshots with $M_1$'s interpolated prediction |
-| `run_m0_m1_m2_weekly(currentSeason, ref, hyper, stage2_fit, ...)` | Full $M_0 \to M_1 \to M_2$ weekly chain for deployment |
-| `loso_m1_m2_joint(allD, spec, ...)` | Joint $M_0 \to M_1 \to M_2$ LOSO evaluator |
+| `run_m0_detection(...)` | Run M0 ignition detection for a season |
+| `run_m1_alignment(...)` | Run M1 multi-template alignment for a season |
+| `run_m2_forecast(kit, currentSeason, weekF, m1_result, ...)` | Full frozen-GAM M2 forecast + adaptive Holt bias correction + online season RE |
+| `nested_loso_build_fold(allD, test_season, ...)` | Build LOSO fold (train seasons, ref, hyper) for nested evaluation |
+| `nested_loso_m2_train(fold, m1_train_preds, spec)` | Train frozen GAM on LOSO training fold |
+| `nested_loso_m2_eval_frozen_bias(allD, fold, m2_fit, m1_test_preds, spec, ...)` | Evaluate with adaptive Holt bias + online RE on held-out season |
 
 Modified functions in `R/m2_training.R`:
 
@@ -399,6 +402,6 @@ Compare with the [pipeline overview](pipeline_overview.html) §7:
 | 2 | Ignition detector $\hat\theta$ | Offline | *No change* |
 | 3 | $M_1$ LOSO walk-forward → `params_df` | Offline | *No change* (still needed for `k_ref` tuning) |
 | 4 | Peak detection tuning | Offline | *No change* |
-| **5** | **$M_2$ hyperparameter tuning** | **Offline** | **Use `loso_m1_m2_joint()` — runs $M_1$ walk-forward per fold to generate template features; $\delta$ grid no longer needed** |
-| **6** | **$M_2$ initial fit** | **Offline** | **`train_stage2_joint(m1_preds = m1_train_all)` — uses walk-forward $M_1$ predictions on all historical seasons** |
-| **7** | **Weekly: $M_0 \to M_1 \to M_2$** | **Online** | **Use `run_m0_m1_m2_weekly()` — $M_1$ output feeds $M_2$'s template via `inject_m1_into_snapshots()`** |
+| **5** | **$M_2$ hyperparameter tuning** | **Offline** | **Use `nested_loso_build_fold()` + `nested_loso_m2_train()` + `nested_loso_m2_eval_frozen_bias()` — runs $M_1$ walk-forward per fold; 480-spec grid; bias_alpha excluded (deployment parameter)** |
+| **6** | **$M_2$ production fit** | **Offline** | **`nested_loso_m2_train()` on full historical data — frozen GAM saved to `m2_production.rds`** |
+| **7** | **Weekly: $M_0 \to M_1 \to M_2$** | **Online** | **`run_m0_detection()` + `run_m1_alignment()` + `run_m2_forecast()` — frozen GAM + adaptive Holt bias + online season RE** |

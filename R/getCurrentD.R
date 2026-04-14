@@ -1,6 +1,27 @@
 
+#' Fetch and tidy current-season PHO respiratory surveillance data
+#'
+#' Downloads (or reads a local copy of) the Public Health Ontario lab-testing
+#' CSV, filters to one virus and the requested season plus its predecessor,
+#' aggregates weekly totals across all PHUs, and returns a tidy data frame
+#' ready for the M0/M1/M2 pipeline.
+#'
+#' @param data URL or local file path to the PHO lab-testing CSV. Defaults to
+#'   the 2024-25 / 2025-26 ORVT public feed.
+#' @param startWeek Integer MMWR week used as the epidemic-year origin for
+#'   computing \code{weekF} (default 27L, early July).
+#' @param lastWeek Integer or \code{NA}. When non-\code{NA}, rows with MMWR
+#'   \code{week > lastWeek} are dropped before returning.
+#' @param virus Character string matching the \code{Virus} column of the CSV
+#'   (default \code{"Influenza A"}).
+#' @param season Character season identifier in \code{"YYYY-YY"} format
+#'   (default \code{"2025-26"}).
+#'
+#' @return A data frame with one row per MMWR week containing: \code{season},
+#'   \code{week}, \code{N} (total tests), \code{y} (positives), \code{neg},
+#'   \code{p} (positivity), \code{weekS}, \code{weekF}, \code{cYear},
+#'   \code{newWeek}, and \code{date}.
 #' @export
-#return current season data for a given virus
 getCurrentD <- function(data= "https://ws1.publichealthontario.ca/appdata/powerbi/ORVT/ORVT_Lab_Testing_Data_2024-25_2025-26.csv", 
                         startWeek = 27L, 
                         lastWeek = NA,

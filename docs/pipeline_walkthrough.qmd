@@ -211,7 +211,7 @@ loso_result <- loso_walkforward(
 )
 
 best_m1 <- loso_result$best_config
-# k_ref=25, temperature=0.25, shift=0 → Weibull peak MAE = 1.169
+# k_ref=25, temperature=0.25, slope_weight=8.0, slope_window=6, dynamic_temp=FALSE → Weibull peak MAE = 1.275
 
 # Re-estimate ref with best k_ref, save with M1_PARAMS attached
 ref_production <- estimateRef(
@@ -227,9 +227,9 @@ ref_production$M1_PARAMS <- list(
   rise_weight        = 1.0,
   trough_weight      = 0.1,
   peak_decay         = 0.3,
-  slope_weight       = 0.5,
-  slope_window       = 4L,
-  dynamic_temp       = TRUE,
+  slope_weight       = 8.0,
+  slope_window       = 6L,
+  dynamic_temp       = FALSE,
   dynamic_temp_pivot = 10L
 )
 
@@ -267,24 +267,36 @@ m1_folds <- nested_loso_build_folds(
   temperature   = 0.25
 )
 
-# Phase 2: sweep M2 spec grid (189 specs)
-spec_grid <- make_stage2_spec_grid()   # built-in 189-spec grid
-nested_result <- nested_loso_m2_eval(
-  folds     = m1_folds,
-  spec_grid = spec_grid,
-  flu_hist  = flu_hist
+# Phase 2: sweep M2 spec grid (v15, 480 specs: k_f × k_e × alpha_state × k_r × k_de × k_sp)
+# bias_alpha is a deployment parameter, not a grid dimension
+grid <- tidyr::crossing(
+  delta       = 0L, Kr = 1L,
+  k_f         = c(2L, 3L, 4L, 5L),
+  k_e         = c(2L, 3L),
+  alpha_state = c(0.30, 0.35, 0.40, 0.45, 0.50),
+  k_r         = c(0L, 2L, 3L),
+  k_de        = c(0L, 2L),
+  k_sp        = c(0L, 2L)
 )
-# Best spec: delta=0, Kr=1, k_f=2, k_e=4, alpha_state=0.10, lambda_w=0
+BIAS_ALPHA <- 0.4  # deployment default; set per season at runtime
+
+nested_result <- nested_loso_m2_eval_frozen_bias(
+  allD          = allD,
+  fold          = fold,
+  m2_fit        = m2,
+  m1_test_preds = m1_test,
+  spec          = spec,
+  eval_window   = 12L
+)
+# Best spec: k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0
+# Mean Bernoulli NLL = 0.406 (480 specs, 10 seasons)
 
 # Phase 3: refit on full historical data with best spec
 best_spec <- nested_result$best_spec
-m2_production_fit <- nested_loso_refit_best(
-  flu_hist      = flu_hist,
-  manual_labels = manual_labels,
-  startWeek     = startWeek,
-  best_spec     = best_spec,
-  k_ref         = 25L,
-  temperature   = 0.25
+m2_production_fit <- nested_loso_m2_train(
+  fold          = fold_full,
+  m1_train_preds = m1_all,
+  spec          = best_spec
 )
 
 m2_production <- list(fit = m2_production_fit, spec = best_spec)

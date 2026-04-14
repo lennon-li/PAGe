@@ -455,6 +455,34 @@ prep_stage2_joint <- function(dat,
 # Stage-2 training
 # =========================================================
 
+#' Score a fitted Stage-2 GAM on a test set
+#'
+#' Computes binomial NLL, mean NLL, Brier score, and RMSE(p) for a fitted
+#' Stage-2 \code{bam}/\code{gam} on held-out data. Optionally applies
+#' time-decay weights (\code{lambda_w}) and restricts evaluation to an early
+#' observation window (\code{eval_window}). Factor levels for \code{lead},
+#' \code{season}, and \code{season_h} are aligned to the training model
+#' before prediction.
+#'
+#' @param fit Fitted \code{mgcv::gam} or \code{mgcv::bam} Stage-2 model.
+#' @param d_test Data frame of test observations. Must contain \code{y_lead}
+#'   and \code{N_lead} (outcome counts) plus any predictors used in
+#'   \code{fit}.
+#' @param exclude_season_re Logical; if \code{TRUE} (default) the season
+#'   random effect (\code{s(season)}) is excluded when predicting.
+#' @param exclude_terms Character vector of additional terms to exclude from
+#'   prediction. Overrides \code{exclude_season_re} when non-\code{NULL}.
+#' @param lambda_w Numeric; exponential time-decay rate applied to
+#'   \code{t_since} when computing observation weights (0 = uniform;
+#'   default 0).
+#' @param eval_window Optional integer; restrict scoring to rows where
+#'   \code{t_since <= eval_window}. When \code{NULL} all rows are scored.
+#' @param soft_cap_fn Optional function applied to \code{p_hat} after
+#'   prediction (e.g. a soft ceiling on positivity).
+#'
+#' @return A list with \code{nll}, \code{mean_nll}, \code{brier}, and
+#'   \code{rmse_p}.
+#' @keywords internal
 # internal: score with optional exclude terms
 # lambda_w: time-decay weight rate (0 = uniform). Weights w_i = exp(-lambda_w * t_since_i),
 #   normalised to sum to n so that mean_nll is on the same scale regardless of lambda_w.
@@ -530,6 +558,40 @@ score_stage2_metrics <- function(fit,
   list(nll = nll, mean_nll = mean_nll, brier = brier, rmse_p = rmse_p)
 }
 
+#' Fit a Stage-2 joint GAM from a pre-prepared stacked dataset
+#'
+#' Fits a \code{mgcv::bam()} Stage-2 model to a stacked multi-lead,
+#' multi-season data frame. The formula and all structural choices are
+#' governed by \code{spec} (from \code{stage2_make_spec()}). Time-decay
+#' training weights are computed from \code{t_since} when \code{lambda_w > 0}.
+#' Training rows are restricted to post-ignition observations
+#' (\code{post_ign == TRUE}).
+#'
+#' @param d_all Data frame produced by \code{prep_stage2_joint()}, containing
+#'   stacked multi-lead observations with columns \code{post_ign},
+#'   \code{lead}, \code{y_lead}, \code{N_lead}, and any covariates required
+#'   by \code{spec}.
+#' @param best_mean_nll List or 1-row data frame of tuned hyperparameters.
+#'   Used to set defaults for \code{spec} when \code{spec = NULL}.
+#' @param template_df Optional data frame with columns \code{newWeek} and
+#'   \code{fit} for the reference template curve. Required when
+#'   \code{spec$template_mode != "none"}.
+#' @param spec Optional spec list from \code{stage2_make_spec()}. When
+#'   \code{NULL} a default parsimonious spec is constructed from
+#'   \code{best_mean_nll}.
+#' @param k_e,k_n Integer basis dimensions for EMA and log-N smooth terms
+#'   (used only when \code{spec = NULL}; defaults 6L and 6L).
+#' @param method Character; GAM fitting method. Defaults to \code{"REML"};
+#'   switched to \code{"fREML"} when discrete approximation is active.
+#' @param lambda_w Numeric; time-decay weight rate (0 = uniform weights;
+#'   default 0).
+#' @param w_floor Numeric; minimum weight floor applied after the decay
+#'   interval \code{t_floor_start} (default 0).
+#' @param verbose Logical; print fitting diagnostics (default \code{FALSE}).
+#'
+#' @return A list with \code{fit} (the \code{bam} object), \code{train_data},
+#'   \code{tuned}, \code{spec}, \code{lambda_w}, and \code{feature_ranges}.
+#' @keywords internal
 # internal
 train_stage2_joint_prepped <- function(d_all,
                                        best_mean_nll,

@@ -160,12 +160,12 @@ $M_2$ fits a joint binomial GAM for $h \in \{1,2\}$ on aligned-week space. Covar
 
 Hyperparameters are selected by **nested LOSO**: for each held-out season, the reference curve and all $M_1$ predictions are re-estimated on the remaining seasons only, eliminating template leakage. Phase 1 pre-computes $M_1$ predictions once per fold; Phase 2 sweeps the $M_2$ spec grid in minutes.
 
-**Tuned spec** (v14/v15 confirmed, 1920-spec nested LOSO, 10 seasons, Bernoulli NLL = 0.406):
+**Tuned spec** (v15 confirmed, 480-spec nested LOSO, 10 seasons, Bernoulli NLL = 0.406):
 ```
 delta=0, Kr=1, k_f=4, k_e=2, k_r=2, k_de=0, k_sp=0
-alpha_state=0.40, bias_alpha=0.2, bias_beta=0.0, lambda_w=0, w_floor=0.05
+alpha_state=0.40, lambda_w=0, w_floor=0.05
 ```
-Mode: **frozen GAM** (pre-trained once on all historical seasons) + **Holt EMA bias correction** (α=0.2, level-only) + online season random effect, applied week-by-week at deployment. v15 confirmed that rate-of-change (`k_de`) and alignment-uncertainty (`k_sp`) terms provide no improvement.
+Mode: **frozen GAM** (pre-trained once on all historical seasons) + **adaptive Holt EMA bias correction** (level-only, β=0; base α is a deployment parameter set per-season based on season characteristics — boosted to 0.7 after ≥2 consecutive same-sign residuals) + online season random effect, applied week-by-week at deployment. v15 confirmed that rate-of-change (`k_de`) and alignment-uncertainty (`k_sp`) terms provide no improvement over the v14 spec.
 
 **Key functions:** `nested_loso_build_fold()`, `m1_walkforward_multi()`, `nested_loso_m2_train()`, `nested_loso_m2_eval_frozen_bias()`, `prep_stage2_joint()`, `train_stage2_joint()`
 
@@ -189,7 +189,7 @@ Before the live season begins, $M_2$ is fit on all historical seasons using the 
 
 ## Deployment sequence {#sec-train-deploy}
 
-Within each week: $M_1$ aligns → for any post-ignition state, $M_2$ refits on historical + current data, then forecasts. Full implementation: [`prospective_deployment.html`](prospective_deployment.html).
+Within each week: $M_1$ aligns → for any post-ignition state, $M_2$ forecasts using the frozen GAM and updates the adaptive Holt bias corrector. Full implementation: [`prospective_deployment.html`](prospective_deployment.html).
 
 | Step | What | When |
 |------|------|------|
@@ -199,7 +199,7 @@ Within each week: $M_1$ aligns → for any post-ignition state, $M_2$ refits on 
 | 4 | Post-peak flag parameters | Offline, once |
 | 5 | $M_2$ nested LOSO hyperparameter tuning | Offline, once |
 | 6 | $M_2$ initial fit on full historical data | Offline, before season start |
-| **7** | **Weekly: $M_1$ aligns → $M_2$ refits (hist + current) → forecast** | **Online, every week** |
+| **7** | **Weekly: $M_1$ aligns → $M_2$ forecasts (frozen GAM + adaptive Holt bias)** | **Online, every week** |
 
 ---
 
@@ -223,14 +223,7 @@ Within each week: $M_1$ aligns → for any post-ignition state, $M_2$ refits on 
 
 **Multi-template ensemble alignment.** Instead of forcing all seasons into one population reference shape, the FS reference method produces per-season curves. M₁ aligns to each training season's curve independently and ensembles forecasts via softmax weighting on NLL. This allows the model to recognize which historical season the current one most resembles (e.g., steep 2022–23 vs gradual 2017–18) without being constrained to a single population template. Temperature controls how strongly the model commits to the best-matching template.
 
-**Weekly refit at deployment.** Each week, $M_2$ is refitted on all historical
-aligned seasons plus the current-season observations accumulated to that week.
-This lets the model track the live positivity trend and avoids forecasts that
-diverge from observed data. The historical aligned dataset is precomputed offline
-and stored in `ref_production.rds`; the per-week cost is small (< 1 s on ~275 rows).
-The season random effect is excluded at prediction time (`s(season)` dropped)
-so the model generalises to the unseen current season. A `mode="frozen"` fallback
-in `run_m2_forecast()` retains the pre-2026 frozen-fit behaviour for diagnostics.
+**Frozen GAM + adaptive bias correction at deployment.** $M_2$ is trained once on all historical seasons and deployed as a frozen GAM. Each week after ignition, an adaptive Holt EMA bias corrector and online season random effect are updated sequentially, then the frozen GAM forecasts 1- and 2-weeks ahead. No weekly refit is needed — the bias corrector absorbs systematic drift within-season. The base smoothing rate is a deployment-time setting tuned per season; it is automatically boosted when the corrector detects ≥2 consecutive same-sign residuals. This approach is ~12× faster than weekly refit while maintaining equivalent accuracy.
 
 **Reference curve uses known labels (@sec-refcurve before @sec-m0).** The reference
 curve (and per-season FS curves) are estimated from retrospectively labelled ignition weeks — not from
@@ -242,10 +235,7 @@ current data and return the current state — the caller decides whether to keep
 calling. The same functions power both the LOSO inner loop and production
 deployment, guaranteeing identical behaviour.
 
-**LOSO grid search for multi-template tuning.** All M₁ tuning (`k_ref`, `multi_temperature`, `template_shift`)
-uses walk-forward LOSO so that no future data leaks into training. A 4×3×4 grid (baseline 81 configs, extended ~120 configs) is evaluated
-to find the peak MAE minimizer under Weibull weighting. Ignition
-detector thresholds are tuned in an earlier LOSO pass (@sec-m0).
+**LOSO grid search for multi-template tuning.** All M₁ tuning uses walk-forward LOSO so that no future data leaks into training. The final 67-spec grid (v5–v7 combined) covers `slope_weight` (0–30), `slope_window` (4–12), `k_ref` (15–50), and `template_shift` (0–1) to find the Weibull-weighted peak MAE minimizer. Ignition detector thresholds are tuned in an earlier LOSO pass (@sec-m0).
 
 **Alignment stops at peak.** Once `peak_passed == TRUE`, alignment freezes.
 This prevents the descending limb from distorting the peak estimate, and

@@ -349,6 +349,34 @@ plot_cls_models_by_season <- function(ign_fit,
     p
   }
 
+#' Fit ignition classifier and run season-level detection
+#'
+#' Convenience wrapper that calls \code{fitIgnition()} with the supplied
+#' knob arguments and then passes the fitted object to
+#' \code{detectIgnitionBySeason_M0v2()} using the best parameters from a
+#' previous LOSO tuning run.
+#'
+#' @param tuned List returned by a LOSO tuning step (e.g.
+#'   \code{tuneIgnitionGrid_M0v2()}). Must contain \code{$best_params} as a
+#'   named list of M0 gate thresholds.
+#' @param alignedD Data frame of aligned historical seasons passed to
+#'   \code{fitIgnition()}.
+#' @param score_col Character; column in \code{alignedD} used as the GAM
+#'   classifier score (default \code{"p_cls_p"}).
+#' @param keep_signals Logical; if \code{TRUE} retains per-week signal columns
+#'   in the output (default \code{TRUE}).
+#' @param iWeek Logical; if \code{TRUE} also estimates \code{iWeek_hat}
+#'   (default \code{TRUE}).
+#' @param verbose Logical; controls progress messages (default \code{TRUE}).
+#' @param fit_base,fit_slope,fit_fs Logicals passed to \code{fitIgnition()}
+#'   controlling which GAM smooth terms to include.
+#' @param event_k,lead,A_pre,B_post,k_week,k_p Integer/numeric knobs passed
+#'   to \code{fitIgnition()}.
+#'
+#' @return Output of \code{detectIgnitionBySeason_M0v2()}; a list with
+#'   \code{$data} (per-week signals), \code{$by_season} (per-season
+#'   summaries), and optionally \code{$compare} (truth vs estimate).
+#' @keywords internal
 detect_ignition_from_tuning <- function(tuned,
                                         alignedD,
                                         score_col    = "p_cls_p",
@@ -939,6 +967,35 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
 # Requires: fitIgnition(), tuneIgnitionGrid_M0v2(), detectIgnitionBySeason_M0v2()
 # ============================================================
 
+#' Leave-one-season-out evaluation of M0v2 ignition detection
+#'
+#' Performs strict LOSO cross-validation for the M0v2 ignition model. In
+#' each fold the held-out season is withheld from both training the GAM
+#' classifier (\code{fitIgnition}) and tuning the gate thresholds
+#' (\code{tuneIgnitionGrid_M0v2}). Returns per-fold outputs and aggregated
+#' detection accuracy metrics.
+#'
+#' @param dat Data frame with columns \code{season}, \code{weekF},
+#'   \code{phase}, \code{p}, and the score column (default \code{p_cls_p}).
+#' @param grid Data frame of candidate gate-threshold parameter combinations
+#'   passed to \code{tuneIgnitionGrid_M0v2()} in each fold.
+#' @param season_col,week_col,phase_col,p_col,score_col Character strings
+#'   naming the corresponding columns in \code{dat}.
+#' @param drop_seasons Optional character vector; seasons excluded from all
+#'   folds (neither training nor evaluation).
+#' @param exSeason_tune Optional character vector; additional seasons excluded
+#'   from tuning only (not from evaluation).
+#' @param fit_args Named list of arguments forwarded to \code{fitIgnition()}
+#'   on each fold.
+#' @param tune_args Named list of arguments forwarded to
+#'   \code{tuneIgnitionGrid_M0v2()} on each fold.
+#' @param verbose Logical; print fold-level progress messages (default
+#'   \code{TRUE}).
+#'
+#' @return A list with per-fold outputs (\code{fold_out}) and aggregated
+#'   summary data frames (\code{eval_all}, \code{eval_tune},
+#'   \code{eval_excluded}).
+#' @keywords internal
 loso_M0v2 <- function(dat,
                       grid,
                       # pass-through knobs

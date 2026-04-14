@@ -95,16 +95,11 @@ tuneIgnitionGrid <- function(dat, grid,
     w_max = 30L
   )
   for (nm in names(defaults)) if (!nm %in% names(grid)) grid[[nm]] <- defaults[[nm]]
-  #' Score one parameter setting (internal)
-  #'
-  #' Internal helper for `tuneIgnitionGrid()`; evaluates one row of the tuning grid.
-  #'
-  #' @param i Integer row index into the tuning grid.
-  #'
-  #' @return A 1-row data.frame of scores for this grid setting.
-  #' @keywords internal
-  
-  
+  # Score one parameter setting (internal).
+  # Internal helper for tuneIgnitionGrid(); evaluates one row of the tuning grid.
+  # @param i Integer row index into the tuning grid.
+  # Returns a 1-row data.frame of scores for this grid setting.
+
   score_one_i <- function(i) {
     params <- as.list(grid[i, , drop = FALSE])
     

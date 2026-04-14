@@ -1,3 +1,18 @@
+#' Plot a flualign 2-week-ahead forecast
+#'
+#' Draws the current-season positivity forecast produced by the M0/M1/M2
+#' pipeline. Optionally overlays historical season trajectories as a grey
+#' background for context.
+#'
+#' @param res List returned by the prospective pipeline (e.g.
+#'   \code{run_prospective_pipeline()}). Must contain \code{$pred_df} (with
+#'   columns \code{newWeek}, \code{p_hat}, \code{p_lo}, \code{p_hi}, and
+#'   \code{kind}) and \code{$last_obs}.
+#' @param history Optional data frame of historical seasons with columns
+#'   \code{season}, \code{newWeek}, \code{y}, and \code{neg}. When supplied,
+#'   season trajectories are plotted as translucent grey lines.
+#'
+#' @return A \code{ggplot} object.
 #' @export
 # Plot helper
 plot_forecast <- function(res, history = NULL) {
