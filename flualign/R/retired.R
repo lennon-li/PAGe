@@ -131,9 +131,6 @@ prep_stage2_m1_features <- function(alignedD_prosp,
 #'
 #' @return List with \code{fit}, \code{spec}, and optionally \code{d_train}.
 #' @keywords internal
-
-# --- from R/m2_spec_grid.R ---
-
 train_stage2_joint_m1 <- function(feat,
                                   spec,
                                   seasons_keep = NULL,
@@ -205,9 +202,6 @@ train_stage2_joint_m1 <- function(feat,
 #' instead. Calling this function stops with an error via \code{.Deprecated()}.
 #'
 #' @keywords internal
-
-# --- from R/m2_spec_grid.R ---
-
 tune_stage2_loso_spec_grid <- function(alignedD_prosp,
                                        template_df,
                                        spec_grid,
@@ -465,9 +459,6 @@ tune_stage2_loso_spec_grid <- function(alignedD_prosp,
 #' instead. Calling this function stops with an error via \code{.Deprecated()}.
 #'
 #' @keywords internal
-
-# --- from R/m2_spec_grid.R ---
-
 tune_stage2_loso_spec_grid_parallel <- function(alignedD_prosp,
                                                 template_df,
                                                 spec_grid,
@@ -938,9 +929,6 @@ tune_stage2_loso_specs <- function(
 #' instead. Calling this function stops with an error via \code{.Deprecated()}.
 #'
 #' @keywords internal
-
-# --- from R/m2_training.R ---
-
 tune_stage2_loso_shift_template <- function(
     dat,
     template_df,

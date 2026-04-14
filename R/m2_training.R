@@ -483,13 +483,7 @@ prep_stage2_joint <- function(dat,
 #' @return A list with \code{nll}, \code{mean_nll}, \code{brier}, and
 #'   \code{rmse_p}.
 #' @keywords internal
-# internal: score with optional exclude terms
-# lambda_w: time-decay weight rate (0 = uniform). Weights w_i = exp(-lambda_w * t_since_i),
-#   normalised to sum to n so that mean_nll is on the same scale regardless of lambda_w.
-# eval_window: if non-NULL, restrict evaluation to rows where t_since <= eval_window.
-#   This provides a *fixed* objective for comparing different lambda_w values fairly
-#   (all lambdas are assessed on the same early-window observations).
-score_stage2_metrics <- function(fit,
+score_stage2_metrics <- function(
                                  d_test,
                                  exclude_season_re = TRUE,
                                  exclude_terms = NULL,
@@ -592,7 +586,6 @@ score_stage2_metrics <- function(fit,
 #' @return A list with \code{fit} (the \code{bam} object), \code{train_data},
 #'   \code{tuned}, \code{spec}, \code{lambda_w}, and \code{feature_ranges}.
 #' @keywords internal
-# internal
 train_stage2_joint_prepped <- function(d_all,
                                        best_mean_nll,
                                        template_df = NULL,

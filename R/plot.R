@@ -14,7 +14,6 @@
 #'
 #' @return A \code{ggplot} object.
 #' @export
-# Plot helper
 plot_forecast <- function(res, history = NULL) {
   p <- ggplot2::ggplot()
   if (!is.null(history)) {

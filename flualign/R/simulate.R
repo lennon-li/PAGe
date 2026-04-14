@@ -13,8 +13,6 @@
 #' @return A data frame with columns \code{season} (factor), \code{newWeek},
 #'   \code{y} (positives), and \code{neg} (negatives).
 #' @export
-# Simulated historical seasons (example data & generator)
-
 simulate_flu_seasons <- function(S = 10, weeks = 1:52, seed = 2025) {
   set.seed(seed)
   bump_fun <- function(t, mu = 36, sigma = 7) exp(-0.5 * ((t - mu)/sigma)^2)

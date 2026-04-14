@@ -33,7 +33,6 @@
 #'   \code{delta_stability}, \code{stability_summary}, and
 #'   \code{curvature_Dpp}.
 #' @export
-# Learn tau/delta ranges and penalties from historical seasons
 learn_alignment_hyperparams <- function(
     theD, g_ref_fun,
     tau_range_init   = c(-12, 12),

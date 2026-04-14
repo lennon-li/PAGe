@@ -221,7 +221,6 @@ tuneIgnitionGrid <- function(dat, grid,
 #'
 #' @return A ggplot object.
 #' @export
-
 plot_det_facet <- function(det_out, smooth_col = NULL) {
   stopifnot(is.list(det_out), is.data.frame(det_out$data), is.data.frame(det_out$by_season))
   df <- det_out$data
