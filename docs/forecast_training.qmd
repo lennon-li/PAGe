@@ -743,9 +743,8 @@ digraph m2_train_calls {
     color="#003060"; fillcolor="#b8d4f0"; fontcolor="#003060";
     fontsize=11; fontname="Helvetica-Bold";
     nested_loso_grid_search          [label="nested_loso\n_grid_search"];
-    nested_loso_m2_eval_weekly_refit [label="nested_loso_m2\n_eval_weekly_refit"];
+    nested_loso_m2_eval_frozen_bias  [label="nested_loso_m2\n_eval_frozen_bias"];
     nested_loso_refit_best           [label="nested_loso\n_refit_best"];
-    loso_m1_m2_joint                 [label="loso_m1_m2_joint"];
     score_stage2_metrics             [label="score_stage2_metrics"];
   }
   subgraph cluster_fit {
@@ -788,14 +787,10 @@ digraph m2_train_calls {
   nested_loso_grid_search    -> refit_stage2_weekly;
   nested_loso_grid_search    -> train_stage2_joint;
   nested_loso_grid_search    -> stage2_make_spec;
-  nested_loso_m2_eval_weekly_refit -> refit_stage2_weekly;
-  nested_loso_m2_eval_weekly_refit -> m2_predict_one;
+  nested_loso_m2_eval_frozen_bias  -> m2_predict_one;
+  nested_loso_m2_eval_frozen_bias  -> train_stage2_joint;
   nested_loso_refit_best     -> nested_loso_grid_search;
   nested_loso_refit_best     -> train_stage2_joint;
-  loso_m1_m2_joint           -> m1_walkforward_predictions;
-  loso_m1_m2_joint           -> prep_stage2_joint;
-  loso_m1_m2_joint           -> train_stage2_joint;
-  loso_m1_m2_joint           -> score_stage2_metrics;
   m1_walkforward_multi       -> m1_walkforward_predictions;
   prep_stage2_joint          -> m1_walkforward_predictions;
   m2_predict_one             -> make_soft_cap_fn;

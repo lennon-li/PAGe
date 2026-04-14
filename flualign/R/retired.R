@@ -1496,3 +1496,1579 @@ run_m0_m1_m2_weekly <- function(currentSeason,
 #'   \item{m1_preds_list}{List of M1 predictions per fold (for diagnostics)}
 #' }
 #' @export
+
+
+# =========================================================================
+# Retired 2026-04-xx: dead code removed from active pipeline files
+#
+#   identifiability.R    -> check_scale_identifiability_old
+#   m1_fit.R             -> fit_tau_delta_old
+#   m1_peak_flags.R      -> flagPeak
+#   m1_reference_loader.R -> load_refCurve
+#   m1_reference_helpers.R -> make_reference_functions, set_reference,
+#                             get_reference, fit_reference_gam
+#   m1_loso.R            -> loso_alignment, tune_loso_k
+#   m1_peak_distribution.R -> peak_week_distribution
+#   m1_alignment_plots.R -> plot_alignment_evolution
+#   m2_nested_loso.R     -> nested_loso_m2_eval, plot_nested_loso_scores
+#   pipeline_bridge.R    -> loso_m1_m2_joint
+# =========================================================================
+
+# --- from R/identifiability.R ---
+#' @export
+check_scale_identifiability_old <- function(currentD,
+                                        g_ref_fun,   # you pass g_ref_fun; we use g_ref_safe inside
+                                        hyper,
+                                        min_week    = 20,   # don't turn on scale too early
+                                        min_range_p = 0.10, # 10 percentage-points variation in p_obs
+                                        min_range_g = 0.50  # 0.5 on logit scale for template
+) {
+  # Use the same "safe" reference you already use elsewhere
+  g_ref_safe <- function(u) g_ref_fun(pmin(pmax(u, 1), 52))
+  
+  dat <- currentD %>%
+    dplyr::mutate(n = y + neg) %>%
+    dplyr::filter(n > 0)
+  
+  t <- dat$newWeek
+  y <- dat$y
+  n <- dat$n
+  
+  # 1) observed positivity variation
+  p_obs   <- y / n
+  range_p <- diff(range(p_obs, na.rm = TRUE))
+  last_wk <- max(t, na.rm = TRUE)
+  
+  # 2) τ-only alignment to get tau_hat (δ = 0, b = 1)
+  tp <- tau_profile_se(
+    currentD   = dat,
+    g_ref      = g_ref_safe,
+    allow_scale = FALSE,
+    tau0       = 0,
+    tau_bounds = hyper$TAU_BOUNDS
+  )
+  tau_hat <- tp$tau_hat
+  
+  # 3) template variation over aligned weeks
+  u_aligned <- (t - tau_hat)          # delta = 0
+  g_vals    <- g_ref_safe(u_aligned)
+  range_g   <- diff(range(g_vals, na.rm = TRUE))
+  
+  # 4) rule-of-thumb decision
+  allow_scale_rec <- (last_wk >= min_week) &&
+    (range_p  > min_range_p) &&
+    (range_g  > min_range_g)
+  
+  tibble::tibble(
+    last_week        = last_wk,
+    tau_hat          = tau_hat,
+    range_p_obs      = range_p,
+    range_g_template = range_g,
+    allow_scale_rec  = allow_scale_rec
+  )
+}
+
+
+# --- from R/m1_peak_flags.R ---
+#' Flag whether the epidemic has passed its peak (real time)
+#'
+#' Uses only information up to each week (dynamic peak_so_far), and
+#' checks whether there has been a sustained drop from that peak.
+#'
+#' @param df data frame for a single season, with at least:
+#'   \itemize{
+#'     \item newWeek: monotone-increasing epidemic week index
+#'     \item p: positivity (if missing, y/(y+neg) will be computed)
+#'   }
+#' @param value_col name of the column to treat as positivity (default: "p";
+#'   if NULL and p is absent, uses y/(y+neg)).
+#' @param min_week minimum newWeek to start considering a "past-peak" flag.
+#' @param max_week maximum newWeek to consider (Inf = no upper limit).
+#' @param drop_frac required relative drop from the peak_so_far:
+#'   flag when rel_drop >= drop_frac.
+#' @param min_abs_drop required absolute drop from peak_so_far:
+#'   flag when abs_drop >= min_abs_drop.
+#' @param min_consec_below number of consecutive weeks that must satisfy
+#'   the drop condition before declaring "past peak".
+#'
+#' @return A list with:
+#'   \itemize{
+#'     \item df: original data plus helper columns:
+#'       \code{peak_so_far}, \code{abs_drop}, \code{rel_drop},
+#'       \code{drop_cond}, \code{drop_streak}, \code{eligible},
+#'       \code{past_peak_flag}
+#'     \item flag_week: newWeek at which "past peak" is first flagged (NA if none)
+#'     \item peak_week_so_far: newWeek of the global max within df
+#'     \item peak_value_so_far: value at that peak
+#'   }
+#' @export
+flagPeak <- function(df,
+                     value_col       = NULL,
+                     min_week        = 1L,
+                     max_week        = Inf,
+                     drop_frac       = 0.25,
+                     min_abs_drop    = 0.05,
+                     min_consec_below = 2L) {
+  
+  if (!"newWeek" %in% names(df)) {
+    stop("df must contain 'newWeek'.")
+  }
+  
+  # ---- choose value_col (p or y/(y+neg)) ----
+  if (is.null(value_col)) {
+    if ("p" %in% names(df)) {
+      value_col <- "p"
+    } else if (all(c("y", "neg") %in% names(df))) {
+      df <- dplyr::mutate(df, p = .data$y / (.data$y + .data$neg))
+      value_col <- "p"
+    } else {
+      stop("Need either column 'p' or columns 'y' and 'neg' to define positivity.")
+    }
+  }
+  
+  if (!value_col %in% names(df)) {
+    stop("Column '", value_col, "' not found in df.")
+  }
+  
+  # ---- sort by newWeek and work on a copy ----
+  df <- df %>%
+    dplyr::arrange(.data$newWeek)
+  
+  val <- df[[value_col]]
+  
+  # guard against all NA
+  if (all(!is.finite(val))) {
+    warning("All positivity values are NA/inf; cannot flag peak.")
+    df$peak_so_far      <- NA_real_
+    df$abs_drop         <- NA_real_
+    df$rel_drop         <- NA_real_
+    df$drop_cond        <- FALSE
+    df$drop_streak      <- 0L
+    df$eligible         <- FALSE
+    df$past_peak_flag   <- FALSE
+    return(list(
+      df               = df,
+      flag_week        = NA_integer_,
+      peak_week_so_far = NA_integer_,
+      peak_value_so_far = NA_real_
+    ))
+  }
+  
+  # ---- dynamic peak so far (only using data up to each week) ----
+  peak_so_far <- cummax(val)
+  
+  abs_drop <- pmax(0, peak_so_far - val)
+  rel_drop <- ifelse(peak_so_far > 0,
+                     abs_drop / peak_so_far,
+                     0)
+  
+  drop_cond <- (rel_drop >= drop_frac) | (abs_drop >= min_abs_drop)
+  
+  # eligible window in newWeek space
+  eligible <- (df$newWeek >= min_week) &
+    (df$newWeek <= max_week)
+  
+  drop_eff <- drop_cond & eligible
+  
+  # ---- run-length of consecutive TRUEs for drop_eff ----
+  # no explicit loops; reset streak when drop_eff == FALSE
+  drop_streak <- ave(
+    drop_eff,
+    cumsum(!drop_eff),
+    FUN = function(x) ifelse(x, seq_along(x), 0L)
+  )
+  
+  # first index where we meet the streak condition
+  idx_flag <- which(drop_streak >= min_consec_below)[1L]
+  
+  flag_week <- if (length(idx_flag) == 0L) NA_integer_ else df$newWeek[idx_flag]
+  
+  # global peak (within df) for reporting
+  peak_idx <- which.max(val)
+  peak_week_so_far  <- df$newWeek[peak_idx]
+  peak_value_so_far <- val[peak_idx]
+  
+  df$peak_so_far    <- peak_so_far
+  df$abs_drop       <- abs_drop
+  df$rel_drop       <- rel_drop
+  df$drop_cond      <- drop_cond
+  df$drop_streak    <- as.integer(drop_streak)
+  df$eligible       <- eligible
+  df$past_peak_flag <- !is.na(flag_week) & (df$newWeek >= flag_week)
+  
+  list(
+    df                = df,
+    flag_week         = flag_week,
+    peak_week_so_far  = peak_week_so_far,
+    peak_value_so_far = peak_value_so_far
+  )
+}
+
+
+# --- from R/m1_reference_loader.R ---
+#' Load all flualign example objects
+#'
+#' Loads all objects stored in the bundled ref_curve.RData file
+#' into the specified environment (default: caller).
+#'
+#' @param envir environment to load into. Defaults to parent.frame().
+#' @export
+load_refCurve <- function(envir = parent.frame()) {
+  f <- system.file("extdata", "ref_curve.RData", package = "flualign")
+  if (f == "") stop("ref_curve.RData not found in flualign")
+  load(f, envir = envir)
+}
+
+# --- from R/m1_peak_distribution.R ---
+#' Peak week (newWeek) per season + suggested peak-rule parameters
+#'
+#' @param theD historical data with at least:
+#'   season, newWeek, and either p or (y, neg).
+#' @param value_col column to define the peak. If NULL, uses p if present,
+#'   otherwise computes p = y/(y+neg).
+#' @param k_for_drop integer: how many weeks after the peak to look at
+#'   when estimating the typical drop (also used as suggested min_consec_below).
+#' @param drop_prob quantile of the *relative* drop to use, e.g. 0.5 for median.
+#' @param abs_drop_prob quantile of the *absolute* drop to use for min_abs_drop.
+#' @param max_week_prob quantile of peak_newWeek to use for max_week (e.g. 0.95).
+#'
+#' @return A list with:
+#'   \itemize{
+#'     \item \code{peaks}: tibble(season, peak_newWeek, peak_value)
+#'     \item \code{suggested}: list with
+#'       \itemize{
+#'         \item \code{min_week}
+#'         \item \code{max_week}
+#'         \item \code{drop_frac}
+#'         \item \code{min_abs_drop}
+#'         \item \code{min_consec_below}
+#'       }
+#'   }
+#' @export
+peak_week_distribution <- function(theD,
+                                   value_col     = NULL,
+                                   k_for_drop    = 2L,
+                                   drop_prob     = 0.5,
+                                   abs_drop_prob = 0.5,
+                                   max_week_prob = 0.95) {
+  
+  # --- choose value_col (p or y/(y+neg)) ---
+  if (is.null(value_col)) {
+    if ("p" %in% names(theD)) {
+      value_col <- "p"
+    } else if (all(c("y", "neg") %in% names(theD))) {
+      theD <- dplyr::mutate(theD, p = .data$y / (.data$y + .data$neg))
+      value_col <- "p"
+    } else {
+      stop("Need either column 'p' or columns 'y' and 'neg' to define a peak.")
+    }
+  }
+  
+  if (!all(c("season", "newWeek", value_col) %in% names(theD))) {
+    stop("theD must contain 'season', 'newWeek' and ", value_col)
+  }
+  
+  # --- 1) Peak per season ---
+  peaks <- theD %>%
+    dplyr::group_by(.data$season) %>%
+    dplyr::filter(
+      is.finite(.data[[value_col]]),
+      is.finite(.data$newWeek)
+    ) %>%
+    dplyr::slice_max(
+      order_by  = .data[[value_col]],
+      with_ties = FALSE
+    ) %>%
+    dplyr::ungroup() %>%
+    dplyr::transmute(
+      season,
+      peak_newWeek = .data$newWeek,
+      peak_value   = .data[[value_col]]
+    )
+  
+  # --- 2) Relative + absolute drop after k_for_drop weeks ---
+  future_pts <- peaks %>%
+    dplyr::mutate(
+      newWeek_future = .data$peak_newWeek + as.integer(k_for_drop)
+    )
+  
+  drop_df <- future_pts %>%
+    dplyr::left_join(
+      theD %>%
+        dplyr::select(season, newWeek, !!rlang::sym(value_col)),
+      by = c("season", "newWeek_future" = "newWeek")
+    ) %>%
+    dplyr::rename(value_future = !!rlang::sym(value_col)) %>%
+    dplyr::filter(
+      is.finite(.data$value_future),
+      is.finite(.data$peak_value)
+    ) %>%
+    dplyr::mutate(
+      abs_drop = .data$peak_value - .data$value_future,
+      rel_drop = .data$abs_drop / .data$peak_value
+    )
+  
+  if (nrow(drop_df) == 0L) {
+    warning("No seasons have data ", k_for_drop,
+            " weeks after peak; cannot estimate drop_frac or min_abs_drop.")
+    drop_frac_hat   <- NA_real_
+    abs_drop_hat    <- NA_real_
+  } else {
+    drop_frac_hat <- stats::quantile(
+      drop_df$rel_drop,
+      probs = drop_prob,
+      na.rm = TRUE
+    )
+    abs_drop_hat  <- stats::quantile(
+      drop_df$abs_drop,
+      probs = abs_drop_prob,
+      na.rm = TRUE
+    )
+  }
+  
+  # --- 3) max_week from historical peak distribution ---
+  max_week_hat <- as.integer(
+    stats::quantile(peaks$peak_newWeek,
+                    probs = max_week_prob,
+                    na.rm = TRUE)
+  )
+  
+
+  
+  list(
+    peaks     = peaks,
+    min_week         = min(peaks$peak_newWeek, na.rm = TRUE),
+    max_week         = max_week_hat,
+    drop_frac        = as.numeric(drop_frac_hat),
+    min_abs_drop     = as.numeric(abs_drop_hat),
+    min_consec_below = as.integer(k_for_drop)
+  )
+}
+
+
+# --- from R/m1_alignment_plots.R ---
+#' Plot multiple aligned curves (full season) as observation window grows
+#'
+#' @param currentSeason data frame with at least:
+#'   newWeek, weekF, y, neg, date (date can be NA; will be derived).
+#' @param season character like "2017-2018" (you already use this).
+#' @param startWeek integer, starting week-of-year for the template season.
+#' @param start_cut_week epidemiologic week (in `currentSeason$week`) at which
+#'   you start re-fitting (e.g. 44).
+#' @param g_ref_fun reference spline on link scale.
+#' @param g_ref_mu_se function(u) returning list(mu, se) from GAM.
+#' @param hyper list from learn_alignment_hyperparams().
+#' @param ref_df data frame with reference curve, typically having
+#'   `newWeek` and `p_gamm`.
+#' @param allow_scale base setting passed to align_forecast_pipeline_dilate()
+#'   if no override is triggered (can be TRUE/FALSE/NULL).
+#' @param force_allow_scale_from_week epi week; from this week onward
+#'   (in surveillance-week space) we FORCE allow_scale = TRUE for that cut.
+#'   Before that, we use `allow_scale` as given (including NULL).
+#' @param max_newWeek optional scalar (aligned newWeek). If non-NULL, do not
+#'   fit cuts whose last observed newWeek exceeds this. Each fitted cut still
+#'   forecasts out to the season end.
+#' @param peak_newWeek optional scalar in newWeek space giving the (known)
+#'   epidemic peak location. For cuts with last observed newWeek >= peak_newWeek,
+#'   use a GAM tail (from `forecast_post_peak_gam`) for newWeek > cut, instead
+#'   of continued alignment-based extrapolation.
+#' @param k_smooth_post basis dimension for the post-peak GAM tail.
+#' @param use_weights logical, passed to pipeline.
+#' @param level CI level.
+#'
+#' @return plotly object with all curves; each cut has its own legend entry.
+#' @export
+plot_alignment_evolution <- function(currentSeason,
+                                     season,
+                                     startWeek,
+                                     start_cut_week,
+                                     g_ref_fun,
+                                     g_ref_mu_se,
+                                     hyper,
+                                     ref_df,
+                                     allow_scale = NULL,
+                                     force_allow_scale_from_week = NULL,
+                                     max_newWeek = 52,
+                                     peak_newWeek = NULL,
+                                     k_smooth_post = 8,
+                                     use_weights = TRUE,
+                                     level = 0.95) {
+  
+  # ---- Basic checks ----
+  needed_cols <- c("newWeek", "week", "weekF", "y", "neg")
+  missing <- setdiff(needed_cols, names(currentSeason))
+  if (length(missing) > 0) {
+    stop("currentSeason is missing columns: ",
+         paste(missing, collapse = ", "))
+  }
+  
+  # 1) translate start_cut_week (epi week-of-year) -> starting newWeek
+  start_newWeek <- currentSeason %>%
+    dplyr::filter(.data$week == !!start_cut_week) %>%
+    dplyr::summarise(min_nw = min(.data$newWeek, na.rm = TRUE)) %>%
+    dplyr::pull(.data$min_nw)
+  
+  if (!is.finite(start_newWeek)) {
+    stop("start_cut_week = ", start_cut_week,
+         " not found in currentSeason$week")
+  }
+  
+  last_obs_newWeek <- max(currentSeason$newWeek, na.rm = TRUE)
+  
+  # apply max_newWeek limit for which cuts we FIT
+  if (!is.null(max_newWeek)) {
+    if (!is.numeric(max_newWeek) || length(max_newWeek) != 1L || !is.finite(max_newWeek)) {
+      stop("max_newWeek must be a single finite numeric")
+    }
+    last_cut_newWeek <- min(last_obs_newWeek, max_newWeek)
+  } else {
+    last_cut_newWeek <- last_obs_newWeek
+  }
+  
+  if (last_cut_newWeek < start_newWeek) {
+    stop("max_newWeek < start_newWeek; no cuts to fit.")
+  }
+  
+  # all cut points in "newWeek" space (truncated only for *fitting*)
+  cut_newWeeks <- seq(from = start_newWeek, to = last_cut_newWeek, by = 1L)
+  
+  # map each newWeek cut to its surveillance week (currentSeason$week)
+  cut_info <- tibble::tibble(cut_newWeek = cut_newWeeks) %>%
+    dplyr::left_join(
+      currentSeason %>%
+        dplyr::select(newWeek, week) %>%
+        dplyr::distinct(),
+      by = c("cut_newWeek" = "newWeek")
+    )
+  
+  # legend labels in *surveillance week* space
+  cut_labels <- paste0("≤ week ", cut_info$week)
+  
+  start_year <- as.integer(substr(season, 1, 4))
+  max_newWeek_season <- if (!is.null(max_newWeek)) as.integer(max_newWeek) else max(currentSeason$newWeek, na.rm = TRUE)
+
+  
+  # ---- helper: build xD from a res object ----
+  build_xD <- function(res, season_label) {
+    res$pred_df %>%
+      dplyr::left_join(
+        currentSeason %>%
+          dplyr::select(date, newWeek = .data$weekF),
+        by = "newWeek"
+      ) %>%
+      tibble::add_column(season = season_label) %>%
+      dplyr::mutate(
+        date       = as.Date(.data$date),
+        start_year = start_year,
+        nW_true    = n_weeks_in_start_year(start_year),
+        week       = ((.data$newWeek + startWeek - 2L) %% .data$nW_true) + 1L,
+        mmwr_year  = ifelse(.data$week >= 35L, start_year, start_year + 1L),
+        Rdate      = MMWRweek::MMWRweek2Date(.data$mmwr_year, .data$week, 1L),
+        date       = as.Date(ifelse(is.na(.data$date), .data$Rdate, .data$date))
+      ) %>%
+      dplyr::left_join(ref_df, by = "newWeek")
+  }
+  
+  # ---- Optional: global post-peak GAM tail (used only if peak_newWeek not NULL) ----
+  xD_post_template <- NULL
+  if (!is.null(peak_newWeek)) {
+    post_gam_res <- flualign::forecast_post_peak_gam(
+      currentSeason = currentSeason,
+      g_ref_fun     = g_ref_fun,
+      max_newWeek   = max_newWeek_season,
+      k_smooth      = k_smooth_post,
+      use_weights   = use_weights,
+      level         = level
+    )
+    xD_post_template <- build_xD(post_gam_res, season_label = season)
+  }
+  
+  # ---- 2) loop over cuts, refit, build xD for each ----
+  all_xD <- purrr::map2_dfr(
+    cut_newWeeks,
+    cut_labels,
+    function(cn, lab) {
+      
+      # data up to this cut
+      currentD_cut <- currentSeason %>%
+        dplyr::filter(.data$newWeek <= cn) %>%
+        dplyr::select(.data$newWeek, .data$y, .data$neg)
+      
+      # epi-week of the last observation in this cut (surveillance-week scale)
+      epi_last <- currentSeason %>%
+        dplyr::filter(.data$newWeek == cn) %>%
+        dplyr::summarise(w = max(.data$week, na.rm = TRUE)) %>%
+        dplyr::pull(.data$w)
+      
+      # decide allow_scale for THIS cut:
+      allow_scale_cut <-
+        if (!is.null(force_allow_scale_from_week) &&
+            is.finite(epi_last) &&
+            epi_last >= force_allow_scale_from_week) {
+          TRUE
+        } else {
+          allow_scale   # TRUE/FALSE/NULL
+        }
+      
+      # alignment-based fit for this cut (full-season prediction)
+      res_align <- align_forecast_pipeline_dilate(
+        currentD    = currentD_cut,
+        g_ref_fun   = g_ref_fun,
+        g_ref_mu_se = g_ref_mu_se,
+        hyper       = hyper,
+        allow_scale = allow_scale_cut,
+        use_weights = use_weights,
+        level       = level
+      )
+      
+      xD_align <- build_xD(res_align, season_label = season)
+      
+      # If no peak_newWeek provided OR this cut is before peak -> pure alignment
+      if (is.null(peak_newWeek) || cn < peak_newWeek || is.null(xD_post_template)) {
+        return(
+          xD_align %>%
+            dplyr::mutate(cut_label = lab)
+        )
+      }
+      
+      # Otherwise: peak has (in truth) occurred already, so:
+      # - use alignment up to the cut newWeek
+      # - use GAM tail (from xD_post_template) after the cut
+      
+      x_pre <- xD_align %>%
+        dplyr::filter(.data$newWeek <= cn)
+      
+      x_tail <- xD_post_template %>%
+        dplyr::filter(.data$newWeek > cn) %>%
+        dplyr::mutate(
+          # for this hypothetical cut, everything after cn is "forecast"
+          kind = "forecast"
+        )
+      
+      dplyr::bind_rows(x_pre, x_tail) %>%
+        dplyr::arrange(.data$newWeek) %>%
+        dplyr::mutate(cut_label = lab)
+    }
+  )
+  
+  # ---- 3) single ggplot with many curves (each full season curve) ----
+  p <- ggplot2::ggplot(all_xD, ggplot2::aes(x = .data$date, y = .data$p_hat)) +
+    ggplot2::geom_ribbon(
+      ggplot2::aes(
+        ymin   = .data$p_lo,
+        ymax   = .data$p_hi,
+        fill   = .data$cut_label,
+        group  = .data$cut_label
+      ),
+      alpha = 0.15,
+      colour = NA
+    ) +
+    ggplot2::geom_line(
+      ggplot2::aes(
+        colour = .data$cut_label,
+        group  = .data$cut_label
+      ),
+      linewidth = 0.7
+    ) +
+    ggplot2::geom_point(
+      data = all_xD %>% dplyr::filter(.data$kind == "observed"),
+      ggplot2::aes(x = .data$date, y = .data$p_hat),
+      inherit.aes = FALSE,
+      colour = "black",
+      size = 1.5
+    ) +
+    ggplot2::geom_line(
+      ggplot2::aes(y = .data$p_gamm),
+      colour = "steelblue",
+      linewidth = 0.9,
+      inherit.aes = TRUE
+    ) +
+    ggplot2::scale_x_date(
+      breaks = all_xD$date,
+      labels = all_xD$week
+    ) +
+    ggplot2::ylab("Percentage Positivity") +
+    ggplot2::xlab("Surveillance Week") +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(
+      axis.text.x = ggplot2::element_text(
+        angle = 90, vjust = 0.5, hjust = 1
+      )
+    ) +
+    ggplot2::labs(
+      colour = "Cut at",
+      fill   = "Cut at",
+      title  = paste0("Alignment evolution for ", season),
+      subtitle = paste0(
+        "Curves re-fitted from week ", start_cut_week,
+        " to ", max(currentSeason$week, na.rm = TRUE),
+        if (!is.null(max_newWeek))
+          paste0("; last alignment cut at newWeek ", last_cut_newWeek)
+        else "",
+        if (!is.null(peak_newWeek))
+          paste0("; post-peak tail from GAM (peak newWeek ≈ ", peak_newWeek, ")")
+        else ""
+      )
+    )
+  
+  p_multi <- plotly::ggplotly(
+    p,
+    tooltip = c("cut_label", "date", "week", "p_hat", "p_lo", "p_hi", "kind")
+  )
+  
+  # clean legend names (remove "(...,1)" junk from ggplotly)
+  for (i in seq_along(p_multi$x$data)) {
+    nm <- p_multi$x$data[[i]]$name
+    if (!is.null(nm) && nzchar(nm)) {
+      nm_clean <- sub("^\\(([^,]+),.*\\)$", "\\1", nm)
+      p_multi$x$data[[i]]$name <- nm_clean
+    }
+  }
+  
+  p_multi
+}
+
+
+# --- from R/m1_fit.R (fit_tau_delta_old) ---
+#' @return A list with \code{tau}, \code{a}, \code{b}, \code{delta},
+#'   \code{allow_scale}, \code{delta_on}, \code{value}, \code{status}, and
+#'   \code{predict_prob}.
+#' @keywords internal
+fit_tau_delta_old <- function(currentD, g_ref_fun,
+                          tau_bounds, delta_bounds,
+                          allow_scale = NULL,
+                          week_threshold_delta,
+                          lam_delta,
+                          use_weights = TRUE) {
+
+  t <- currentD$newWeek; y <- currentD$y; n <- currentD$y + currentD$neg
+  w <- if (use_weights) n else rep(1, length(n))
+
+  if (is.null(allow_scale)) allow_scale <- max(t, na.rm = TRUE) >= 28
+  delta_on <- max(t, na.rm = TRUE) >= week_threshold_delta
+
+  g0   <- g_ref_safe(t)
+  ok   <- is.finite(g0) & n > 0
+  t0   <- t[ok]; y0 <- y[ok]; n0 <- n[ok]; w0 <- w[ok]; g0 <- g0[ok]
+
+  if (allow_scale) {
+    fit0 <- try(glm(cbind(y0, n0 - y0) ~ g0, family = binomial(), weights = w0), silent = TRUE)
+    if (inherits(fit0, "try-error")) { a0 <- qlogis(pmax(mean(y0/n0), 1e-6)); b0 <- 1 } else {
+      a0 <- unname(coef(fit0)[1]); b0 <- unname(coef(fit0)[2])
+    }
+  } else {
+    fit0 <- try(glm(cbind(y0, n0 - y0) ~ 1 + offset(g0), family = binomial(), weights = w0), silent = TRUE)
+    a0 <- if (inherits(fit0, "try-error")) qlogis(pmax(mean(y0/n0), 1e-6)) else unname(coef(fit0)[1])
+    b0 <- 1
+  }
+
+  tau0 <- median(c(0, tau_bounds[1] + 1e-3, tau_bounds[2] - 1e-3))
+  del0 <- if (delta_on) median(c(0, delta_bounds[1] + 1e-4, delta_bounds[2] - 1e-4)) else 0
+  a0   <- median(c(a0, -10, 10))
+  b0   <- if (allow_scale) median(c(b0, 0.2, 5.0)) else 1
+
+  if (allow_scale && delta_on) {
+    x0 <- c(tau0, a0, b0, del0)
+    lb <- c(tau_bounds[1], -10, 0.2, delta_bounds[1])
+    ub <- c(tau_bounds[2],  10, 5.0,  delta_bounds[2])
+  } else if (allow_scale && !delta_on) {
+    x0 <- c(tau0, a0, b0, 0)
+    lb <- c(tau_bounds[1], -10, 0.2, 0)
+    ub <- c(tau_bounds[2],  10, 5.0,  0)
+  } else if (!allow_scale && delta_on) {
+    x0 <- c(tau0, a0, del0)
+    lb <- c(tau_bounds[1], -10, delta_bounds[1])
+    ub <- c(tau_bounds[2],  10, delta_bounds[2])
+  } else {
+    x0 <- c(tau0, a0, 0)
+    lb <- c(tau_bounds[1], -10, 0)
+    ub <- c(tau_bounds[2],  10, 0)
+  }
+
+  obj <- function(par) safe_obj(par, t, y, n, gfun = g_ref_safe,
+                                allow_scale = allow_scale, lam = lam_delta, w = w)
+
+  if (!is.finite(obj(x0))) {
+    for (sc in c(0, 0.25, 0.5, 1)) {
+      x_try <- x0
+      x_try[1] <- median(c(x0[1] + sc, tau_bounds[1] + 1e-3, tau_bounds[2] - 1e-3))
+      if (is.finite(obj(x_try))) { x0 <- x_try; break }
+    }
+  }
+
+  opt <- nloptr::sbplx(x0 = x0, fn = obj, lower = lb, upper = ub,
+                       control = list(xtol_rel = 1e-7, maxeval = 3000))
+
+  par <- opt$par
+  tau_hat <- par[1]; a_hat <- par[2]
+  if (allow_scale) { b_hat <- par[3]; del_hat <- par[4] } else { b_hat <- 1; del_hat <- par[3] }
+
+  predict_prob <- function(tt) {
+    u <- (tt - tau_hat) / (1 + del_hat)
+    plogis(a_hat + b_hat * g_ref_safe(u))
+  }
+
+  list(
+    tau = tau_hat, a = a_hat, b = b_hat, delta = del_hat,
+    allow_scale = allow_scale, delta_on = delta_on,
+    value = opt$value, status = opt$convergence,
+    predict_prob = predict_prob,
+    t = t, y = y, n = n, w = w, g_ref_fun = g_ref_safe
+  )
+}
+
+
+
+# --- from R/m1_reference_helpers.R (make_reference_functions, set_reference, get_reference, fit_reference_gam) ---
+#' Create closures for reference link-scale mean g(u) and se{g(u)}
+#' @param gam_obj fitted GAM (e.g., gam_fit$gam) on binomial link scale
+#' @param grid data.frame with column newWeek over support (e.g., 1:52)
+#' @return list(g_ref_fun, g_ref_safe, g_ref_mu_se)
+make_reference_functions <- function(gam_obj, grid) {
+  stopifnot("newWeek" %in% names(grid))
+  # smoother (link scale) for integer weeks
+  eta_hat <- drop(predict(gam_obj, newdata = grid, type = "link", se.fit = FALSE))
+  spl <- splinefun(grid$newWeek, eta_hat, method = "natural")
+  g_ref_fun <- function(u) spl(u)
+  g_ref_safe <- function(u) {
+    u2 <- pmax(pmin(u, max(grid$newWeek)), min(grid$newWeek))
+    spl(u2)
+  }
+  g_ref_mu_se <- function(u) {
+    nd <- data.frame(newWeek = u)
+    pr <- predict(gam_obj, newdata = nd, type = "link", se.fit = TRUE)
+    list(mu = drop(pr$fit), se = drop(pr$se.fit))
+  }
+  list(g_ref_fun = g_ref_fun, g_ref_safe = g_ref_safe, g_ref_mu_se = g_ref_mu_se)
+}
+
+#' Set reference closures globally for convenience
+set_reference <- function(gam_obj, grid) {
+  fns <- make_reference_functions(gam_obj, grid)
+  .flualign_ref_env$g_ref_fun   <- fns$g_ref_fun
+  .flualign_ref_env$g_ref_safe  <- fns$g_ref_safe
+  .flualign_ref_env$g_ref_mu_se <- fns$g_ref_mu_se
+  invisible(TRUE)
+}
+
+#' Get the current reference closures
+get_reference <- function() {
+  list(
+    g_ref_fun   = get("g_ref_fun",   envir = .flualign_ref_env, inherits = FALSE),
+    g_ref_safe  = get("g_ref_safe",  envir = .flualign_ref_env, inherits = FALSE),
+    g_ref_mu_se = get("g_ref_mu_se", envir = .flualign_ref_env, inherits = FALSE)
+  )
+}
+
+# Convenience: fit GAM and set reference in one step
+#' Fit reference GAM and set closures
+#' @param df data.frame(season, newWeek, y, neg)
+#' @param k basis dimension for s(newWeek)
+fit_reference_gam <- function(df, k = 12) {
+  stopifnot(all(c("newWeek","y","neg","season") %in% names(df)))
+  fm <- gamm4::gamm4(cbind(y, neg) ~ s(newWeek, k = k),
+                      random = ~(1|season), data = df,
+                      family = binomial(), method = "REML")
+  grid <- data.frame(newWeek = sort(unique(df$newWeek)))
+  set_reference(fm$gam, grid)
+  invisible(fm)
+}
+
+
+# --- from R/m1_loso.R (loso_alignment) ---
+#' Leave-one-season-out (or user-specified split) alignment evaluation
+#'
+#' For each test season, estimates the reference curve on the training seasons,
+#' learns alignment hyperparameters from the training data, then applies the
+#' full alignment pipeline to the test season. By default performs LOSO:
+#' each season is held out in turn and aligned against the curve estimated on
+#' all other seasons.
+#'
+#' @param alignedD Data frame returned by \code{alignIgnition()}, containing
+#'   at least \code{season}, \code{newWeek}, \code{y}, \code{neg}.
+#' @param train_seasons Character vector of season labels to use for training.
+#'   If \code{NULL} (default), training seasons are all seasons except the
+#'   current test season (i.e., LOSO).
+#' @param test_seasons Character vector of season labels to evaluate.
+#'   If \code{NULL} (default), all seasons in \code{alignedD} are used as
+#'   test seasons (full LOSO).
+#' @param k Basis dimension passed to \code{estimateRef()} for the cyclic smooth.
+#' @param n_weeks Integer. Template domain length passed to \code{estimateRef()}.
+#' @param allow_scale Logical or \code{NULL}. If \code{NULL} (default),
+#'   scale identifiability is checked automatically per fold via
+#'   \code{check_scale_identifiability()}.
+#' @param level Numeric. Confidence level for prediction intervals (default 0.95).
+#' @param verbose Logical. Print progress messages (default \code{TRUE}).
+#'
+#' @return A list with two elements:
+#' \describe{
+#'   \item{results}{Named list (one entry per test season). Each entry is the
+#'     output of \code{align_forecast_pipeline_dilate()} augmented with
+#'     \code{season}, \code{train_seasons}, and \code{anchorWeek}.}
+#'   \item{summary}{A tibble with one row per test season containing:
+#'     \code{season}, \code{n_train}, \code{tau}, \code{delta}, \code{a},
+#'     \code{b}, \code{allow_scale}, \code{delta_on}, \code{t_peak},
+#'     \code{t_peak_lo}, \code{t_peak_hi}, \code{anchorWeek}.}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Full LOSO (default)
+#' loso <- loso_alignment(alignedD)
+#' loso$summary
+#'
+#' # Hold out specific seasons as test
+#' loso2 <- loso_alignment(alignedD, test_seasons = c("2017-18", "2019-20"))
+#'
+#' # Fixed train/test split
+#' loso3 <- loso_alignment(
+#'   alignedD,
+#'   train_seasons = c("2012-13","2013-14","2014-15","2015-16","2016-17"),
+#'   test_seasons  = c("2017-18","2018-19","2019-20")
+#' )
+#' }
+#' @export
+loso_alignment <- function(alignedD,
+                            train_seasons = NULL,
+                            test_seasons  = NULL,
+                            k             = 10,
+                            n_weeks       = 52L,
+                            allow_scale   = NULL,
+                            level         = 0.95,
+                            verbose       = TRUE) {
+
+  all_seasons <- sort(unique(alignedD$season))
+
+  if (is.null(test_seasons)) {
+    test_seasons <- all_seasons
+  }
+
+  # validate
+  bad <- setdiff(test_seasons, all_seasons)
+  if (length(bad) > 0)
+    stop("test_seasons not found in alignedD: ", paste(bad, collapse = ", "))
+
+  if (!is.null(train_seasons)) {
+    bad_tr <- setdiff(train_seasons, all_seasons)
+    if (length(bad_tr) > 0)
+      stop("train_seasons not found in alignedD: ", paste(bad_tr, collapse = ", "))
+  }
+
+  results <- vector("list", length(test_seasons))
+  names(results) <- test_seasons
+
+  for (test_s in test_seasons) {
+
+    # --- determine training set ---
+    tr_seasons <- if (!is.null(train_seasons)) {
+      train_seasons
+    } else {
+      setdiff(all_seasons, test_s)
+    }
+
+    if (length(tr_seasons) < 2)
+      stop("Fewer than 2 training seasons for test season '", test_s,
+           "'. Cannot fit reference curve.")
+
+    if (verbose)
+      message(sprintf("[loso_alignment] test: %-9s | training on %d seasons",
+                      test_s, length(tr_seasons)))
+
+    # --- fit reference curve on training seasons ---
+    ex_for_ref <- setdiff(all_seasons, tr_seasons)   # exclude test + any others not in train
+    ref <- estimateRef(
+      alignedD  = alignedD,
+      exSeason  = ex_for_ref,
+      k         = k,
+      n_weeks   = n_weeks
+    )
+
+    # --- learn hyperparameters from training data ---
+    hyper <- learn_alignment_hyperparams(ref$dat, ref$g_ref_fun)
+
+    # --- test season data ---
+    currentD <- dplyr::filter(alignedD, season == test_s)
+
+    # --- scale identifiability ---
+    scale_rec <- if (!is.null(allow_scale)) {
+      allow_scale
+    } else {
+      check_scale_identifiability(
+        currentD  = currentD,
+        g_ref_fun = ref$g_ref_fun,
+        hyper     = hyper
+      )$allow_scale_rec
+    }
+
+    # --- alignment + forecast ---
+    res <- align_forecast_pipeline_dilate(
+      currentD    = currentD,
+      g_ref_fun   = ref$g_ref_fun,
+      g_ref_mu_se = ref$g_ref_mu_se,
+      hyper       = hyper,
+      allow_scale = scale_rec,
+      level       = level
+    )
+
+    res$season        <- test_s
+    res$train_seasons <- tr_seasons
+    res$anchorWeek    <- ref$anchorWeek
+
+    results[[test_s]] <- res
+  }
+
+  # --- build summary tibble ---
+  summary_df <- purrr::map_dfr(results, function(r) {
+    pk <- r$peak
+    tibble::tibble(
+      season     = r$season,
+      n_train    = length(r$train_seasons),
+      tau        = r$tau,
+      delta      = r$delta,
+      a          = r$a,
+      b          = r$b,
+      allow_scale = r$allow_scale,
+      delta_on   = r$delta_on,
+      t_peak     = pk$t_peak,
+      t_peak_lo  = pk$t_peak_ci[1],
+      t_peak_hi  = pk$t_peak_ci[2],
+      anchorWeek = r$anchorWeek
+    )
+  })
+
+  list(results = results, summary = summary_df)
+}
+
+
+# --- from R/m1_loso.R (tune_loso_k) ---
+tune_loso_k <- function(allD,
+                         params,
+                         k_ref_grid      = c(6L, 8L, 10L, 12L, 15L, 20L),
+                         manual_labels   = NULL,
+                         exclude_seasons = NULL,
+                         n_weeks         = 52L,
+                         n_cores         = parallel::detectCores() - 1L,
+                         use_smoothed_peaks = FALSE,
+                         k_smooth           = 10L,
+                         peak_weight_boost  = 1,
+                         peak_weight_decay  = 0.3,
+                         use_smoothed       = FALSE,
+                         verbose         = TRUE,
+                         ...) {
+
+  # Pre-filter once
+  if (!is.null(exclude_seasons)) {
+    allD <- dplyr::filter(allD, !season %in% exclude_seasons)
+  }
+
+  # True peak week per season: smoothed or raw
+  if (use_smoothed_peaks) {
+    deriv_all <- estimateDerivs(allD, k = k_smooth,
+                                peak_weight_boost = peak_weight_boost,
+                                peak_weight_decay = peak_weight_decay,
+                                ignition_weeks    = manual_labels)
+    true_peaks <- deriv_all$data %>%
+      dplyr::filter(!is.na(fit), is.finite(fit)) %>%
+      dplyr::group_by(season) %>%
+      dplyr::slice_max(fit, n = 1L, with_ties = FALSE) %>%
+      dplyr::ungroup() %>%
+      dplyr::select(season, true_peak_weekF = weekF)
+  } else {
+    true_peaks <- allD %>%
+      dplyr::filter(!is.na(p), is.finite(p), N > 0) %>%
+      dplyr::group_by(season) %>%
+      dplyr::slice_max(p, n = 1L, with_ties = FALSE) %>%
+      dplyr::ungroup() %>%
+      dplyr::select(season, true_peak_weekF = weekF)
+  }
+
+  results <- purrr::map_dfr(k_ref_grid, function(k) {
+
+    if (verbose) message(sprintf("[tune_loso_k] k_ref = %d", k))
+
+    wf <- loso_walkforward(
+      allD            = allD,
+      params          = params,
+      manual_labels   = manual_labels,
+      exclude_seasons = NULL,   # already filtered above
+      k_ref           = k,
+      n_weeks         = n_weeks,
+      n_cores         = n_cores,
+      use_smoothed       = use_smoothed,
+      peak_weight_boost  = peak_weight_boost,
+      peak_weight_decay  = peak_weight_decay,
+      verbose         = FALSE,
+      ...
+    )
+
+    pdf <- wf$params_df
+
+    # Prospective peak MAE under three Weibull weighting schemes.
+    # w(t) = exp(-(lambda * t)^p), t = weeks since true ignition (0 at lock).
+    # Rows: ignition locked, t_peak available, eval_week <= true peak.
+    score_df <- pdf %>%
+      dplyr::filter(!is.na(t_peak), !is.na(iWeek_true)) %>%
+      dplyr::mutate(
+        pred_peak_weekF = round(t_peak - anchorWeek + iWeek_hat)
+      ) %>%
+      dplyr::left_join(true_peaks, by = "season") %>%
+      dplyr::filter(!is.na(true_peak_weekF),
+                    eval_week <= true_peak_weekF) %>%
+      dplyr::mutate(
+        error      = abs(pred_peak_weekF - true_peak_weekF),
+        t          = eval_week - iWeek_true,
+        w_p1_l0    = 1,                          # p=1, lambda=0: unweighted
+        w_p1_l01   = exp(-(0.1 * t)^1),          # p=1, lambda=0.1: exponential
+        w_p2_l01   = exp(-(0.1 * t)^2)           # p=2, lambda=0.1: Weibull shape 2
+      )
+
+    wmae <- function(w) {
+      if (nrow(score_df) == 0 || sum(w) == 0) NA_real_
+      else sum(w * score_df$error) / sum(w)
+    }
+
+    tibble::tibble(
+      k_ref        = k,
+      mae_w_p1_l0  = wmae(score_df$w_p1_l0),
+      mae_w_p1_l01 = wmae(score_df$w_p1_l01),
+      mae_w_p2_l01 = wmae(score_df$w_p2_l01),
+      n_seasons    = dplyr::n_distinct(score_df$season)
+    )
+  })
+
+  results
+}
+
+
+# --- from R/m2_nested_loso.R (nested_loso_m2_eval) ---
+
+
+# ---------- 5. Evaluate M2 on test season ----------
+
+#' Evaluate M2 on the held-out test season
+#'
+#' Builds aligned test data (running M0 pipeline on the test season),
+#' prepares M2 features with the fold's per-fold \code{template_df},
+#' scores predictions, and extracts diagnostics.
+#'
+#' @param allD Full multi-season data frame.
+#' @param fold Output of \code{nested_loso_build_fold()}.
+#' @param m2_fit Output of \code{nested_loso_m2_train()} (the trained M2 GAM).
+#' @param m1_test_preds M1 test predictions from \code{nested_loso_m1_test()}.
+#' @param spec M2 hyperparameter spec object.
+#' @param eval_window Integer; maximum weeks post-ignition to evaluate
+#'   (default 12L).
+#' @param k_deriv Integer; basis dimension for \code{estimateDerivs()}.
+#' @param manual_labels Optional manual ignition labels.
+#' @param flag_args Named list forwarded to \code{flagIgnition()}.
+#' @param verbose Logical; print progress.
+#'
+#' @return A named list:
+#'   \describe{
+#'     \item{scores}{One-row tibble with season, n, mean_nll, brier, rmse_p.}
+#'     \item{predictions}{Tibble with per-observation predictions
+#'       (season, weekF, lead, t_since, p_hat, p_obs, y_lead, N_lead).}
+#'   }
+#'   On failure, scores contain \code{NA} and predictions is empty.
+#'
+#' @export
+nested_loso_m2_eval <- function(allD,
+                                fold,
+                                m2_fit,
+                                m1_test_preds,
+                                spec,
+                                eval_window   = 12L,
+                                k_deriv       = 10L,
+                                manual_labels = NULL,
+                                flag_args     = list(
+                                  p_thresh   = 0.01,
+                                  k1         = 0.4,
+                                  k_c        = 0.01,
+                                  n_consec   = 2L,
+                                  min_window = 10L,
+                                  w_min      = 21L,
+                                  w_max      = 21L,
+                                  d2_relax   = -0.01
+                                ),
+                                verbose = TRUE) {
+
+  test_s <- fold$test_season
+  na_scores <- tibble::tibble(
+    season = test_s, n = NA_integer_,
+    mean_nll = NA_real_, brier = NA_real_, rmse_p = NA_real_
+  )
+  empty_preds <- tibble::tibble(
+    season = character(), weekF = integer(), lead = character(),
+    t_since = numeric(), p_hat = numeric(), p_obs = numeric(),
+    y_lead = integer(), N_lead = integer()
+  )
+
+  if (isTRUE(verbose))
+    message("[m2_eval] Evaluating M2 on test season ", test_s)
+
+  # --- Build aligned test data via M0 pipeline ---
+  test_allD <- dplyr::filter(allD, .data$season == test_s)
+  test_deriv <- estimateDerivs(test_allD, k = k_deriv)
+
+  test_outs <- test_deriv$data %>%
+    dplyr::group_by(.data$season) %>%
+    dplyr::group_split(.keep = TRUE) %>%
+    purrr::map(~ do.call(flagIgnition,
+                         c(list(df = .x, manual_labels = manual_labels),
+                           flag_args)))
+
+  aligned_test <- alignIgnition(test_outs)
+  aligned_test_prosp <- add_prospective_derivs_link(aligned_test)
+  if (!"N" %in% names(aligned_test_prosp))
+    aligned_test_prosp$N <- aligned_test_prosp$y + aligned_test_prosp$neg
+
+  # --- Prep M2 test data with per-fold template ---
+  # Normalize empty M1 predictions to NULL
+  m1_preds_use <- if (!is.null(m1_test_preds) && nrow(m1_test_preds) > 0)
+    m1_test_preds else NULL
+
+  d_test <- tryCatch(
+    prep_stage2_joint(
+      dat           = aligned_test_prosp,
+      best_mean_nll = spec$best_row,
+      template_df   = fold$template_df,
+      leads         = spec$leads %||% c(1L, 2L),
+      pre_buffer    = as.integer(spec$pre_buffer %||% 0L),
+      alpha_state   = as.numeric(spec$alpha_state %||% 0.30),
+      m1_preds      = m1_preds_use,
+      verbose       = FALSE
+    ),
+    error = function(e) NULL
+  )
+
+  if (is.null(d_test) || nrow(d_test) == 0)
+    return(list(scores = na_scores, predictions = empty_preds))
+
+  # --- Restrict to post-ignition eval window ---
+  d_test <- d_test[d_test$post_ign, , drop = FALSE]
+  if (!is.null(eval_window) && "t_since" %in% names(d_test)) {
+    d_test <- d_test[is.finite(d_test$t_since) &
+                       d_test$t_since >= 0 &
+                       d_test$t_since <= as.integer(eval_window), , drop = FALSE]
+  }
+
+  if (nrow(d_test) == 0)
+    return(list(scores = na_scores, predictions = empty_preds))
+
+  # --- Soft positivity ceiling (matches deployment-time cap) ---
+  # Derived from the training data of m2_fit so evaluation is consistent
+  # with what run_m2_forecast() applies at prediction time.
+  fit_obj     <- m2_fit$fit
+  soft_cap_fn <- make_soft_cap_fn(fit_obj)
+
+  # --- Score ---
+  ex_terms <- spec$exclude_newseason
+  if (is.null(ex_terms)) ex_terms <- stage2_exclude_newseason(spec)
+
+  scores <- score_stage2_metrics(
+    fit               = fit_obj,
+    d_test            = d_test,
+    exclude_season_re = TRUE,
+    exclude_terms     = ex_terms,
+    lambda_w          = 0,
+    eval_window       = eval_window,
+    soft_cap_fn       = soft_cap_fn
+  )
+
+  # --- Extract predictions ---
+  # Align factor levels for prediction
+  if ("lead" %in% names(d_test) && is.factor(fit_obj$model$lead))
+    d_test$lead <- factor(as.character(d_test$lead),
+                          levels = levels(fit_obj$model$lead))
+  if ("season" %in% names(d_test) && is.factor(fit_obj$model$season)) {
+    d_test$season <- factor(as.character(d_test$season),
+                            levels = levels(fit_obj$model$season))
+    if (anyNA(d_test$season))
+      d_test$season[is.na(d_test$season)] <- levels(fit_obj$model$season)[1]
+  }
+  if ("season_h" %in% names(d_test) && is.factor(fit_obj$model$season_h)) {
+    d_test$season_h <- factor(as.character(d_test$season_h),
+                              levels = levels(fit_obj$model$season_h))
+    if (anyNA(d_test$season_h))
+      d_test$season_h[is.na(d_test$season_h)] <- levels(fit_obj$model$season_h)[1]
+  }
+
+  # Frozen LOSO: test season is NOT in training data — exclude s(season).
+  ex_terms_with_season <- unique(c(ex_terms, "s(season)"))
+
+  p_hat <- as.numeric(stats::predict(fit_obj, newdata = d_test,
+                                     type = "response", exclude = ex_terms_with_season))
+  p_hat <- soft_cap_fn(p_hat)
+  p_hat <- pmin(1 - 1e-12, pmax(1e-12, p_hat))
+
+  preds <- tibble::tibble(
+    season  = test_s,
+    weekF   = d_test$weekF,
+    lead    = as.character(d_test$lead),
+    t_since = d_test$t_since,
+    p_hat   = p_hat,
+    p_obs   = d_test$y_lead / d_test$N_lead,
+    y_lead  = d_test$y_lead,
+    N_lead  = d_test$N_lead
+  )
+
+  if (isTRUE(verbose))
+    message("[m2_eval] ", test_s,
+            " | mean_nll=", round(scores$mean_nll, 4),
+            " brier=", round(scores$brier, 6),
+            " rmse_p=", round(scores$rmse_p, 4))
+
+  list(
+    scores      = tibble::tibble(
+      season   = test_s,
+      n        = nrow(d_test),
+      mean_nll = scores$mean_nll,
+      brier    = scores$brier,
+      rmse_p   = scores$rmse_p
+    ),
+    predictions = preds
+  )
+}
+
+
+# --- from R/m2_nested_loso.R (plot_nested_loso_scores) ---
+#' Plot nested LOSO scores by season
+#'
+#' Bar chart of per-season scores from nested LOSO, with the overall
+#' mean shown as a dashed line.
+#'
+#' @param scores Scores tibble from \code{nested_loso_cv()} or
+#'   \code{nested_loso_grid_search()}.
+#' @param metric Character; which metric to plot. One of
+#'   \code{"mean_nll"}, \code{"brier"}, \code{"rmse_p"}.
+#' @param title Plot title.
+#'
+#' @return A ggplot object.
+#'
+#' @export
+plot_nested_loso_scores <- function(scores,
+                                    metric = "mean_nll",
+                                    title  = NULL) {
+
+  if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Please install ggplot2.")
+  stopifnot(metric %in% c("mean_nll", "brier", "rmse_p"))
+
+  if (is.null(title))
+    title <- paste0("Nested LOSO: ", metric, " by season")
+
+  overall_mean <- mean(scores[[metric]], na.rm = TRUE)
+
+  ggplot2::ggplot(scores, ggplot2::aes(x = .data$season, y = .data[[metric]])) +
+    ggplot2::geom_col(fill = "steelblue", alpha = 0.8) +
+    ggplot2::geom_hline(yintercept = overall_mean,
+                        linetype = "dashed", colour = "red", linewidth = 0.7) +
+    ggplot2::annotate("text", x = 1, y = overall_mean,
+                      label = sprintf("mean = %.4f", overall_mean),
+                      vjust = -0.5, hjust = 0, colour = "red", size = 3.5) +
+    ggplot2::labs(x = "Season", y = metric, title = title) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+}
+
+
+# --- from R/pipeline_bridge.R (loso_m1_m2_joint) ---
+
+#' Run full M0→M1→M2 weekly forecast chain
+#'
+#' Convenience function for prospective deployment that chains:
+#' \enumerate{
+#'   \item M0 ignition detection (via \code{ign_out} or \code{params})
+#'   \item M1 alignment (via \code{run_alignment_prospective()})
+#'   \item M2 forecast with M1's prediction as template
+#' }
+#'
+#' @param currentSeason Data frame for the current season up to this week.
+#' @param ref Reference object from \code{estimateRef()}.
+#' @param hyper M1 hyperparams from \code{learn_alignment_hyperparams()}.
+#' @param stage2_fit Fitted M2 model (bam/gam object).
+#' @param kit Prospective kit (used by \code{build_stage2_pseudo_prospective_list()}).
+#' @param params M0 detection params (if \code{ign_out} is NULL).
+#' @param ign_out Pre-computed M0 ignition output.
+#' @param allow_scale Passed to M1 alignment.
+#' @param level Confidence level (default 0.95).
+#' @param use_m1_template Logical. If TRUE (default), replaces M2's template
+#'   with M1's aligned prediction. If FALSE, uses static template (legacy mode).
+#' @param exclude M2 prediction exclude terms (e.g., for new season).
+#' @param exclude_season_re Logical (default TRUE).
+#' @param interval "pi" or "ci" for M2 prediction intervals.
+#'
+#' @return A list with:
+#' \describe{
+#'   \item{m1}{Full M1 alignment result from \code{run_alignment_prospective()}}
+#'   \item{m2_forecast}{M2 forecast data frame from \code{stage2_predict_series()}}
+#'   \item{state}{Overall pipeline state: "pre_ignition", "aligning", or "post_peak"}
+#' }
+#' @export
+loso_m1_m2_joint <- function(allD,
+                              params,
+                              spec,
+                              template_df,
+                              manual_labels   = NULL,
+                              test_seasons    = NULL,
+                              exclude_seasons = NULL,
+                              horizons        = c(1L, 2L),
+                              eval_window     = 12L,
+                              k_deriv         = 10L,
+                              k_ref           = 10L,
+                              n_weeks         = 52L,
+                              flag_args       = list(
+                                p_thresh   = 0.01,
+                                k1         = 0.4,
+                                k_c        = 0.01,
+                                n_consec   = 2L,
+                                min_window = 10L,
+                                w_min      = 21L,
+                                w_max      = 21L,
+                                d2_relax   = -0.01
+                              ),
+                              allow_scale     = NULL,
+                              use_ci          = TRUE,
+                              buffer_weeks    = 0L,
+                              min_obs         = 4L,
+                              curvature_ratio = 1.0,
+                              method          = "REML",
+                              n_cores         = parallel::detectCores() - 1L,
+                              verbose         = TRUE) {
+
+  all_seasons <- sort(unique(as.character(allD$season)))
+
+  if (!is.null(exclude_seasons)) {
+    allD        <- dplyr::filter(allD, !.data$season %in% exclude_seasons)
+    all_seasons <- setdiff(all_seasons, exclude_seasons)
+  }
+
+  if (is.null(test_seasons)) test_seasons <- all_seasons
+  stopifnot(all(test_seasons %in% all_seasons))
+
+  if (length(all_seasons) < 3)
+    stop("Need >= 3 seasons for LOSO.")
+
+  # Set up parallel plan
+  n_workers <- max(1L, as.integer(n_cores))
+  old_plan  <- future::plan()
+  if (n_workers > 1L) future::plan(future::multisession, workers = n_workers)
+  on.exit(future::plan(old_plan), add = TRUE)
+
+  scores_list     <- vector("list", length(test_seasons))
+  pred_list       <- vector("list", length(test_seasons))
+  m1_preds_list   <- vector("list", length(test_seasons))
+  names(scores_list) <- names(pred_list) <- names(m1_preds_list) <- test_seasons
+
+  for (test_s in test_seasons) {
+    if (isTRUE(verbose))
+      message("\n=== [loso_m1_m2_joint] Test season: ", test_s, " ===")
+
+    tr_seasons <- setdiff(all_seasons, test_s)
+
+    # --- Step 1: Build aligned training data + reference curve ---
+    if (isTRUE(verbose)) message("  Step 1: Fitting reference on ", length(tr_seasons), " training seasons")
+    train_allD <- dplyr::filter(allD, .data$season %in% tr_seasons)
+    res_deriv  <- estimateDerivs(train_allD, k = k_deriv)
+
+    train_outs <- res_deriv$data %>%
+      dplyr::group_by(.data$season) %>%
+      dplyr::group_split(.keep = TRUE) %>%
+      purrr::map(~ do.call(flagIgnition,
+                           c(list(df = .x, manual_labels = manual_labels), flag_args)))
+
+    aligned_train <- alignIgnition(train_outs)
+    ref <- estimateRef(alignedD = aligned_train, exSeason = character(0),
+                       k = k_ref, n_weeks = n_weeks)
+    hyper <- learn_alignment_hyperparams(ref$dat, ref$g_ref_fun)
+
+    # --- Step 2: M1 walk-forward for all training seasons ---
+    if (isTRUE(verbose)) message("  Step 2: Running M1 walk-forward for training seasons")
+
+    m1_train_preds <- m1_walkforward_multi(
+      allD            = allD,
+      ref             = ref,
+      hyper           = hyper,
+      params          = params,
+      seasons         = tr_seasons,
+      horizons        = horizons,
+      allow_scale     = allow_scale,
+      use_ci          = use_ci,
+      buffer_weeks    = buffer_weeks,
+      min_obs         = min_obs,
+      curvature_ratio = curvature_ratio,
+      parallel        = (n_workers > 1L),
+      verbose         = FALSE
+    )
+
+    if (isTRUE(verbose))
+      message("  M1 training predictions: ", nrow(m1_train_preds), " rows across ",
+              length(unique(m1_train_preds$season)), " seasons")
+
+    # --- Step 3-4: Train M2 with M1 predictions as template ---
+    if (!"N" %in% names(aligned_train))
+      aligned_train$N <- aligned_train$y + aligned_train$neg
+    if (isTRUE(verbose)) message("  Step 3-4: Training M2 with M1-stacked template")
+
+    m2_fit <- tryCatch(
+      train_stage2_joint(
+        dat         = aligned_train,
+        template_df = template_df,
+        spec        = spec,
+        method      = method,
+        m1_preds    = m1_train_preds,
+        verbose     = FALSE
+      ),
+      error = function(e) {
+        warning("M2 training failed for test season ", test_s, ": ", e$message)
+        NULL
+      }
+    )
+
+    if (is.null(m2_fit)) {
+      scores_list[[test_s]] <- tibble::tibble(
+        season = test_s, mean_nll = NA_real_, brier = NA_real_, rmse_p = NA_real_
+      )
+      next
+    }
+
+    # --- Step 5: M1 walk-forward on test season ---
+    if (isTRUE(verbose)) message("  Step 5: Running M1 walk-forward on test season")
+
+    m1_test_preds <- m1_walkforward_predictions(
+      seasonD         = dplyr::filter(allD, .data$season == test_s),
+      ref             = ref,
+      hyper           = hyper,
+      params          = params,
+      horizons        = horizons,
+      allow_scale     = allow_scale,
+      use_ci          = use_ci,
+      buffer_weeks    = buffer_weeks,
+      min_obs         = min_obs,
+      curvature_ratio = curvature_ratio
+    )
+    m1_preds_list[[test_s]] <- m1_test_preds
+
+    if (nrow(m1_test_preds) == 0) {
+      if (isTRUE(verbose)) message("  No M1 predictions for test season (no ignition?)")
+      scores_list[[test_s]] <- tibble::tibble(
+        season = test_s, mean_nll = NA_real_, brier = NA_real_, rmse_p = NA_real_
+      )
+      next
+    }
+
+    # --- Step 6: Prepare test data + M2 prediction ---
+    if (isTRUE(verbose)) message("  Step 6: Evaluating M2 on test season")
+
+    test_allD <- dplyr::filter(allD, .data$season == test_s)
+    test_deriv <- estimateDerivs(test_allD, k = k_deriv)
+
+    test_outs <- test_deriv$data %>%
+      dplyr::group_by(.data$season) %>%
+      dplyr::group_split(.keep = TRUE) %>%
+      purrr::map(~ do.call(flagIgnition,
+                           c(list(df = .x, manual_labels = manual_labels), flag_args)))
+
+    aligned_test <- alignIgnition(test_outs)
+    if (!"N" %in% names(aligned_test))
+      aligned_test$N <- aligned_test$y + aligned_test$neg
+
+    # Build M2 test data with M1 test predictions
+    d_test <- tryCatch(
+      prep_stage2_joint(
+        dat           = aligned_test,
+        best_mean_nll = spec$best_row,
+        template_df   = template_df,
+        leads         = horizons,
+        pre_buffer    = as.integer(spec$pre_buffer %||% 0L),
+        alpha_state   = as.numeric(spec$alpha_state %||% 0.30),
+        m1_preds      = m1_test_preds,
+        verbose       = FALSE
+      ),
+      error = function(e) NULL
+    )
+
+    if (is.null(d_test) || nrow(d_test) == 0) {
+      scores_list[[test_s]] <- tibble::tibble(
+        season = test_s, mean_nll = NA_real_, brier = NA_real_, rmse_p = NA_real_
+      )
+      next
+    }
+
+    # Restrict to eval window
+    d_test <- d_test[d_test$post_ign, , drop = FALSE]
+    if (!is.null(eval_window) && "t_since" %in% names(d_test)) {
+      d_test <- d_test[is.finite(d_test$t_since) &
+                         d_test$t_since >= 0 &
+                         d_test$t_since <= as.integer(eval_window), , drop = FALSE]
+    }
+
+    if (nrow(d_test) == 0) {
+      scores_list[[test_s]] <- tibble::tibble(
+        season = test_s, mean_nll = NA_real_, brier = NA_real_, rmse_p = NA_real_
+      )
+      next
+    }
+
+    # Score M2
+    scores <- score_stage2_metrics(
+      fit                  = m2_fit$fit,
+      d_test               = d_test,
+      exclude_season_re    = TRUE,
+      exclude_terms        = spec$exclude_newseason,
+      lambda_w             = 0,
+      eval_window          = eval_window
+    )
+
+    scores_list[[test_s]] <- tibble::tibble(
+      season   = test_s,
+      n        = nrow(d_test),
+      mean_nll = scores$mean_nll,
+      brier    = scores$brier,
+      rmse_p   = scores$rmse_p
+    )
+
+    # Collect predictions for diagnostics
+    fit_obj <- m2_fit$fit
+    ex <- spec$exclude_newseason
+
+    # Align factor levels
+    if ("lead" %in% names(d_test) && is.factor(fit_obj$model$lead))
+      d_test$lead <- factor(as.character(d_test$lead), levels = levels(fit_obj$model$lead))
+    if ("season" %in% names(d_test) && is.factor(fit_obj$model$season)) {
+      d_test$season <- factor(as.character(d_test$season), levels = levels(fit_obj$model$season))
+      if (anyNA(d_test$season)) d_test$season[is.na(d_test$season)] <- levels(fit_obj$model$season)[1]
+    }
+    if ("season_h" %in% names(d_test) && is.factor(fit_obj$model$season_h)) {
+      d_test$season_h <- factor(as.character(d_test$season_h), levels = levels(fit_obj$model$season_h))
+      if (anyNA(d_test$season_h)) d_test$season_h[is.na(d_test$season_h)] <- levels(fit_obj$model$season_h)[1]
+    }
+
+    # Frozen LOSO: test season is NOT in training data — exclude s(season).
+    ex_with_season <- unique(c(ex, "s(season)"))
+    p_hat <- as.numeric(stats::predict(fit_obj, newdata = d_test, type = "response", exclude = ex_with_season))
+    p_hat <- pmin(1 - 1e-12, pmax(1e-12, p_hat))
+
+    pred_list[[test_s]] <- tibble::tibble(
+      season   = test_s,
+      weekF    = d_test$weekF,
+      lead     = as.character(d_test$lead),
+      t_since  = d_test$t_since,
+      p_hat    = p_hat,
+      p_obs    = d_test$y_lead / d_test$N_lead,
+      y_lead   = d_test$y_lead,
+      N_lead   = d_test$N_lead
+    )
+
+    if (isTRUE(verbose))
+      message("  Score: mean_nll=", round(scores$mean_nll, 4),
+              " brier=", round(scores$brier, 6),
+              " rmse_p=", round(scores$rmse_p, 4))
+  }
+
+  list(
+    scores      = dplyr::bind_rows(scores_list),
+    predictions = dplyr::bind_rows(pred_list),
+    m1_preds    = m1_preds_list
+  )
+}
+

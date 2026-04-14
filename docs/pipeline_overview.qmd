@@ -94,7 +94,7 @@ Primary forecasting targets are one- and two-week-ahead positivity $\pi_{s,w+1}$
 
 **Goal:** detect the start of the epidemic season in real time.
 
-$M_0$ votes each week using four threshold-based gates (`cond_sum`, `cond_p`, `cond_prev`, `cond_inc`) capturing level, trend, cumulative burden, and sustained elevation from data available up to the current week only. Ignition fires when all four agree simultaneously within a tuned eligibility window. Gate thresholds are selected by LOSO grid search against known ignition weeks, minimising detection timing error. Once ignition locks at $\hat{w}^{(\mathrm{ign})}_s$, the aligned coordinate system activates:
+$M_0$ votes each week using four threshold-based gates (`cond_sum`, `cond_p`, `cond_prev`, `cond_inc`) capturing level, trend, cumulative burden, and sustained elevation from data available up to the current week only. Ignition fires when all four agree simultaneously within a tuned eligibility window. Gate thresholds are selected by LOSO grid search against known ignition weeks using a lexicographic objective: first minimise the number of seasons with adjusted detection error > 2 weeks, then minimise the maximum error across seasons, then minimise a composite score. Once ignition locks at $\hat{w}^{(\mathrm{ign})}_s$, the aligned coordinate system activates:
 
 $$
 w^a_{s,w} = w^f_{s,w} - \hat{w}^{(\mathrm{ign})}_s + w^{an}.
@@ -110,7 +110,7 @@ $$
 
 **Goal:** align observed epidemic curves to historical templates to continuously estimate peak timing.
 
-After ignition, each week's partial curve is aligned to each training season's template in parallel using a 4-parameter dilation model ($\tau_w$, $\delta_w$, $a_w$, $b_w$). Template fits are ensemble-weighted by alignment quality (NLL) via softmax, yielding a continuously updated peak estimate. Once the peak is detected (`peak_passed == TRUE`), alignment freezes.
+After ignition, each week's partial curve is aligned to each training season's template in parallel using a 4-parameter dilation model ($\tau_w$, $\delta_w$, $a_w$, $b_w$). Template fits are ensemble-weighted by alignment quality (NLL) and slope similarity via softmax, yielding a continuously updated peak estimate. Once the peak is detected (`peak_passed == TRUE`), alignment freezes.
 
 ### Reference curve estimation {#sec-refcurve}
 
@@ -120,7 +120,7 @@ $$
 w^a_{s,w} = w^f_{s,w} - w^{(\mathrm{ign})}_s + w^{an}.
 $$
 
-The factor-smooth (`"fs"`) method fits a GAM with `s(newWeek, season, bs="fs")`, returning per-season curves `eta_mat` used for multi-template alignment.
+The factor-smooth (`"fs"`) method fits a GAM with `s(newWeek, season, bs="fs", xt=list(bs="cc"))` on logit-scale data, returning per-season curves `eta_mat` used for multi-template alignment.
 
 **Key functions:** `flagIgnition()`, `alignIgnition()`, `estimateRef()`, `learn_alignment_hyperparams()`
 
@@ -319,9 +319,8 @@ digraph PAGe_pipeline {
     refit_stage2_weekly              [label="refit_stage2_weekly"];
     score_stage2_metrics             [label="score_stage2_metrics"];
     nested_loso_grid_search          [label="nested_loso\n_grid_search"];
-    nested_loso_m2_eval_weekly_refit [label="nested_loso_m2\n_eval_weekly_refit"];
+    nested_loso_m2_eval_frozen_bias  [label="nested_loso_m2\n_eval_frozen_bias", penwidth=2];
     nested_loso_refit_best           [label="nested_loso\n_refit_best"];
-    loso_m1_m2_joint                 [label="loso_m1_m2_joint"];
   }
   subgraph cluster_m2pred {
     label="M2: Predict"; style=filled;
@@ -360,14 +359,10 @@ digraph PAGe_pipeline {
   nested_loso_grid_search  -> refit_stage2_weekly;
   nested_loso_grid_search  -> train_stage2_joint;
   nested_loso_grid_search  -> stage2_make_spec;
-  nested_loso_m2_eval_weekly_refit -> refit_stage2_weekly;
-  nested_loso_m2_eval_weekly_refit -> m2_predict_one;
+  nested_loso_m2_eval_frozen_bias  -> m2_predict_one;
+  nested_loso_m2_eval_frozen_bias  -> train_stage2_joint;
   nested_loso_refit_best   -> nested_loso_grid_search;
   nested_loso_refit_best   -> train_stage2_joint;
-  loso_m1_m2_joint         -> m1_walkforward_predictions;
-  loso_m1_m2_joint         -> prep_stage2_joint;
-  loso_m1_m2_joint         -> train_stage2_joint;
-  loso_m1_m2_joint         -> score_stage2_metrics;
   m2_predict_one           -> make_soft_cap_fn;
   run_prospective_pipeline -> run_m0_detection;
   run_prospective_pipeline -> run_m2_forecast;

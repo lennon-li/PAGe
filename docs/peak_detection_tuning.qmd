@@ -37,7 +37,7 @@ allD <- read.csv("../data/flu_testing_data.csv") %>%
   filter(!season %in% c("2011-12", "2020-21", "2021-22", "2025-26"))
 
 # Load LOSO walk-forward results (required — run loso_walkforward.qmd first)
-wf <- readRDS("../data/loso_wf_cache.rds")
+wf <- readRDS("../data/align_multi_cache.rds")
 
 # Backfill peak_passed / peak_weekF if loaded from a pre-refactor cache
 if (!"peak_passed" %in% names(wf$params_df)) {
