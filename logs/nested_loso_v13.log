@@ -1,0 +1,151 @@
+=== Nested LOSO M2 grid search (v13 — Holt + R2 + Phase1 clamping) ===
+Start: 2026-04-10 11:05:11 
+
+Warning messages:
+1: replacing previous import ‘data.table::first’ by ‘dplyr::first’ when loading ‘flualign’ 
+2: replacing previous import ‘data.table::between’ by ‘dplyr::between’ when loading ‘flualign’ 
+3: replacing previous import ‘data.table::last’ by ‘dplyr::last’ when loading ‘flualign’ 
+4: replacing previous import ‘ggplot2::last_plot’ by ‘plotly::last_plot’ when loading ‘flualign’ 
+5: replacing previous import ‘data.table::transpose’ by ‘purrr::transpose’ when loading ‘flualign’ 
+Test seasons ( 10 ): 2012-13, 2013-14, 2014-15, 2016-17, 2017-18, 2018-19, 2019-20, 2022-23, 2023-24, 2024-25 
+
+Grid size: 960 specs
+
+=== PHASE 1: Loading M1 cache ===
+Loaded Phase 1 from: data/nested_loso_v13_phase1.rds — 10 folds
+All folds cached — skipping Phase 1.
+
+Phase 1 complete: 10 folds.
+
+=== PHASE 2: M2 grid search (v13 — frozen + Holt + online RE) ===
+Total v13 specs to evaluate: 960 
+
+( 960 specs x 10 folds)
+
+Batch 1/88 (11 specs)... 84s | nll range: 35.151–42.074
+Batch 2/88 (11 specs)... 43s | nll range: 35.151–38.825
+Batch 3/88 (11 specs)... 40s | nll range: 35.877–44.039
+Batch 4/88 (11 specs)... 41s | nll range: 35.074–38.084
+Batch 5/88 (11 specs)... 39s | nll range: 35.074–42.354
+Batch 6/88 (11 specs)... 40s | nll range: 34.704–45.099
+Batch 7/88 (11 specs)... 39s | nll range: 34.704–40.412
+Batch 8/88 (11 specs)... 41s | nll range: 34.488–45.641
+Batch 9/88 (11 specs)... 40s | nll range: 34.488–38.494
+Batch 10/88 (11 specs)... 42s | nll range: 34.222–45.750
+Batch 11/88 (11 specs)... 39s | nll range: 34.222–38.052
+Batch 12/88 (11 specs)... 39s | nll range: 35.151–42.074
+Batch 13/88 (11 specs)... 40s | nll range: 35.151–38.825
+Batch 14/88 (11 specs)... 40s | nll range: 36.260–44.039
+Batch 15/88 (11 specs)... 41s | nll range: 35.074–38.084
+Batch 16/88 (11 specs)... 38s | nll range: 35.436–45.099
+Batch 17/88 (11 specs)... 41s | nll range: 34.704–38.008
+Batch 18/88 (11 specs)... 39s | nll range: 34.704–42.793
+Batch 19/88 (11 specs)... 40s | nll range: 34.488–45.641
+Batch 20/88 (11 specs)... 38s | nll range: 34.488–40.523
+Batch 21/88 (11 specs)... 40s | nll range: 34.222–45.750
+Batch 22/88 (11 specs)... 39s | nll range: 34.222–38.052
+Batch 23/88 (11 specs)... 41s | nll range: 35.151–42.074
+Batch 24/88 (11 specs)... 40s | nll range: 35.151–38.825
+Batch 25/88 (11 specs)... 39s | nll range: 35.273–44.039
+Batch 26/88 (11 specs)... 40s | nll range: 35.074–38.084
+Batch 27/88 (11 specs)... 40s | nll range: 35.436–45.099
+Batch 28/88 (11 specs)... 40s | nll range: 34.704–38.008
+Batch 29/88 (11 specs)... 39s | nll range: 34.704–42.793
+Batch 30/88 (11 specs)... 40s | nll range: 34.488–45.641
+Batch 31/88 (11 specs)... 39s | nll range: 34.488–40.523
+Batch 32/88 (11 specs)... 40s | nll range: 34.222–45.750
+Batch 33/88 (11 specs)... 40s | nll range: 34.222–38.052
+Batch 34/88 (11 specs)... 40s | nll range: 35.151–42.074
+Batch 35/88 (11 specs)... 39s | nll range: 35.151–38.825
+Batch 36/88 (11 specs)... 40s | nll range: 35.273–44.039
+Batch 37/88 (11 specs)... 41s | nll range: 35.074–38.084
+Batch 38/88 (11 specs)... 40s | nll range: 35.592–45.099
+Batch 39/88 (11 specs)... 40s | nll range: 34.704–38.008
+Batch 40/88 (11 specs)... 39s | nll range: 35.130–45.641
+Batch 41/88 (11 specs)... 40s | nll range: 34.488–38.311
+Batch 42/88 (11 specs)... 40s | nll range: 34.595–42.901
+Batch 43/88 (11 specs)... 40s | nll range: 34.222–45.750
+Batch 44/88 (11 specs)... 39s | nll range: 34.222–39.355
+Batch 45/88 (11 specs)... 40s | nll range: 36.254–43.377
+Batch 46/88 (11 specs)... 39s | nll range: 36.254–40.429
+Batch 47/88 (11 specs)... 39s | nll range: 36.206–45.941
+Batch 48/88 (11 specs)... 40s | nll range: 36.206–39.554
+Batch 49/88 (11 specs)... 40s | nll range: 35.684–46.662
+Batch 50/88 (11 specs)... 40s | nll range: 35.442–38.771
+Batch 51/88 (11 specs)... 39s | nll range: 35.837–46.933
+Batch 52/88 (11 specs)... 40s | nll range: 35.752–39.950
+Batch 53/88 (11 specs)... 38s | nll range: 35.859–43.826
+Batch 54/88 (11 specs)... 40s | nll range: 34.132–47.036
+Batch 55/88 (11 specs)... 39s | nll range: 34.132–39.355
+Batch 56/88 (11 specs)... 39s | nll range: 36.254–43.377
+Batch 57/88 (11 specs)... 39s | nll range: 36.254–40.429
+Batch 58/88 (11 specs)... 40s | nll range: 36.206–45.941
+Batch 59/88 (11 specs)... 38s | nll range: 36.206–39.554
+Batch 60/88 (11 specs)... 40s | nll range: 35.684–46.662
+Batch 61/88 (11 specs)... 40s | nll range: 35.442–38.771
+Batch 62/88 (11 specs)... 40s | nll range: 36.238–46.933
+Batch 63/88 (11 specs)... 40s | nll range: 35.752–39.950
+Batch 64/88 (11 specs)... 38s | nll range: 36.519–47.036
+Batch 65/88 (11 specs)... 40s | nll range: 34.132–37.386
+Batch 66/88 (11 specs)... 39s | nll range: 34.132–41.903
+Batch 67/88 (11 specs)... 40s | nll range: 36.775–44.416
+Batch 68/88 (11 specs)... 38s | nll range: 36.775–42.603
+Batch 69/88 (11 specs)... 40s | nll range: 36.031–46.868
+Batch 70/88 (11 specs)... 39s | nll range: 36.031–41.636
+Batch 71/88 (11 specs)... 41s | nll range: 35.854–47.799
+Batch 72/88 (11 specs)... 40s | nll range: 35.854–38.862
+Batch 73/88 (11 specs)... 40s | nll range: 35.723–48.198
+Batch 74/88 (11 specs)... 40s | nll range: 35.684–39.443
+Batch 75/88 (11 specs)... 40s | nll range: 36.189–48.437
+Batch 76/88 (11 specs)... 40s | nll range: 35.745–39.916
+Batch 77/88 (11 specs)... 38s | nll range: 35.843–41.903
+Batch 78/88 (11 specs)... 41s | nll range: 36.775–44.416
+Batch 79/88 (11 specs)... 39s | nll range: 36.775–42.603
+Batch 80/88 (11 specs)... 40s | nll range: 36.031–46.868
+Batch 81/88 (11 specs)... 39s | nll range: 36.031–41.636
+Batch 82/88 (11 specs)... 40s | nll range: 35.854–47.799
+Batch 83/88 (11 specs)... 39s | nll range: 35.854–40.308
+Batch 84/88 (11 specs)... 40s | nll range: 35.723–48.198
+Batch 85/88 (11 specs)... 41s | nll range: 35.684–39.443
+Batch 86/88 (11 specs)... 40s | nll range: 36.189–48.437
+Batch 87/88 (11 specs)... 40s | nll range: 35.745–39.916
+Batch 88/88 (3 specs)... 31s | nll range: 36.454–39.916
+There were 50 or more warnings (use warnings() to see the first 50)
+
+=== Assembling v13 results ===
+Total specs: 960 
+
+=== Top 20 specs by mean NLL ===
+# A tibble: 20 × 5
+   spec_id                                  n_seasons mean_nll   brier rmse_p
+   <chr>                                        <int>    <dbl>   <dbl>  <dbl>
+ 1 d+0_Kr1_kf4_ke2_as0.3_kr2_kde0_ba0.4_bb0        10     34.1 0.00162 0.0382
+ 2 d+0_Kr1_kf4_ke2_as0.3_kr3_kde0_ba0.4_bb0        10     34.1 0.00162 0.0382
+ 3 d+0_Kr1_kf4_ke3_as0.3_kr2_kde0_ba0.4_bb0        10     34.1 0.00162 0.0382
+ 4 d+0_Kr1_kf4_ke3_as0.3_kr3_kde0_ba0.4_bb0        10     34.1 0.00162 0.0382
+ 5 d+0_Kr1_kf4_ke2_as0.3_kr2_kde0_ba0.3_bb0        10     34.2 0.00159 0.0379
+ 6 d+0_Kr1_kf4_ke2_as0.3_kr3_kde0_ba0.3_bb0        10     34.2 0.00159 0.0379
+ 7 d+0_Kr1_kf4_ke3_as0.3_kr2_kde0_ba0.3_bb0        10     34.2 0.00159 0.0379
+ 8 d+0_Kr1_kf4_ke3_as0.3_kr3_kde0_ba0.3_bb0        10     34.2 0.00159 0.0379
+ 9 d+0_Kr1_kf2_ke2_as0.3_kr2_kde0_ba0.3_bb0        10     34.2 0.00160 0.0382
+10 d+0_Kr1_kf2_ke2_as0.3_kr3_kde0_ba0.3_bb0        10     34.2 0.00160 0.0382
+11 d+0_Kr1_kf2_ke3_as0.3_kr2_kde0_ba0.3_bb0        10     34.2 0.00160 0.0382
+12 d+0_Kr1_kf2_ke3_as0.3_kr3_kde0_ba0.3_bb0        10     34.2 0.00160 0.0382
+13 d+0_Kr1_kf3_ke2_as0.3_kr2_kde0_ba0.3_bb0        10     34.2 0.00160 0.0382
+14 d+0_Kr1_kf3_ke2_as0.3_kr3_kde0_ba0.3_bb0        10     34.2 0.00160 0.0382
+15 d+0_Kr1_kf3_ke3_as0.3_kr2_kde0_ba0.3_bb0        10     34.2 0.00160 0.0382
+16 d+0_Kr1_kf3_ke3_as0.3_kr3_kde0_ba0.3_bb0        10     34.2 0.00160 0.0382
+17 d+0_Kr1_kf2_ke2_as0.3_kr2_kde0_ba0.4_bb0        10     34.4 0.00164 0.0385
+18 d+0_Kr1_kf2_ke2_as0.3_kr3_kde0_ba0.4_bb0        10     34.4 0.00164 0.0385
+19 d+0_Kr1_kf2_ke3_as0.3_kr2_kde0_ba0.4_bb0        10     34.4 0.00164 0.0385
+20 d+0_Kr1_kf2_ke3_as0.3_kr3_kde0_ba0.4_bb0        10     34.4 0.00164 0.0385
+
+Best spec: d+0_Kr1_kf4_ke2_as0.3_kr2_kde0_ba0.4_bb0 
+Best spec params:
+        k_f         k_e alpha_state         k_r        k_de  bias_alpha 
+        4.0         2.0         0.3         2.0         0.0         0.4 
+  bias_beta 
+        0.0 
+
+Results saved to data/nested_loso_v13_production.rds
+End: 2026-04-10 12:04:11 

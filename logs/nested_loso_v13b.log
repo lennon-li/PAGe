@@ -1,0 +1,52 @@
+=== Nested LOSO M2 v13b — alpha_state boundary extension ===
+Start: 2026-04-10 14:19:08 
+
+Warning messages:
+1: replacing previous import ‘data.table::first’ by ‘dplyr::first’ when loading ‘flualign’ 
+2: replacing previous import ‘data.table::between’ by ‘dplyr::between’ when loading ‘flualign’ 
+3: replacing previous import ‘data.table::last’ by ‘dplyr::last’ when loading ‘flualign’ 
+4: replacing previous import ‘ggplot2::last_plot’ by ‘plotly::last_plot’ when loading ‘flualign’ 
+5: replacing previous import ‘data.table::transpose’ by ‘purrr::transpose’ when loading ‘flualign’ 
+Test seasons ( 10 ): 2012-13, 2013-14, 2014-15, 2016-17, 2017-18, 2018-19, 2019-20, 2022-23, 2023-24, 2024-25 
+
+Loading M1 cache...
+Loaded: data/nested_loso_v13_phase1.rds 
+
+Grid size: 15 specs
+
+Batch 1/2 (11 specs)... 84s | nll range: 34.132–35.802
+Batch 2/2 (4 specs)... 32s | nll range: 35.232–36.376
+There were 50 or more warnings (use warnings() to see the first 50)
+
+=== v13b Results ===
+# A tibble: 15 × 5
+   spec_id                      n_seasons mean_nll   brier rmse_p
+   <chr>                            <int>    <dbl>   <dbl>  <dbl>
+ 1 kf4_ke2_as0.3_kr2_ba0.4_bb0         10     34.1 0.00162 0.0382
+ 2 kf4_ke2_as0.3_kr2_ba0.3_bb0         10     34.2 0.00159 0.0379
+ 3 kf4_ke2_as0.35_kr2_ba0.4_bb0        10     34.4 0.00162 0.0383
+ 4 kf4_ke2_as0.35_kr2_ba0.3_bb0        10     34.5 0.00158 0.0379
+ 5 kf4_ke2_as0.3_kr2_ba0.5_bb0         10     34.5 0.00167 0.0387
+ 6 kf4_ke2_as0.4_kr2_ba0.3_bb0         10     34.7 0.00158 0.0378
+ 7 kf4_ke2_as0.4_kr2_ba0.4_bb0         10     34.7 0.00162 0.0383
+ 8 kf4_ke2_as0.35_kr2_ba0.5_bb0        10     34.8 0.00168 0.0389
+ 9 kf4_ke2_as0.4_kr2_ba0.5_bb0         10     35.2 0.00169 0.0390
+10 kf4_ke2_as0.5_kr2_ba0.3_bb0         10     35.2 0.00158 0.0378
+11 kf4_ke2_as0.5_kr2_ba0.4_bb0         10     35.5 0.00163 0.0384
+12 kf4_ke2_as0.45_kr2_ba0.3_bb0        10     35.6 0.00159 0.0380
+13 kf4_ke2_as0.45_kr2_ba0.4_bb0        10     35.8 0.00164 0.0385
+14 kf4_ke2_as0.5_kr2_ba0.5_bb0         10     36.0 0.00171 0.0392
+15 kf4_ke2_as0.45_kr2_ba0.5_bb0        10     36.4 0.00171 0.0393
+
+Best spec: kf4_ke2_as0.3_kr2_ba0.4_bb0 
+
+=== Best NLL by alpha_state ===
+  alpha_state mean_nll
+1        0.30 34.13217
+2        0.35 34.44846
+3        0.40 34.65312
+4        0.45 35.56750
+5        0.50 35.23163
+
+Saved to data/nested_loso_v13b_production.rds
+End: 2026-04-10 14:21:10 
