@@ -19,7 +19,7 @@ cat("Start:", format(Sys.time()), "\n\n")
 
 # --- 1. Packages ---
 suppressPackageStartupMessages({
-  library(flualign)
+  library(PAGe)
   library(dplyr)
   library(tidyr)
   library(purrr)

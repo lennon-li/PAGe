@@ -4,7 +4,7 @@ library(tidyverse)
 library(mgcv)
 library(data.table)
 library(MMWRweek)
-library(flualign)
+library(PAGe)
 
 source("R/m0_retro.R")
 source("R/m0_training.R")

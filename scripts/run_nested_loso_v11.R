@@ -19,7 +19,7 @@ cat("=== Nested LOSO M2 grid search (v11 — simplified + z_resid + bias) ===\n"
 cat("Start:", format(Sys.time()), "\n\n")
 
 suppressPackageStartupMessages({
-  library(flualign)
+  library(PAGe)
   library(dplyr)
   library(tidyr)
   library(purrr)

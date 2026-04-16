@@ -9,7 +9,7 @@ Primary deliverables:
 
 1. A trained, validated forecasting model for 2-week-ahead positivity
    prediction.
-2. The `flualign` R package, implemented as a clean, documented, installable
+2. The `PAGe` R package, implemented as a clean, documented, installable
    package.
 
 Evaluation must stay prospective and walk-forward. Avoid data leakage from
@@ -17,8 +17,8 @@ future seasons.
 
 ## Repository Layout
 
-- `flualign/` is the installable package and source of truth for package code.
-- `R/` is a root-level mirror of `flualign/R/` used for development
+- `PAGe/` is the installable package and source of truth for package code.
+- `R/` is a root-level mirror of `PAGe/R/` used for development
   convenience. Keep mirrored files in sync when editing.
 - `docs/` contains Quarto documentation. `pipeline_overview.qmd` is the main
   architecture reference.
@@ -42,8 +42,8 @@ alignment-derived covariates from M1.
   passing raw GAM objects around.
 - In Quarto docs, do not use body-level h1 headings; the YAML `title:` already
   provides the page h1.
-- Built-in historical data lives in `flualign/inst/extdata/flu_hist.csv` and
-  `flualign/ref_curve.RData`.
+- Built-in historical data lives in `PAGe/inst/extdata/flu_hist.csv` and
+  `PAGe/ref_curve.RData`.
 
 ## Current Status (2026-04-12)
 
@@ -72,4 +72,4 @@ Key data for M2 development:
 ## Environment Notes
 
 Scripts in `scripts/` have hardcoded Windows paths — set `wd` to the repo root
-on your platform. Package code (`R/`, `flualign/R/`) and QMDs use relative paths.
+on your platform. Package code (`R/`, `PAGe/R/`) and QMDs use relative paths.

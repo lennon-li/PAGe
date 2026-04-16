@@ -66,22 +66,21 @@ library(gt)
 # Source all pipeline functions
 r_dir  <- normalizePath("../R",   mustWork = TRUE)
 r_files <- c(
-  "utils.R", "m0_retro.R", "m1_reference_helpers.R", "m1_reference.R",
-  "m1_hyperparams.R", "m1_fit.R", "identifiability.R",
-  "check_scale_identifiability.R", "m1_runtime.R",
-  "align_forecast_pipeline_dilate.R", "m1_multi_template.R",
-  "m1_peak_status.R",
-  "m1_peak_flags.R", "m1_peak_summary.R", "m0_training.R", "m1_loso.R",
-  "m2_training.R", "pipeline_runtime_helpers.R",
+  "utils.R", "m0_retro.R", "flagIgnition.R",
+  "m1_reference_helpers.R", "m1_reference.R",
+  "m1_hyperparams.R", "m1_fit.R", "check_scale_identifiability.R",
+  "m1_runtime.R", "m1_multi_template.R",
+  "m1_peak_status.R", "m1_peak_summary.R",
+  "m0_training.R", "m1_loso.R",
+  "m2_training.R", "m2_spec_grid.R", "m2_nested_loso.R",
+  "pipeline_runtime_helpers.R", "pipeline_bridge.R",
   "m0_runtime.R", "m2_runtime.R", "pipeline_runtime.R",
-  "forecast_post_peak_gam.R", "m2_spec_grid.R",
-  "pipeline_bridge.R", "m2_nested_loso.R", "getCurrentD.R"
+  "getCurrentD.R"
 )
 for (f in r_files) {
   fp <- file.path(r_dir, f)
   if (file.exists(fp)) source(fp)
 }
-source(file.path(normalizePath("../flualign/R", mustWork = TRUE), "flagIgnition.R"))
 
 startWeek <- 27L
 DATA_DIR  <- normalizePath("../data", mustWork = TRUE)
@@ -182,48 +181,62 @@ with `s(newWeek, season, bs="fs")`, producing per-season curves `eta_mat` used
 for multi-template alignment. Full analysis: [`estimateRef.html`](estimateRef.html).
 
 **2b — Alignment hyperparameters** (`tune_m1_alignment()` / `loso_walkforward()`):
-a 153-config grid is evaluated by LOSO walk-forward to select `k_ref`,
-`temperature`, and `shift` minimising Weibull-weighted peak MAE.
+a 67-spec grid (`k_ref` × `slope_weight`, with `temperature`, `slope_window`,
+and `dynamic_temp` also evaluated) is scored by LOSO walk-forward using
+Weibull-weighted peak MAE. Locked production spec:
+`k_ref=25, temperature=0.25, slope_weight=8.0, slope_window=6, dynamic_temp=FALSE`
+(Weibull peak MAE = 1.275 weeks, v5–v7 grid).
 Full analysis: [`loso_walkforward.html`](loso_walkforward.html).
 
 ```{r train-m1}
 #| eval: false
 
-# 2a — Estimate reference curve (FS method)
+flag_args <- list(
+  p_thresh = 0.01, k1 = 0.4, k_c = 0.01, n_consec = 2L,
+  min_window = 10L, w_min = 21L, w_max = 21L, d2_relax = -0.01
+)
+EXCLUDE_PERM <- c("2011-12", "2015-16", "2020-21", "2021-22")
+train_allD   <- flu_hist |> filter(!season %in% EXCLUDE_PERM)
+
+# 2a — Align training seasons to ignition anchors, estimate reference curve (FS method)
+res_deriv     <- estimateDerivs(train_allD, k = 10L)
+train_outs    <- res_deriv$data |>
+  dplyr::group_by(season) |> dplyr::group_split(.keep = TRUE) |>
+  purrr::map(\(df) do.call(flagIgnition, c(list(df = df, manual_labels = manual_labels), flag_args)))
+aligned_train <- alignIgnition(train_outs)
+
+# estimateRef() operates on already-aligned data
 ref_result <- estimateRef(
-  flu_hist      = flu_hist,
-  manual_labels = manual_labels,
-  method        = "fs",
-  k_ref         = 25L,
-  startWeek     = startWeek
+  alignedD  = aligned_train,
+  exSeason  = character(0),
+  k         = 25L,
+  n_weeks   = 52L,
+  method    = "fs"
 )
 
-# 2b — M1 LOSO walk-forward hyperparameter tuning
-loso_result <- loso_walkforward(
-  flu_hist      = flu_hist,
-  manual_labels = manual_labels,
-  startWeek     = startWeek,
-  grid = expand.grid(
-    k_ref       = c(10L, 25L, 40L, 60L),
-    temperature = c(0.10, 0.25, 0.50),
-    shift       = c(-2L, -1L, 0L, 1L)
-  )
+# 2b — M1 LOSO hyperparameter tuning (k_ref × slope_weight grid, 67 specs)
+params    <- readRDS(file.path(DATA_DIR, "stage1_tuning.rds"))$best_params
+tune_grid <- expand.grid(
+  k_ref        = c(15L, 25L, 40L),
+  slope_weight = c(0, 2.0, 4.0, 8.0, 12.0, 16.0, 30.0)
 )
 
-best_m1 <- loso_result$best_config
-# k_ref=25, temperature=0.25, slope_weight=8.0, slope_window=6, dynamic_temp=FALSE → Weibull peak MAE = 1.275
-
-# Re-estimate ref with best k_ref, save with M1_PARAMS attached
-ref_production <- estimateRef(
-  flu_hist      = flu_hist,
+tune_result <- tune_m1_alignment(
+  allD          = flu_hist,
+  params        = params,
+  grid          = tune_grid,
   manual_labels = manual_labels,
-  method        = "fs",
-  k_ref         = best_m1$k_ref,
-  startWeek     = startWeek
+  exclude_seasons = EXCLUDE_PERM,
+  verbose       = TRUE
 )
-ref_production$M1_PARAMS <- list(
-  k_ref              = best_m1$k_ref,
-  temperature        = best_m1$temperature,
+# Best: k_ref=25, temperature=0.25, slope_weight=8.0, slope_window=6, dynamic_temp=FALSE
+# Weibull peak MAE = 1.275 weeks (v5–v7 grid, LOCKED)
+
+# Production M1 params (locked from LOSO grid)
+M1_PARAMS <- list(
+  k_ref              = 25L,
+  ref_method         = "fs",
+  temperature        = 0.25,
   rise_weight        = 1.0,
   trough_weight      = 0.1,
   peak_decay         = 0.3,
@@ -233,8 +246,25 @@ ref_production$M1_PARAMS <- list(
   dynamic_temp_pivot = 10L
 )
 
-saveRDS(ref_production, file.path(DATA_DIR, "ref_production.rds"))
-cat("Saved ref_production.rds — anchorWeek:", ref_production$anchorWeek, "\n")
+# Re-estimate ref with best k_ref, build hyper, save production kit
+ref <- estimateRef(
+  alignedD = aligned_train,
+  exSeason = character(0),
+  k        = M1_PARAMS$k_ref,
+  n_weeks  = 52L,
+  method   = M1_PARAMS$ref_method
+)
+hyper <- learn_alignment_hyperparams(ref$dat, ref$g_ref_fun)
+
+saveRDS(list(
+  ref           = ref,
+  hyper         = hyper,
+  hist_data     = aligned_train,
+  M1_PARAMS     = M1_PARAMS,
+  flag_args     = flag_args,
+  manual_labels = manual_labels
+), file.path(DATA_DIR, "ref_production.rds"))
+cat("Saved ref_production.rds — anchorWeek:", ref$anchorWeek, "\n")
 ```
 
 ```{r load-m1}
@@ -250,27 +280,70 @@ cat(sprintf("M1 ref loaded: anchorWeek=%d, k_ref=%d, temperature=%.2f\n",
 
 ### Step 3 — Train M2: nested LOSO hyperparameter tuning and production fit
 
-M2 is a joint binomial GAM for h∈{1,2} in aligned-week space. Hyperparameters
-are selected by **nested LOSO**: for each held-out season, the reference curve
-and M1 predictions are re-estimated on the remaining seasons to prevent leakage.
+M2 is a joint binomial GAM for h∈{1,2} in aligned-week space. Training uses a
+**three-phase nested LOSO** to prevent leakage:
+
+- **Phase 1** — build per-fold reference curves and M1 walk-forward predictions
+  (each fold's ref and M1 are re-estimated on its training seasons only).
+- **Phase 2** — evaluate all 480 M2 specs via `nested_loso_grid_search()`;
+  selects the spec minimising mean Bernoulli NLL across 10 held-out seasons.
+- **Phase 3** — refit the production GAM on all training seasons with the best spec.
+
+Production spec (v15): `k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0`
+(Bernoulli NLL = 0.406, 480-spec grid, 10 seasons).
+`bias_alpha` is a **deployment parameter** (fixed at 0.4), not a LOSO grid dimension — NLL is flat across 0.1–0.3, making it unidentifiable as a structural parameter.
 Full analysis: [`forecast_training.html`](forecast_training.html).
 
 ```{r train-m2}
 #| eval: false
 
-# Phase 1: pre-compute M1 walk-forward predictions per LOSO fold
-m1_folds <- nested_loso_build_folds(
-  flu_hist      = flu_hist,
-  manual_labels = manual_labels,
-  startWeek     = startWeek,
-  k_ref         = 25L,
-  temperature   = 0.25
-)
+EXCLUDE_SEAS <- "2015-16"
+test_seasons <- sort(setdiff(unique(allD$season), EXCLUDE_SEAS))
+BIAS_ALPHA   <- 0.4  # deployment default — not a LOSO grid dimension
 
-# Phase 2: sweep M2 spec grid (v15, 480 specs: k_f × k_e × alpha_state × k_r × k_de × k_sp)
-# bias_alpha is a deployment parameter, not a grid dimension
-grid <- tidyr::crossing(
-  delta       = 0L, Kr = 1L,
+# ---- Phase 1: build per-fold M1 cache ----------------------------------------
+# For each held-out season: re-estimate ref + hyper on training seasons only,
+# then compute M1 walk-forward predictions for both training and test seasons.
+
+m1_cache <- list()
+for (test_s in test_seasons) {
+  fold <- nested_loso_build_fold(
+    allD            = allD,
+    test_season     = test_s,
+    exclude_seasons = EXCLUDE_SEAS,
+    k_ref           = M1_PARAMS$k_ref,
+    ref_method      = M1_PARAMS$ref_method,
+    manual_labels   = manual_labels,
+    verbose         = FALSE
+  )
+  m1_train <- m1_walkforward_multi(
+    allD         = allD, ref = fold$ref, hyper = fold$hyper, params = params,
+    seasons      = fold$train_seasons,
+    temperature  = M1_PARAMS$temperature, rise_weight  = M1_PARAMS$rise_weight,
+    trough_weight = M1_PARAMS$trough_weight, peak_decay = M1_PARAMS$peak_decay,
+    slope_weight = M1_PARAMS$slope_weight, slope_window = M1_PARAMS$slope_window,
+    dynamic_temp = M1_PARAMS$dynamic_temp, dynamic_temp_pivot = M1_PARAMS$dynamic_temp_pivot,
+    parallel = TRUE, verbose = FALSE
+  )
+  m1_test <- m1_walkforward_predictions(
+    seasonD      = allD[allD$season == test_s, ],
+    ref = fold$ref, hyper = fold$hyper, params = params,
+    temperature  = M1_PARAMS$temperature, rise_weight  = M1_PARAMS$rise_weight,
+    trough_weight = M1_PARAMS$trough_weight, peak_decay = M1_PARAMS$peak_decay,
+    slope_weight = M1_PARAMS$slope_weight, slope_window = M1_PARAMS$slope_window,
+    dynamic_temp = M1_PARAMS$dynamic_temp, dynamic_temp_pivot = M1_PARAMS$dynamic_temp_pivot
+  )
+  m1_cache[[test_s]] <- list(fold = fold, m1_train = m1_train, m1_test = m1_test)
+}
+saveRDS(m1_cache, file.path(DATA_DIR, "nested_loso_v15_phase1.rds"))
+
+# ---- Phase 2: sweep M2 spec grid (480 specs, v15) ----------------------------
+# Grid: k_f {2,3,4,5} × k_e {2,3} × alpha_state {0.30..0.50} × k_r {0,2,3}
+#       × k_de {0,2} × k_sp {0,2}
+# bias_alpha fixed at 0.4 (deployment parameter; LOSO NLL flat 0.1–0.3)
+
+grid_v15 <- tidyr::crossing(
+  delta = 0L, Kr = 1L,
   k_f         = c(2L, 3L, 4L, 5L),
   k_e         = c(2L, 3L),
   alpha_state = c(0.30, 0.35, 0.40, 0.45, 0.50),
@@ -278,29 +351,66 @@ grid <- tidyr::crossing(
   k_de        = c(0L, 2L),
   k_sp        = c(0L, 2L)
 )
-BIAS_ALPHA <- 0.4  # deployment default; set per season at runtime
+specs_v15 <- purrr::pmap(grid_v15, \(delta, Kr, k_f, k_e, alpha_state, k_r, k_de, k_sp)
+  stage2_make_spec(
+    delta = delta, Kr = Kr, T = "S",
+    k_f = k_f, k_e = k_e, alpha_state = alpha_state,
+    k_r = k_r, k_de = k_de, k_sp = k_sp,
+    k_n = 0L, k_w = 0L, k_s = 0L,
+    lambda_w = 0, w_floor = 0.05, bias_alpha = BIAS_ALPHA
+  )
+)
 
-nested_result <- nested_loso_m2_eval_frozen_bias(
-  allD          = allD,
-  fold          = fold,
-  m2_fit        = m2,
-  m1_test_preds = m1_test,
-  spec          = spec,
-  eval_window   = 12L
+# Run grid search (uses nested_loso_grid_search or manual furrr loop for checkpointing)
+cv_results <- nested_loso_grid_search(
+  allD            = allD,
+  params          = params,
+  specs           = specs_v15,
+  checkpoint_file = file.path(DATA_DIR, "nested_loso_v15_phase2.rds"),
+  test_seasons    = test_seasons,
+  exclude_seasons = EXCLUDE_SEAS,
+  manual_labels   = manual_labels,
+  eval_window     = 12L,
+  bias_alpha      = BIAS_ALPHA
 )
 # Best spec: k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0
-# Mean Bernoulli NLL = 0.406 (480 specs, 10 seasons)
+# Mean Bernoulli NLL = 0.406
 
-# Phase 3: refit on full historical data with best spec
-best_spec <- nested_result$best_spec
-m2_production_fit <- nested_loso_m2_train(
-  fold          = fold_full,
-  m1_train_preds = m1_all,
-  spec          = best_spec
+# ---- Phase 3: refit production GAM on all training seasons -------------------
+# See scripts/_rebuild_m2_production_v15.R for the full production rebuild.
+# Key steps: estimateRef on all train seasons → m1_walkforward_multi → train_stage2_joint
+
+best_spec <- specs_v15[[which.min(sapply(cv_results, \(r) mean(r$scores$bernoulli_nll)))]]
+
+# Rebuild M1 predictions on all training seasons (same ref/hyper as above)
+train_seas      <- sort(setdiff(unique(flu_hist$season), c(EXCLUDE_SEAS, "2020-21", "2021-22")))
+m1_train_preds  <- m1_walkforward_multi(
+  allD         = flu_hist, ref = ref, hyper = hyper, params = params,
+  seasons      = train_seas,
+  temperature  = M1_PARAMS$temperature,  rise_weight   = M1_PARAMS$rise_weight,
+  trough_weight = M1_PARAMS$trough_weight, peak_decay  = M1_PARAMS$peak_decay,
+  slope_weight = M1_PARAMS$slope_weight, slope_window  = M1_PARAMS$slope_window,
+  dynamic_temp = M1_PARAMS$dynamic_temp, dynamic_temp_pivot = M1_PARAMS$dynamic_temp_pivot,
+  parallel = TRUE, verbose = FALSE
 )
 
-m2_production <- list(fit = m2_production_fit, spec = best_spec)
-saveRDS(m2_production, file.path(DATA_DIR, "m2_production.rds"))
+joint_out <- train_stage2_joint(
+  dat         = add_prospective_derivs_link(aligned_train),
+  template_df = ref$pred_df[, c("newWeek", "fit")],
+  spec        = best_spec,
+  method      = "REML",
+  m1_preds    = m1_train_preds,
+  verbose     = FALSE
+)
+
+saveRDS(list(
+  spec             = best_spec,
+  fit              = joint_out$fit,
+  feature_ranges   = joint_out$feature_ranges,
+  m1_train_preds   = m1_train_preds,
+  training_seasons = train_seas,
+  spec_version     = "v15"
+), file.path(DATA_DIR, "m2_production.rds"))
 cat("Saved m2_production.rds\n")
 ```
 
@@ -308,9 +418,13 @@ cat("Saved m2_production.rds\n")
 #| message: false
 
 m2_prod <- readRDS(file.path(DATA_DIR, "m2_production.rds"))
-cat(sprintf("M2 model loaded: %d coefficients | lead levels: %s\n",
-            length(coef(m2_prod$fit)),
-            paste(levels(m2_prod$fit$model$lead), collapse = ", ")))
+cat(sprintf(
+  "M2 model loaded: EDF=%.1f | spec_version=%s\n  best spec: k_f=%d, k_e=%d, alpha_state=%.2f, k_r=%d, k_de=%d, k_sp=%d\n",
+  sum(m2_prod$fit$edf),
+  m2_prod$spec_version %||% "unknown",
+  m2_prod$spec$k_f, m2_prod$spec$k_e, m2_prod$spec$alpha_state,
+  m2_prod$spec$k_r, m2_prod$spec$k_de %||% 0L, m2_prod$spec$k_sp %||% 0L
+))
 ```
 
 ### Step 4 — Build and verify the deployment kit
@@ -319,20 +433,28 @@ cat(sprintf("M2 model loaded: %d coefficients | lead levels: %s\n",
 named list, verifying that required files exist.
 
 ```{r build-kit}
+`%||%` <- function(x, y) if (is.null(x)) y else x
 kit <- load_prospective_kit(DATA_DIR)
 
 cat(sprintf(paste0(
   "Kit contents:\n",
-  "  M1: k_ref=%d, temperature=%.2f, anchorWeek=%d\n",
+  "  M1: k_ref=%d, temperature=%.2f, slope_weight=%.1f, anchorWeek=%d\n",
   "  M0: %d params loaded\n",
-  "  M2: %d coefs | best spec: delta=%s, Kr=%s\n"),
+  "  M2: EDF=%.1f | spec_version=%s\n",
+  "      best spec: k_f=%d, k_e=%d, alpha_state=%.2f, k_r=%d\n",
+  "      feature_ranges: z_ema=[%.2f, %.2f], dz_ema_sd=%.4f\n"),
   kit$M1_PARAMS$k_ref,
   kit$M1_PARAMS$temperature,
+  kit$M1_PARAMS$slope_weight %||% NA,
   kit$ref$anchorWeek,
   length(kit$m0_params),
-  length(coef(kit$m2_production$fit)),
-  kit$best_spec$delta,
-  kit$best_spec$Kr
+  sum(kit$m2_production$fit$edf),
+  kit$m2_production$spec_version %||% "unknown",
+  kit$best_spec$k_f, kit$best_spec$k_e, kit$best_spec$alpha_state,
+  kit$best_spec$k_r,
+  kit$m2_production$feature_ranges$z_ema[1],
+  kit$m2_production$feature_ranges$z_ema[2],
+  kit$m2_production$feature_ranges$dz_ema_sd %||% NA_real_
 ))
 ```
 

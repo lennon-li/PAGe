@@ -3,7 +3,7 @@
 cat("=== Rebuild m2_production.rds (v14 spec) ===\n")
 
 suppressPackageStartupMessages({
-  library(flualign); library(dplyr); library(purrr); library(mgcv); library(MMWRweek)
+  library(PAGe); library(dplyr); library(purrr); library(mgcv); library(MMWRweek)
 })
 for (f in c('R/utils.R','R/m0_retro.R','R/flagIgnition.R',
             'R/m1_reference.R','R/m1_reference_helpers.R','R/m1_multi_template.R',

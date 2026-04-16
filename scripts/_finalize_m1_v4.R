@@ -137,7 +137,7 @@ ckpt_best <- tryCatch(
   error = function(e) NULL
 )
 if (!is.null(ckpt_best) && !is.null(ckpt_best$params_df)) {
-  suppressPackageStartupMessages(library(flualign))
+  suppressPackageStartupMessages(library(PAGe))
   for (f in c("R/utils.R","R/m0_retro.R","R/flagIgnition.R")) source(f)
   library(MMWRweek)
   n_weeks_in_start_year <- function(sy)

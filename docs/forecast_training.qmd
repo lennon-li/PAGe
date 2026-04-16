@@ -24,7 +24,7 @@ library(plotly)
 library(data.table)
 library(MMWRweek)
 library(gt)
-library(flualign)
+library(PAGe)
 
 source("../R/m0_retro.R")
 source("../R/m0_training.R")
@@ -36,7 +36,7 @@ source("../R/pipeline_runtime.R")
 source("../R/m2_spec_grid.R")
 source("../R/m2_nested_loso.R")
 # Pull internal helpers missing from R/ mirror
-.plot_stage2_joint_fit_prosp <- flualign:::.plot_stage2_joint_fit_prosp
+.plot_stage2_joint_fit_prosp <- PAGe:::.plot_stage2_joint_fit_prosp
 
 startWeek <- 27L
 

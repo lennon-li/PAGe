@@ -1,0 +1,34 @@
+Package: PAGe
+Type: Package
+Title: Seasonal Flu Curve Alignment and Forecasting
+Version: 0.1.0
+Authors@R: c(person("Lennon", "Li", email = "lennon.li@oahpp.ca", role = c("aut", "cre")), person("ChatGPT", "CoAuthor", role = "aut"))
+Description: Align partially observed seasonal positivity curves to a learned reference
+  shape via profile likelihood (shift tau and optional dilation delta), then forecast
+  the remainder of the season with sensible prediction intervals and peak timing.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Depends: R (>= 4.1.0)
+Imports:
+    tibble,
+    stats,
+    utils,
+    graphics,
+    grDevices,
+    methods,
+    ggplot2,
+    dplyr,
+    tidyr,
+    purrr,
+    nloptr,
+    mgcv,
+    gamm4,
+    plotly,
+    MMWRweek
+Suggests:
+    knitr,
+    kableExtra,
+    rmarkdown
+VignetteBuilder: knitr
+RoxygenNote: 7.3.3

@@ -18,7 +18,7 @@ cat("=== M1 alignment tuning v5 (dynamic_temp=FALSE, slope grid) ===\n")
 cat("Start:", format(Sys.time()), "\n\n")
 
 suppressPackageStartupMessages({
-  library(flualign)
+  library(PAGe)
   library(dplyr)
   library(tidyr)
   library(MMWRweek)

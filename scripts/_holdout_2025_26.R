@@ -16,7 +16,7 @@ cat("=== M1 holdout test: 2025-26 ===\n")
 cat("Start:", format(Sys.time()), "\n\n")
 
 suppressPackageStartupMessages({
-  library(flualign)
+  library(PAGe)
   library(dplyr)
   library(furrr)
   library(MMWRweek)

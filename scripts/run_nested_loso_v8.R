@@ -22,7 +22,7 @@ cat("=== Nested LOSO M2 grid search (v8 — clean + k_f expanded) ===\n")
 cat("Start:", format(Sys.time()), "\n\n")
 
 suppressPackageStartupMessages({
-  library(flualign)
+  library(PAGe)
   library(dplyr)
   library(tidyr)
   library(purrr)

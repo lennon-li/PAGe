@@ -15,7 +15,7 @@ execute:
 ---
 
 ::: {.callout-note}
-This page is a source map for the root-level `R/` directory, which is mirrored into `flualign/R/` for the installable package. It is meant to answer two questions quickly: which file owns a piece of the pipeline, and which functions live in that file.
+This page is a source map for the root-level `R/` directory, which is mirrored into `PAGe/R/` for the installable package. It is meant to answer two questions quickly: which file owns a piece of the pipeline, and which functions live in that file.
 :::
 
 ## At a glance
@@ -24,14 +24,14 @@ This page is a source map for the root-level `R/` directory, which is mirrored i
 file_meta <- data.frame(
   file = c(
     "m0_training.R", "m0_retro.R", "m0_runtime.R", "flagIgnition.R",
-    "m1_reference.R", "m1_reference_helpers.R", "m1_reference_loader.R",
+    "m1_reference.R", "m1_reference_helpers.R",
     "m1_fit.R", "m1_hyperparams.R", "m1_loso.R", "m1_runtime.R",
-    "m1_multi_template.R", "m1_peak_status.R", "m1_peak_flags.R",
-    "m1_peak_summary.R", "m1_peak_distribution.R", "m1_alignment_plots.R",
+    "m1_multi_template.R", "m1_peak_status.R",
+    "m1_peak_summary.R",
     "m2_training.R", "m2_spec_grid.R", "m2_nested_loso.R", "m2_runtime.R",
     "pipeline_bridge.R", "pipeline_runtime_helpers.R", "pipeline_runtime.R",
     "align_forecast_pipeline_dilate.R", "forecast_post_peak_gam.R",
-    "checkSeasonLength.R", "check_scale_identifiability.R", "identifiability.R",
+    "checkSeasonLength.R", "check_scale_identifiability.R",
     "getCurrentD.R", "score_params.R", "simulate.R",
     "plot.R", "plotRes.R", "plotSeasonCurves.R",
     "utils.R", "migrate_r_packages.R",
@@ -39,10 +39,10 @@ file_meta <- data.frame(
   ),
   area = c(
     rep("M_0: ignition", 4),
-    rep("M_1: reference and alignment", 13),
+    rep("M_1: reference and alignment", 9),
     rep("M_2: forecast training and runtime", 4),
     rep("Pipeline orchestration", 3),
-    rep("Supporting analyses and utilities", 13),
+    rep("Supporting analyses and utilities", 12),
     "Retired"
   ),
   purpose = c(
@@ -51,30 +51,25 @@ file_meta <- data.frame(
     "Run weekly M_0 detection on a current season and visualize the weekly snapshots.",
     "Apply the four-rule threshold detector to flag the ignition week for a single season.",
     "Estimate the reference epidemic curve and derivative summaries from historical data.",
-    "Define reusable reference-curve closures and helpers that package the fitted GAM as accessors.",
-    "Load example reference objects and built-in package data used in demos and documentation.",
+    "Define reusable reference-curve closures and shim accessors that wrap the fitted GAM.",
     "Fit tau and delta by matching a season to the reference curve.",
     "Learn high-level M_1 alignment hyperparameters from retrospective tuning results.",
     "Run LOSO and walk-forward evaluation for alignment and hyperparameter tuning.",
     "Run prospective M_1 alignment, peak detection, and peak calibration.",
     "Combine multiple reference templates into the multi-template alignment ensemble.",
     "Turn alignment outputs into a coarse peak-state label such as pre-peak or post-peak.",
-    "Flag whether the season has likely passed its peak in real time.",
     "Summarize peak timing implied by an alignment fit.",
-    "Estimate the peak-week distribution and candidate peak-rule settings across seasons.",
-    "Plot how alignment trajectories evolve as more weekly data arrive.",
     "Core M_2 prediction functions: m2_predict_one() (shared prediction core), soft-cap, feature derivation, model fitting, and weekly refit.",
     "M_2 model specification, formula construction, feature engineering helpers, and the grid-search spec builder.",
-    "Nested LOSO evaluation for the full M_1 -> M_2 forecasting stack, including weekly-refit and frozen-fit paths.",
+    "Nested LOSO evaluation for the full M_1 -> M_2 forecasting stack, including frozen-fit path and per-fold fold builder.",
     "Build pseudo-prospective M_2 snapshots and turn them into forecast series.",
-    "M_1 walk-forward predictions and joint M_1 -> M_2 LOSO evaluation bridge.",
+    "M_1 walk-forward predictions bridge functions: m1_walkforward_predictions(), m1_walkforward_multi(), inject_m1_into_snapshots().",
     "Provide small shared helpers used across runtime code paths.",
-    "End-to-end prospective pipeline entry points: run_prospective_pipeline() and run_m2_forecast().",
+    "End-to-end prospective pipeline entry points: load_prospective_kit(), run_prospective_pipeline(), run_m0_detection(), run_m1_alignment(), run_m2_forecast().",
     "Legacy exploratory helper for dilation-based alignment plus forecasting in one function.",
     "Legacy post-peak forecasting helper based on a GAM without further alignment updates.",
     "Check whether a season has enough observed weeks to support downstream analysis.",
     "Check whether scale is identifiable early enough for alignment-based forecasting.",
-    "Older identifiability helper retained for comparison with the current rule.",
     "Extract or derive the current scale parameter used in older alignment workflows.",
     "Score ignition-threshold parameter settings on historical data.",
     "Simulate flu seasons and load the built-in historical influenza example data.",
@@ -227,8 +222,9 @@ digraph PAGe_pipeline {
     label="M0: Ignition"; style=filled;
     color="#856404"; fillcolor="#fff3cd"; fontcolor="#856404";
     fontsize=11; fontname="Helvetica-Bold";
-    fitIgnition      [label="fitIgnition"];
-    run_m0_detection [label="run_m0_detection"];
+    fitIgnition        [label="fitIgnition\n(training)"];
+    run_m0_detection   [label="run_m0_detection"];
+    run_ignition_weekly [label="run_ignition\n_weekly"];
   }
 
   // ── M1: Alignment ─────────────────────────────────────────
@@ -236,10 +232,11 @@ digraph PAGe_pipeline {
     label="M1: Alignment"; style=filled;
     color="#155724"; fillcolor="#c3e6cb"; fontcolor="#155724";
     fontsize=11; fontname="Helvetica-Bold";
-    run_alignment_prospective  [label="run_alignment\n_prospective"];
-    m1_walkforward_predictions [label="m1_walkforward\n_predictions"];
-    m1_walkforward_multi       [label="m1_walkforward\n_multi"];
-    inject_m1_into_snapshots   [label="inject_m1_into\n_snapshots"];
+    run_alignment_prospective       [label="run_alignment\n_prospective"];
+    run_alignment_prospective_multi [label="run_alignment\n_prospective_multi", penwidth=2];
+    m1_walkforward_predictions      [label="m1_walkforward\n_predictions"];
+    m1_walkforward_multi            [label="m1_walkforward\n_multi"];
+    inject_m1_into_snapshots        [label="inject_m1_into\n_snapshots"];
   }
 
   // ── M2: Spec & Features ───────────────────────────────────
@@ -264,10 +261,12 @@ digraph PAGe_pipeline {
     train_stage2_joint_prepped       [label="train_stage2_joint\n_prepped"];
     refit_stage2_weekly              [label="refit_stage2\n_weekly"];
     score_stage2_metrics             [label="score_stage2\n_metrics"];
+    nested_loso_build_fold           [label="nested_loso\n_build_fold"];
+    nested_loso_m2_train             [label="nested_loso\n_m2_train"];
+    nested_loso_cv                   [label="nested_loso_cv"];
     nested_loso_grid_search          [label="nested_loso\n_grid_search"];
-    nested_loso_m2_eval_weekly_refit [label="nested_loso_m2\n_eval_weekly_refit"];
+    nested_loso_m2_eval_frozen_bias  [label="nested_loso_m2\n_eval_frozen_bias", penwidth=2];
     nested_loso_refit_best           [label="nested_loso\n_refit_best"];
-    loso_m1_m2_joint                 [label="loso_m1_m2_joint"];
   }
 
   // ── M2: Predict (shared core) ─────────────────────────────
@@ -285,18 +284,20 @@ digraph PAGe_pipeline {
     color="#721c24"; fillcolor="#f8d7da"; fontcolor="#721c24";
     fontsize=11; fontname="Helvetica-Bold";
     run_prospective_pipeline [label="run_prospective\n_pipeline"];
+    run_m1_alignment         [label="run_m1_alignment"];
     run_m2_forecast          [label="run_m2_forecast"];
   }
 
   // ── Edges ─────────────────────────────────────────────────
   // M0
-  run_m0_detection -> fitIgnition;
+  run_m0_detection -> run_ignition_weekly;
 
   // M1
-  m1_walkforward_multi     -> m1_walkforward_predictions;
-  m1_walkforward_multi     -> run_alignment_prospective;
-  inject_m1_into_snapshots -> run_alignment_prospective;
-  prep_stage2_joint        -> m1_walkforward_predictions;
+  m1_walkforward_multi            -> m1_walkforward_predictions;
+  m1_walkforward_predictions      -> run_alignment_prospective_multi;
+  run_alignment_prospective_multi -> run_alignment_prospective;
+  inject_m1_into_snapshots        -> run_alignment_prospective_multi;
+  prep_stage2_joint               -> m1_walkforward_predictions;
 
   // M2 spec
   stage2_make_spec          -> stage2_build_joint_formula;
@@ -314,28 +315,27 @@ digraph PAGe_pipeline {
   refit_stage2_weekly        -> prep_stage2_joint;
   refit_stage2_weekly        -> train_stage2_joint;
   refit_stage2_weekly        -> score_stage2_metrics;
-  nested_loso_grid_search    -> m1_walkforward_multi;
-  nested_loso_grid_search    -> refit_stage2_weekly;
-  nested_loso_grid_search    -> train_stage2_joint;
+  nested_loso_cv             -> nested_loso_build_fold;
+  nested_loso_cv             -> m1_walkforward_multi;
+  nested_loso_cv             -> m1_walkforward_predictions;
+  nested_loso_cv             -> nested_loso_m2_train;
+  nested_loso_cv             -> nested_loso_m2_eval_frozen_bias;
+  nested_loso_grid_search    -> nested_loso_cv;
   nested_loso_grid_search    -> stage2_make_spec;
-  nested_loso_m2_eval_weekly_refit -> refit_stage2_weekly;
-  nested_loso_m2_eval_weekly_refit -> m2_predict_one;
-  nested_loso_m2_eval_weekly_refit -> make_soft_cap_fn;
+  nested_loso_m2_train       -> train_stage2_joint;
+  nested_loso_m2_eval_frozen_bias -> m2_predict_one;
+  nested_loso_m2_eval_frozen_bias -> make_soft_cap_fn;
   nested_loso_refit_best     -> nested_loso_grid_search;
   nested_loso_refit_best     -> train_stage2_joint;
-  loso_m1_m2_joint           -> m1_walkforward_predictions;
-  loso_m1_m2_joint           -> prep_stage2_joint;
-  loso_m1_m2_joint           -> train_stage2_joint;
-  loso_m1_m2_joint           -> score_stage2_metrics;
 
   // M2 predict
   m2_predict_one -> make_soft_cap_fn;
 
   // Deployment
   run_prospective_pipeline -> run_m0_detection;
+  run_prospective_pipeline -> run_m1_alignment;
   run_prospective_pipeline -> run_m2_forecast;
-  run_m2_forecast          -> run_m0_detection;
-  run_m2_forecast          -> refit_stage2_weekly;
+  run_m1_alignment         -> run_alignment_prospective;
   run_m2_forecast          -> m2_predict_one;
   run_m2_forecast          -> make_soft_cap_fn;
   run_m2_forecast          -> stage2_exclude_newseason;
@@ -356,7 +356,7 @@ for (area in areas) {
     file_i <- area_rows$file[i]
     cat("### `", file_i, "`\n\n", sep = "")
     cat(area_rows$purpose[i], "\n\n")
-    cat("Mirror: `flualign/R/", file_i, "`.\n\n", sep = "")
+    cat("Mirror: `PAGe/R/", file_i, "`.\n\n", sep = "")
 
     funcs_i <- fun_inventory[fun_inventory$file == file_i, c("fun", "description"), drop = FALSE]
     if (!nrow(funcs_i)) {

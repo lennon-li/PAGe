@@ -263,16 +263,17 @@ m1_walkforward_multi <- function(allD,
 # internal: empty tibble with correct columns
 .empty_m1_preds <- function() {
   tibble::tibble(
-    season         = character(0),
-    eval_weekF     = integer(0),
-    target_weekF   = integer(0),
-    h              = integer(0),
-    m1_p_hat       = numeric(0),
-    m1_p_lo        = numeric(0),
-    m1_p_hi        = numeric(0),
-    m1_tau         = numeric(0),
-    m1_delta       = numeric(0),
-    m1_state       = character(0)
+    season           = character(0),
+    eval_weekF       = integer(0),
+    target_weekF     = integer(0),
+    h                = integer(0),
+    m1_p_hat         = numeric(0),
+    m1_p_lo          = numeric(0),
+    m1_p_hi          = numeric(0),
+    m1_logit_spread  = numeric(0),
+    m1_tau           = numeric(0),
+    m1_delta         = numeric(0),
+    m1_state         = character(0)
   )
 }
 

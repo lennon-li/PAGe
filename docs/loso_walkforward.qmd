@@ -21,7 +21,7 @@ library(gratia)
 library(MMWRweek)
 library(plotly)
 library(gt)
-library(flualign)
+library(PAGe)
 library(future)
 library(furrr)
 

@@ -1,4 +1,4 @@
-#' flualign: Seasonal Flu Curve Alignment and Forecasting
+#' PAGe: Seasonal Flu Curve Alignment and Forecasting
 #' @import ggplot2
 #' @import dplyr
 #' @import tidyr

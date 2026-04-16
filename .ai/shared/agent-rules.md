@@ -17,7 +17,7 @@
   search only when required.
 - Debug incrementally by starting with the touched function and its nearest
   dependencies.
-- Keep mirrored package files in `R/` and `flualign/R/` consistent when a task
+- Keep mirrored package files in `R/` and `PAGe/R/` consistent when a task
   touches both copies.
 
 ## Package Work

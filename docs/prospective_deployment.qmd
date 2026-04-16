@@ -81,7 +81,7 @@ for (f in r_files) {
   fp <- file.path(r_dir, f)
   if (file.exists(fp)) source(fp)
 }
-source(file.path(normalizePath("../flualign/R", mustWork = TRUE), "flagIgnition.R"))
+source(file.path(normalizePath("../PAGe/R", mustWork = TRUE), "flagIgnition.R"))
 
 startWeek  <- 27L
 WALK_START <- 5L

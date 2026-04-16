@@ -20,7 +20,7 @@ cat("=== Nested LOSO M2 v14b — alpha_state boundary extension (Bernoulli NLL) 
 cat("Start:", format(Sys.time()), "\n\n")
 
 suppressPackageStartupMessages({
-  library(flualign); library(dplyr); library(tidyr); library(purrr)
+  library(PAGe); library(dplyr); library(tidyr); library(purrr)
   library(furrr); library(future); library(mgcv); library(MMWRweek)
   library(data.table)
 })

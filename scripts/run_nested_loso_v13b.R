@@ -17,7 +17,7 @@ cat("=== Nested LOSO M2 v13b — alpha_state boundary extension ===\n")
 cat("Start:", format(Sys.time()), "\n\n")
 
 suppressPackageStartupMessages({
-  library(flualign)
+  library(PAGe)
   library(dplyr)
   library(tidyr)
   library(purrr)

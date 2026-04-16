@@ -17,7 +17,7 @@ cat("=== Nested LOSO M2 grid search (v12 — dz_ema + level-only Holt) ===\n")
 cat("Start:", format(Sys.time()), "\n\n")
 
 suppressPackageStartupMessages({
-  library(flualign)
+  library(PAGe)
   library(dplyr)
   library(tidyr)
   library(purrr)

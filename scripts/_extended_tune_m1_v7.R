@@ -21,7 +21,7 @@ cat("=== M1 alignment tuning v7 (slope_weight + k_ref expansion) ===\n")
 cat("Start:", format(Sys.time()), "\n\n")
 
 suppressPackageStartupMessages({
-  library(flualign)
+  library(PAGe)
   library(dplyr)
   library(tidyr)
   library(MMWRweek)

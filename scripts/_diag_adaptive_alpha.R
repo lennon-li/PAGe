@@ -5,7 +5,7 @@
 cat("=== Adaptive-alpha M2 diagnostic ===\n")
 
 suppressPackageStartupMessages({
-  library(flualign); library(dplyr); library(MMWRweek); library(future); library(furrr)
+  library(PAGe); library(dplyr); library(MMWRweek); library(future); library(furrr)
 })
 for (f in c('R/utils.R', 'R/m0_retro.R', 'R/flagIgnition.R',
             'R/m1_reference.R', 'R/m1_reference_helpers.R', 'R/m1_multi_template.R',

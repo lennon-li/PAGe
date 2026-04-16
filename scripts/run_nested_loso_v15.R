@@ -28,7 +28,7 @@ cat("=== Nested LOSO M2 grid search (v15 — fixed M1 + Bernoulli NLL) ===\n")
 cat("Start:", format(Sys.time()), "\n\n")
 
 suppressPackageStartupMessages({
-  library(flualign)
+  library(PAGe)
   library(dplyr)
   library(tidyr)
   library(purrr)

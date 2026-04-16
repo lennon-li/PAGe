@@ -24,7 +24,7 @@ library(plotly)
 library(data.table)
 library(MMWRweek)
 library(gt)
-library(flualign)
+library(PAGe)
 
 source("../R/m0_retro.R")
 source("../R/m0_training.R")

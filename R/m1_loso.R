@@ -127,14 +127,14 @@ loso_walkforward <- function(allD,
                               align_rise_weight   = 1.0,
                               align_peak_decay    = 0.3,
                               # --- Multi-template ensemble (Improvement A) ---
-                              use_multi_template        = FALSE,
-                              ref_method                = "binomial",
-                              multi_temperature         = 1.0,
+                              use_multi_template        = TRUE,
+                              ref_method                = "fs",
+                              multi_temperature         = 0.25,
                               multi_top_k               = NULL,
                               multi_blend_alpha         = 1.0,
-                              slope_weight              = 0.5,
-                              slope_window              = 4L,
-                              dynamic_temp              = TRUE,
+                              slope_weight              = 8.0,
+                              slope_window              = 6L,
+                              dynamic_temp              = FALSE,
                               dynamic_temp_pivot        = 10L,
                               checkpoint_file = NULL,
                               verbose         = TRUE) {
@@ -226,6 +226,8 @@ loso_walkforward <- function(allD,
     aligned_train <- alignIgnition(train_outs)
 
     # --- 2. Fit reference curve on aligned training data ---
+    if (use_multi_template && ref_method != "fs")
+      warning(sprintf("[loso_walkforward] ref_method='%s' ignored when use_multi_template=TRUE; forcing 'fs' (required for eta_mat).", ref_method))
     ref_meth <- if (use_multi_template) "fs" else ref_method
     ref   <- estimateRef(alignedD = aligned_train, exSeason = character(0),
                          k = k_ref, n_weeks = n_weeks,

@@ -6,7 +6,7 @@
 cat("=== Rebuild production kit (v15 spec, locked M1) ===\n")
 
 suppressPackageStartupMessages({
-  library(flualign); library(dplyr); library(purrr); library(mgcv); library(MMWRweek)
+  library(PAGe); library(dplyr); library(purrr); library(mgcv); library(MMWRweek)
   library(future); library(furrr)
 })
 n_cores <- max(1L, parallel::detectCores() - 1L)

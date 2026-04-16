@@ -4,7 +4,7 @@
 library(dplyr)
 library(tidyr)
 library(MMWRweek)
-library(flualign)
+library(PAGe)
 
 wd <- "C:/Users/lennon.li/Documents/claude/PAGe"
 source(file.path(wd, "R/m1_reference.R"))

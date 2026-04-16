@@ -3,7 +3,7 @@ devtools::load_all("flualign", quiet = TRUE)
 
 library(tidyverse)
 library(MMWRweek)
-library(flualign)
+library(PAGe)
 
 # ---- rebuild alignedD -------------------------------------------------------
 startWeek <- 27

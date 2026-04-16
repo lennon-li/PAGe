@@ -17,7 +17,7 @@ library(ggplot2)
 library(plotly)
 library(gt)
 library(MMWRweek)
-library(flualign)
+library(PAGe)
 
 source("../R/utils.R")
 source("../R/pipeline_runtime_helpers.R")

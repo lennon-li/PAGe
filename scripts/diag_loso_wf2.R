@@ -1,7 +1,7 @@
 setwd("C:/Users/lennon.li/Documents/claude/PAGe")
 
 library(MMWRweek)
-library(flualign)
+library(PAGe)
 library(dplyr)
 library(purrr)
 library(future)
