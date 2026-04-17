@@ -336,3 +336,27 @@ All scripts live in `scripts/fresh_run/`. Each writes to `data/fresh_*` paths an
 ```
 
 Run in order. Steps 3 and 4 can overlap on separate machines if cores allow.
+
+---
+
+## Known Fresh-Run FAIL Patterns (validated 2026-04-16)
+
+When comparing fresh against gold, these FAILs are expected and explained — not regressions:
+
+| FAIL | Cause | Action |
+|------|-------|--------|
+| M1 ref curve delta > 0.01 | 2025-26 data added to fresh ref (post-peak weeks shift ~0.03 logit) | Expected; passes if gold is also rebuilt with current data |
+| M1 LOSO MAE delta > 0.02 | Slope-similarity bug fix (2026-04-10): `t_obs → u_hat` in `align_multi_template` changed alignment scores | Not a regression; gold was pre-fix. Best spec is unchanged (s001) |
+| M2 spec_id / coef / NLL mismatch | Gold `nested_loso_v15_production.rds` is actually v14 (has `_ba/bb` suffix in spec IDs) | Strip `_ba[0-9.]+_bb[0-9.]+$` from gold spec IDs before joining |
+| Prospective forecast delta > 0.005 | Gold `deploy_wf_cache.rds` uses v14 GAM (bias_alpha=0.2); fresh uses v15 (bias_alpha=0.4) | Not comparable; verify fresh forecasts are internally reasonable instead |
+
+**Critical checks that must PASS even with gold version mismatch:**
+- M0 ignition delta = 0 (all seasons)
+- M1 anchorWeek exact match
+- M2 best NLL ~ 0.406 (fresh: 0.4078)
+- Prospective ignition week matches
+
+**Known bugs fixed during fresh run:**
+- `run_alignment_prospective_multi()` was not propagating `t_peak_median` to its return list — it was nested under `$peak` internally but not surfaced at the top level. Fixed 2026-04-16. Stale checkpoint files from pre-fix runs must be deleted before re-running M1 LOSO.
+- `load_prospective_kit()` uses `data_dir` + filename args, not full paths — use `load_prospective_kit(data_dir="data", ref_file="fresh_ref_production.rds", ...)`.
+- `multisession` workers use the installed PAGe package, not local `source()`d overrides — run `R CMD INSTALL PAGe` after any package edits before running LOSO steps.
