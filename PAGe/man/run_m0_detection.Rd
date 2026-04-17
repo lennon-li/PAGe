@@ -2,6 +2,7 @@
 % Please edit documentation in R/pipeline_runtime.R
 \name{run_m0_detection}
 \alias{run_m0_detection}
+\alias{run_m0}
 \title{Run M0 ignition detection for the current season}
 \usage{
 run_m0_detection(
@@ -10,6 +11,8 @@ run_m0_detection(
   manual_ign_week = NA_integer_,
   verbose = TRUE
 )
+
+run_m0(kit, current_data, ...)
 }
 \arguments{
 \item{kit}{A kit list returned by \code{load_prospective_kit()}.}

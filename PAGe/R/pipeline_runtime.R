@@ -637,3 +637,24 @@ run_prospective_pipeline <- function(kit,
     ign_out   = m0$ign_out
   )
 }
+
+
+# ============================================================
+# High-level deployment aliases (shorter names for new API)
+# ============================================================
+
+#' @rdname run_m0_detection
+#' @export
+run_m0 <- function(kit, current_data, ...) run_m0_detection(kit, current_data, ...)
+
+#' @rdname run_m1_alignment
+#' @export
+run_m1 <- function(kit, current_data, m0_result, ...) run_m1_alignment(kit, current_data, m0_result, ...)
+
+#' @rdname run_m2_forecast
+#' @export
+run_m2 <- function(kit, current_data, m1_result, ...) run_m2_forecast(kit, current_data, m1_result, ...)
+
+#' @rdname run_prospective_pipeline
+#' @export
+run_pipeline <- function(kit, current_data, ...) run_prospective_pipeline(kit, current_data, ...)

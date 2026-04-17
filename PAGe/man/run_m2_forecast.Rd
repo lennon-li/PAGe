@@ -2,6 +2,7 @@
 % Please edit documentation in R/pipeline_runtime.R
 \name{run_m2_forecast}
 \alias{run_m2_forecast}
+\alias{run_m2}
 \title{Run M2 forecast using M1 alignment outputs}
 \usage{
 run_m2_forecast(
@@ -11,6 +12,8 @@ run_m2_forecast(
   mode = c("weekly_refit", "frozen"),
   verbose = TRUE
 )
+
+run_m2(kit, current_data, m1_result, ...)
 }
 \arguments{
 \item{kit}{A kit list returned by \code{load_prospective_kit()}.}

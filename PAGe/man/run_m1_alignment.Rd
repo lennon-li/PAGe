@@ -2,9 +2,12 @@
 % Please edit documentation in R/pipeline_runtime.R
 \name{run_m1_alignment}
 \alias{run_m1_alignment}
+\alias{run_m1}
 \title{Walk-forward M1 alignment for the current season}
 \usage{
 run_m1_alignment(kit, current_data, m0_result, walk_start = 5L, verbose = TRUE)
+
+run_m1(kit, current_data, m0_result, ...)
 }
 \arguments{
 \item{kit}{A kit list returned by \code{load_prospective_kit()}.}

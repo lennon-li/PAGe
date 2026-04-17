@@ -2,6 +2,7 @@
 % Please edit documentation in R/pipeline_runtime.R
 \name{run_prospective_pipeline}
 \alias{run_prospective_pipeline}
+\alias{run_pipeline}
 \title{Run the full M0 -> M1 -> M2 walk-forward pipeline for one season}
 \usage{
 run_prospective_pipeline(
@@ -12,6 +13,8 @@ run_prospective_pipeline(
   mode = c("weekly_refit", "frozen"),
   verbose = TRUE
 )
+
+run_pipeline(kit, current_data, ...)
 }
 \arguments{
 \item{kit}{A kit list returned by \code{load_prospective_kit()}.}

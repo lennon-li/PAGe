@@ -34,21 +34,59 @@ h4 {
   background: #f9fbfe;
   border-radius: 0 3px 3px 0;
 }
-.callout-tip { border-left: 4px solid #28a745; background: #f0fff4; padding: 0.8em 1em; margin: 1em 0; border-radius: 0 4px 4px 0; }
+.callout-tip  { border-left: 4px solid #28a745; background: #f0fff4; padding: 0.8em 1em; margin: 1em 0; border-radius: 0 4px 4px 0; }
 .callout-note { border-left: 4px solid #4a90d9; background: #f4f8fd; padding: 0.8em 1em; margin: 1em 0; border-radius: 0 4px 4px 0; }
 </style>
 ```
 
-This document walks through the complete **M0 → M1 → M2** forecasting pipeline in two parts:
+This document walks through the complete **M0 → M1 → M2** forecasting pipeline
+in two parts:
 
-1. **Training** (offline, once per season or when surveillance data accumulate): fit M0 ignition thresholds, M1 reference curve and alignment hyperparameters, and M2 forecast model.
-2. **Deployment** (online, every new data week): load pre-built artifacts and run `run_m0_detection()` → `run_m1_alignment()` → `run_m2_forecast()`.
+1. **Training** (offline): tune M0 ignition thresholds, build M1 reference curve,
+   tune and train M2 forecast model, assemble the deployment kit.
+2. **Deployment** (online, every new data week): load the kit and run
+   `run_m0()` → `run_m1()` → `run_m2()` (or the single `run_pipeline()` call).
 
-For deep dives into each training step see:
+For deep dives into individual steps see:
 [`ignition_training.html`](ignition_training.html) |
 [`estimateRef.html`](estimateRef.html) |
 [`loso_walkforward.html`](loso_walkforward.html) |
 [`forecast_training.html`](forecast_training.html)
+
+---
+
+## Quick Start
+
+Train everything and deploy in ~10 lines. Uses `loso_seasons = "alternating"` for
+M2 (every other season as LOSO test fold) so the first run completes in roughly
+30 minutes instead of 2–3 hours.
+
+```{r quick-start}
+#| eval: false
+
+library(PAGe)
+
+allD <- load_flu_data()                             # load surveillance history
+
+m0       <- tune_m0(allD)                          # M0: LOSO grid search
+m1       <- build_m1(allD, m0)                     # M1: reference curve + hyperparams
+m2_loso  <- build_m2(allD, m0, m1,                # M2: nested LOSO tuning (~30 min)
+                     loso_seasons = "alternating")
+m2_model <- train_m2(allD, m0, m1,                # M2: production GAM fit
+                     m2_loso$best_spec)
+kit      <- assemble_kit(m0, m1, m2_model,        # bundle artifacts for deployment
+                         save_ref_path = "data/ref_production.rds",
+                         save_m2_path  = "data/m2_production.rds")
+
+# --- Deployment (every new week) ---
+current  <- getCurrentD() |> dplyr::filter(season == "2025-26")
+wf       <- run_pipeline(kit, current)             # full M0 → M1 → M2 in one call
+```
+
+Switch `loso_seasons = "all"` for a full production-quality LOSO (all seasons as
+test folds, ~2 hours). See [Customization](#customization) for other options.
+
+---
 
 ## Setup
 
@@ -63,355 +101,186 @@ library(MMWRweek)
 library(plotly)
 library(gt)
 
-# Source all pipeline functions
-r_dir  <- normalizePath("../R",   mustWork = TRUE)
-r_files <- c(
-  "utils.R", "m0_retro.R", "flagIgnition.R",
+r_dir <- normalizePath("../R", mustWork = TRUE)
+for (f in c(
+  "utils.R", "m0_retro.R", "m0_training.R", "flagIgnition.R",
   "m1_reference_helpers.R", "m1_reference.R",
   "m1_hyperparams.R", "m1_fit.R", "check_scale_identifiability.R",
   "m1_runtime.R", "m1_multi_template.R",
-  "m1_peak_status.R", "m1_peak_summary.R",
-  "m0_training.R", "m1_loso.R",
+  "m1_peak_status.R", "m1_peak_summary.R", "m1_loso.R",
   "m2_training.R", "m2_spec_grid.R", "m2_nested_loso.R",
   "pipeline_runtime_helpers.R", "pipeline_bridge.R",
   "m0_runtime.R", "m2_runtime.R", "pipeline_runtime.R",
-  "getCurrentD.R"
-)
-for (f in r_files) {
+  "pipeline_training.R", "getCurrentD.R"
+)) {
   fp <- file.path(r_dir, f)
   if (file.exists(fp)) source(fp)
 }
 
+`%||%` <- function(x, y) if (is.null(x)) y else x
 startWeek <- 27L
 DATA_DIR  <- normalizePath("../data", mustWork = TRUE)
-```
-
-## Historical data
-
-The pipeline is trained on all historical influenza seasons. Seasons `2020-21`
-and `2021-22` are excluded due to COVID disruption. Season `2015-16` is used for
-M1 reference curve estimation but excluded from LOSO alignment folds (ignition
-outlier).
-
-```{r load-hist}
-#| message: false
-#| warning: false
-
-flu_hist_path <- file.path(DATA_DIR, "flu_testing_data.csv")
-flu_hist <- read.csv(flu_hist_path) |>
-  transmute(
-    season,
-    week,
-    year,
-    start_year = seasonstart,
-    date = as.Date(week_start_date),
-    y = pos_flua,
-    N = test_flu
-  ) |>
-  filter(!season %in% c("2011-12", "2020-21", "2021-22")) |>
-  mutate(
-    neg = N - y,
-    p = y / N,
-    weekF = as.integer(((week - 27L) %% (52L + as.integer(MMWRweek::MMWRweek(
-      as.Date(paste0(start_year, "-12-31"))
-    )$MMWRweek == 53L))) + 1L),
-    season = as.character(season)
-  )
-
-seasons_available <- sort(unique(flu_hist$season))
-cat(sprintf("Seasons: %s\n(%d seasons, %d rows)\n",
-            paste(seasons_available, collapse = ", "),
-            length(seasons_available), nrow(flu_hist)))
 ```
 
 ---
 
 ## Part 1 — Training (offline)
 
-These steps run once, before the current season begins. The outputs are saved
-as RDS files in `data/` and loaded at deployment time.
+Run once per season (or whenever surveillance history grows). Each function
+handles one stage and returns an object that the next stage consumes.
 
-### Step 1 — Train M0: ignition detection
+### 1.1 Load data
 
-M0 fits threshold gates (`cond_sum`, `cond_p`, `cond_prev`, `cond_inc`) by
-LOSO grid search. Each fold holds out one season and tunes thresholds on the
-remaining seasons. The best configuration is selected by minimising detection
-timing error against manually labelled ignition weeks.
+```{r load-data}
+#| message: false
+#| warning: false
 
-For full details see [`ignition_training.html`](ignition_training.html).
+n_weeks_in_start_year <- function(start_year) {
+  52L + as.integer(MMWRweek::MMWRweek(as.Date(paste0(start_year, "-12-31")))$MMWRweek == 53L)
+}
+
+allD <- read.csv(file.path(DATA_DIR, "flu_testing_data.csv")) |>
+  dplyr::select(season, week, year, start_year = seasonstart,
+                date = week_start_date, y = pos_flua, N = test_flu) |>
+  dplyr::mutate(
+    neg     = N - y,
+    date    = as.Date(date),
+    nW_true = n_weeks_in_start_year(start_year),
+    weekF   = ((week - startWeek) %% nW_true) + 1L,
+    p       = y / N
+  ) |>
+  dplyr::filter(!season %in% c("2011-12", "2020-21", "2021-22"))
+
+cat(sprintf("allD: %d rows | %d seasons (%s to %s)\n",
+            nrow(allD), length(unique(allD$season)),
+            min(allD$season), max(allD$season)))
+```
+
+### 1.2 M0 — Ignition Detection
+
+`tune_m0()` runs a LOSO grid search over ignition threshold parameters.
+Each held-out season is scored against manually-verified ignition weeks.
 
 ```{r train-m0}
 #| eval: false
 
-# Manual ignition labels (weekF, season-relative)
+m0 <- tune_m0(allD, loso_seasons = "all")
+
+cat("Best M0 params:\n")
+print(m0$best_params)
+```
+
+```{r load-m0}
+#| message: false
+
+m0_raw  <- readRDS(file.path(DATA_DIR, "stage1_tuning.rds"))
 manual_labels <- c(
   "2012-13" = 18L, "2013-14" = 20L, "2014-15" = 20L,
   "2015-16" = 24L, "2016-17" = 19L, "2017-18" = 20L,
   "2018-19" = 19L, "2019-20" = 22L, "2022-23" = 15L,
   "2023-24" = 20L, "2024-25" = 23L
 )
-
-# LOSO tuning grid (see ignition_training.html for full grid)
-stage1_result <- tuneIgnitionGrid_M0v2(
-  flu_hist     = flu_hist,
-  manual_labels = manual_labels,
-  startWeek    = startWeek
-)
-
-saveRDS(stage1_result, file.path(DATA_DIR, "stage1_tuning.rds"))
-cat("Best M0 params:\n")
-print(stage1_result$best_params)
-```
-
-```{r load-m0}
-#| message: false
-
-stage1 <- readRDS(file.path(DATA_DIR, "stage1_tuning.rds"))
-cat("M0 best params loaded:\n")
-print(stage1$best_params)
-```
-
-### Step 2 — Train M1: reference curve and alignment hyperparameters
-
-M1 training has two substeps:
-
-**2a — Reference curve** (`estimateRef()`): aligns historical seasons to their
-manually-labelled ignition weeks. The factor-smooth (`fs`) method fits a GAM
-with `s(newWeek, season, bs="fs")`, producing per-season curves `eta_mat` used
-for multi-template alignment. Full analysis: [`estimateRef.html`](estimateRef.html).
-
-**2b — Alignment hyperparameters** (`tune_m1_alignment()` / `loso_walkforward()`):
-a 67-spec grid (`k_ref` × `slope_weight`, with `temperature`, `slope_window`,
-and `dynamic_temp` also evaluated) is scored by LOSO walk-forward using
-Weibull-weighted peak MAE. Locked production spec:
-`k_ref=25, temperature=0.25, slope_weight=8.0, slope_window=6, dynamic_temp=FALSE`
-(Weibull peak MAE = 1.275 weeks, v5–v7 grid).
-Full analysis: [`loso_walkforward.html`](loso_walkforward.html).
-
-```{r train-m1}
-#| eval: false
-
 flag_args <- list(
   p_thresh = 0.01, k1 = 0.4, k_c = 0.01, n_consec = 2L,
   min_window = 10L, w_min = 21L, w_max = 21L, d2_relax = -0.01
 )
-EXCLUDE_PERM <- c("2011-12", "2015-16", "2020-21", "2021-22")
-train_allD   <- flu_hist |> filter(!season %in% EXCLUDE_PERM)
-
-# 2a — Align training seasons to ignition anchors, estimate reference curve (FS method)
-res_deriv     <- estimateDerivs(train_allD, k = 10L)
-train_outs    <- res_deriv$data |>
-  dplyr::group_by(season) |> dplyr::group_split(.keep = TRUE) |>
-  purrr::map(\(df) do.call(flagIgnition, c(list(df = df, manual_labels = manual_labels), flag_args)))
-aligned_train <- alignIgnition(train_outs)
-
-# estimateRef() operates on already-aligned data
-ref_result <- estimateRef(
-  alignedD  = aligned_train,
-  exSeason  = character(0),
-  k         = 25L,
-  n_weeks   = 52L,
-  method    = "fs"
-)
-
-# 2b — M1 LOSO hyperparameter tuning (k_ref × slope_weight grid, 67 specs)
-params    <- readRDS(file.path(DATA_DIR, "stage1_tuning.rds"))$best_params
-tune_grid <- expand.grid(
-  k_ref        = c(15L, 25L, 40L),
-  slope_weight = c(0, 2.0, 4.0, 8.0, 12.0, 16.0, 30.0)
-)
-
-tune_result <- tune_m1_alignment(
-  allD          = flu_hist,
-  params        = params,
-  grid          = tune_grid,
+# Reconstruct an m0 object from the saved tuning result
+m0 <- list(
+  best_params   = m0_raw$best_params,
+  tuning        = m0_raw,
   manual_labels = manual_labels,
-  exclude_seasons = EXCLUDE_PERM,
-  verbose       = TRUE
+  flag_args     = flag_args
 )
-# Best: k_ref=25, temperature=0.25, slope_weight=8.0, slope_window=6, dynamic_temp=FALSE
-# Weibull peak MAE = 1.275 weeks (v5–v7 grid, LOCKED)
+cat("M0 best params:\n"); print(m0$best_params)
+```
 
-# Production M1 params (locked from LOSO grid)
-M1_PARAMS <- list(
-  k_ref              = 25L,
-  ref_method         = "fs",
-  temperature        = 0.25,
-  rise_weight        = 1.0,
-  trough_weight      = 0.1,
-  peak_decay         = 0.3,
-  slope_weight       = 8.0,
-  slope_window       = 6L,
-  dynamic_temp       = FALSE,
-  dynamic_temp_pivot = 10L
-)
+::: {.callout-note}
+**Default grid**: 36 parameter combinations (4 `p_thr` × 3 `prev_thr` × 3
+`p_sum_thr`). Full LOSO over all seasons takes ~2 minutes. See
+[`ignition_training.html`](ignition_training.html) for scoring details.
+:::
 
-# Re-estimate ref with best k_ref, build hyper, save production kit
-ref <- estimateRef(
-  alignedD = aligned_train,
-  exSeason = character(0),
-  k        = M1_PARAMS$k_ref,
-  n_weeks  = 52L,
-  method   = M1_PARAMS$ref_method
-)
-hyper <- learn_alignment_hyperparams(ref$dat, ref$g_ref_fun)
+### 1.3 M1 — Reference Curve
 
-saveRDS(list(
-  ref           = ref,
-  hyper         = hyper,
-  hist_data     = aligned_train,
-  M1_PARAMS     = M1_PARAMS,
-  flag_args     = flag_args,
-  manual_labels = manual_labels
-), file.path(DATA_DIR, "ref_production.rds"))
-cat("Saved ref_production.rds — anchorWeek:", ref$anchorWeek, "\n")
+`build_m1()` aligns all training seasons to their ignition weeks, fits the
+factor-smooth reference curve (`estimateRef`), and learns per-season alignment
+search bounds (`learn_alignment_hyperparams`).
+
+```{r train-m1}
+#| eval: false
+
+m1 <- build_m1(allD, m0)
+
+cat(sprintf("M1 ref: anchorWeek=%d | %d training seasons\n",
+            m1$ref$anchorWeek, length(m1$seasons_used)))
+
+# Optional: tune alignment hyperparameters (k_ref × slope_weight, 20-spec grid)
+# m1_tune <- tune_m1(allD, m0, m1)
 ```
 
 ```{r load-m1}
 #| message: false
 
 ref_cache <- readRDS(file.path(DATA_DIR, "ref_production.rds"))
-ref <- ref_cache$ref
-cat(sprintf("M1 ref loaded: anchorWeek=%d, k_ref=%d, temperature=%.2f\n",
-            ref$anchorWeek,
-            ref_cache$M1_PARAMS$k_ref,
-            ref_cache$M1_PARAMS$temperature))
+m1 <- list(
+  ref           = ref_cache$ref,
+  hyper         = ref_cache$hyper,
+  aligned_train = ref_cache$hist_data,
+  m1_params     = ref_cache$M1_PARAMS %||% list(
+    k_ref = 25L, ref_method = "fs", temperature = 0.25,
+    rise_weight = 1.0, trough_weight = 0.1, peak_decay = 0.3,
+    slope_weight = 8.0, slope_window = 6L,
+    dynamic_temp = FALSE, dynamic_temp_pivot = 10L
+  ),
+  seasons_used  = sort(unique(ref_cache$hist_data$season))
+)
+cat(sprintf("M1 ref loaded: anchorWeek=%d, k_ref=%d, slope_weight=%.1f\n",
+            m1$ref$anchorWeek,
+            m1$m1_params$k_ref,
+            m1$m1_params$slope_weight))
 ```
 
-### Step 3 — Train M2: nested LOSO hyperparameter tuning and production fit
+```{r plot-ref-curve}
+#| echo: false
+#| warning: false
+#| fig-height: 4
 
-M2 is a joint binomial GAM for h∈{1,2} in aligned-week space. Training uses a
-**three-phase nested LOSO** to prevent leakage:
+nw <- seq(1, 52)
+ref_df <- data.frame(
+  newWeek = nw,
+  p_ref   = plogis(m1$ref$g_ref_fun(nw))
+)
+ggplot(ref_df, aes(newWeek, p_ref)) +
+  geom_line(linewidth = 1.2, colour = "steelblue") +
+  labs(title = "M1 Reference Curve",
+       x = "Aligned week (newWeek)", y = "Positivity") +
+  theme_minimal()
+```
 
-- **Phase 1** — build per-fold reference curves and M1 walk-forward predictions
-  (each fold's ref and M1 are re-estimated on its training seasons only).
-- **Phase 2** — evaluate all 480 M2 specs via `nested_loso_grid_search()`;
-  selects the spec minimising mean Bernoulli NLL across 10 held-out seasons.
-- **Phase 3** — refit the production GAM on all training seasons with the best spec.
+::: {.callout-note}
+**Locked production spec**: `k_ref=25, temperature=0.25, slope_weight=8.0,
+slope_window=6, dynamic_temp=FALSE` — Weibull-weighted peak MAE = 1.275 weeks
+(v5–v7 grid). See [`loso_walkforward.html`](loso_walkforward.html).
+:::
 
-Production spec (v15): `k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0`
-(Bernoulli NLL = 0.406, 480-spec grid, 10 seasons).
-`bias_alpha` is a **deployment parameter** (fixed at 0.4), not a LOSO grid dimension — NLL is flat across 0.1–0.3, making it unidentifiable as a structural parameter.
-Full analysis: [`forecast_training.html`](forecast_training.html).
+### 1.4 M2 — Forecast Model
+
+`build_m2()` runs a three-phase nested LOSO to find the best M2 spec.
+`train_m2()` then fits the production GAM on all training seasons.
 
 ```{r train-m2}
 #| eval: false
 
-EXCLUDE_SEAS <- "2015-16"
-test_seasons <- sort(setdiff(unique(allD$season), EXCLUDE_SEAS))
-BIAS_ALPHA   <- 0.4  # deployment default — not a LOSO grid dimension
+# Phase 1 + 2: nested LOSO grid search
+# loso_seasons = "alternating" → ~30 min; "all" → ~2 hours (production)
+m2_loso <- build_m2(allD, m0, m1, loso_seasons = "alternating")
 
-# ---- Phase 1: build per-fold M1 cache ----------------------------------------
-# For each held-out season: re-estimate ref + hyper on training seasons only,
-# then compute M1 walk-forward predictions for both training and test seasons.
+cat(sprintf("\nTop 5 specs:\n"))
+print(head(m2_loso$summary[, c("spec_id", "bernoulli_nll")], 5))
 
-m1_cache <- list()
-for (test_s in test_seasons) {
-  fold <- nested_loso_build_fold(
-    allD            = allD,
-    test_season     = test_s,
-    exclude_seasons = EXCLUDE_SEAS,
-    k_ref           = M1_PARAMS$k_ref,
-    ref_method      = M1_PARAMS$ref_method,
-    manual_labels   = manual_labels,
-    verbose         = FALSE
-  )
-  m1_train <- m1_walkforward_multi(
-    allD         = allD, ref = fold$ref, hyper = fold$hyper, params = params,
-    seasons      = fold$train_seasons,
-    temperature  = M1_PARAMS$temperature, rise_weight  = M1_PARAMS$rise_weight,
-    trough_weight = M1_PARAMS$trough_weight, peak_decay = M1_PARAMS$peak_decay,
-    slope_weight = M1_PARAMS$slope_weight, slope_window = M1_PARAMS$slope_window,
-    dynamic_temp = M1_PARAMS$dynamic_temp, dynamic_temp_pivot = M1_PARAMS$dynamic_temp_pivot,
-    parallel = TRUE, verbose = FALSE
-  )
-  m1_test <- m1_walkforward_predictions(
-    seasonD      = allD[allD$season == test_s, ],
-    ref = fold$ref, hyper = fold$hyper, params = params,
-    temperature  = M1_PARAMS$temperature, rise_weight  = M1_PARAMS$rise_weight,
-    trough_weight = M1_PARAMS$trough_weight, peak_decay = M1_PARAMS$peak_decay,
-    slope_weight = M1_PARAMS$slope_weight, slope_window = M1_PARAMS$slope_window,
-    dynamic_temp = M1_PARAMS$dynamic_temp, dynamic_temp_pivot = M1_PARAMS$dynamic_temp_pivot
-  )
-  m1_cache[[test_s]] <- list(fold = fold, m1_train = m1_train, m1_test = m1_test)
-}
-saveRDS(m1_cache, file.path(DATA_DIR, "nested_loso_v15_phase1.rds"))
-
-# ---- Phase 2: sweep M2 spec grid (480 specs, v15) ----------------------------
-# Grid: k_f {2,3,4,5} × k_e {2,3} × alpha_state {0.30..0.50} × k_r {0,2,3}
-#       × k_de {0,2} × k_sp {0,2}
-# bias_alpha fixed at 0.4 (deployment parameter; LOSO NLL flat 0.1–0.3)
-
-grid_v15 <- tidyr::crossing(
-  delta = 0L, Kr = 1L,
-  k_f         = c(2L, 3L, 4L, 5L),
-  k_e         = c(2L, 3L),
-  alpha_state = c(0.30, 0.35, 0.40, 0.45, 0.50),
-  k_r         = c(0L, 2L, 3L),
-  k_de        = c(0L, 2L),
-  k_sp        = c(0L, 2L)
-)
-specs_v15 <- purrr::pmap(grid_v15, \(delta, Kr, k_f, k_e, alpha_state, k_r, k_de, k_sp)
-  stage2_make_spec(
-    delta = delta, Kr = Kr, T = "S",
-    k_f = k_f, k_e = k_e, alpha_state = alpha_state,
-    k_r = k_r, k_de = k_de, k_sp = k_sp,
-    k_n = 0L, k_w = 0L, k_s = 0L,
-    lambda_w = 0, w_floor = 0.05, bias_alpha = BIAS_ALPHA
-  )
-)
-
-# Run grid search (uses nested_loso_grid_search or manual furrr loop for checkpointing)
-cv_results <- nested_loso_grid_search(
-  allD            = allD,
-  params          = params,
-  specs           = specs_v15,
-  checkpoint_file = file.path(DATA_DIR, "nested_loso_v15_phase2.rds"),
-  test_seasons    = test_seasons,
-  exclude_seasons = EXCLUDE_SEAS,
-  manual_labels   = manual_labels,
-  eval_window     = 12L,
-  bias_alpha      = BIAS_ALPHA
-)
-# Best spec: k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0
-# Mean Bernoulli NLL = 0.406
-
-# ---- Phase 3: refit production GAM on all training seasons -------------------
-# See scripts/_rebuild_m2_production_v15.R for the full production rebuild.
-# Key steps: estimateRef on all train seasons → m1_walkforward_multi → train_stage2_joint
-
-best_spec <- specs_v15[[which.min(sapply(cv_results, \(r) mean(r$scores$bernoulli_nll)))]]
-
-# Rebuild M1 predictions on all training seasons (same ref/hyper as above)
-train_seas      <- sort(setdiff(unique(flu_hist$season), c(EXCLUDE_SEAS, "2020-21", "2021-22")))
-m1_train_preds  <- m1_walkforward_multi(
-  allD         = flu_hist, ref = ref, hyper = hyper, params = params,
-  seasons      = train_seas,
-  temperature  = M1_PARAMS$temperature,  rise_weight   = M1_PARAMS$rise_weight,
-  trough_weight = M1_PARAMS$trough_weight, peak_decay  = M1_PARAMS$peak_decay,
-  slope_weight = M1_PARAMS$slope_weight, slope_window  = M1_PARAMS$slope_window,
-  dynamic_temp = M1_PARAMS$dynamic_temp, dynamic_temp_pivot = M1_PARAMS$dynamic_temp_pivot,
-  parallel = TRUE, verbose = FALSE
-)
-
-joint_out <- train_stage2_joint(
-  dat         = add_prospective_derivs_link(aligned_train),
-  template_df = ref$pred_df[, c("newWeek", "fit")],
-  spec        = best_spec,
-  method      = "REML",
-  m1_preds    = m1_train_preds,
-  verbose     = FALSE
-)
-
-saveRDS(list(
-  spec             = best_spec,
-  fit              = joint_out$fit,
-  feature_ranges   = joint_out$feature_ranges,
-  m1_train_preds   = m1_train_preds,
-  training_seasons = train_seas,
-  spec_version     = "v15"
-), file.path(DATA_DIR, "m2_production.rds"))
-cat("Saved m2_production.rds\n")
+# Phase 3: production GAM fit
+m2_model <- train_m2(allD, m0, m1, m2_loso$best_spec)
+cat(sprintf("GAM EDF: %.2f\n", sum(m2_model$fit$edf)))
 ```
 
 ```{r load-m2}
@@ -419,7 +288,7 @@ cat("Saved m2_production.rds\n")
 
 m2_prod <- readRDS(file.path(DATA_DIR, "m2_production.rds"))
 cat(sprintf(
-  "M2 model loaded: EDF=%.1f | spec_version=%s\n  best spec: k_f=%d, k_e=%d, alpha_state=%.2f, k_r=%d, k_de=%d, k_sp=%d\n",
+  "M2 loaded: EDF=%.1f | spec_version=%s\n  spec: k_f=%d, k_e=%d, alpha_state=%.2f, k_r=%d, k_de=%d, k_sp=%d\n",
   sum(m2_prod$fit$edf),
   m2_prod$spec_version %||% "unknown",
   m2_prod$spec$k_f, m2_prod$spec$k_e, m2_prod$spec$alpha_state,
@@ -427,34 +296,52 @@ cat(sprintf(
 ))
 ```
 
-### Step 4 — Build and verify the deployment kit
+::: {.callout-note}
+**Production spec (v15)**: `k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0`
+— mean Bernoulli NLL = 0.406 (480-spec grid, 10 seasons). `bias_alpha` is a
+deployment parameter (fixed at 0.4), not a LOSO grid dimension.
+See [`forecast_training.html`](forecast_training.html).
+:::
 
-`load_prospective_kit()` bundles all offline-trained artifacts into a single
-named list, verifying that required files exist.
+### 1.5 Assemble the Deployment Kit
+
+`assemble_kit()` bundles all trained artifacts into the format expected by
+`run_pipeline()`. It also optionally saves to disk.
+
+```{r assemble-kit}
+#| eval: false
+
+kit <- assemble_kit(
+  m0, m1,
+  m2_model        = list(
+    fit              = m2_prod$fit,
+    feature_ranges   = m2_prod$feature_ranges,
+    m1_train_preds   = m2_prod$m1_train_preds,
+    spec             = m2_prod$spec,
+    training_seasons = m2_prod$training_seasons,
+    spec_version     = m2_prod$spec_version %||% "v15"
+  ),
+  best_spec_id  = m2_prod$best_spec_id,
+  save_ref_path = "data/ref_production.rds",
+  save_m2_path  = "data/m2_production.rds"
+)
+```
 
 ```{r build-kit}
-`%||%` <- function(x, y) if (is.null(x)) y else x
 kit <- load_prospective_kit(DATA_DIR)
 
 cat(sprintf(paste0(
   "Kit contents:\n",
   "  M1: k_ref=%d, temperature=%.2f, slope_weight=%.1f, anchorWeek=%d\n",
   "  M0: %d params loaded\n",
-  "  M2: EDF=%.1f | spec_version=%s\n",
-  "      best spec: k_f=%d, k_e=%d, alpha_state=%.2f, k_r=%d\n",
-  "      feature_ranges: z_ema=[%.2f, %.2f], dz_ema_sd=%.4f\n"),
+  "  M2: EDF=%.1f | spec_version=%s\n"),
   kit$M1_PARAMS$k_ref,
   kit$M1_PARAMS$temperature,
-  kit$M1_PARAMS$slope_weight %||% NA,
+  kit$M1_PARAMS$slope_weight %||% NA_real_,
   kit$ref$anchorWeek,
   length(kit$m0_params),
   sum(kit$m2_production$fit$edf),
-  kit$m2_production$spec_version %||% "unknown",
-  kit$best_spec$k_f, kit$best_spec$k_e, kit$best_spec$alpha_state,
-  kit$best_spec$k_r,
-  kit$m2_production$feature_ranges$z_ema[1],
-  kit$m2_production$feature_ranges$z_ema[2],
-  kit$m2_production$feature_ranges$dz_ema_sd %||% NA_real_
+  kit$m2_production$spec_version %||% "unknown"
 ))
 ```
 
@@ -462,113 +349,79 @@ cat(sprintf(paste0(
 
 ## Part 2 — Deployment (online, every new data week)
 
-Each week, load the current season data and call the three modular pipeline
-functions. You can stop at any stage:
+Load the kit once and call `run_pipeline()` each week, or call the three
+step functions individually for finer control.
 
-- Stop after **M0** to inspect ignition detection only.
-- Stop after **M1** for peak timing estimates without forecasts.
-- Run all three for full 1- and 2-week-ahead positivity forecasts.
-
-### Get current season data
+### 2.1 Load current season data
 
 ```{r get-current}
 #| message: false
 #| warning: false
 
 currentD_full <- getCurrentD(startWeek = startWeek)
-currentD_full <- filter(currentD_full, season == "2025-26")
+currentD_full <- dplyr::filter(currentD_full, season == "2025-26")
 
 cat(sprintf("Current season: 2025-26 | Weeks observed: %d | weekF range: %d–%d\n",
             nrow(currentD_full),
             min(currentD_full$weekF), max(currentD_full$weekF)))
 ```
 
-### Step A — M0: ignition detection
+### 2.2 Run the full pipeline
 
-`run_m0_detection()` applies the trained M0 thresholds to the current season.
-If ignition has not fired automatically, you can pass `manual_ign_week` to
-override.
+`run_pipeline()` calls M0 → M1 → M2 in sequence and returns all results.
+Use the individual step functions when you need to inspect intermediate results
+or override between stages.
+
+```{r run-all}
+#| eval: false
+
+# Option A: one call
+wf <- run_pipeline(kit, currentD_full)
+
+# Option B: step by step (same result, allows inspection/override)
+r0 <- run_m0(kit, currentD_full)
+r1 <- run_m1(kit, currentD_full, r0)
+r2 <- run_m2(kit, currentD_full, r1)
+```
+
+### 2.3 M0 — Ignition Detection
 
 ```{r run-m0}
 #| message: false
 
-# Optional: set manual_ign_week to an integer to override automatic detection
-# e.g. manual_ign_week <- 20L
-manual_ign_week <- NA_integer_
+manual_ign_week <- NA_integer_   # set to an integer to override
 
-m0 <- run_m0_detection(
-  kit             = kit,
-  current_data    = currentD_full,
-  manual_ign_week = manual_ign_week,
-  verbose         = TRUE
-)
+m0_res <- run_m0(kit, currentD_full,
+                 manual_ign_week = manual_ign_week, verbose = TRUE)
 
 cat(sprintf("\nM0 result: iWeek_locked = %s | overridden = %s\n",
-            ifelse(is.na(m0$iWeek_locked), "not detected",
-                   as.character(m0$iWeek_locked)),
-            m0$overridden))
+            ifelse(is.na(m0_res$iWeek_locked), "not detected",
+                   as.character(m0_res$iWeek_locked)),
+            m0_res$overridden))
 ```
 
 ::: {.callout-tip}
 **When to override**: If surveillance data are delayed or M0 fires a week
-early/late due to a noisy season, set `manual_ign_week` to the known ignition
-week before calling `run_m1_alignment()`. The corrected `iWeek_locked` will
-propagate to all downstream alignment and forecast covariates.
+early/late, set `manual_ign_week` before calling `run_m1()`. The corrected
+`iWeek_locked` propagates to all downstream covariates.
 :::
 
-```{r m0-detection-table}
-#| echo: false
-#| warning: false
-
-ign_tbl <- m0$ign_out$weekly_flags
-if (!is.null(ign_tbl) && nrow(ign_tbl) > 0) {
-  ign_show <- ign_tbl |>
-    filter(weekF >= max(1, m0$iWeek_locked - 5, na.rm = TRUE)) |>
-    select(any_of(c("weekF", "p", "cond_sum", "cond_p", "cond_prev",
-                    "cond_inc", "ignited"))) |>
-    head(10)
-  if (nrow(ign_show) > 0) {
-    gt(ign_show) |>
-      tab_header(title = "M0 gate flags near ignition") |>
-      fmt_number(columns = where(is.numeric), decimals = 3) |>
-      tab_options(table.width = pct(70), table.font.size = "13px")
-  }
-}
-```
-
-### Step B — M1: alignment walk-forward
-
-`run_m1_alignment()` takes the M0 result and runs the multi-template ensemble
-alignment from ignition week to the last observed week. Each week's partial
-curve is aligned to each training season's template; an ensemble peak estimate
-is updated as data accumulate.
-
-You may stop here if you only need peak timing (no M2 forecast required).
+### 2.4 M1 — Alignment Walk-Forward
 
 ```{r run-m1}
 #| message: false
 
-m1 <- run_m1_alignment(
-  kit          = kit,
-  current_data = currentD_full,
-  m0_result    = m0,
-  walk_start   = 5L,
-  verbose      = TRUE
-)
+m1_res <- run_m1(kit, currentD_full, m0_res, walk_start = 5L, verbose = TRUE)
 
-# Summary
-active <- filter(m1$params_df, !is.na(iWeek_hat))
+active <- dplyr::filter(m1_res$params_df, !is.na(iWeek_hat))
 if (nrow(active) > 0) {
-  last <- slice_max(active, eval_week, n = 1, with_ties = FALSE)
+  last <- dplyr::slice_max(active, eval_week, n = 1, with_ties = FALSE)
   cat(sprintf(paste0(
     "M1 walk-forward: %d eval weeks\n",
     "Latest (weekF %d): state=%s | τ=%.2f | δ=%.2f\n",
     "  Est. peak weekF: %s | Peak passed: %s\n"),
     nrow(active),
-    last$eval_week,
-    last$state,
-    last$tau,
-    last$delta_m1,
+    last$eval_week, last$state, last$tau, last$delta_m1,
     ifelse(is.na(last$peak_weekF), "?", as.character(last$peak_weekF)),
     ifelse(last$peak_passed, "YES", "no")
   ))
@@ -577,23 +430,17 @@ if (nrow(active) > 0) {
 }
 ```
 
-::: {.callout-tip}
-**Using M1 results for peak detection only**: `m1$params_df` contains
-`peak_weekF` and `peak_passed` at every evaluation week. If `peak_passed == TRUE`,
-the epidemic has passed its peak. No M2 call is needed for this use case.
-:::
-
-```{r m1-params-table}
+```{r m1-table}
 #| echo: false
 #| warning: false
 
 if (nrow(active) > 0) {
-  gt(active |> select(eval_week, state, iWeek_hat, tau, delta_m1,
-                       peak_weekF, t_peak, peak_passed)) |>
+  gt(active |> dplyr::select(eval_week, state, iWeek_hat, tau, delta_m1,
+                               peak_weekF, peak_passed)) |>
     fmt_number(columns = where(is.numeric), decimals = 3) |>
     fmt_integer(columns = c(eval_week, iWeek_hat, peak_weekF)) |>
     tab_style(
-      style = cell_fill(color = "#fff0f0"),
+      style     = cell_fill(color = "#fff0f0"),
       locations = cells_body(rows = peak_passed == TRUE)
     ) |>
     tab_header(title = "M1 alignment parameters — all eval weeks") |>
@@ -601,29 +448,16 @@ if (nrow(active) > 0) {
 }
 ```
 
-### Step C — M2: 1- and 2-week-ahead forecast
-
-`run_m2_forecast()` takes the M1 result and predicts h=1 and h=2 positivity
-using the production GAM. Extrapolation guards are applied automatically:
-- `logN_now` is capped at the training range maximum to prevent spline extrapolation.
-- Predicted positivity is soft-capped using a tanh squash above the 95th percentile
-  of training positivity.
+### 2.5 M2 — 1- and 2-week-ahead Forecast
 
 ```{r run-m2}
 #| message: false
 
-m2 <- run_m2_forecast(
-  kit          = kit,
-  current_data = currentD_full,
-  m1_result    = m1,
-  verbose      = TRUE
-)
+m2_res <- run_m2(kit, currentD_full, m1_res, verbose = TRUE)
 
-# Latest forecasts
-if (nrow(m2$m2_preds) > 0) {
-  latest_ew <- max(m2$m2_preds$eval_week)
-  latest_m2 <- filter(m2$m2_preds, eval_week == latest_ew)
-
+if (nrow(m2_res$m2_preds) > 0) {
+  latest_ew <- max(m2_res$m2_preds$eval_week)
+  latest_m2 <- dplyr::filter(m2_res$m2_preds, eval_week == latest_ew)
   cat(sprintf("\nM2 forecasts at weekF=%d:\n", latest_ew))
   for (i in seq_len(nrow(latest_m2))) {
     r <- latest_m2[i, ]
@@ -635,16 +469,16 @@ if (nrow(m2$m2_preds) > 0) {
 }
 ```
 
-### Current season: alignment + forecast plot
+### 2.6 Alignment and forecast plot
 
 ```{r plot-current}
 #| echo: false
 #| warning: false
 #| fig-height: 5
 
-if (nrow(active) > 0 && nrow(m2$m2_preds) > 0) {
+if (nrow(active) > 0 && nrow(m2_res$m2_preds) > 0) {
   ew           <- max(active$eval_week)
-  pw           <- filter(m1$params_df, eval_week == ew)
+  pw           <- dplyr::filter(m1_res$params_df, eval_week == ew)
   iWeek_hat_ew <- pw$iWeek_hat[[1]]
   anchor_ew    <- kit$ref$anchorWeek
   peak_wF      <- pw$peak_weekF[[1]]
@@ -653,78 +487,72 @@ if (nrow(active) > 0 && nrow(m2$m2_preds) > 0) {
   current_newW  <- ew - iWeek_hat_ew + anchor_ew
   ignition_newW <- anchor_ew
 
-  fc <- filter(m1$m1_curves, eval_week == ew, kind == "forecast") |>
-    arrange(newWeek)
-  junction     <- fc$newWeek[which.min(abs(fc$newWeek - current_newW))]
-  fc_past      <- filter(fc, newWeek <= junction)
-  fc_future    <- filter(fc, newWeek >= junction)
+  fc <- dplyr::filter(m1_res$m1_curves, eval_week == ew, kind == "forecast") |>
+    dplyr::arrange(newWeek)
+  junction   <- fc$newWeek[which.min(abs(fc$newWeek - current_newW))]
+  fc_past    <- dplyr::filter(fc, newWeek <= junction)
+  fc_future  <- dplyr::filter(fc, newWeek >= junction)
 
-  obs_s <- currentD_full |> mutate(p_obs = y / N)
+  obs_s      <- currentD_full |> dplyr::mutate(p_obs = y / N)
   obs_aligned <- obs_s |>
-    filter(weekF <= ew) |>
-    mutate(newWeek = weekF - iWeek_hat_ew + anchor_ew)
+    dplyr::filter(weekF <= ew) |>
+    dplyr::mutate(newWeek = weekF - iWeek_hat_ew + anchor_ew)
   obs_future  <- obs_s |>
-    filter(weekF > ew) |>
-    mutate(newWeek = weekF - iWeek_hat_ew + anchor_ew)
+    dplyr::filter(weekF > ew) |>
+    dplyr::mutate(newWeek = weekF - iWeek_hat_ew + anchor_ew)
 
-  m2_ew <- filter(m2$m2_preds, eval_week == ew)
+  m2_ew      <- dplyr::filter(m2_res$m2_preds, eval_week == ew)
   m2_aligned <- m2_ew |>
-    mutate(newWeek = target_weekF - iWeek_hat_ew + anchor_ew) |>
-    arrange(newWeek)
+    dplyr::mutate(newWeek = target_weekF - iWeek_hat_ew + anchor_ew) |>
+    dplyr::arrange(newWeek)
 
-  m2_retro <- m2$m2_preds |>
-    filter(eval_week < ew, h == 1) |>
-    mutate(newWeek = target_weekF - iWeek_hat_ew + anchor_ew) |>
-    filter(newWeek >= ignition_newW) |>
-    select(newWeek, m2_p) |>
-    arrange(newWeek)
+  m2_retro <- m2_res$m2_preds |>
+    dplyr::filter(eval_week < ew, h == 1) |>
+    dplyr::mutate(newWeek = target_weekF - iWeek_hat_ew + anchor_ew) |>
+    dplyr::filter(newWeek >= ignition_newW) |>
+    dplyr::select(newWeek, m2_p) |>
+    dplyr::arrange(newWeek)
 
-  jv <- obs_aligned$p_obs[obs_aligned$weekF == ew]
-  junction_val <- if (length(jv) > 0 && !is.na(jv[1])) jv[1] else NA_real_
-  junction_pt  <- tibble(newWeek = current_newW, m2_p = junction_val)
+  jv            <- obs_aligned$p_obs[obs_aligned$weekF == ew]
+  junction_val  <- if (length(jv) > 0 && !is.na(jv[1])) jv[1] else NA_real_
+  junction_pt   <- tibble::tibble(newWeek = current_newW, m2_p = junction_val)
 
   y_max <- max(c(fc$p_hat, obs_s$p_obs, m2_ew$m2_hi), na.rm = TRUE) * 1.15
   y_max <- max(y_max, 0.15)
 
-  newW_grid <- seq(1, 52, by = 0.5)
-  ref_curve_df <- tibble(
-    newWeek = newW_grid,
-    p_ref   = plogis(kit$ref$g_ref_fun(newW_grid))
-  )
+  nw_grid    <- seq(1, 52, by = 0.5)
+  ref_curve  <- tibble::tibble(newWeek = nw_grid,
+                                p_ref = plogis(kit$ref$g_ref_fun(nw_grid)))
 
   plt <- plot_ly() |>
-    add_lines(data = ref_curve_df, x = ~newWeek, y = ~p_ref,
+    add_lines(data = ref_curve, x = ~newWeek, y = ~p_ref,
               line = list(color = "rgba(160,160,160,0.4)", width = 1),
               name = "Reference") |>
     add_lines(data = fc_past, x = ~newWeek, y = ~p_hat,
-              line = list(color = "steelblue", width = 2),
-              name = "M1 fitted") |>
+              line = list(color = "steelblue", width = 2), name = "M1 fitted") |>
     add_lines(data = fc_future, x = ~newWeek, y = ~p_hat,
               line = list(color = "steelblue", width = 2, dash = "dash"),
               name = "M1 forecast") |>
     add_markers(data = obs_aligned, x = ~newWeek, y = ~p_obs,
-                marker = list(color = "black", size = 5),
-                name = "Observed") |>
+                marker = list(color = "black", size = 5), name = "Observed") |>
     add_markers(data = obs_future, x = ~newWeek, y = ~p_obs,
                 marker = list(color = "black", size = 5, opacity = 0.35,
-                              symbol = "circle-open"),
-                name = "Future obs") |>
-    add_segments(x = anchor_ew, xend = anchor_ew, y = 0, yend = y_max,
+                              symbol = "circle-open"), name = "Future obs") |>
+    add_segments(x = anchor_ew,    xend = anchor_ew,    y = 0, yend = y_max,
                  line = list(color = "grey50", dash = "dash", width = 1),
-                 name = paste0("Ignition wk ", iWeek_hat_ew)) |>
+                 name = paste0("Ign wk ", iWeek_hat_ew)) |>
     add_segments(x = current_newW, xend = current_newW, y = 0, yend = y_max,
                  line = list(color = "black", width = 2),
                  name = paste0("Now wk ", ew))
 
-  m2_past_line <- bind_rows(m2_retro, junction_pt) |> arrange(newWeek)
+  m2_past_line <- dplyr::bind_rows(m2_retro, junction_pt) |> dplyr::arrange(newWeek)
   if (nrow(m2_past_line) > 1) {
     plt <- plt |>
       add_lines(data = m2_past_line, x = ~newWeek, y = ~m2_p,
-                line = list(color = "firebrick", width = 2),
-                name = "M2 fitted")
+                line = list(color = "firebrick", width = 2), name = "M2 fitted")
   }
-  m2_future_line <- bind_rows(junction_pt,
-                               m2_aligned |> select(newWeek, m2_p))
+  m2_future_line <- dplyr::bind_rows(junction_pt,
+                                      m2_aligned |> dplyr::select(newWeek, m2_p))
   plt <- plt |>
     add_lines(data = m2_future_line, x = ~newWeek, y = ~m2_p,
               line = list(color = "firebrick", width = 2, dash = "dash"),
@@ -751,65 +579,31 @@ if (nrow(active) > 0 && nrow(m2$m2_preds) > 0) {
 }
 ```
 
----
-
-## Full pipeline in three lines
-
-Once trained artifacts exist in `data/`, the entire deployment for a new week
-reduces to:
-
-```{r full-pipeline-example}
-#| eval: false
-
-kit <- load_prospective_kit(DATA_DIR)
-current_data <- getCurrentD(startWeek = 27L) |> filter(season == "2025-26")
-
-# --- Option A: run everything at once ---
-wf <- run_prospective_pipeline(kit, current_data)
-
-# --- Option B: step by step (allows inspection/override between stages) ---
-m0 <- run_m0_detection(kit, current_data)
-# Optionally: m0$ign_out$ign_week_locked <- 20L  # manual override
-
-m1 <- run_m1_alignment(kit, current_data, m0_result = m0)
-# Optionally stop here — m1$params_df has peak estimates
-
-m2 <- run_m2_forecast(kit, current_data, m1_result = m1)
-# m2$m2_preds has h=1 and h=2 forecasts for every eval week
-```
-
----
-
-## Forecast accuracy
+### 2.7 Forecast accuracy
 
 ```{r accuracy}
 #| echo: false
 #| warning: false
 
-if (nrow(m2$m2_preds) > 0) {
+if (nrow(m2_res$m2_preds) > 0) {
   obs_lookup <- currentD_full |>
-    transmute(target_weekF = as.integer(weekF), p_obs = y / N)
+    dplyr::transmute(target_weekF = as.integer(weekF), p_obs = y / N)
 
-  acc <- m2$m2_preds |>
-    filter(!is.na(m2_p)) |>
-    left_join(obs_lookup, by = "target_weekF") |>
-    filter(!is.na(p_obs)) |>
-    mutate(
-      m2_ae = abs(m2_p - p_obs),
-      m1_ae = abs(m1_p - p_obs),
+  acc <- m2_res$m2_preds |>
+    dplyr::filter(!is.na(m2_p)) |>
+    dplyr::left_join(obs_lookup, by = "target_weekF") |>
+    dplyr::filter(!is.na(p_obs)) |>
+    dplyr::mutate(
+      m2_ae     = abs(m2_p - p_obs),
+      m1_ae     = abs(m1_p - p_obs),
       m2_covers = (p_obs >= m2_lo) & (p_obs <= m2_hi)
     )
 
   if (nrow(acc) > 0) {
     acc |>
-      group_by(h) |>
-      summarise(
-        n        = n(),
-        MAE_M2   = mean(m2_ae),
-        MAE_M1   = mean(m1_ae),
-        Coverage = mean(m2_covers),
-        .groups  = "drop"
-      ) |>
+      dplyr::group_by(h) |>
+      dplyr::summarise(n = n(), MAE_M2 = mean(m2_ae), MAE_M1 = mean(m1_ae),
+                       Coverage = mean(m2_covers), .groups = "drop") |>
       gt() |>
       tab_header(title = "Forecast accuracy: M2 vs M1 (realised weeks only)") |>
       fmt_number(columns = c(MAE_M2, MAE_M1), decimals = 4) |>
@@ -820,3 +614,66 @@ if (nrow(m2$m2_preds) > 0) {
   }
 }
 ```
+
+---
+
+## Customization {#customization}
+
+All high-level functions accept custom season sets and grids.
+
+```{r customization}
+#| eval: false
+
+# Custom training seasons (skip some outlier seasons)
+m0 <- tune_m0(allD, exclude = c("2011-12", "2015-16", "2020-21", "2021-22", "2022-23"))
+
+# Full LOSO for production-quality M2 tuning
+m2_loso <- build_m2(allD, m0, m1, loso_seasons = "all")
+
+# Test only specific seasons as LOSO folds
+m2_loso <- build_m2(allD, m0, m1,
+                     loso_seasons = c("2016-17", "2018-19", "2022-23", "2024-25"))
+
+# Subset the M2 grid (e.g. fix k_de=0, vary other dims)
+my_grid <- default_m2_grid() |> dplyr::filter(k_de == 0L)
+m2_loso <- build_m2(allD, m0, m1, grid = my_grid)
+
+# Use a checkpoint directory for resumable M2 tuning
+m2_loso <- build_m2(allD, m0, m1,
+                     checkpoint_dir = "data/m2_loso_ckpt")
+
+# Tune M1 alignment hyperparameters (optional — defaults are well-tuned)
+m1_tune <- tune_m1(allD, m0, m1, loso_seasons = "all")
+# Then rebuild m1 with the tuned k_ref and slope_weight if they differ from defaults
+
+# Change bias_alpha (deployment parameter, not tuned via LOSO)
+m2_loso <- build_m2(allD, m0, m1, bias_alpha = 0.3)
+
+# Manual ignition override at deployment time
+r0 <- run_m0(kit, current_data)
+r0$ign_out$iWeek_hat_locked <- 20L   # force week 20
+r0$iWeek_locked             <- 20L
+r1 <- run_m1(kit, current_data, r0)
+r2 <- run_m2(kit, current_data, r1)
+```
+
+---
+
+## Function reference
+
+| Function | Stage | Purpose |
+|---|---|---|
+| `build_m0()` | M0 | Align seasons to ignition weeks (no tuning) |
+| `tune_m0()` | M0 | LOSO grid search for ignition thresholds |
+| `build_m1()` | M1 | Reference curve + alignment hyperparameters |
+| `tune_m1()` | M1 | LOSO grid search for alignment hyperparameters |
+| `build_m2()` | M2 | Nested LOSO grid search for forecast spec |
+| `train_m2()` | M2 | Production GAM fit on all training seasons |
+| `assemble_kit()` | — | Bundle artifacts for deployment |
+| `run_m0()` / `run_m0_detection()` | Deploy | Ignition detection for current season |
+| `run_m1()` / `run_m1_alignment()` | Deploy | Alignment walk-forward |
+| `run_m2()` / `run_m2_forecast()` | Deploy | 1- and 2-week-ahead forecasts |
+| `run_pipeline()` / `run_prospective_pipeline()` | Deploy | Full M0→M1→M2 in one call |
+| `load_prospective_kit()` | Deploy | Load saved artifacts from disk |
+
+: {tbl-colwidths="[25,10,65]"}
