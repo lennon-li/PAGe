@@ -14,7 +14,7 @@ num_deriv(x, f, eps = 0.001)
 \item{eps}{Numeric step size (default \code{1e-3}).}
 }
 \value{
-A numeric scalar approximating \code{f*(x)}.
+A numeric scalar approximating the derivative of f at x.
 }
 \description{
 Approximates the derivative of \code{f} at \code{x} using a symmetric

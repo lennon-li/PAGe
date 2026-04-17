@@ -25,7 +25,7 @@
 #' @param f A function of a single numeric argument.
 #' @param eps Numeric step size (default \code{1e-3}).
 #'
-#' @return A numeric scalar approximating \code{f'(x)}.
+#' @return A numeric scalar approximating the derivative of f at x.
 #' @export
 num_deriv <- function(x, f, eps = 1e-3) (f(x + eps) - f(x - eps)) / (2 * eps)
 
