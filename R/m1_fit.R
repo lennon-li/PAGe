@@ -1,3 +1,23 @@
+#' Negative log-likelihood for tau/delta alignment
+#'
+#' Binomial negative log-likelihood for the time-alignment model
+#' `logit(p) = a + b * g(u)` with `u = (t - tau) / (1 + delta)`,
+#' with an optional ridge penalty on `delta`. Used as the objective inside
+#' the nonlinear optimiser in [align_forecast_pipeline_dilate()].
+#'
+#' @param par Numeric vector of parameters. When `allow_scale = TRUE`:
+#'   `c(tau, a, b, delta)`; otherwise `c(tau, a, delta)` with `b` fixed to 1.
+#' @param t Numeric vector of observation times (`newWeek`).
+#' @param y Integer vector of weekly positive counts.
+#' @param n Integer vector of weekly total tests.
+#' @param gfun Reference curve function on the logit scale.
+#' @param allow_scale Logical; if `TRUE`, estimate slope `b`
+#'   (default `TRUE`).
+#' @param lam Ridge penalty on `delta^2` (default `0.1`).
+#' @param w Numeric vector of per-observation weights
+#'   (default `n`, i.e. weight by total tests).
+#'
+#' @return A numeric scalar; the penalised binomial negative log-likelihood.
 #' @export
 negloglik_tau_delta <- function(par, t, y, n, gfun, allow_scale = TRUE,
                                 lam = 0.1, w = n) {

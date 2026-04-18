@@ -504,15 +504,17 @@ eval_out <- nested_loso_m2_eval_frozen_bias(
 
 ```{r load-production-results}
 #| eval: true
+# Production spec is v15 (see §Best spec below). v14 is retained only as a
+# fallback so this chunk still renders if the v15 cache has not been rebuilt.
 v14_path <- "../data/nested_loso_v14_production.rds"
 v15_path <- "../data/nested_loso_v15_production.rds"
 if (file.exists(v15_path)) {
   prod_results <- readRDS(v15_path)
-  cat("Grid:", nrow(prod_results$summary), "specs × 10 seasons nested LOSO (v15)\n")
+  cat("Grid:", nrow(prod_results$summary), "specs × 10 seasons nested LOSO (v15, production)\n")
 } else {
   prod_results <- readRDS(v14_path)
-  cat("Grid:", nrow(prod_results$summary), "specs × 10 seasons nested LOSO (v14, Bernoulli NLL)\n")
-  cat("(v15 not yet available)\n")
+  cat("Grid:", nrow(prod_results$summary), "specs × 10 seasons nested LOSO (v14 fallback)\n")
+  cat("(v15 cache not available — rerun scripts/run_nested_loso_v15.R to refresh)\n")
 }
 cat("Best:", prod_results$best_spec_id,
     "| mean_bernoulli_nll =", round(min(prod_results$summary$mean_nll, na.rm = TRUE), 5), "\n")

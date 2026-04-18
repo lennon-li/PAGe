@@ -1714,8 +1714,8 @@ flagPeak <- function(df,
 #' @param envir environment to load into. Defaults to parent.frame().
 #' @export
 load_refCurve <- function(envir = parent.frame()) {
-  f <- system.file("extdata", "ref_curve.RData", package = "flualign")
-  if (f == "") stop("ref_curve.RData not found in flualign")
+  f <- system.file("extdata", "ref_curve.RData", package = "PAGe")
+  if (f == "") stop("ref_curve.RData not found in PAGe")
   load(f, envir = envir)
 }
 

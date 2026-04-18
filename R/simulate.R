@@ -47,6 +47,6 @@ simulate_flu_seasons <- function(S = 10, weeks = 1:52, seed = 2025) {
 #'   \code{y}, and \code{neg}).
 #' @export
 load_flu_hist <- function() {
-  fp <- system.file("extdata", "flu_hist.csv", package = "flualign", mustWork = TRUE)
+  fp <- system.file("extdata", "flu_hist.csv", package = "PAGe", mustWork = TRUE)
   utils::read.csv(fp, stringsAsFactors = TRUE)
 }

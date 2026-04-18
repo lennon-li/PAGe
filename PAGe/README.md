@@ -32,69 +32,60 @@ library(PAGe)
 
 ## Quick Start
 
-### 1. Load data and train reference
+The high-level API is organised around **build**, **tune**, **train**,
+**assemble**, and **run**. See `vignette("intro", package = "PAGe")`
+for a runnable walkthrough.
+
+### 1. Train a kit from historical data
 ```r
 library(PAGe)
 
-# Load historical flu surveillance data
-flu_hist <- load_flu_hist()
+# Historical surveillance data shipped with the package.
+allD <- load_flu_hist()
 
-# Fit reference curve (sets global reference functions)
-fit_reference_gam(flu_hist)
+# Fit each stage.
+m0 <- build_m0(allD)                         # ignition detection
+m1 <- build_m1(allD, m0)                     # reference curve + alignment
+m2 <- train_m2(allD, m0, m1, best_spec = NULL) # forecast GAM
+
+# Bundle everything a deployment needs into one list.
+kit <- assemble_kit(m0, m1, m2)
 ```
 
-### 2. Tune alignment hyperparameters
+### 2. Retune hyperparameters (optional)
 ```r
-# Learn M1 alignment hyperparameters via LOSO cross-validation
-hyper <- learn_alignment_hyperparams(flu_hist, g_ref_fun)
+# Grid search ignition thresholds (M0) and alignment hyperparameters (M1).
+m0_tune <- tune_m0(allD)
+m1_tune <- tune_m1(allD, m0, m1)
 
-# Production hyperparameters (pre-tuned):
-# k_ref=25, temperature=0.25, slope_weight=8.0, slope_window=6, dynamic_temp=FALSE
+# Production M1 hyperparameters (already baked into build_m1):
+# k_ref = 25, temperature = 0.25, slope_weight = 8.0,
+# slope_window = 6, dynamic_temp = FALSE
 ```
 
-### 3. Demo: Forecast one season
+### 3. Weekly prospective forecast
 ```r
-# Pick a season and take only early weeks (simulating prospective setting)
-set.seed(1)
-season <- sample(levels(flu_hist$season), 1)
-currentD <- subset(flu_hist, season == season & newWeek <= 20, 
-                   select = c("newWeek", "y", "neg"))
+# A pre-built kit can be saved to disk and reloaded in production:
+saveRDS(kit, "m2_production.rds")
+kit <- readRDS("m2_production.rds")
 
-# Run M0 (ignition detection) → M1 (alignment) → forecast
-res <- align_forecast_pipeline_dilate(
-  currentD, 
-  g_ref_fun = g_ref_fun, 
-  hyper = hyper, 
-  level = 0.95
-)
-
-# Visualize
-plot_forecast(res, history = flu_hist)
-```
-
-### 4. Real-time deployment
-For weekly prospective forecasting (loading pre-trained models):
-```r
-kit <- load_prospective_kit("data/m2_production.rds")
-
-# Each week, call:
-weekly_forecast <- run_prospective_pipeline(
-  currentD = flu_hist[flu_hist$season == "2025-26" & flu_hist$weekF <= 5, ],
-  kit = kit,
-  forecast_weeks = c(1, 2)
-)
+# Each week, produce a 1–2 week ahead forecast:
+current <- getCurrentD(season = "2025-26")
+res <- run_pipeline(kit, current)
+plot_forecast(res, history = allD)
 ```
 
 ## Key Functions
 
 | Task | Function |
 |---|---|
-| **Data** | `load_flu_hist()` |
-| **M0 (Ignition)** | `run_ignition_weekly()`, `fitIgnition()` |
-| **M1 (Alignment)** | `run_alignment_prospective()`, `learn_alignment_hyperparams()` |
-| **M2 (Forecast)** | `train_stage2_joint()`, `refit_stage2_weekly()` |
-| **Pipeline** | `align_forecast_pipeline_dilate()`, `run_prospective_pipeline()` |
-| **Visualization** | `plot_forecast()`, `plot_alignment_evolution()` |
+| **Data** | `load_flu_hist()`, `getCurrentD()` |
+| **Build** | `build_m0()`, `build_m1()`, `build_m2()` |
+| **Tune** | `tune_m0()`, `tune_m1()` |
+| **Train** | `train_m2()`, `train_stage2_joint()` |
+| **Assemble** | `assemble_kit()` |
+| **Run** | `run_m0()`, `run_m1()`, `run_m2()`, `run_pipeline()` |
+| **Visualisation** | `plot_forecast()`, `plot_alignment_evolution()`, `plotRes()` |
 
 ## Documentation
 

@@ -8,13 +8,16 @@
 \description{
 Align partially observed seasonal positivity curves to a learned reference shape via profile likelihood (shift tau and optional dilation delta), then forecast the remainder of the season with sensible prediction intervals and peak timing.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/lennon-li/PAGe}
+  \item Report bugs at \url{https://github.com/lennon-li/PAGe/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: Lennon Li \email{lennon.li@oahpp.ca}
-
-Authors:
-\itemize{
-  \item ChatGPT CoAuthor
-}
 
 }
 \keyword{internal}

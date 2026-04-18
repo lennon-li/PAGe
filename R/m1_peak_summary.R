@@ -1,3 +1,18 @@
+#' Summarise the peak of an aligned seasonal fit
+#'
+#' Given a fitted alignment (shift `tau`, dilation `delta`, intercept `a`,
+#' slope `b`) and the reference template function, computes the peak week on
+#' the surveillance time axis together with a delta-method confidence
+#' interval, and the peak probability with its interval on the link scale.
+#'
+#' @param fit_obj List containing numeric scalars `tau`, `delta`, `a`, `b`.
+#' @param g_ref_fun Reference curve on the logit scale; a function of `u`.
+#' @param V_ab 2x2 covariance matrix for `(a, b)`.
+#' @param V_td 2x2 covariance matrix for `(tau, delta)`.
+#' @param level Confidence level for the intervals (default `0.95`).
+#'
+#' @return A list with elements `u_star`, `t_peak`, `t_peak_ci`, `p_peak`,
+#'   `p_peak_ci`.
 #' @export
 peak_summary_from_fit <- function(fit_obj, g_ref_fun, V_ab, V_td, level = 0.95) {
   u_star <- template_peak_u(g_ref_fun)

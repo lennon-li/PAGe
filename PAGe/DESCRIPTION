@@ -2,7 +2,9 @@ Package: PAGe
 Type: Package
 Title: Seasonal Flu Curve Alignment and Forecasting
 Version: 0.1.0
-Authors@R: c(person("Lennon", "Li", email = "lennon.li@oahpp.ca", role = c("aut", "cre")), person("ChatGPT", "CoAuthor", role = "aut"))
+Authors@R: person("Lennon", "Li", email = "lennon.li@oahpp.ca", role = c("aut", "cre"))
+URL: https://github.com/lennon-li/PAGe
+BugReports: https://github.com/lennon-li/PAGe/issues
 Description: Align partially observed seasonal positivity curves to a learned reference
   shape via profile likelihood (shift tau and optional dilation delta), then forecast
   the remainder of the season with sensible prediction intervals and peak timing.
@@ -12,6 +14,7 @@ LazyData: true
 Depends: R (>= 4.1.0)
 Imports:
     tibble,
+    data.table,
     stats,
     utils,
     graphics,
@@ -29,6 +32,8 @@ Imports:
 Suggests:
     knitr,
     kableExtra,
-    rmarkdown
+    rmarkdown,
+    testthat (>= 3.0.0)
 VignetteBuilder: knitr
-RoxygenNote: 7.3.3
+Config/testthat/edition: 3
+RoxygenNote: 7.3.2

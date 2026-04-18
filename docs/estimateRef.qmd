@@ -25,7 +25,7 @@ library(gratia)
 library(plotly)
 library(data.table)
 library(MMWRweek)
-devtools::load_all("../PAGe", quiet = TRUE)
+library(PAGe)
 
 # ---- Settings ----
 startWeek   <- 27     # MMWR week number that defines weekF = 1

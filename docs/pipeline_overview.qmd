@@ -214,7 +214,7 @@ Within each week: $M_1$ aligns → for any post-ignition state, $M_2$ forecasts 
 | [`forecast_training.html`](forecast_training.html) | Specify and tune `$M_2$`, including nested LOSO evaluation |
 | [`m1_m2_stacking.html`](m1_m2_stacking.html) | Describe how walk-forward `$M_1$` predictions replace the static `$M_2$` template feature |
 | [`prospective_deployment.html`](prospective_deployment.html) | Show the live `$M_0 \to M_1 \to M_2$` walk-forward pipeline on the current season |
-| [`run.html`](run.html) | Legacy `$M_1$`-only current-season alignment view |
+| [`run.html`](run.html) | Current-season `$M_1$` alignment view on 2025-26 data |
 | *(this document)* | Provide the cross-document map and stage-level architecture summary |
 
 ---

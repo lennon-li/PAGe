@@ -143,6 +143,17 @@ make_g_ref_mu_se <- function(gam_obj) {
   }
 }
 
+#' Summarise alignment fit as a one-row tibble
+#'
+#' Convenience formatter for the result of
+#' [align_forecast_pipeline_dilate()] or similar alignment routines.
+#'
+#' @param res List with elements `tau`, `delta`, `fallback_reason`, and
+#'   `peak` (where `peak` contains `t_peak`, `t_peak_ci`, and `p_peak`).
+#'
+#' @return A one-row tibble with columns `tau_hat`, `delta_hat`,
+#'   `fallback`, `Peak week`, `Peak week (LCL)`, `Peak week (UCL)`, and
+#'   `Peak probability`.
 #' @export
 makeTable <-function(res){
   tibble::tibble(

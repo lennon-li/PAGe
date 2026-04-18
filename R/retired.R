@@ -1714,8 +1714,8 @@ flagPeak <- function(df,
 #' @param envir environment to load into. Defaults to parent.frame().
 #' @export
 load_refCurve <- function(envir = parent.frame()) {
-  f <- system.file("extdata", "ref_curve.RData", package = "flualign")
-  if (f == "") stop("ref_curve.RData not found in flualign")
+  f <- system.file("extdata", "ref_curve.RData", package = "PAGe")
+  if (f == "") stop("ref_curve.RData not found in PAGe")
   load(f, envir = envir)
 }
 
@@ -2130,10 +2130,7 @@ plot_alignment_evolution <- function(currentSeason,
 
 
 # --- from R/m1_fit.R (fit_tau_delta_old) ---
-#' @return A list with \code{tau}, \code{a}, \code{b}, \code{delta},
-#'   \code{allow_scale}, \code{delta_on}, \code{value}, \code{status}, and
-#'   \code{predict_prob}.
-#' @keywords internal
+#' @noRd
 fit_tau_delta_old <- function(currentD, g_ref_fun,
                           tau_bounds, delta_bounds,
                           allow_scale = NULL,

@@ -1,0 +1,66 @@
+---
+title: "Getting started with PAGe"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with PAGe}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+**PAGe** (Phase-Aligned Gated Epidemic Forecasting) produces 1--2 week
+ahead forecasts of seasonal respiratory-virus percentage positivity
+from surveillance data. The pipeline is three stages run in sequence
+each week:
+
+* **M0** — ignition detection (when the season has started)
+* **M1** — alignment to a learned reference curve via shift `tau` and
+  optional dilation `delta`
+* **M2** — binomial GAM forecast with adaptive Holt EMA bias correction
+
+## Training a kit
+
+```{r}
+library(PAGe)
+
+# Historical surveillance data shipped with the package.
+allD <- load_flu_hist()
+
+# M0: ignition detection.
+m0 <- build_m0(allD)
+
+# M1: reference curve + alignment hyperparameters.
+m1 <- build_m1(allD, m0)
+
+# M2: forecast GAM (uses the pre-tuned production spec).
+m2 <- train_m2(allD, m0, m1, best_spec = NULL)
+
+# Bundle everything a deployment needs into one list.
+kit <- assemble_kit(m0, m1, m2)
+```
+
+## Weekly forecasting
+
+Given `kit` and the current season's observed weeks so far, produce a
+forecast with:
+
+```{r}
+current <- getCurrentD(season = "2025-26")
+res <- run_pipeline(kit, current)
+plot_forecast(res, history = allD)
+```
+
+## Where to read more
+
+* `docs/pipeline_overview.qmd` — architecture and notation.
+* `docs/pipeline_walkthrough.qmd` — an end-to-end training and
+  deployment walkthrough with live data.
+* `?build_m0`, `?build_m1`, `?build_m2`, `?assemble_kit`,
+  `?run_pipeline` — reference pages for the high-level API.
