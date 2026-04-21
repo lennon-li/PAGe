@@ -426,26 +426,27 @@ Predicted probabilities $\hat{p}_i$ pass through the **soft positivity ceiling**
 
 Hyperparameters were selected by nested leave-one-season-out (LOSO) cross-validation. For each held-out season, M0 detection and M1 alignment were run on the remaining training seasons; M2 was trained on those aligned predictions and evaluated on the held-out season with week-by-week Holt EMA bias correction and online season RE — exactly replicating the prospective deployment loop.
 
-Four rounds of grid search were run:
+Rounds of grid search:
 
-- **v13** (960 specs = 4×k_f × 2×k_e × 5×alpha_state × 3×k_r × 4×bias_alpha × 2×bias_beta) confirmed `alpha_state=0.30` was at the grid boundary.
-- **v13b** (15 specs) extended `alpha_state` to 0.50 and confirmed `0.30` is a genuine interior optimum under raw binomial NLL.
-- **v14** re-scored v13 results using **Bernoulli NLL** (N-invariant; prevents post-COVID high-volume seasons from dominating). `alpha_state` optimum shifted to 0.40.
-- **v14b** extended `alpha_state` under Bernoulli NLL and found the optimum is flat from 0.30–0.50 (interior).
-- **v15** (480 specs = 4×k_f × 2×k_e × 5×alpha_state × 3×k_r × 2×k_de × 2×k_sp) tested `k_de` (rate-of-change, after `dz_ema` standardization) and `k_sp` (alignment uncertainty `logit_spread`). Both new terms produced identical NLL to `k_de=0, k_sp=0`. **v14 GAM spec confirmed as production model.** `bias_alpha` was removed from the grid: it is unidentifiable in LOSO (NLL flat across 0.1–0.3) and is a deployment-time parameter, not a model structure parameter. Entry-point: `scripts/run_nested_loso_v15.R`.
+- **v13** (960 specs) confirmed `alpha_state=0.30` was at the grid boundary.
+- **v13b** (15 specs) extended `alpha_state` to 0.50 — genuine interior optimum under raw binomial NLL.
+- **v14** re-scored v13 with **Bernoulli NLL** (N-invariant; prevents post-COVID high-volume seasons from dominating). `alpha_state` optimum shifted to 0.40.
+- **v14b** extended `alpha_state` under Bernoulli NLL; optimum flat 0.30–0.50 (interior).
+- **v15** (480 specs) tested `k_de` and `k_sp`; reported best NLL = 0.406. **Later retired** — the evaluation loop had four bugs (Holt B/2 asymptote, missing dz_ema standardization, silent online-RE no-op, retrospective `iWeek` in test fold) that biased NLL low.
+- **v15-postfix** (7200 specs) re-tunes under the corrected evaluation loop: B1 Holt raw-error update, B2 `dz_ema` standardized via `feature_ranges$dz_ema_sd`, B3 online season RE correctly applied, B4 `manual_labels` split into train/test so the test fold uses prospective M0 ignition detection. `bias_alpha` is back in the grid since the corrected loop makes it identifiable; the L2 fix (walk-forward `estimateDerivs` in the test fold) was verified post-hoc and lowers the best-spec NLL from 0.5959 to 0.5796 without changing the best spec. Entry-point: `scripts/run_nested_loso_v15_postfix.R`.
 
-**Active hyperparameters (v15):**
+**Active hyperparameters (v15-postfix):**
 
-- `k_f` ∈ {2, 3, 4, 5} — basis dimension for template-position smooth `s(logit_f_eff)`; best (v14) = 4.
+- `k_f` ∈ {2, 3, 4, 5} — basis dimension for template-position smooth `s(logit_f_eff)`; best = 5.
 - `k_e` ∈ {2, 3} — basis dimension for EMA state smooth `s(z_ema)`; k_e=2 and k_e=3 tie.
-- `alpha_state` ∈ {0.30, 0.35, 0.40, 0.45, 0.50} — EMA decay for `z_ema`; best (v14b Bernoulli) = 0.40 (flat 0.30–0.50).
-- `k_r` ∈ {0, 2, 3} — basis dimension for amplitude-residual smooth `s(z_resid)`; k_r=0 loses by Bernoulli NLL ≈ 0.013 nats.
-- `k_de` ∈ {0, 2} — basis dimension for rate-of-change smooth `s(dz_ema)`; enabled after standardizing `dz_ema` to unit variance.
-- `k_sp` ∈ {0, 2} — basis dimension for alignment uncertainty smooth `s(logit_spread)`, where `logit_spread` is the weighted SD of per-template logit predictions from M1.
+- `alpha_state` ∈ {0.30, 0.35, 0.40, 0.45, 0.50} — EMA decay for `z_ema`; best = 0.40.
+- `k_r` ∈ {0, 2, 3} — basis dimension for amplitude-residual smooth `s(z_resid)`; best = 0 (residual smooth off — `z_resid` is noisier under prospective `iWeek`).
+- `k_de` ∈ {0, 2} — basis dimension for rate-of-change smooth `s(dz_ema)`; best = 0.
+- `k_sp` ∈ {0, 2} — basis dimension for alignment uncertainty smooth `s(logit_spread)`, where `logit_spread` is the weighted SD of per-template logit predictions from M1; best = 2.
+- `bias_alpha` ∈ {0.1..0.5} — EMA rate for online Holt bias correction; best = 0.5.
+- `bias_beta` ∈ {0, 0.05, 0.1} — Holt trend rate; best = 0 (level-only).
 
 **Fixed parameters:** `delta = 0`, `Kr = 1`, `lambda_w = 0`, `k_n = k_w = k_s = 0`.
-
-**Deployment-only parameter (not part of LOSO grid):** `bias_alpha` — NLL is flat across 0.1–0.3 in LOSO, making it unidentifiable as a structural parameter. It is set adaptively at deployment based on season speed (see @sec-deployment-bias).
 
 ```{r tuning-call}
 #| eval: false
@@ -471,10 +472,8 @@ m1_test <- m1_walkforward_predictions(
   dynamic_temp = FALSE, dynamic_temp_pivot = 10L
 )
 
-# --- Phase 2: train frozen GAM once per spec, evaluate with adaptive Holt bias + online RE ---
-# v15 grid: k_f × k_e × alpha_state × k_r × k_de × k_sp = 480 specs
-# bias_alpha is a deployment parameter, not part of LOSO grid (NLL flat 0.1–0.3; set adaptively per season)
-# k_de now feasible after dz_ema standardization; k_sp tests alignment uncertainty
+# --- Phase 2: train frozen GAM once per spec, evaluate with Holt bias + online RE ---
+# v15-postfix grid (7200 specs) under corrected evaluation loop (B1–B4 fixes).
 grid <- tidyr::crossing(
   delta       = 0L, Kr = 1L,
   k_f         = c(2L, 3L, 4L, 5L),
@@ -482,14 +481,15 @@ grid <- tidyr::crossing(
   alpha_state = c(0.30, 0.35, 0.40, 0.45, 0.50),
   k_r         = c(0L, 2L, 3L),
   k_de        = c(0L, 2L),
-  k_sp        = c(0L, 2L)
+  k_sp        = c(0L, 2L),
+  bias_alpha  = seq(0.1, 0.5, by = 0.1),
+  bias_beta   = c(0.0, 0.05, 0.1)
 )
-BIAS_ALPHA <- 0.4  # deployment default; tuned per season at runtime
 spec <- stage2_make_spec(
   delta = delta, Kr = Kr, T = "S", k_f = k_f, k_e = k_e,
   k_r = k_r, k_de = k_de, k_sp = k_sp, k_n = 0L, k_w = 0L, k_s = 0L,
   alpha_state = alpha_state, lambda_w = 0, w_floor = 0.05,
-  bias_alpha = BIAS_ALPHA, bias_beta = 0.0
+  bias_alpha = bias_alpha, bias_beta = bias_beta
 )
 
 m2       <- nested_loso_m2_train(fold = fold, m1_train_preds = m1_train, spec = spec)
@@ -504,20 +504,23 @@ eval_out <- nested_loso_m2_eval_frozen_bias(
 
 ```{r load-production-results}
 #| eval: true
-# Production spec is v15 (see §Best spec below). v14 is retained only as a
-# fallback so this chunk still renders if the v15 cache has not been rebuilt.
-v14_path <- "../data/nested_loso_v14_production.rds"
-v15_path <- "../data/nested_loso_v15_production.rds"
-if (file.exists(v15_path)) {
-  prod_results <- readRDS(v15_path)
-  cat("Grid:", nrow(prod_results$summary), "specs × 10 seasons nested LOSO (v15, production)\n")
+# Production spec is v15-postfix (see §Best spec below). Earlier v15 is
+# retained only as an optimistic-baseline fallback.
+v15_path       <- "../data/nested_loso_v15_production.rds"
+v15pf_path     <- "../data/nested_loso_v15_postfix_production.rds"
+if (file.exists(v15pf_path)) {
+  prod_results <- readRDS(v15pf_path)
+  cat("Grid:", nrow(prod_results$summary),
+      "specs × 10 seasons nested LOSO (v15-postfix, production)\n")
 } else {
-  prod_results <- readRDS(v14_path)
-  cat("Grid:", nrow(prod_results$summary), "specs × 10 seasons nested LOSO (v14 fallback)\n")
-  cat("(v15 cache not available — rerun scripts/run_nested_loso_v15.R to refresh)\n")
+  prod_results <- readRDS(v15_path)
+  cat("Grid:", nrow(prod_results$summary),
+      "specs × 10 seasons nested LOSO (v15 fallback — pre-fix, optimistic)\n")
+  cat("(v15-postfix cache not available — rerun scripts/run_nested_loso_v15_postfix.R)\n")
 }
 cat("Best:", prod_results$best_spec_id,
-    "| mean_bernoulli_nll =", round(min(prod_results$summary$mean_nll, na.rm = TRUE), 5), "\n")
+    "| mean_bernoulli_nll =",
+    round(min(prod_results$summary$bernoulli_nll, na.rm = TRUE), 5), "\n")
 ```
 
 ### Best spec {#sec-best-spec-interp}
@@ -527,9 +530,9 @@ cat("Best:", prod_results$best_spec_id,
 best_spec_nested <- prod_results$best_spec
 ```
 
-**Production spec (v15):** `k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0` with `delta=0, Kr=1, lambda_w=0`. Mean LOSO Bernoulli NLL = **0.40628** (480 specs, 10 seasons). v15 confirmed that neither rate-of-change (`k_de`) nor alignment uncertainty (`k_sp`) improve over the baseline spec — Bernoulli NLL is identical at 0.406 for both `k_de=0` and `k_de=2`, and for both `k_sp=0` and `k_sp=2`. The v14 GAM structure is therefore confirmed as the production model.
+**Production spec (v15-postfix):** `k_f=5, k_e=2, alpha_state=0.40, k_r=0, k_de=0, k_sp=2, bias_alpha=0.5, bias_beta=0` with `delta=0, Kr=1, lambda_w=0`. Mean LOSO Bernoulli NLL = **0.5959** (pre-L2; 7200 specs, 10 seasons) and **0.5796** (post-L2, single-spec rescore). The 47% rise relative to the retired v15 best (0.406) is the honesty penalty from the four evaluation-loop bug fixes; the prior number was optimistic, not the product of a better model. Rank-stability check: under the post-L2 loop, the production spec remains the top of the top-20 pre-L2 region with gap = 0.
 
-The model uses three effective covariates: template position (`s(logit_f_eff, k=4)`), EMA state (`s(z_ema, k=2)`, α=0.40), and amplitude residual (`s(z_resid, k=2)`). Adaptive Holt EMA bias correction (level-only, β=0.0) plus online season random effect are applied at deployment; the base smoothing rate is set per season based on observed season speed (see @sec-deployment-bias).
+The model uses three effective smooth covariates: template position (`s(logit_f_eff, k=5)`), EMA state (`s(z_ema, k=2)`, α=0.40), and alignment uncertainty (`s(logit_spread, k=2)`). The amplitude-residual smooth (`s(z_resid)`) is off in the post-fix fit — `z_resid = z_ema − logit_f_eff` becomes noisier under prospective `iWeek`, so the data prefers to drop it. Holt EMA bias correction is level-only (β=0), with `bias_alpha=0.5` chosen as the LOSO-near-optimum that trades 0.5% NLL for robustness against single-week outliers; α=1.0 minimizes LOSO NLL but degenerates to a naive last-residual carry-forward. Online season random effect is applied at deployment.
 
 **`delta = 0`, `Kr = 1` — template shift and ramp are inert.**
 All delta and Kr values produce identical NLL. With `z_resid` and bias correction absorbing amplitude and timing adjustments, these parameters have no remaining signal.
@@ -554,16 +557,16 @@ The optimum is flat from 0.30–0.50 across both v14b and v15:
 `alpha_state=0.40` chosen as the representative interior point. The model is insensitive to EMA speed across the full 0.30–0.50 range.
 
 **`k_r = 2` — amplitude residual is load-bearing.**
-`k_r=0` (drop `z_resid`) loses by Bernoulli NLL ≈ 0.013 nats. Under N-invariant scoring, `z_resid` still provides meaningful signal; `k_r=2` and `k_r=3` tie.
+`k_r=0` wins in v15-postfix. Under the corrected evaluation loop, `z_resid = z_ema − logit_f_eff` is noisier because the test fold uses prospective (not retrospective) `iWeek`, so `logit_f_eff` fluctuates as the lock-in week shifts. The data prefers to drop the residual smooth rather than carry its noise.
 
 **`k_de = 0` — rate-of-change covariate provides no benefit.**
-`k_de > 0` catastrophically failed in v13/v14 (NLL > 117) due to poor conditioning of unscaled `dz_ema`. In v15, `dz_ema` was standardized to unit variance (SD stored in `feature_ranges$dz_ema_sd`) — but even after rescaling, `k_de=2` and `k_de=0` produce identical Bernoulli NLL (0.406). The growth-rate signal is already captured by `z_resid` and the Holt bias corrector.
+`k_de > 0` catastrophically failed in v13/v14 (NLL > 117) due to poor conditioning of unscaled `dz_ema`. In v15-postfix, `dz_ema` is standardized to unit variance using the training-fold SD (stored in `feature_ranges$dz_ema_sd`) — the B2 fix that makes the standardization itself fold-honest — but `k_de=2` still ties `k_de=0` at the best NLL. The growth-rate signal is already captured by the Holt bias corrector.
 
-**`k_sp = 0` — alignment uncertainty provides no benefit.**
-`logit_spread` (weighted SD of per-template logit predictions from M1's ensemble) was tested in v15 via `k_sp ∈ {0, 2}`. `k_sp=2` and `k_sp=0` produce identical Bernoulli NLL (0.406). The alignment uncertainty from M1 does not carry additional predictive signal beyond the existing covariates.
+**`k_sp = 2` — alignment uncertainty is a load-bearing covariate.**
+`logit_spread` (weighted SD of per-template logit predictions from M1's ensemble) is now in the best spec at `k_sp=2`. Under the pre-fix v15 loop the term appeared inert; under the corrected loop it contributes non-trivially, presumably because the other uncertainty channels (`z_resid` drop, prospective `iWeek`) made alignment variance more informative.
 
-**`bias_alpha` — level-only Holt EMA, deployment parameter only.** {#sec-deployment-bias}
-`bias_beta = 0` (level-only) is set by design: the trend term provides no benefit and can cause oscillation. `bias_alpha` controls how quickly the corrector adapts to observed residuals (~`1/bias_alpha` week half-life). It is a **deployment-time parameter**, not part of the LOSO grid: under Bernoulli NLL, all values in 0.1–0.3 are indistinguishable (NLL flat at 0.406), making it unidentifiable as a structural model parameter. The appropriate value depends on the season — faster-peaking seasons (e.g. 2025-26) warrant a higher `bias_alpha` (~0.4) for quicker adaptation, while slower seasons can use a lower value (~0.2). An adaptive mechanism automatically boosts `bias_alpha` to 0.7 when ≥2 consecutive same-sign residuals are detected. The corrector resets at the first post-peak week.
+**`bias_alpha = 0.5, bias_beta = 0` — level-only Holt EMA, tuned in LOSO.** {#sec-deployment-bias}
+`bias_beta = 0` (level-only) is set by design: the trend term provides no benefit and can cause oscillation. Under the v15-postfix loop, `bias_alpha` becomes identifiable: NLL decreases monotonically across 0.5→1.0 (0.5959 → 0.5932) but the plateau is flat and α=1.0 degenerates to a naive last-residual carry-forward. We ship α=0.5 — the lower edge of the flat region — for robustness against single-week outliers, paying a 0.5% NLL cost for that margin. The corrector resets at the first post-peak week.
 
 **`lambda_w = 0` — uniform training weights.**
 Down-weighting late-season observations provides no benefit.

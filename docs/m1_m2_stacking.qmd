@@ -402,6 +402,6 @@ Compare with the [pipeline overview](pipeline_overview.html) §7:
 | 2 | Ignition detector $\hat\theta$ | Offline | *No change* |
 | 3 | $M_1$ LOSO walk-forward → `params_df` | Offline | *No change* (still needed for `k_ref` tuning) |
 | 4 | Peak detection tuning | Offline | *No change* |
-| **5** | **$M_2$ hyperparameter tuning** | **Offline** | **Use `nested_loso_build_fold()` + `nested_loso_m2_train()` + `nested_loso_m2_eval_frozen_bias()` — runs $M_1$ walk-forward per fold; 480-spec grid; bias_alpha excluded (deployment parameter)** |
+| **5** | **$M_2$ hyperparameter tuning** | **Offline** | **Use `nested_loso_build_fold()` + `nested_loso_m2_train()` + `nested_loso_m2_eval_frozen_bias()` — runs $M_1$ walk-forward per fold; v15-postfix 7200-spec grid with `bias_alpha` tuned in-loop (was deployment-only pre-fix)** |
 | **6** | **$M_2$ production fit** | **Offline** | **`nested_loso_m2_train()` on full historical data — frozen GAM saved to `m2_production.rds`** |
 | **7** | **Weekly: $M_0 \to M_1 \to M_2$** | **Online** | **`run_m0_detection()` + `run_m1_alignment()` + `run_m2_forecast()` — frozen GAM + adaptive Holt bias + online season RE** |

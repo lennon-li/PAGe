@@ -1,3 +1,8 @@
+---
+name: seasonal-forecast
+description: Train, tune, evaluate, or deploy the PAGe seasonal respiratory virus forecasting pipeline. Covers the full M0 → M1 → M2 → prospective deployment chain.
+---
+
 # Seasonal Forecast Training & Evaluation Skill
 
 Use this skill when training, tuning, evaluating, or deploying the PAGe seasonal respiratory virus forecasting pipeline. Covers the full M0 → M1 → M2 → prospective deployment chain.

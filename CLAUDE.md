@@ -63,12 +63,13 @@ k_ref=25, temperature=0.25, slope_weight=8.0, slope_window=6, dynamic_temp=FALSE
 Ensemble operates on logit scale; outputs logit_spread (alignment uncertainty)
 propagated to M2.
 
-**M2 (Forecast)** is tuned through v15. Production kit at `data/m2_production.rds`
-(v15 spec: k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0, delta=0, Kr=1).
-Frozen GAM + adaptive Holt EMA bias correction (level-only β=0; bias_alpha is a
-deployment parameter set per season, NOT part of the LOSO grid — NLL is flat across
-0.1–0.3 making it unidentifiable as a structural parameter). 480-spec nested LOSO
-(v15), Bernoulli NLL = 0.406. Entry-point: `scripts/run_nested_loso_v15.R`.
+**M2 (Forecast)** is tuned through v15-postfix. Production kit at
+`data/m2_production.rds` (v15-postfix spec: k_f=5, k_e=2, alpha_state=0.40,
+k_r=0, k_de=0, k_sp=2, delta=0, Kr=1, bias_alpha=0.5, bias_beta=0). Frozen GAM
++ adaptive Holt EMA bias correction (level-only β=0; bias_alpha=0.5 tuned via
+LOSO and robustness probe). 7200-spec nested LOSO (v15-postfix), Bernoulli NLL
+= 0.5959 pre-L2 / 0.5796 post-L2 (L2 fix: walk-forward estimateDerivs in test
+fold). Entry-point: `scripts/run_nested_loso_v15_postfix.R`.
 
 Key data for M2 development:
 - `data/m1_alignment_tuning_combined.rds` — full M1 grid (67 specs, v5–v7)

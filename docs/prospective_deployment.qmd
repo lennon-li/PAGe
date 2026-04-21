@@ -63,25 +63,8 @@ library(MMWRweek)
 library(plotly)
 library(gt)
 
-# Source all pipeline functions
-r_dir <- normalizePath("../R", mustWork = TRUE)
-r_files <- c(
-  "utils.R", "m0_retro.R", "m1_reference_helpers.R", "m1_reference.R",
-  "m1_hyperparams.R", "m1_fit.R", "identifiability.R",
-  "check_scale_identifiability.R", "m1_runtime.R",
-  "align_forecast_pipeline_dilate.R", "m1_multi_template.R",
-  "m1_peak_status.R",
-  "m1_peak_flags.R", "m1_peak_summary.R", "m0_training.R", "m1_loso.R",
-  "m2_training.R", "pipeline_runtime_helpers.R",
-  "m0_runtime.R", "m2_runtime.R", "pipeline_runtime.R",
-  "forecast_post_peak_gam.R", "m2_spec_grid.R",
-  "pipeline_bridge.R", "m2_nested_loso.R", "getCurrentD.R"
-)
-for (f in r_files) {
-  fp <- file.path(r_dir, f)
-  if (file.exists(fp)) source(fp)
-}
-source(file.path(normalizePath("../PAGe/R", mustWork = TRUE), "flagIgnition.R"))
+# Pipeline functions are provided by the installed PAGe package.
+library(PAGe)
 
 startWeek  <- 27L
 WALK_START <- 5L
@@ -89,11 +72,10 @@ DATA_DIR   <- normalizePath("../data", mustWork = TRUE)
 WF_CACHE   <- file.path(DATA_DIR, "deploy_wf_cache.rds")
 
 # ---- M2 mode ----
-# "frozen" uses the pre-trained GAM (v15 best spec: k_f=4, k_e=2,
-# alpha_state=0.40, k_r=2, k_de=0, k_sp=0) with adaptive Holt EMA bias
-# correction (base bias_alpha is a deployment parameter set per season;
-# auto-boosted to 0.7 after ≥2 consecutive same-sign residuals)
-# + online season RE at deployment time.
+# "frozen" uses the pre-trained GAM (v15-postfix best spec: k_f=5, k_e=2,
+# alpha_state=0.40, k_r=0, k_de=0, k_sp=2, bias_alpha=0.5, bias_beta=0) with
+# adaptive Holt EMA bias correction (level-only β=0) + online season RE at
+# deployment time.
 M2_MODE <- "frozen"
 
 # ---- Cache control ----

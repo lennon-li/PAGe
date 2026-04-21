@@ -120,16 +120,16 @@ build_stage2_pseudo_prospective_list <- function(
   
   has_date <- !is.null(date_col) && date_col %in% names(currentSeason)
   
-  d_truth <- dplyr::as_tibble(currentSeason) %>%
+  d_truth <- dplyr::as_tibble(currentSeason) |>
     dplyr::mutate(
       weekF = as.integer(.data$weekF),
       y     = as.integer(.data$y),
       N     = if ("N" %in% names(.)) as.integer(.data$N) else as.integer(.data$y + .data$neg),
       neg   = if ("neg" %in% names(.)) as.integer(.data$neg) else as.integer(.data$N - .data$y),
       date  = if (has_date) as.Date(.data[[date_col]]) else as.Date(NA)
-    ) %>%
-    dplyr::filter(!is.na(.data$weekF), .data$weekF >= 1L, .data$weekF <= n_weeks) %>%
-    dplyr::group_by(.data$weekF) %>%
+    ) |>
+    dplyr::filter(!is.na(.data$weekF), .data$weekF >= 1L, .data$weekF <= n_weeks) |>
+    dplyr::group_by(.data$weekF) |>
     dplyr::summarise(
       y_true   = sum(.data$y, na.rm = TRUE),
       N_true   = sum(.data$N, na.rm = TRUE),
@@ -137,14 +137,14 @@ build_stage2_pseudo_prospective_list <- function(
       p_true   = y_true / pmax(N_true, 1L),
       date_true = {x <- date; x <- x[!is.na(x)]; if (length(x)) x[1] else as.Date(NA)},
       .groups = "drop"
-    ) %>%
+    ) |>
     dplyr::arrange(.data$weekF)
   
   max_obs_weekF <- suppressWarnings(max(d_truth$weekF[is.finite(d_truth$p_true)], na.rm = TRUE))
   if (!is.finite(max_obs_weekF)) max_obs_weekF <- 0L
   max_obs_weekF <- as.integer(max_obs_weekF)
   
-  grid <- dplyr::tibble(weekF = seq.int(1L, n_weeks)) %>%
+  grid <- dplyr::tibble(weekF = seq.int(1L, n_weeks)) |>
     dplyr::left_join(d_truth, by = "weekF")
   
   if (isTRUE(align)) {
@@ -154,19 +154,19 @@ build_stage2_pseudo_prospective_list <- function(
   }
   grid$newWeek <- pmin(pmax(grid$newWeek_raw, nw_min), nw_max)
   
-  tpl <- dplyr::as_tibble(template_df) %>%
+  tpl <- dplyr::as_tibble(template_df) |>
     dplyr::transmute(newWeek = as.integer(.data$newWeek), template_fit = as.numeric(.data$fit))
-  tpl_shift <- dplyr::as_tibble(template_df) %>%
+  tpl_shift <- dplyr::as_tibble(template_df) |>
     dplyr::transmute(newWeek_shift = as.integer(.data$newWeek), template_fit_shift = as.numeric(.data$fit))
   
-  base_full <- grid %>%
-    dplyr::left_join(tpl, by = "newWeek") %>%
+  base_full <- grid |>
+    dplyr::left_join(tpl, by = "newWeek") |>
     dplyr::mutate(
       iWeek_used = as.integer(iWeek_hat),
       delta = as.integer(delta),
       newWeek_shift = pmin(pmax(.data$newWeek + .data$delta, nw_min), nw_max)
-    ) %>%
-    dplyr::left_join(tpl_shift, by = "newWeek_shift") %>%
+    ) |>
+    dplyr::left_join(tpl_shift, by = "newWeek_shift") |>
     dplyr::mutate(
       template_fit_shift = dplyr::coalesce(.data$template_fit_shift, .data$template_fit),
       phase = ifelse(.data$weekF < iWeek_hat, 0L, 1L),
@@ -174,13 +174,13 @@ build_stage2_pseudo_prospective_list <- function(
       omega   = ramp_weight(.data$t_since, K = K),
       logit_f     = logit_stable(.data$template_fit_shift, eps = eps),
       logit_f_eff = .data$omega * .data$logit_f
-    ) %>%
+    ) |>
     dplyr::arrange(.data$weekF)
   
   build_snapshot <- function(asof_weekF) {
     asof_weekF <- as.integer(asof_weekF)
     
-    d <- base_full %>%
+    d <- base_full |>
       dplyr::mutate(
         y    = dplyr::if_else(.data$weekF <= asof_weekF, .data$y_true, NA_integer_),
         N    = dplyr::if_else(.data$weekF <= asof_weekF, .data$N_true, NA_integer_),
@@ -194,7 +194,7 @@ build_stage2_pseudo_prospective_list <- function(
     
     lead_levels <- paste0("h", sort(unique(leads)))
     dplyr::bind_rows(lapply(leads, function(h) {
-      d %>% dplyr::mutate(lead = factor(paste0("h", h), levels = lead_levels))
+      d |> dplyr::mutate(lead = factor(paste0("h", h), levels = lead_levels))
     }))
   }
   
@@ -390,8 +390,8 @@ stage2_predict_series <- function(pp,
     if (!("lead" %in% names(d)))  stop("Snapshot missing lead.")
     if (!("toFit" %in% names(d))) d$toFit <- 1L
     
-    base <- d %>%
-      dplyr::arrange(.data$weekF) %>%
+    base <- d |>
+      dplyr::arrange(.data$weekF) |>
       dplyr::distinct(.data$weekF, .keep_all = TRUE)
     
     base$weekF <- as.integer(base$weekF)
@@ -418,7 +418,7 @@ stage2_predict_series <- function(pp,
     # Keep an N lookup if available (for PI)
     N_lookup <- NULL
     if ("N" %in% names(base)) {
-      N_lookup <- base %>% dplyr::select(.data$weekF, N = .data$N)
+      N_lookup <- base |> dplyr::select(.data$weekF, N = .data$N)
       N_lookup$N <- as.integer(N_lookup$N)
     }
     
@@ -438,8 +438,8 @@ stage2_predict_series <- function(pp,
     asof_weekF <- if (any(ok_fit)) max(as.integer(d$weekF[ok_fit]), na.rm = TRUE) else max(base$weekF, na.rm = TRUE)
     asof_weekF <- as.integer(asof_weekF)
     
-    d2 <- d %>%
-      dplyr::left_join(base %>% dplyr::select(.data$weekF, .data$z_ema, .data$logN_now),
+    d2 <- d |>
+      dplyr::left_join(base |> dplyr::select(.data$weekF, .data$z_ema, .data$logN_now),
                        by = "weekF")
     
     if (!"season" %in% names(d2)) {
@@ -495,7 +495,7 @@ stage2_predict_series <- function(pp,
         p_hi  = p_hi
       )
       
-      pred_wide <- pred_long %>%
+      pred_wide <- pred_long |>
         tidyr::pivot_wider(
           names_from  = .data$lead,
           values_from = c(.data$p_hat, .data$p_lo, .data$p_hi),
@@ -507,13 +507,13 @@ stage2_predict_series <- function(pp,
     w_max_pred <- if (!is.null(pred_wide)) suppressWarnings(max(pred_wide$weekF, na.rm = TRUE)) else w_max_obs
     if (!is.finite(w_max_pred)) w_max_pred <- w_max_obs
     
-    out <- tibble::tibble(weekF = seq.int(1L, as.integer(max(w_max_obs, w_max_pred)))) %>%
+    out <- tibble::tibble(weekF = seq.int(1L, as.integer(max(w_max_obs, w_max_pred)))) |>
       dplyr::left_join(
-        base %>% dplyr::select(.data$weekF, .data$newWeek, .data$date, .data$p_obs, .data$p_ref, .data$p_true),
+        base |> dplyr::select(.data$weekF, .data$newWeek, .data$date, .data$p_obs, .data$p_ref, .data$p_true),
         by = "weekF"
       )
     
-    if (!is.null(pred_wide)) out <- out %>% dplyr::left_join(pred_wide, by = "weekF")
+    if (!is.null(pred_wide)) out <- out |> dplyr::left_join(pred_wide, by = "weekF")
     
     if (any(!is.na(out$date))) {
       out <- impute_weekly(out, "weekF", "date", as.difftime(date_step_days, units = "days"))
@@ -608,15 +608,15 @@ plot_stage2 <- function(ppp,
       ref <- dplyr::tibble(snapshot = snap, x = d[[xvar]], p_ref = as.numeric(d$p_ref))
     }
     
-    pred <- d %>%
+    pred <- d |>
       dplyr::select(dplyr::all_of(c(xvar,
                                     "p_hat_h1","p_lo_h1","p_hi_h1",
-                                    "p_hat_h2","p_lo_h2","p_hi_h2"))) %>%
+                                    "p_hat_h2","p_lo_h2","p_hi_h2"))) |>
       tidyr::pivot_longer(
         cols = -dplyr::all_of(xvar),
         names_to = c(".value", "h"),
         names_pattern = "p_(hat|lo|hi)_(h[12])"
-      ) %>%
+      ) |>
       dplyr::transmute(
         snapshot = snap,
         x = .data[[xvar]],
@@ -626,8 +626,8 @@ plot_stage2 <- function(ppp,
         p_hi  = as.numeric(.data$hi)
       )
     
-    truth <- d %>%
-      dplyr::filter(.data$weekF %in% c(asof + 1L, asof + 2L)) %>%
+    truth <- d |>
+      dplyr::filter(.data$weekF %in% c(asof + 1L, asof + 2L)) |>
       dplyr::mutate(
         h = dplyr::case_when(
           .data$weekF == asof + 1L ~ "h1",
@@ -636,8 +636,8 @@ plot_stage2 <- function(ppp,
         ),
         h = factor(.data$h, levels = c("h1","h2")),
         x = .data[[xvar]]
-      ) %>%
-      dplyr::transmute(snapshot = snap, x = .data$x, h = .data$h, p_true = as.numeric(.data$p_true)) %>%
+      ) |>
+      dplyr::transmute(snapshot = snap, x = .data$x, h = .data$h, p_true = as.numeric(.data$p_true)) |>
       dplyr::filter(is.finite(.data$p_true), !is.na(.data$h))
     
     vlines <- dplyr::tibble(snapshot = snap, asof_x = asof_x, ign_x = ign_x)
@@ -648,8 +648,8 @@ plot_stage2 <- function(ppp,
   parts <- Map(function(d, name, i) build_one_long(d, name, get_ign(i)), ppp, nm, seq_along(ppp))
   
   obs_all   <- dplyr::bind_rows(lapply(parts, `[[`, "obs"))
-  pred_all  <- dplyr::bind_rows(lapply(parts, `[[`, "pred"))  %>% dplyr::filter(.data$h %in% h_plot)
-  truth_all <- dplyr::bind_rows(lapply(parts, `[[`, "truth")) %>% dplyr::filter(.data$h %in% h_plot)
+  pred_all  <- dplyr::bind_rows(lapply(parts, `[[`, "pred"))  |> dplyr::filter(.data$h %in% h_plot)
+  truth_all <- dplyr::bind_rows(lapply(parts, `[[`, "truth")) |> dplyr::filter(.data$h %in% h_plot)
   v_all     <- dplyr::bind_rows(lapply(parts, `[[`, "v"))
   ref_all   <- dplyr::bind_rows(lapply(parts, `[[`, "ref"))
   
@@ -673,8 +673,8 @@ plot_stage2 <- function(ppp,
       size = 1.2, alpha = 0.9
     )
     
-    pred2 <- pred %>%
-      dplyr::filter(is.finite(.data$p_hat), is.finite(.data$p_lo), is.finite(.data$p_hi), !is.na(.data$x)) %>%
+    pred2 <- pred |>
+      dplyr::filter(is.finite(.data$p_hat), is.finite(.data$p_lo), is.finite(.data$p_hi), !is.na(.data$x)) |>
       dplyr::arrange(.data$h, .data$x)
     
     if (show_band && nrow(pred2)) {

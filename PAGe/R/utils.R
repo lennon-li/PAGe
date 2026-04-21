@@ -242,7 +242,7 @@ mark_season_weeks <- function(res, threshold = 0.05, min_run = 1L) {
 #' @return integer vector of newWeek indices
 #' @export
 get_newWeek_from_week <- function(season_df, week_vec) {
-  key <- season_df %>%
+  key <- season_df |>
     dplyr::distinct(week, newWeek)
   
   idx <- match(week_vec, key$week)

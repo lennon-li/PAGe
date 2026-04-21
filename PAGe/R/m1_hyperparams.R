@@ -91,14 +91,14 @@ learn_alignment_hyperparams <- function(
     })
   })
 
-  stability_summary <- delta_stability %>%
-    dplyr::group_by(week_cut) %>%
-    dplyr::summarise(sd_delta = stats::sd(delta_hat, na.rm = TRUE), .groups = "drop") %>%
+  stability_summary <- delta_stability |>
+    dplyr::group_by(week_cut) |>
+    dplyr::summarise(sd_delta = stats::sd(delta_hat, na.rm = TRUE), .groups = "drop") |>
     dplyr::mutate(rel_sd = sd_delta / max(sd_delta, na.rm = TRUE))
 
-  WEEK_THRESHOLD_DELTA <- stability_summary %>%
-    dplyr::filter(rel_sd <= rel_sd_target) %>%
-    dplyr::summarise(w = if (dplyr::n() == 0) NA_real_ else min(week_cut)) %>%
+  WEEK_THRESHOLD_DELTA <- stability_summary |>
+    dplyr::filter(rel_sd <= rel_sd_target) |>
+    dplyr::summarise(w = if (dplyr::n() == 0) NA_real_ else min(week_cut)) |>
     dplyr::pull(w)
   if (is.na(WEEK_THRESHOLD_DELTA)) WEEK_THRESHOLD_DELTA <- ceiling(stats::median(obs_cuts))
 

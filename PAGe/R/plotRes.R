@@ -21,7 +21,7 @@ plotRes <-function(res,seasonIndex = NULL, peakInfo = NULL, currentSeason = NULL
   
   # passdPeak = F
   # if(!is.null(peakInfo) && !is.na(peakInfo$flag_week)){
-  #   res$pred_df = res$pred_df %>%
+  #   res$pred_df = res$pred_df |>
   #     mutate(
   #            p_hat = ifelse(kind == "forecast", NA, p_hat),
   #            p_lo = ifelse(kind == "forecast", NA, p_lo),
@@ -30,7 +30,7 @@ plotRes <-function(res,seasonIndex = NULL, peakInfo = NULL, currentSeason = NULL
   # 
   # }
   
-  res$pred_df = res$pred_df %>% left_join(currentSeason %>% select(newWeek,p)) 
+  res$pred_df = res$pred_df |> left_join(currentSeason |> select(newWeek,p)) 
 
   
   p = as.list(c(hist = "hist", ref = "ref", data = "data") )
@@ -48,7 +48,7 @@ plotRes <-function(res,seasonIndex = NULL, peakInfo = NULL, currentSeason = NULL
       color = "steelblue", linewidth = 1.2
     ) +
     geom_line(
-      data = theD %>% filter(weekF >8),
+      data = theD |> filter(weekF >8),
       aes(x = newWeek, y = fit, group = season),
       color = "grey70", linewidth = 0.6, alpha = 0.4
     ) +
@@ -78,22 +78,22 @@ plotRes <-function(res,seasonIndex = NULL, peakInfo = NULL, currentSeason = NULL
   
   
   
-xD = res$pred_df %>% left_join(currentSeason %>% select(date, newWeek = weekF)) %>%
-    add_column(season = season) %>%     
+xD = res$pred_df |> left_join(currentSeason |> select(date, newWeek = weekF)) |>
+    add_column(season = season) |>     
     mutate( date = as.Date(date),
             start_year = as.integer(substr(season, 1, 4)),
             nW_true    = n_weeks_in_start_year(start_year),
             week = ((newWeek + startWeek - 2L) %% nW_true) + 1L,
             mmwr_year  = ifelse(week >= 35L, start_year, start_year + 1L),
             Rdate      = MMWRweek2Date(mmwr_year, week, 1L),
-            date = as.Date(ifelse(is.na(date), Rdate, date)))%>% 
+            date = as.Date(ifelse(is.na(date), Rdate, date)))|> 
     left_join(ref_df)
   
-  p2= xD %>% ggplot(aes(x = date, y = p_hat)) + geom_line()  +
-             #geom_point(data = xD %>% filter(kind=="observed")) +     
+  p2= xD |> ggplot(aes(x = date, y = p_hat)) + geom_line()  +
+             #geom_point(data = xD |> filter(kind=="observed")) +     
            #  geom_ribbon(aes(ymin = p_lo, ymax = p_hi), alpha = 0.20) +
              geom_line(aes(y= p_gamm), color = "steelblue") +
-             geom_text(data = xD %>% filter(newWeek %%2 ==0),aes(y = 0.1,x= date,label = newWeek), size = 3, angle = 90) + 
+             geom_text(data = xD |> filter(newWeek %%2 ==0),aes(y = 0.1,x= date,label = newWeek), size = 3, angle = 90) + 
              geom_point(aes(x= date, y = p), color = "tomato")+
              ylab("Percentge Positivity") +xlab("Surveillance Week") +
                scale_x_date(
@@ -113,11 +113,11 @@ xD = res$pred_df %>% left_join(currentSeason %>% select(date, newWeek = weekF)) 
     ) + xlab(paste0("Week of Year (In season: ",start_week," to ", end_week,")"))
    
     
-    start_date <- as.Date(xD %>% filter(newWeek == start_week) %>% summarise(min(date)) %>% pull())
-    end_date   <- as.Date(xD %>% filter(newWeek == end_week)   %>% summarise(max(date)) %>% pull())
+    start_date <- as.Date(xD |> filter(newWeek == start_week) |> summarise(min(date)) |> pull())
+    end_date   <- as.Date(xD |> filter(newWeek == end_week)   |> summarise(max(date)) |> pull())
     
-    start <- xD %>% filter(newWeek == start_week) %>% .$week
-    end   <- xD %>% filter(newWeek == end_week)   %>% .$week
+    start <- xD |> filter(newWeek == start_week) |> pull(week)
+    end   <- xD |> filter(newWeek == end_week)   |> pull(week)
     
     p2 = p2+ annotate(
       "segment",

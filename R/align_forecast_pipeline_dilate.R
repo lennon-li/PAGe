@@ -267,7 +267,7 @@ align_forecast_pipeline_dilate <- function(currentD,
     allow_scale     = fit$allow_scale,
     delta_on        = fit$delta_on,
     nll             = fit$value,
-    pred_df         = dplyr::bind_rows(pred_obs, pred_fut) %>%
+    pred_df         = dplyr::bind_rows(pred_obs, pred_fut) |>
       dplyr::arrange(newWeek),
     last_obs        = last_obs,
     V_ab            = V_ab,

@@ -23,15 +23,15 @@ simulate_flu_seasons <- function(S = 10, weeks = 1:52, seed = 2025) {
     b = rlnorm(S, meanlog = log(1), sdlog = 0.15),
     tau = rnorm(S, mean = 0, sd = 2)
   )
-  df <- tidyr::crossing(season = season_tbl$season, newWeek = weeks) %>%
-    dplyr::left_join(season_tbl, by = "season") %>%
+  df <- tidyr::crossing(season = season_tbl$season, newWeek = weeks) |>
+    dplyr::left_join(season_tbl, by = "season") |>
     dplyr::mutate(
       n   = round(runif(dplyr::n(), 600, 1500)),
       eta = a + b * eta_template(newWeek - tau),
       p   = plogis(eta),
       y   = rbinom(dplyr::n(), size = n, prob = p),
       neg = n - y
-    ) %>%
+    ) |>
     dplyr::select(season, newWeek, y, neg)
   df
 }

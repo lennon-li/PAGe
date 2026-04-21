@@ -17,7 +17,7 @@
 plot_forecast <- function(res, history = NULL) {
   p <- ggplot2::ggplot()
   if (!is.null(history)) {
-    bg <- history %>% dplyr::mutate(p_obs = y / (y + neg))
+    bg <- history |> dplyr::mutate(p_obs = y / (y + neg))
     p <- p +
       ggplot2::geom_line(data = bg,
                          ggplot2::aes(x = newWeek, y = p_obs, group = season),

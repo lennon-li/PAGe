@@ -435,23 +435,28 @@ run_m2_forecast <- function(kit,
       logit_obs <- qlogis(pmin(pmax(p_obs_ew, 1e-6), 1 - 1e-6))
       for (pl in pred_log) {
         if (pl$target_weekF == ew) {
-          logit_pred <- qlogis(pmin(pmax(pl$m2_p, 1e-6), 1 - 1e-6))
-          resid    <- logit_obs - logit_pred
+          # B1 fix: use raw (uncorrected) logit error so the EMA level
+          # asymptotes to the true bias B, not B/2.
+          # pl$m2_eta_raw is the GAM linear predictor BEFORE bias addition.
+          err      <- logit_obs - pl$m2_eta_raw
           hkey     <- paste0("h", pl$h)
           lev_prev <- bias_level[[hkey]]
           trn_prev <- bias_trend[[hkey]]
           # Adaptive α: boost to bias_alpha_high after ≥2 consecutive same-sign
-          # residuals (model "not catching up" per user intent).
-          cur_pos <- resid > 0
+          # raw errors (model "not catching up" per user intent).
+          cur_pos <- err > 0
           if (!is.na(prev_resid_pos[[hkey]]) && cur_pos == prev_resid_pos[[hkey]]) {
             consec_ss[[hkey]] <- consec_ss[[hkey]] + 1L
           } else {
             consec_ss[[hkey]] <- 0L
           }
           prev_resid_pos[[hkey]] <- cur_pos
-          alpha_t  <- if (consec_ss[[hkey]] >= 2L) bias_alpha_high else bias_alpha
-          lev_new  <- alpha_t * resid + (1 - alpha_t) * (lev_prev + trn_prev)
-          trn_new  <- bias_beta * (lev_new - lev_prev) + (1 - bias_beta) * trn_prev
+          alpha_t <- if (consec_ss[[hkey]] >= 2L) bias_alpha_high else bias_alpha
+          # Holt level update: level tracks the running bias estimate.
+          # lev_new = (lev+trn) + alpha*(err - (lev+trn))
+          # At steady state (trn=0, beta=0): lev* = err = B. (B1 fixed)
+          lev_new <- (lev_prev + trn_prev) + alpha_t * (err - (lev_prev + trn_prev))
+          trn_new <- trn_prev + bias_beta * (lev_new - lev_prev - trn_prev)
           bias_level[[hkey]] <- lev_new
           bias_trend[[hkey]] <- trn_new
         }
@@ -526,7 +531,9 @@ run_m2_forecast <- function(kit,
                        pmax(z_ema_hist_range[1L], utils::tail(z_ema_ew, 1)))
     logN_now   <- min(log(max(obs_to_ew_base$N[obs_to_ew_base$weekF == ew], 1)),
                       logN_train_max)
-    dz_ema_now <- if (is.na(prev_z_ema)) 0 else z_ema_now - prev_z_ema
+    # B2 fix: divide dz_ema by training SD (parity with prep_stage2_joint).
+    dz_sd      <- fr$dz_ema_sd %||% 1
+    dz_ema_now <- if (is.na(prev_z_ema)) 0 else (z_ema_now - prev_z_ema) / dz_sd
     prev_z_ema <- z_ema_now
 
     # R2: update online season RE from observations accumulated to this week
@@ -578,9 +585,13 @@ run_m2_forecast <- function(kit,
         ))
       }
 
-      # Record prediction for future bias updates
+      # Record prediction for future bias updates.
+      # m2_eta_raw: GAM linear predictor BEFORE bias (bl) addition.
+      # Used by B1 fix: raw error = logit_obs - m2_eta_raw.
       pred_log[[length(pred_log) + 1L]] <<- list(
-        target_weekF = target_weekF, m2_p = pr$m2_p, h = h
+        target_weekF = target_weekF, m2_p = pr$m2_p,
+        m2_eta_raw   = qlogis(pmin(pmax(pr$m2_p, 1e-6), 1 - 1e-6)) - bl,
+        h            = h
       )
 
       tibble::tibble(

@@ -55,7 +55,7 @@ negloglik_tau_delta <- function(par, t, y, n, gfun, allow_scale = TRUE,
 #' @keywords internal
 tau_profile_se <- function(currentD, g_ref, allow_scale = FALSE,
                            h = 1e-3, tau0 = 0, tau_bounds = c(-12, 12)) {
-  dat <- currentD %>% dplyr::mutate(n = y + neg) %>% dplyr::filter(n > 0)
+  dat <- currentD |> dplyr::mutate(n = y + neg) |> dplyr::filter(n > 0)
   t <- dat$newWeek; y <- dat$y; n <- dat$n; w <- n
 
   nll_of_tau <- function(tau) {

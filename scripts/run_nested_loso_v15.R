@@ -228,17 +228,20 @@ if (Sys.getenv("SMOKE_TEST", unset = "0") == "1") {
     method         = "REML",
     verbose        = TRUE
   )
+  # B4 fix: pass training labels only (test season excluded → prospective ignition)
+  manual_labels_train_smoke <- manual_labels[setdiff(names(manual_labels), test_s)]
   eval_out <- nested_loso_m2_eval_frozen_bias(
-    allD          = allD,
-    fold          = fc$fold,
-    m2_fit        = m2_fit,
-    m1_test_preds = if (!is.null(fc$m1_test) && nrow(fc$m1_test) > 0) fc$m1_test else NULL,
-    spec          = smoke_spec,
-    eval_window   = 12L,
-    bias_alpha    = BIAS_ALPHA,
-    manual_labels = manual_labels,
-    flag_args     = flag_args,
-    verbose       = FALSE
+    allD                = allD,
+    fold                = fc$fold,
+    m2_fit              = m2_fit,
+    m1_test_preds       = if (!is.null(fc$m1_test) && nrow(fc$m1_test) > 0) fc$m1_test else NULL,
+    spec                = smoke_spec,
+    eval_window         = 12L,
+    bias_alpha          = BIAS_ALPHA,
+    manual_labels_train = manual_labels_train_smoke,
+    manual_labels_test  = NULL,
+    flag_args           = flag_args,
+    verbose             = FALSE
   )
   cat("Smoke test scores:\n")
   print(eval_out$scores)
@@ -301,18 +304,21 @@ if (length(todo_spec_ids) > 0) {
             error = function(e) NULL
           )
 
+          # B4 fix: construct per-fold train labels (exclude the held-out season).
+          manual_labels_train_fold <- manual_labels[setdiff(names(manual_labels), test_s)]
           eval_out <- tryCatch(
             nested_loso_m2_eval_frozen_bias(
-              allD          = allD,
-              fold          = fc$fold,
-              m2_fit        = m2_fit,
-              m1_test_preds = if (!is.null(fc$m1_test) && nrow(fc$m1_test) > 0) fc$m1_test else NULL,
-              spec          = spec,
-              eval_window   = 12L,
-              bias_alpha    = BIAS_ALPHA,
-              manual_labels = manual_labels,
-              flag_args     = flag_args,
-              verbose       = FALSE
+              allD                = allD,
+              fold                = fc$fold,
+              m2_fit              = m2_fit,
+              m1_test_preds       = if (!is.null(fc$m1_test) && nrow(fc$m1_test) > 0) fc$m1_test else NULL,
+              spec                = spec,
+              eval_window         = 12L,
+              bias_alpha          = BIAS_ALPHA,
+              manual_labels_train = manual_labels_train_fold,
+              manual_labels_test  = NULL,
+              flag_args           = flag_args,
+              verbose             = FALSE
             ),
             error = function(e) NULL
           )

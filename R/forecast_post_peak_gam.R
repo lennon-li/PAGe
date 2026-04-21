@@ -34,7 +34,7 @@ forecast_post_peak_gam <- function(currentSeason,
          paste(miss, collapse = ", "))
   }
   
-  df_obs <- currentSeason %>%
+  df_obs <- currentSeason |>
     dplyr::mutate(
       newWeek = as.integer(.data$newWeek),
       n       = .data$y + .data$neg
@@ -47,7 +47,7 @@ forecast_post_peak_gam <- function(currentSeason,
   # optional template on link scale
   if (!is.null(g_ref_fun)) {
     g_ref_safe <- function(u) g_ref_fun(pmin(pmax(u, 1), 52))
-    df_obs <- df_obs %>%
+    df_obs <- df_obs |>
       dplyr::mutate(
         eta_ref = g_ref_safe(.data$newWeek)
       )
@@ -79,7 +79,7 @@ forecast_post_peak_gam <- function(currentSeason,
   )
   
   if (!is.null(g_ref_fun)) {
-    grid <- grid %>%
+    grid <- grid |>
       dplyr::mutate(
         eta_ref = g_ref_safe(.data$newWeek)
       )
@@ -97,7 +97,7 @@ forecast_post_peak_gam <- function(currentSeason,
   se_eta  <- as.numeric(pred_link$se.fit)
   z       <- stats::qnorm((1 + level) / 2)
   
-  grid <- grid %>%
+  grid <- grid |>
     dplyr::mutate(
       p_hat = plogis(eta_hat),
       p_lo  = plogis(eta_hat - z * se_eta),
@@ -106,7 +106,7 @@ forecast_post_peak_gam <- function(currentSeason,
         .data$newWeek <= max(df_obs$newWeek, na.rm = TRUE),
         "observed", "forecast"
       )
-    ) %>%
+    ) |>
     dplyr::arrange(.data$newWeek)
   
   # simple peak summary on the smoothed curve

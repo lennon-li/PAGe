@@ -223,7 +223,7 @@ prep_stage2_joint <- function(dat,
   
   if (is.null(template_df) || !is.data.frame(template_df)) stop("template_df must be provided.")
   if (!all(c("newWeek","fit") %in% names(template_df))) stop("template_df must have columns newWeek, fit")
-  template_df <- template_df %>% dplyr::select(.data$newWeek, fit_ref = .data$fit)
+  template_df <- template_df |> dplyr::select(.data$newWeek, fit_ref = .data$fit)
   
   need <- c("season","weekF","phase","newWeek","y","N")
   miss <- setdiff(need, names(dat))
@@ -252,35 +252,35 @@ prep_stage2_joint <- function(dat,
   leads <- as.integer(leads)
   
   # ---- ignition from phase==1 (fallback) ----
-  ign_true <- dat %>%
-    dplyr::group_by(.data$season) %>%
+  ign_true <- dat |>
+    dplyr::group_by(.data$season) |>
     dplyr::summarise(
       iWeek_true = suppressWarnings(min(.data$weekF[.data$phase == 1L], na.rm = TRUE)),
       .groups = "drop"
     )
   
-  d0 <- dat %>%
+  d0 <- dat |>
     dplyr::left_join(ign_true, by = "season")
   
   # ---- optional override ignition week used ----
   if (!is.null(ign_week_df)) {
     stopifnot(all(c("season","iWeek_hat") %in% names(ign_week_df)))
-    ign_week_df <- ign_week_df %>%
+    ign_week_df <- ign_week_df |>
       dplyr::transmute(season = as.character(.data$season), iWeek_used = as.numeric(.data$iWeek_hat))
     
-    d0 <- d0 %>%
-      dplyr::mutate(season = as.character(.data$season)) %>%
-      dplyr::left_join(ign_week_df, by = "season") %>%
+    d0 <- d0 |>
+      dplyr::mutate(season = as.character(.data$season)) |>
+      dplyr::left_join(ign_week_df, by = "season") |>
       dplyr::mutate(iWeek_used = dplyr::coalesce(.data$iWeek_used, .data$iWeek_true))
   } else {
-    d0 <- d0 %>% dplyr::mutate(iWeek_used = .data$iWeek_true)
+    d0 <- d0 |> dplyr::mutate(iWeek_used = .data$iWeek_true)
   }
   
   # ---- core covariates ----
-  d0 <- d0 %>%
-    dplyr::filter(is.finite(.data$iWeek_used)) %>%
-    dplyr::arrange(.data$season, .data$weekF) %>%
-    dplyr::group_by(.data$season) %>%
+  d0 <- d0 |>
+    dplyr::filter(is.finite(.data$iWeek_used)) |>
+    dplyr::arrange(.data$season, .data$weekF) |>
+    dplyr::group_by(.data$season) |>
     dplyr::mutate(
       post_ign  = (.data$weekF >= (.data$iWeek_used - pre_buffer)),
       logN_now  = log(pmax(.data$N, 1L)),
@@ -295,34 +295,34 @@ prep_stage2_joint <- function(dat,
       dz_ema    = .data$z_ema - dplyr::lag(.data$z_ema, n = 1L,
                                             default = dplyr::first(.data$z_ema)),
       t_since   = as.numeric(.data$weekF - .data$iWeek_used)
-    ) %>%
-    dplyr::ungroup() %>%
-    dplyr::select(-.data$z0, -.data$z_fill) %>%
+    ) |>
+    dplyr::ungroup() |>
+    dplyr::select(-.data$z0, -.data$z_fill) |>
     dplyr::left_join(template_df, by = "newWeek")
   
   # ---- shift template by delta ----
   if (!is.na(delta) && delta != 0L) {
     n <- abs(delta)
     if (delta > 0L) {
-      d0 <- d0 %>%
-        dplyr::group_by(.data$season) %>%
-        dplyr::mutate(fit_shift = dplyr::lead(.data$fit_ref, n = n)) %>%
+      d0 <- d0 |>
+        dplyr::group_by(.data$season) |>
+        dplyr::mutate(fit_shift = dplyr::lead(.data$fit_ref, n = n)) |>
         dplyr::ungroup()
     } else {
-      d0 <- d0 %>%
-        dplyr::group_by(.data$season) %>%
-        dplyr::mutate(fit_shift = dplyr::lag(.data$fit_ref, n = n)) %>%
+      d0 <- d0 |>
+        dplyr::group_by(.data$season) |>
+        dplyr::mutate(fit_shift = dplyr::lag(.data$fit_ref, n = n)) |>
         dplyr::ungroup()
     }
   } else {
-    d0 <- d0 %>% dplyr::mutate(fit_shift = .data$fit_ref)
+    d0 <- d0 |> dplyr::mutate(fit_shift = .data$fit_ref)
   }
   
   # ---- template covariate ----
   K_eff <- if (isTRUE(use_ramp)) as.integer(K) else 1L
   
   # ---- template covariate ----
-  d0 <- d0 %>%
+  d0 <- d0 |>
     dplyr::mutate(
       # K controls ramping; convention:
       # - K <= 1: no ramp (omega=1 from ignition onward)
@@ -331,7 +331,7 @@ prep_stage2_joint <- function(dat,
       logit_f = if (isTRUE(template_on)) logit_stable(.data$fit_shift) else 0,
       logit_f_eff = .data$omega * .data$logit_f,
       z_resid = .data$z_ema - .data$logit_f_eff
-    ) %>%
+    ) |>
     dplyr::filter(is.finite(.data$z_ema), is.finite(.data$logN_now))
 
   # ---- clamp features to training ranges for LOSO/deployment parity ----
@@ -367,20 +367,20 @@ prep_stage2_joint <- function(dat,
   d0 <- dplyr::mutate(d0, dz_ema = .data$dz_ema / dze_sd)
 
   out <- lapply(leads, function(h) {
-    d0 %>%
-      dplyr::group_by(.data$season) %>%
+    d0 |>
+      dplyr::group_by(.data$season) |>
       dplyr::mutate(
         y_lead = dplyr::lead(.data$y, n = h),
         N_lead = dplyr::lead(.data$N, n = h)
-      ) %>%
-      dplyr::ungroup() %>%
+      ) |>
+      dplyr::ungroup() |>
       dplyr::mutate(
         lead = factor(paste0("h", h), levels = paste0("h", sort(unique(leads))))
-      ) %>%
+      ) |>
       dplyr::filter(!is.na(.data$y_lead), !is.na(.data$N_lead), .data$N_lead > 0)
   })
   
-  d <- dplyr::bind_rows(out) %>%
+  d <- dplyr::bind_rows(out) |>
     dplyr::mutate(
       season = factor(.data$season),
       y_lead = as.integer(.data$y_lead),
@@ -402,7 +402,7 @@ prep_stage2_joint <- function(dat,
     # Extract h integer from lead factor (e.g., "h1" → 1, "h2" → 2)
     d$.h_int <- as.integer(sub("^h", "", as.character(d$lead)))
 
-    m1_join <- m1_preds %>%
+    m1_join <- m1_preds |>
       dplyr::transmute(
         season           = as.character(.data$season),
         weekF            = as.integer(.data$eval_weekF),
@@ -411,11 +411,11 @@ prep_stage2_joint <- function(dat,
         .m1_logit_spread = if ("m1_logit_spread" %in% names(.)) as.numeric(.data$m1_logit_spread) else NA_real_
       )
 
-    d <- d %>%
-      dplyr::mutate(season_chr = as.character(.data$season)) %>%
+    d <- d |>
+      dplyr::mutate(season_chr = as.character(.data$season)) |>
       dplyr::left_join(m1_join, by = c("season_chr" = "season",
                                         "weekF" = "weekF",
-                                        ".h_int" = ".h_int")) %>%
+                                        ".h_int" = ".h_int")) |>
       dplyr::mutate(
         logit_f_eff = dplyr::if_else(
           is.finite(.data$.m1_p_hat) & !is.na(.data$.m1_p_hat),
@@ -428,7 +428,7 @@ prep_stage2_joint <- function(dat,
           0  # fallback: zero spread when not available
         ),
         z_resid = .data$z_ema - .data$logit_f_eff
-      ) %>%
+      ) |>
       dplyr::select(-dplyr::all_of(c("season_chr", ".h_int", ".m1_p_hat", ".m1_logit_spread")))
 
     if (isTRUE(verbose)) {
@@ -726,10 +726,41 @@ train_stage2_joint_prepped <- function(d_all,
 #' @export
 estimate_season_re_online <- function(fit, obs_df, ex_terms = NULL, lambda_re = 1) {
   if (nrow(obs_df) == 0L) return(0)
+
+  # B3 fix: obs_df (current-season raw obs) is missing required GAM columns.
+  # Populate them from the fitted model so predict() doesn't fail silently.
+  # TODO: lead=h1 assumes 1-week-ahead horizon; should match actual forecast h.
+  nd <- obs_df
+  if (!"lead" %in% names(nd) && "lead" %in% names(fit$model)) {
+    lev_lead <- if (is.factor(fit$model$lead))
+      levels(fit$model$lead)
+    else
+      as.character(fit$var.summary$lead[[1L]])
+    nd$lead <- factor(lev_lead[1L], levels = lev_lead)
+  }
+  if (!"season" %in% names(nd) && "season" %in% names(fit$model)) {
+    lev_seas <- levels(fit$model$season)
+    nd$season <- factor(lev_seas[1L], levels = lev_seas)
+  }
+  # Fill remaining missing numeric covariates with column medians from training.
+  model_cols <- names(fit$model)
+  for (col in setdiff(model_cols, c(names(nd), "y", "N", ".weights"))) {
+    v <- fit$model[[col]]
+    if (is.numeric(v)) {
+      nd[[col]] <- stats::median(v, na.rm = TRUE)
+    } else if (is.factor(v)) {
+      nd[[col]] <- factor(levels(v)[1L], levels = levels(v))
+    }
+  }
+
   eta_no_re <- tryCatch(
-    as.numeric(stats::predict(fit, newdata = obs_df, type = "link",
+    as.numeric(stats::predict(fit, newdata = nd, type = "link",
                               exclude = unique(c(ex_terms, "s(season)")))),
-    error = function(e) NULL
+    error = function(e) {
+      warning("[estimate_season_re_online] predict() failed: ", conditionMessage(e),
+              call. = FALSE)
+      NULL
+    }
   )
   if (is.null(eta_no_re)) return(0)
   p_obs     <- obs_df$y / pmax(obs_df$N, 1L)

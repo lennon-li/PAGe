@@ -59,10 +59,10 @@ false positive).
 \examples{
 \dontrun{
 wf     <- readRDS("data/loso_wf_cache.rds")
-allD   <- read.csv("data/flu_testing_data.csv") \%>\%
+allD   <- read.csv("data/flu_testing_data.csv") |>
   mutate(p = y / N, N = as.integer(N))
 tuning <- tune_peak_detection(wf$params_df, allD)
 # Pick smallest buffer_weeks with fp_rate == 0
-tuning \%>\% filter(fp_rate == 0) \%>\% arrange(mean_delay)
+tuning |> filter(fp_rate == 0) |> arrange(mean_delay)
 }
 }

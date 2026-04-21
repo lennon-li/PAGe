@@ -160,12 +160,12 @@ $M_2$ fits a joint binomial GAM for $h \in \{1,2\}$ on aligned-week space. Covar
 
 Hyperparameters are selected by **nested LOSO**: for each held-out season, the reference curve and all $M_1$ predictions are re-estimated on the remaining seasons only, eliminating template leakage. Phase 1 pre-computes $M_1$ predictions once per fold; Phase 2 sweeps the $M_2$ spec grid in minutes.
 
-**Tuned spec** (v15 confirmed, 480-spec nested LOSO, 10 seasons, Bernoulli NLL = 0.406):
+**Tuned spec** (v15-postfix, 7200-spec nested LOSO, 10 seasons, Bernoulli NLL = 0.5959 pre-L2 / 0.5796 post-L2):
 ```
-delta=0, Kr=1, k_f=4, k_e=2, k_r=2, k_de=0, k_sp=0
-alpha_state=0.40, lambda_w=0, w_floor=0.05
+delta=0, Kr=1, k_f=5, k_e=2, k_r=0, k_de=0, k_sp=2
+alpha_state=0.40, bias_alpha=0.5, bias_beta=0, lambda_w=0, w_floor=0.05
 ```
-Mode: **frozen GAM** (pre-trained once on all historical seasons) + **adaptive Holt EMA bias correction** (level-only, β=0; base α is a deployment parameter set per-season based on season characteristics — boosted to 0.7 after ≥2 consecutive same-sign residuals) + online season random effect, applied week-by-week at deployment. v15 confirmed that rate-of-change (`k_de`) and alignment-uncertainty (`k_sp`) terms provide no improvement over the v14 spec.
+Mode: **frozen GAM** (pre-trained once on all historical seasons) + **Holt EMA bias correction** (level-only, β=0; `bias_alpha=0.5` tuned in LOSO, chosen at the lower edge of the flat-NLL plateau for robustness) + online season random effect, applied week-by-week at deployment. The v15-postfix loop fixes four evaluation bugs (Holt asymptote, `dz_ema` standardization, silent online-RE no-op, retrospective `iWeek` leakage in test fold) that biased earlier v15 numbers low. Under the corrected loop, `k_sp` becomes load-bearing and `k_r` drops to 0 — `z_resid` is noisier with prospective `iWeek` and alignment uncertainty now contributes.
 
 **Key functions:** `nested_loso_build_fold()`, `m1_walkforward_multi()`, `nested_loso_m2_train()`, `nested_loso_m2_eval_frozen_bias()`, `prep_stage2_joint()`, `train_stage2_joint()`
 

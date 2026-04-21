@@ -155,13 +155,13 @@ estimateRef <- function(alignedD,
     if (!"fit" %in% names(dat))
       stop("method='median_smooth' requires a 'fit' column from estimateDerivs().")
     # Step 1: pointwise median of per-season smoothed fit at each newWeek
-    agg <- dat %>%
-      dplyr::group_by(newWeek) %>%
+    agg <- dat |>
+      dplyr::group_by(newWeek) |>
       dplyr::summarise(
         med_p  = stats::median(fit, na.rm = TRUE),
         n_seas = dplyr::n_distinct(season),
         .groups = "drop"
-      ) %>%
+      ) |>
       dplyr::filter(!is.na(med_p), med_p > 0)
     agg$logit_med <- stats::qlogis(pmin(pmax(agg$med_p, 1e-4), 1 - 1e-4))
     # Step 2: smooth the median curve with a single cyclic GAM (no RE needed)

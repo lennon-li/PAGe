@@ -297,9 +297,9 @@ cat(sprintf(
 ```
 
 ::: {.callout-note}
-**Production spec (v15)**: `k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0`
-— mean Bernoulli NLL = 0.406 (480-spec grid, 10 seasons). `bias_alpha` is a
-deployment parameter (fixed at 0.4), not a LOSO grid dimension.
+**Production spec (v15-postfix)**: `k_f=5, k_e=2, alpha_state=0.40, k_r=0, k_de=0, k_sp=2, bias_alpha=0.5, bias_beta=0`
+— mean Bernoulli NLL = 0.5959 pre-L2 / 0.5796 post-L2 (7200-spec grid, 10 seasons).
+`bias_alpha` is now tuned inside LOSO (was deployment-only pre-fix).
 See [`forecast_training.html`](forecast_training.html).
 :::
 
@@ -319,7 +319,7 @@ kit <- assemble_kit(
     m1_train_preds   = m2_prod$m1_train_preds,
     spec             = m2_prod$spec,
     training_seasons = m2_prod$training_seasons,
-    spec_version     = m2_prod$spec_version %||% "v15"
+    spec_version     = m2_prod$spec_version %||% "v15-postfix"
   ),
   best_spec_id  = m2_prod$best_spec_id,
   save_ref_path = "data/ref_production.rds",

@@ -14,6 +14,8 @@ nested_loso_m2_eval_frozen_bias(
   horizons = c(1L, 2L),
   bias_alpha = 0.2,
   manual_labels = NULL,
+  manual_labels_train = NULL,
+  manual_labels_test = NULL,
   flag_args = list(p_thresh = 0.01, k1 = 0.4, k_c = 0.01, n_consec = 2L, min_window =
     10L, w_min = 21L, w_max = 21L, d2_relax = -0.01),
   verbose = TRUE
@@ -40,7 +42,16 @@ columns \code{eval_weekF}, \code{target_weekF}, \code{h}, \code{m1_p_hat},
 Not read from \code{spec} — this is a deployment-time parameter fixed outside the LOSO
 spec grid. LOSO showed it is unidentifiable in-distribution (flat NLL from 0.1–0.3).}
 
-\item{manual_labels}{Optional named integer vector of manual ignition labels.}
+\item{manual_labels}{Optional named integer vector of manual ignition labels
+(deprecated; use \code{manual_labels_train} and \code{manual_labels_test}).}
+
+\item{manual_labels_train}{Optional named integer vector of manual ignition
+labels for training seasons only. Used when building training-fold ignition.
+Should exclude the held-out test season (B4 fix).}
+
+\item{manual_labels_test}{Optional named integer vector of manual ignition
+labels for the test season. Default \code{NULL} = use prospective
+\code{flagIgnition()} without override (no retrospective label leakage).}
 
 \item{flag_args}{Named list forwarded to \code{flagIgnition()}.}
 

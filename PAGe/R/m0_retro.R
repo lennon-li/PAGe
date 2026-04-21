@@ -76,8 +76,8 @@ tuneIgnitionGrid <- function(dat, grid,
   miss <- setdiff(need, names(dat))
   if (length(miss)) stop("tuneIgnitionGrid: dat missing cols: ", paste(miss, collapse = ", "))
   
-  truth <- dat %>%
-    dplyr::group_by(season) %>%
+  truth <- dat |>
+    dplyr::group_by(season) |>
     dplyr::summarise(
       iWeek_true = suppressWarnings(min(weekF[phase == 1L], na.rm = TRUE)),
       .groups = "drop"
@@ -106,7 +106,7 @@ tuneIgnitionGrid <- function(dat, grid,
     det_out <- detectIgnitionBySeason(dat, params, keep_signals = FALSE, verbose = FALSE)
     pred <- det_out$by_season[, c("season", "iWeek_hat")]
     
-    joined <- dplyr::left_join(truth, pred, by = "season") %>%
+    joined <- dplyr::left_join(truth, pred, by = "season") |>
       dplyr::mutate(
         diff = iWeek_hat - iWeek_true,
         abs_diff = abs(diff),
@@ -232,16 +232,16 @@ plot_det_facet <- function(det_out, smooth_col = NULL) {
   if (!smooth_col %in% names(df)) stop("smooth_col not found: ", smooth_col)
   
   # true + estimated ignition weeks
-  truth <- df %>%
-    group_by(season) %>%
+  truth <- df |>
+    group_by(season) |>
     summarise(iWeek_true = suppressWarnings(min(weekF[phase == 1L], na.rm = TRUE)),
               .groups = "drop")
   
-  ann <- truth %>%
-    left_join(det_out$by_season %>% select(season, iWeek_hat), by = "season")
+  ann <- truth |>
+    left_join(det_out$by_season |> select(season, iWeek_hat), by = "season")
   
   # plotting data
-  df_plot <- df %>%
+  df_plot <- df |>
     select(season, weekF, p, smoothed = all_of(smooth_col))
   
   ggplot(df_plot, aes(x = weekF)) +

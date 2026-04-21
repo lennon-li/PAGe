@@ -53,7 +53,7 @@ run_ignition_weekly <- function(currentSeason,
     gam_cls <- NULL
   }
   
-  d0 <- dplyr::as_tibble(currentSeason) %>%
+  d0 <- dplyr::as_tibble(currentSeason) |>
     dplyr::transmute(
       season = if ("season" %in% names(.)) as.character(.data$season) else NA_character_,
       weekF  = as.integer(.data[[week_col]]),
@@ -61,11 +61,11 @@ run_ignition_weekly <- function(currentSeason,
       N      = if ("N" %in% names(.)) as.integer(.data$N) else as.integer(.data$y + .data$neg),
       neg    = if ("neg" %in% names(.)) as.integer(.data$neg) else as.integer(.data$N - .data$y),
       p      = if ("p" %in% names(.)) as.numeric(.data$p) else .data$y / pmax(.data$y + .data$neg, 1L)
-    ) %>%
-    dplyr::filter(!is.na(.data$weekF), is.finite(.data$weekF), .data$weekF >= 1L) %>%
-    dplyr::mutate(weekF = pmin(.data$weekF, 52L)) %>%
-    dplyr::arrange(.data$weekF) %>%
-    dplyr::group_by(.data$season, .data$weekF) %>%
+    ) |>
+    dplyr::filter(!is.na(.data$weekF), is.finite(.data$weekF), .data$weekF >= 1L) |>
+    dplyr::mutate(weekF = pmin(.data$weekF, 52L)) |>
+    dplyr::arrange(.data$weekF) |>
+    dplyr::group_by(.data$season, .data$weekF) |>
     dplyr::summarise(
       y = sum(.data$y, na.rm = TRUE),
       N = sum(.data$N, na.rm = TRUE),
@@ -87,8 +87,8 @@ run_ignition_weekly <- function(currentSeason,
   }
   
   rows <- lapply(weeks_eval, function(w) {
-    d_now <- d0 %>%
-      dplyr::filter(.data$weekF <= w) %>%
+    d_now <- d0 |>
+      dplyr::filter(.data$weekF <= w) |>
       dplyr::mutate(p_cls_p = if (!is.null(gam_cls))
         as.numeric(stats::predict(gam_cls, newdata = ., type = "response"))
       else
@@ -228,8 +228,8 @@ plot_ignition_weekly_snapshots <- function(ign_out,
   maxWeek <- suppressWarnings(as.integer(maxWeek))
   if (!is.finite(maxWeek_in) || is.na(maxWeek)) maxWeek <- Inf
   
-  df <- df %>%
-    dplyr::mutate(weekF = as.integer(.data$weekF)) %>%
+  df <- df |>
+    dplyr::mutate(weekF = as.integer(.data$weekF)) |>
     dplyr::arrange(.data$weekF)
   
   # snapshots to include, sorted numerically
@@ -254,16 +254,16 @@ plot_ignition_weekly_snapshots <- function(ign_out,
     
     has_date <- date_col %in% names(obs) && any(!is.na(obs[[date_col]]))
     
-    obs <- obs %>%
+    obs <- obs |>
       dplyr::transmute(
         weekF = as.integer(.data[[week_col]]),
         date  = if (has_date) as.Date(.data[[date_col]]) else as.Date(NA),
         y     = if (has_yN) as.numeric(.data[[y_col]]) else NA_real_,
         N     = if (has_yN) as.numeric(.data[[N_col]]) else NA_real_,
         p_raw = if (has_p)  as.numeric(.data[[p_col]]) else NA_real_
-      ) %>%
-      dplyr::filter(is.finite(.data$weekF), .data$weekF >= start_week) %>%
-      dplyr::group_by(.data$weekF) %>%
+      ) |>
+      dplyr::filter(is.finite(.data$weekF), .data$weekF >= start_week) |>
+      dplyr::group_by(.data$weekF) |>
       dplyr::summarise(
         date = if (has_date) min(.data$date, na.rm = TRUE) else as.Date(NA),
         p = dplyr::if_else(
@@ -272,13 +272,13 @@ plot_ignition_weekly_snapshots <- function(ign_out,
           sum(.data$y, na.rm = TRUE) / pmax(sum(.data$N, na.rm = TRUE), 1)
         ),
         .groups = "drop"
-      ) %>%
+      ) |>
       dplyr::arrange(.data$weekF)
   } else {
     if (!("p_now" %in% names(df))) stop("No currentSeason provided and ign_out$df has no p_now.")
-    obs <- df %>%
-      dplyr::transmute(weekF = .data$weekF, date = as.Date(NA), p = as.numeric(.data$p_now)) %>%
-      dplyr::filter(is.finite(.data$p), .data$weekF >= start_week) %>%
+    obs <- df |>
+      dplyr::transmute(weekF = .data$weekF, date = as.Date(NA), p = as.numeric(.data$p_now)) |>
+      dplyr::filter(is.finite(.data$p), .data$weekF >= start_week) |>
       dplyr::arrange(.data$weekF)
   }
   
@@ -287,7 +287,7 @@ plot_ignition_weekly_snapshots <- function(ign_out,
   # map weekF -> date for xlim when date axis is used
   week_to_date <- function(w) {
     w <- as.integer(w)
-    m <- obs %>% dplyr::filter(!is.na(.data$date)) %>% dplyr::select(.data$weekF, .data$date)
+    m <- obs |> dplyr::filter(!is.na(.data$date)) |> dplyr::select(.data$weekF, .data$date)
     if (nrow(m) == 0) return(as.Date(NA))
     
     hit <- m$date[match(w, m$weekF)]
@@ -318,7 +318,7 @@ plot_ignition_weekly_snapshots <- function(ign_out,
     is.finite(iWeek_hat_locked) && !is.na(iWeek_hat_locked)
   
   # per-snapshot meta: snapshot factor is ordered by numeric week
-  snap_tbl <- tibble::tibble(asof_weekF = w_seq) %>%
+  snap_tbl <- tibble::tibble(asof_weekF = w_seq) |>
     dplyr::mutate(
       detected_by_now = lock_ok & (.data$asof_weekF >= ign_week_locked),
       iWeek_plot = dplyr::if_else(.data$detected_by_now, iWeek_hat_locked, NA_integer_),
@@ -328,44 +328,44 @@ plot_ignition_weekly_snapshots <- function(ign_out,
     )
   
   # attach x positions and observed p at as-of
-  snap_tbl <- snap_tbl %>%
+  snap_tbl <- snap_tbl |>
     dplyr::left_join(
-      obs %>% dplyr::transmute(weekF = .data$weekF, x = .data[[xvar]], p = .data$p),
+      obs |> dplyr::transmute(weekF = .data$weekF, x = .data[[xvar]], p = .data$p),
       by = c("asof_weekF" = "weekF")
-    ) %>%
+    ) |>
     dplyr::rename(asof_x = .data$x, asof_p = .data$p)
   
   # ignition line x position (only for detected snapshots)
-  ign_line <- snap_tbl %>%
-    dplyr::filter(.data$detected_by_now, !is.na(.data$iWeek_plot)) %>%
+  ign_line <- snap_tbl |>
+    dplyr::filter(.data$detected_by_now, !is.na(.data$iWeek_plot)) |>
     dplyr::left_join(
-      obs %>% dplyr::transmute(weekF = .data$weekF, x = .data[[xvar]]),
+      obs |> dplyr::transmute(weekF = .data$weekF, x = .data[[xvar]]),
       by = c("iWeek_plot" = "weekF")
-    ) %>%
+    ) |>
     dplyr::rename(ign_x = .data$x)
   
   # all points up to as-of (>= start_week), with red points only after locked ignition
-  plot_dat <- tidyr::crossing(asof_weekF = w_seq, weekF = obs$weekF) %>%
-    dplyr::filter(.data$weekF <= .data$asof_weekF, .data$weekF >= start_week) %>%
+  plot_dat <- tidyr::crossing(asof_weekF = w_seq, weekF = obs$weekF) |>
+    dplyr::filter(.data$weekF <= .data$asof_weekF, .data$weekF >= start_week) |>
     dplyr::left_join(
-      obs %>% dplyr::transmute(weekF = .data$weekF, x = .data[[xvar]], p = .data$p),
+      obs |> dplyr::transmute(weekF = .data$weekF, x = .data[[xvar]], p = .data$p),
       by = "weekF"
-    ) %>%
+    ) |>
     dplyr::left_join(
-      snap_tbl %>% dplyr::select(.data$asof_weekF, .data$snapshot, .data$detected_by_now, .data$iWeek_plot),
+      snap_tbl |> dplyr::select(.data$asof_weekF, .data$snapshot, .data$detected_by_now, .data$iWeek_plot),
       by = "asof_weekF"
-    ) %>%
+    ) |>
     dplyr::mutate(
       point_col = dplyr::if_else(.data$detected_by_now & !is.na(.data$iWeek_plot) & (.data$weekF >= .data$iWeek_plot),
                                  "red", "black")
-    ) %>%
+    ) |>
     dplyr::arrange(.data$asof_weekF, .data$weekF)
   
   make_one <- function(asof_w) {
     asof_w <- as.integer(asof_w)
-    dat <- plot_dat %>% dplyr::filter(.data$asof_weekF == asof_w)
-    snap_info <- snap_tbl %>% dplyr::filter(.data$asof_weekF == asof_w)
-    ign_info  <- ign_line %>% dplyr::filter(.data$asof_weekF == asof_w)
+    dat <- plot_dat |> dplyr::filter(.data$asof_weekF == asof_w)
+    snap_info <- snap_tbl |> dplyr::filter(.data$asof_weekF == asof_w)
+    ign_info  <- ign_line |> dplyr::filter(.data$asof_weekF == asof_w)
     
     p <- ggplot2::ggplot(dat, ggplot2::aes(x = .data$x, y = .data$p)) +
       ggplot2::geom_line(linewidth = 0.6, alpha = 0.6, color = "grey40", na.rm = TRUE) +

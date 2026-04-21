@@ -153,7 +153,7 @@ run_alignment_prospective <- function(
   ign_week_locked <- as.integer(ign_out$ign_week_locked)
 
   # --- Step 3: Re-anchor data to alignment (newWeek) space ---
-  currentD <- currentSeason %>%
+  currentD <- currentSeason |>
     dplyr::mutate(newWeek = as.integer(.data$weekF) - iWeek_hat + ref$anchorWeek)
 
   # --- Step 4: Guard minimum observations ---
@@ -296,11 +296,11 @@ run_alignment_prospective <- function(
 #' @examples
 #' \dontrun{
 #' wf     <- readRDS("data/loso_wf_cache.rds")
-#' allD   <- read.csv("data/flu_testing_data.csv") %>%
+#' allD   <- read.csv("data/flu_testing_data.csv") |>
 #'   mutate(p = y / N, N = as.integer(N))
 #' tuning <- tune_peak_detection(wf$params_df, allD)
 #' # Pick smallest buffer_weeks with fp_rate == 0
-#' tuning %>% filter(fp_rate == 0) %>% arrange(mean_delay)
+#' tuning |> filter(fp_rate == 0) |> arrange(mean_delay)
 #' }
 #' @export
 tune_peak_detection <- function(
@@ -311,11 +311,11 @@ tune_peak_detection <- function(
 ) {
 
   # --- True peak weekF per season from observed data ---
-  true_peaks <- allD %>%
-    dplyr::filter(!is.na(.data$p), is.finite(.data$p), .data$N > 0) %>%
-    dplyr::group_by(.data$season) %>%
-    dplyr::slice_max(.data$p, n = 1L, with_ties = FALSE) %>%
-    dplyr::ungroup() %>%
+  true_peaks <- allD |>
+    dplyr::filter(!is.na(.data$p), is.finite(.data$p), .data$N > 0) |>
+    dplyr::group_by(.data$season) |>
+    dplyr::slice_max(.data$p, n = 1L, with_ties = FALSE) |>
+    dplyr::ungroup() |>
     dplyr::select(season, true_peak_weekF = "weekF")
 
   # Restrict to rows where alignment succeeded (t_peak and iWeek_hat available)
@@ -335,7 +335,7 @@ tune_peak_detection <- function(
     bw <- as.integer(grid$buffer_weeks[i])
 
     # Compute last observed newWeek and detection threshold per row
-    det <- pdf %>%
+    det <- pdf |>
       dplyr::mutate(
         last_obs_newW = as.numeric(.data$eval_week) - as.numeric(.data$iWeek_hat) +
                         as.numeric(.data$anchorWeek),
@@ -344,18 +344,18 @@ tune_peak_detection <- function(
       )
 
     # First eval_week per season where detection fires
-    first_det <- det %>%
-      dplyr::filter(.data$detected) %>%
-      dplyr::group_by(.data$season) %>%
-      dplyr::slice_min(.data$eval_week, n = 1L, with_ties = FALSE) %>%
-      dplyr::ungroup() %>%
+    first_det <- det |>
+      dplyr::filter(.data$detected) |>
+      dplyr::group_by(.data$season) |>
+      dplyr::slice_min(.data$eval_week, n = 1L, with_ties = FALSE) |>
+      dplyr::ungroup() |>
       dplyr::select(season, detection_weekF = "eval_week")
 
     # Compute delay vs true peak for all test seasons
-    eval_df <- tibble::tibble(season = all_test_seasons) %>%
-      dplyr::left_join(true_peaks, by = "season") %>%
-      dplyr::left_join(first_det,  by = "season") %>%
-      dplyr::filter(!is.na(.data$true_peak_weekF)) %>%
+    eval_df <- tibble::tibble(season = all_test_seasons) |>
+      dplyr::left_join(true_peaks, by = "season") |>
+      dplyr::left_join(first_det,  by = "season") |>
+      dplyr::filter(!is.na(.data$true_peak_weekF)) |>
       dplyr::mutate(
         delay     = .data$detection_weekF - .data$true_peak_weekF,
         fp        = !is.na(.data$delay) & .data$delay < 0L,
@@ -448,6 +448,12 @@ tune_peak_detection <- function(
 #'   \code{p}, \code{N} — used to determine the true peak week per season.
 #' @param anchorWeek Integer. Alignment anchor week (default \code{27L}).
 #' @param level Numeric. CI level used in \code{params_df} (default \code{0.95}).
+#' @param holdout_season Character scalar or \code{NULL}. When non-\code{NULL},
+#'   rows for this season are excluded before computing the prior weights
+#'   (\eqn{\mu}, \eqn{\sigma}) and before fitting \code{bias_gam}.  Use this
+#'   inside a LOSO loop to avoid data leakage from the held-out fold.
+#'   When \code{NULL} (default), all seasons are used and behaviour is
+#'   bit-for-bit identical to the pre-fix version.
 #'
 #' @return A list with:
 #' \describe{
@@ -461,54 +467,64 @@ tune_peak_detection <- function(
 #' @examples
 #' \dontrun{
 #' wf  <- readRDS("data/loso_wf_cache.rds")
-#' allD <- read.csv("data/flu_testing_data.csv") %>%
+#' allD <- read.csv("data/flu_testing_data.csv") |>
 #'   mutate(p = pos_flua / test_flu, N = test_flu)
 #' cal <- fit_peak_calibration(wf$params_df, allD)
+#' # LOSO-safe usage (exclude held-out season):
+#' cal_fold <- fit_peak_calibration(wf$params_df, allD, holdout_season = "2022-23")
 #' # Use in production:
 #' ap  <- run_alignment_prospective(currentSeason, ref, hyper, params, cal = cal)
 #' }
 #' @export
 fit_peak_calibration <- function(params_df, allD,
-                                  anchorWeek = 27L, level = 0.95) {
+                                  anchorWeek = 27L, level = 0.95,
+                                  holdout_season = NULL) {
   z <- stats::qnorm((1 + level) / 2)
 
+  # When a holdout_season is specified, exclude it from prior and GAM fitting
+  # to prevent data leakage in LOSO evaluation loops.
+  if (!is.null(holdout_season)) {
+    params_df <- dplyr::filter(params_df, .data$season != holdout_season)
+    allD      <- dplyr::filter(allD, .data$season != holdout_season)
+  }
+
   # --- True peak weekF per season ---
-  true_peaks <- allD %>%
-    dplyr::filter(!is.na(.data$p), is.finite(.data$p), .data$N > 0) %>%
-    dplyr::group_by(.data$season) %>%
-    dplyr::slice_max(.data$p, n = 1L, with_ties = FALSE) %>%
-    dplyr::ungroup() %>%
+  true_peaks <- allD |>
+    dplyr::filter(!is.na(.data$p), is.finite(.data$p), .data$N > 0) |>
+    dplyr::group_by(.data$season) |>
+    dplyr::slice_max(.data$p, n = 1L, with_ties = FALSE) |>
+    dplyr::ungroup() |>
     dplyr::select(season, true_peak_weekF = "weekF")
 
   # --- Prior: historical distribution of true peak in newWeek space ---
   # Using iWeek_true (ground truth) as the anchor for an unbiased prior.
-  prior_df <- params_df %>%
-    dplyr::filter(!is.na(.data$iWeek_true)) %>%
-    dplyr::select(season, iWeek_true) %>%
-    dplyr::distinct() %>%
-    dplyr::left_join(true_peaks, by = "season") %>%
-    dplyr::filter(!is.na(.data$true_peak_weekF)) %>%
+  prior_df <- params_df |>
+    dplyr::filter(!is.na(.data$iWeek_true)) |>
+    dplyr::select(season, iWeek_true) |>
+    dplyr::distinct() |>
+    dplyr::left_join(true_peaks, by = "season") |>
+    dplyr::filter(!is.na(.data$true_peak_weekF)) |>
     dplyr::mutate(peak_newW = .data$true_peak_weekF - .data$iWeek_true + anchorWeek)
 
   mu_prior    <- mean(prior_df$peak_newW)
   sigma_prior <- max(stats::sd(prior_df$peak_newW), 1.0)   # floor at 1 week
 
   # --- Build calibration dataset (pre-peak rows with successful alignment) ---
-  cal_df <- params_df %>%
+  cal_df <- params_df |>
     dplyr::filter(
       !is.na(.data$t_peak), !is.na(.data$t_peak_lo), !is.na(.data$t_peak_hi),
       !is.na(.data$iWeek_true), !is.na(.data$iWeek_hat)
-    ) %>%
+    ) |>
     dplyr::mutate(
       pred_peak_weekF = round(.data$t_peak - anchorWeek + .data$iWeek_hat),
       se_hat          = pmax((.data$t_peak_hi - .data$t_peak_lo) / (2 * z), 0.1),
       t_since_ign     = .data$eval_week - .data$iWeek_true
-    ) %>%
-    dplyr::left_join(true_peaks, by = "season") %>%
+    ) |>
+    dplyr::left_join(true_peaks, by = "season") |>
     dplyr::filter(
       !is.na(.data$true_peak_weekF),
       .data$eval_week <= .data$true_peak_weekF
-    ) %>%
+    ) |>
     dplyr::mutate(
       # (C) Bayesian shrinkage toward prior
       prec_data        = 1 / .data$se_hat^2,

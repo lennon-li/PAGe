@@ -294,7 +294,7 @@ align_multi_template <- function(currentD,
     tibble::tibble()
   }
 
-  pred_df <- dplyr::bind_rows(obs_block, forecast_block) %>%
+  pred_df <- dplyr::bind_rows(obs_block, forecast_block) |>
     dplyr::arrange(newWeek)
 
   # --- 6. Ensemble peak estimate ---
@@ -444,7 +444,7 @@ run_alignment_prospective_multi <- function(
 
   # Re-anchor to alignment space
 
-  currentD <- currentSeason %>%
+  currentD <- currentSeason |>
     dplyr::mutate(newWeek = as.integer(.data$weekF) - iWeek_hat + ref$anchorWeek)
 
   if (nrow(currentD) < as.integer(min_obs))

@@ -217,9 +217,9 @@ loso_walkforward <- function(allD,
                                   peak_weight_decay = peak_weight_decay,
                                   ignition_weeks    = manual_labels)
 
-    train_outs <- res_deriv$data %>%
-      dplyr::group_by(season) %>%
-      dplyr::group_split(.keep = TRUE) %>%
+    train_outs <- res_deriv$data |>
+      dplyr::group_by(season) |>
+      dplyr::group_split(.keep = TRUE) |>
       purrr::map(~ do.call(flagIgnition,
                            c(list(df = .x, manual_labels = manual_labels), flag_args)))
 
@@ -399,12 +399,12 @@ loso_walkforward <- function(allD,
         anchorWeek      = .ref$anchorWeek
       )
 
-      forecast_row <- ap$forecast_df %>%
+      forecast_row <- ap$forecast_df |>
         dplyr::mutate(season = .test_s, eval_week = ew,
                       newWeek = as.numeric(newWeek),
                       p_hat   = as.numeric(p_hat),
                       p_lo    = as.numeric(p_lo),
-                      p_hi    = as.numeric(p_hi)) %>%
+                      p_hi    = as.numeric(p_hi)) |>
         dplyr::select(season, eval_week, newWeek, p_hat, p_lo, p_hi, kind)
 
       list(params = params_row, forecast = forecast_row)
@@ -531,11 +531,11 @@ tune_m1_alignment <- function(allD,
   }
 
   # True peak week per season (observed argmax)
-  true_peaks <- allD %>%
-    dplyr::filter(!is.na(p), is.finite(p), N > 0) %>%
-    dplyr::group_by(season) %>%
-    dplyr::slice_max(p, n = 1L, with_ties = FALSE) %>%
-    dplyr::ungroup() %>%
+  true_peaks <- allD |>
+    dplyr::filter(!is.na(p), is.finite(p), N > 0) |>
+    dplyr::group_by(season) |>
+    dplyr::slice_max(p, n = 1L, with_ties = FALSE) |>
+    dplyr::ungroup() |>
     dplyr::select(season, true_peak_weekF = weekF)
 
   # Build spec IDs
@@ -615,9 +615,9 @@ tune_m1_alignment <- function(allD,
         n_seasons       = 0L
       )
     } else {
-      base_df <- wf$params_df %>%
-        dplyr::left_join(true_peaks, by = "season") %>%
-        dplyr::filter(!is.na(true_peak_weekF), eval_week <= true_peak_weekF) %>%
+      base_df <- wf$params_df |>
+        dplyr::left_join(true_peaks, by = "season") |>
+        dplyr::filter(!is.na(true_peak_weekF), eval_week <= true_peak_weekF) |>
         dplyr::mutate(
           t      = eval_week - iWeek_true,
           w_unif = 1,
@@ -626,13 +626,13 @@ tune_m1_alignment <- function(allD,
         )
 
       # Score using weighted mean peak
-      score_mean <- base_df %>%
-        dplyr::filter(!is.na(t_peak)) %>%
+      score_mean <- base_df |>
+        dplyr::filter(!is.na(t_peak)) |>
         dplyr::mutate(error = abs(round(t_peak - anchorWeek + iWeek_hat) - true_peak_weekF))
 
       # Score using weighted median peak
-      score_med <- base_df %>%
-        dplyr::filter(!is.na(t_peak_median)) %>%
+      score_med <- base_df |>
+        dplyr::filter(!is.na(t_peak_median)) |>
         dplyr::mutate(error = abs(round(t_peak_median - anchorWeek + iWeek_hat) - true_peak_weekF))
 
       wmae <- function(df, w_col) {
@@ -673,10 +673,10 @@ tune_m1_alignment <- function(allD,
     grid,
     all_scores,
     by = "spec_id"
-  ) %>%
+  ) |>
     dplyr::arrange(mae_weibull)
 
-  best <- scores %>% dplyr::slice_min(mae_weibull, n = 1L, with_ties = FALSE)
+  best <- scores |> dplyr::slice_min(mae_weibull, n = 1L, with_ties = FALSE)
 
   if (verbose) {
     message(sprintf("\n[tune_m1] Best spec: %s  mae_weibull = %.4f",

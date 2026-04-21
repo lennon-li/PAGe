@@ -18,9 +18,9 @@
 checkSeasonLength<-function(dat,thresh= 0.05,inclusive  = F) {
 
 
-  dat %>% mutate(p = y/N, week = weekF) %>%
-    arrange(season, week) %>%
-    group_by(season) %>%
+  dat |> mutate(p = y/N, week = weekF) |>
+    arrange(season, week) |>
+    group_by(season) |>
     summarise(
       start_week = {
         p_vec <- p

@@ -4,7 +4,13 @@
 \alias{fit_peak_calibration}
 \title{Fit peak calibration model from LOSO walk-forward results}
 \usage{
-fit_peak_calibration(params_df, allD, anchorWeek = 27L, level = 0.95)
+fit_peak_calibration(
+  params_df,
+  allD,
+  anchorWeek = 27L,
+  level = 0.95,
+  holdout_season = NULL
+)
 }
 \arguments{
 \item{params_df}{Tibble from \code{loso_walkforward()$params_df}.}
@@ -15,6 +21,13 @@ fit_peak_calibration(params_df, allD, anchorWeek = 27L, level = 0.95)
 \item{anchorWeek}{Integer. Alignment anchor week (default \code{27L}).}
 
 \item{level}{Numeric. CI level used in \code{params_df} (default \code{0.95}).}
+
+\item{holdout_season}{Character scalar or \code{NULL}. When non-\code{NULL},
+rows for this season are excluded before computing the prior weights
+(\eqn{\mu}, \eqn{\sigma}) and before fitting \code{bias_gam}.  Use this
+inside a LOSO loop to avoid data leakage from the held-out fold.
+When \code{NULL} (default), all seasons are used and behaviour is
+bit-for-bit identical to the pre-fix version.}
 }
 \value{
 A list with:
@@ -43,9 +56,11 @@ to calibrate real-time peak estimates.
 \examples{
 \dontrun{
 wf  <- readRDS("data/loso_wf_cache.rds")
-allD <- read.csv("data/flu_testing_data.csv") \%>\%
+allD <- read.csv("data/flu_testing_data.csv") |>
   mutate(p = pos_flua / test_flu, N = test_flu)
 cal <- fit_peak_calibration(wf$params_df, allD)
+# LOSO-safe usage (exclude held-out season):
+cal_fold <- fit_peak_calibration(wf$params_df, allD, holdout_season = "2022-23")
 # Use in production:
 ap  <- run_alignment_prospective(currentSeason, ref, hyper, params, cal = cal)
 }

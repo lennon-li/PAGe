@@ -49,16 +49,16 @@ getCurrentD <- function(data= "https://ws1.publichealthontario.ca/appdata/powerb
   
 
 
-  currentD<- read.csv(data) %>% select(week = Surveillance.week, 
+  currentD<- read.csv(data) |> select(week = Surveillance.week, 
                           season = Surveillance.period, 
                          N = Total...of.tests, 
                          y = X..of.positive.tests,
                          PHU = Public.health.unit,
-                         Virus) %>% 
-        filter(Virus == virus) %>%
-        group_by(season, week) %>% summarise( N = sum(N), y = sum(y)) %>% 
-        ungroup() %>% filter(season %in% c(season, prev_season)) %>%
-        group_by(season) %>% 
+                         Virus) |> 
+        filter(Virus == virus) |>
+        group_by(season, week) |> summarise( N = sum(N), y = sum(y)) |> 
+        ungroup() |> filter(season %in% c(season, prev_season)) |>
+        group_by(season) |> 
         mutate( neg = N-y,
                 p = y/N,
                 start_year = as.integer(substr(season, 1, 4)),
@@ -69,11 +69,11 @@ getCurrentD <- function(data= "https://ws1.publichealthontario.ca/appdata/powerb
                 weekF      = ((week - startWeek) %% nW_true) + 1L,
                 cYear      = as.factor(lubridate::year(Rdate)),
                 newWeek    = weekF
-        )  %>%  ungroup() %>% arrange(season, weekS, Rdate) %>% 
-        filter(Rdate > date) %>% rename(date = Rdate)
+        )  |>  ungroup() |> arrange(season, weekS, Rdate) |> 
+        filter(Rdate > date) |> rename(date = Rdate)
         
   if(!is.na(lastWeek)){
-    currentD = currentD %>% filter(week <= lastWeek)
+    currentD = currentD |> filter(week <= lastWeek)
   }
   
   
