@@ -408,7 +408,7 @@ prep_stage2_joint <- function(dat,
         weekF            = as.integer(.data$eval_weekF),
         .h_int           = as.integer(.data$h),
         .m1_p_hat        = as.numeric(.data$m1_p_hat),
-        .m1_logit_spread = if ("m1_logit_spread" %in% names(.)) as.numeric(.data$m1_logit_spread) else NA_real_
+        .m1_logit_spread =  if ("m1_logit_spread" %in% names(m1_preds)) as.numeric(.data$m1_logit_spread) else NA_real_
       )
 
     d <- d |>

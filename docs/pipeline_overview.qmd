@@ -136,7 +136,7 @@ The factor-smooth (`"fs"`) method fits a GAM with `s(newWeek, season, bs="fs", x
 
 All $M_1$ hyperparameters are tuned by leave-one-season-out walk-forward evaluation (67-config grid across v5–v7): each fold re-estimates the reference curve excluding the held-out season, then walks forward week by week producing `params_df`. Peak MAE under Weibull weighting is the primary metric.
 
-**Locked configuration:** `k_ref=25`, `temperature=0.25`, `shift=0`, `slope_window=6`, `slope_weight=8` → Weibull peak MAE = 1.275 weeks. The slope-similarity bonus (weighting templates by matching current growth rate) is the primary driver of improvement from the 1.929 baseline.
+**Locked configuration:** `k_ref=25`, `temperature=0.25`, `shift=0`, `slope_window=6`, `slope_weight=8` → Weibull peak MAE = 1.338 weeks. The slope-similarity bonus (weighting templates by matching current growth rate) is the primary driver of improvement from the 1.929 baseline. (Earlier runs reported 1.275 using probability-scale ensemble averaging; the current code uses logit-scale averaging, raising the MAE slightly while respecting binomial model geometry.)
 
 **Key functions:** `loso_walkforward()`, `tune_m1_alignment()`
 
@@ -160,12 +160,12 @@ $M_2$ fits a joint binomial GAM for $h \in \{1,2\}$ on aligned-week space. Covar
 
 Hyperparameters are selected by **nested LOSO**: for each held-out season, the reference curve and all $M_1$ predictions are re-estimated on the remaining seasons only, eliminating template leakage. Phase 1 pre-computes $M_1$ predictions once per fold; Phase 2 sweeps the $M_2$ spec grid in minutes.
 
-**Tuned spec** (v15-postfix, 7200-spec nested LOSO, 10 seasons, Bernoulli NLL = 0.5959 pre-L2 / 0.5796 post-L2):
+**Tuned spec** (v15-postfix + boundary expansion, 192-spec focused LOSO + 5 expansion rounds, 10 seasons, Bernoulli NLL = 0.5959 pre-L2 / 0.5796 post-L2 / 0.5763 post-expansion):
 ```
-delta=0, Kr=1, k_f=5, k_e=2, k_r=0, k_de=0, k_sp=2
-alpha_state=0.40, bias_alpha=0.5, bias_beta=0, lambda_w=0, w_floor=0.05
+delta=0, Kr=1, k_f=6, k_e=2, k_r=0, k_de=0, k_sp=2
+alpha_state=0.35, bias_alpha=1.0, bias_beta=0, lambda_w=0, w_floor=0.05
 ```
-Mode: **frozen GAM** (pre-trained once on all historical seasons) + **Holt EMA bias correction** (level-only, β=0; `bias_alpha=0.5` tuned in LOSO, chosen at the lower edge of the flat-NLL plateau for robustness) + online season random effect, applied week-by-week at deployment. The v15-postfix loop fixes four evaluation bugs (Holt asymptote, `dz_ema` standardization, silent online-RE no-op, retrospective `iWeek` leakage in test fold) that biased earlier v15 numbers low. Under the corrected loop, `k_sp` becomes load-bearing and `k_r` drops to 0 — `z_resid` is noisier with prospective `iWeek` and alignment uncertainty now contributes.
+Mode: **frozen GAM** (EDF≈26, pre-trained once on all historical seasons) + **Holt EMA bias correction** (level-only, β=0; `bias_alpha=1.0` — boundary expansion showed monotone NLL improvement across the full 0.1–1.0 range; full single-step correction, no smoothing) + online season random effect, applied week-by-week at deployment. The v15-postfix loop fixes four evaluation bugs (Holt asymptote, `dz_ema` standardization, silent online-RE no-op, retrospective `iWeek` leakage in test fold) that biased earlier v15 numbers low. Under the corrected loop, `k_sp` becomes load-bearing and `k_r` drops to 0 — `z_resid` is noisier with prospective `iWeek` and alignment uncertainty now contributes.
 
 **Key functions:** `nested_loso_build_fold()`, `m1_walkforward_multi()`, `nested_loso_m2_train()`, `nested_loso_m2_eval_frozen_bias()`, `prep_stage2_joint()`, `train_stage2_joint()`
 

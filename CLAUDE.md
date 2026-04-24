@@ -59,17 +59,17 @@ alignment-derived covariates from M1.
 **M0 (Ignition)** and **M1 (Alignment)** are complete and tuned. M1 uses
 multi-template ensemble alignment with slope-similarity weighting:
 k_ref=25, temperature=0.25, slope_weight=8.0, slope_window=6, dynamic_temp=FALSE, ref_method="fs"
-(LOSO Weibull-weighted peak MAE = 1.275 weeks across 67-spec grid search, v5–v7).
+(LOSO Weibull-weighted peak MAE = 1.338 weeks across 67-spec grid search, v5–v7; logit-scale ensemble).
 Ensemble operates on logit scale; outputs logit_spread (alignment uncertainty)
 propagated to M2.
 
-**M2 (Forecast)** is tuned through v15-postfix. Production kit at
-`data/m2_production.rds` (v15-postfix spec: k_f=5, k_e=2, alpha_state=0.40,
-k_r=0, k_de=0, k_sp=2, delta=0, Kr=1, bias_alpha=0.5, bias_beta=0). Frozen GAM
-+ adaptive Holt EMA bias correction (level-only β=0; bias_alpha=0.5 tuned via
-LOSO and robustness probe). 7200-spec nested LOSO (v15-postfix), Bernoulli NLL
-= 0.5959 pre-L2 / 0.5796 post-L2 (L2 fix: walk-forward estimateDerivs in test
-fold). Entry-point: `scripts/run_nested_loso_v15_postfix.R`.
+**M2 (Forecast)** is tuned through v15-postfix + boundary expansion. Production kit at
+`data/m2_production.rds` (spec: k_f=6, k_e=2, alpha_state=0.35,
+k_r=0, k_de=0, k_sp=2, delta=0, Kr=1, bias_alpha=1.0, bias_beta=0). Frozen GAM
+(EDF≈26) + adaptive Holt EMA bias correction (level-only β=0; bias_alpha=1.0 from
+boundary expansion). 192-spec focused LOSO + 5 expansion rounds, Bernoulli NLL =
+0.5959 pre-L2 / 0.5796 post-L2 / 0.5763 post-expansion (k_f 5→6, as 0.40→0.35,
+ba 0.5→1.0). Entry-point: `scripts/run_nested_loso_v15_postfix.R`.
 
 Key data for M2 development:
 - `data/m1_alignment_tuning_combined.rds` — full M1 grid (67 specs, v5–v7)

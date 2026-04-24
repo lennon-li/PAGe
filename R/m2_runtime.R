@@ -124,8 +124,8 @@ build_stage2_pseudo_prospective_list <- function(
     dplyr::mutate(
       weekF = as.integer(.data$weekF),
       y     = as.integer(.data$y),
-      N     = if ("N" %in% names(.)) as.integer(.data$N) else as.integer(.data$y + .data$neg),
-      neg   = if ("neg" %in% names(.)) as.integer(.data$neg) else as.integer(.data$N - .data$y),
+      N     = if ("N" %in% names(currentSeason)) as.integer(.data$N) else as.integer(.data$y + .data$neg),
+      neg   = if ("neg" %in% names(currentSeason)) as.integer(.data$neg) else as.integer(.data$N - .data$y),
       date  = if (has_date) as.Date(.data[[date_col]]) else as.Date(NA)
     ) |>
     dplyr::filter(!is.na(.data$weekF), .data$weekF >= 1L, .data$weekF <= n_weeks) |>

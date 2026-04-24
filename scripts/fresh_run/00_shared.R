@@ -19,9 +19,10 @@ suppressPackageStartupMessages({
 
 for (f in c(
   "R/utils.R", "R/m0_retro.R", "R/m0_training.R", "R/flagIgnition.R",
-  "R/m1_reference_helpers.R", "R/m1_reference.R",
+  "R/m1_reference_helpers.R", "R/m1_reference.R", "R/m1_hyperparams.R",
   "R/m1_multi_template.R", "R/m1_loso.R", "R/m1_fit.R",
-  "R/m2_spec_grid.R", "R/m2_training.R", "R/m2_nested_loso.R",
+  "R/m2_spec_grid.R", "R/m2_training.R",
+  "R/m2_loso_utils.R", "R/m2_loso_fold.R", "R/m2_loso_eval.R", "R/m2_loso_cv.R",
   "R/pipeline_bridge.R", "R/pipeline_runtime_helpers.R",
   "R/pipeline_runtime.R"
 )) source(f)

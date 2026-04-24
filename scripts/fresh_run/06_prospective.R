@@ -54,6 +54,13 @@ cat("\nSaved: data/fresh_deploy_wf_cache.rds\n")
 
 # ---- Comparison ----
 cat("\n=== Comparison vs gold (data/deploy_wf_cache.rds) ===\n")
+# NOTE (D2): deploy_wf_cache.rds was built on 2026-04-16 with pre-B3 code in
+# which estimate_season_re_online() silently returned 0 (predict() failed with
+# "object 'season' not found" because obs_df lacked GAM columns).  The B3 fix
+# populates missing columns so predict() now succeeds, yielding re_hat ≈ −2.03
+# at eval_week=19 from pre-ignition observations.  This is the primary driver of
+# Max|M2 forecast delta| ≈ 0.22; it is expected and correct — deploy_wf_cache is
+# NOT a valid B3-corrected baseline.  See also the kf5-corrected comparison below.
 gold_wf <- readRDS("data/deploy_wf_cache.rds")
 
 # Only compare common eval weeks (live data may have grown)
@@ -114,6 +121,34 @@ if (length(ema_col) > 0) {
     cat("Bias same-sign fraction (gold vs fresh):", round(same_sign, 3),
         "(should be ~1.0)\n")
   }
+}
+
+# ---- Fair comparison: kf5 spec + current (B3-fixed) code ----
+cat("\n=== Fair comparison: kf5 backup kit + current code ===\n")
+cat("(Same B3-fixed estimate_season_re_online as fresh; only spec/training differs)\n")
+kit_kf5 <- load_prospective_kit(data_dir = "data")
+m2_kf5_bk <- readRDS("data/m2_production_v15postfix_kf5_backup.rds")
+kit_kf5$m2_production <- m2_kf5_bk
+kit_kf5$best_spec     <- m2_kf5_bk$spec
+kit_kf5$m2            <- m2_kf5_bk
+wf_kf5 <- run_prospective_pipeline(
+  kit = kit_kf5, current_data = currentD,
+  walk_start = 5L, manual_ign_week = NA_integer_,
+  mode = "frozen", verbose = FALSE
+)
+common_kf5 <- intersect(fresh_wf$params_df$eval_week, wf_kf5$params_df$eval_week)
+if (!is.null(fresh_wf$m2_preds) && !is.null(wf_kf5$m2_preds)) {
+  cmp_kf5 <- dplyr::inner_join(
+    dplyr::filter(fresh_wf$m2_preds, eval_week %in% common_kf5),
+    dplyr::filter(wf_kf5$m2_preds,   eval_week %in% common_kf5),
+    by = c("eval_week", "h"), suffix = c(".fresh_kf6", ".kf5")
+  ) |> dplyr::mutate(delta = m2_p.fresh_kf6 - m2_p.kf5)
+  cat("kf5 (B3-corrected) vs fresh kf6 — Max |M2 delta|:",
+      round(max(abs(cmp_kf5$delta), na.rm = TRUE), 4),
+      "(warn if > 0.05 — indicates spec-driven shift)\n")
+  peak_kf5   <- max(wf_kf5$m2_preds$m2_p,    na.rm = TRUE)
+  peak_fresh <- max(fresh_wf$m2_preds$m2_p,   na.rm = TRUE)
+  cat("Peak m2_p — kf5:", round(peak_kf5, 4), "| fresh kf6:", round(peak_fresh, 4), "\n")
 }
 
 cat("\nEnd:", format(Sys.time()), "\n")

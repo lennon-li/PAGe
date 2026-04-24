@@ -237,8 +237,12 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
     dz_ema_now <- if (is.na(prev_z_ema)) 0 else (z_ema_now - prev_z_ema) / dz_sd
     prev_z_ema  <- z_ema_now
 
-    # R2: online season RE from observations to this week
-    re_hat_loso <- estimate_season_re_online(fit = fit_obj, obs_df = obs_arr,
+    # R2: online season RE from post-ignition observations only.
+    # Pre-ignition obs (weekF < iWeek_used) inflate the negative RE.
+    obs_arr_post <- dplyr::filter(obs_arr, .data$weekF >= iWeek_used)
+    re_hat_loso <- estimate_season_re_online(fit = fit_obj,
+                                             obs_df = if (nrow(obs_arr_post) > 0L)
+                                               obs_arr_post else obs_arr,
                                              ex_terms = ex_terms)
 
     for (h in as.integer(horizons)) {

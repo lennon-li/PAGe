@@ -55,12 +55,12 @@ run_ignition_weekly <- function(currentSeason,
   
   d0 <- dplyr::as_tibble(currentSeason) |>
     dplyr::transmute(
-      season = if ("season" %in% names(.)) as.character(.data$season) else NA_character_,
+      season = if ("season" %in% names(currentSeason)) as.character(.data$season) else NA_character_,
       weekF  = as.integer(.data[[week_col]]),
       y      = as.integer(.data$y),
-      N      = if ("N" %in% names(.)) as.integer(.data$N) else as.integer(.data$y + .data$neg),
-      neg    = if ("neg" %in% names(.)) as.integer(.data$neg) else as.integer(.data$N - .data$y),
-      p      = if ("p" %in% names(.)) as.numeric(.data$p) else .data$y / pmax(.data$y + .data$neg, 1L)
+      N      = if ("N" %in% names(currentSeason)) as.integer(.data$N) else as.integer(.data$y + .data$neg),
+      neg    = if ("neg" %in% names(currentSeason)) as.integer(.data$neg) else as.integer(.data$N - .data$y),
+      p      = if ("p" %in% names(currentSeason)) as.numeric(.data$p) else .data$y / pmax(.data$y + .data$neg, 1L)
     ) |>
     dplyr::filter(!is.na(.data$weekF), is.finite(.data$weekF), .data$weekF >= 1L) |>
     dplyr::mutate(weekF = pmin(.data$weekF, 52L)) |>

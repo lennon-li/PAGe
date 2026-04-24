@@ -536,8 +536,13 @@ run_m2_forecast <- function(kit,
     dz_ema_now <- if (is.na(prev_z_ema)) 0 else (z_ema_now - prev_z_ema) / dz_sd
     prev_z_ema <- z_ema_now
 
-    # R2: update online season RE from observations accumulated to this week
-    re_hat <- estimate_season_re_online(fit = fit_ew, obs_df = obs_to_ew_base,
+    # R2: update online season RE from post-ignition observations only.
+    # Pre-ignition obs (weekF < iWeek_hat) are outside GAM training domain and
+    # create a spuriously negative RE when early-season positivity is low.
+    obs_post_ign <- dplyr::filter(obs_to_ew_base, weekF >= iWeek_hat)
+    re_hat <- estimate_season_re_online(fit = fit_ew,
+                                        obs_df = if (nrow(obs_post_ign) > 0L)
+                                          obs_post_ign else obs_to_ew_base,
                                         ex_terms = ex_terms)
 
     ew_result <- dplyr::bind_rows(lapply(horizons, function(h) {

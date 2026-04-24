@@ -5,7 +5,7 @@
 #             saves to data/fresh_* paths; updates fresh_ref_production.rds.
 #
 # Reads:   data/fresh_m0_tuning.rds
-#          data/fresh_nested_loso_v15_production.rds
+#          data/fresh_nested_loso_v15_postfix_production.rds  (v15-postfix L2-fix results)
 #          data/fresh_ref_production.rds
 # Output:  data/fresh_m2_production.rds
 #          data/fresh_ref_production.rds (updated with m1_train_preds + M2 spec)
@@ -75,26 +75,29 @@ saveRDS(list(
 cat("Saved data/fresh_ref_production.rds\n\n")
 
 # ---- M2 best spec (from fresh LOSO results) ----
-cat("M2: loading best spec from fresh v15 LOSO...\n")
-v15_path <- "data/fresh_nested_loso_v15_production.rds"
+cat("M2: loading best spec from fresh v15-postfix LOSO...\n")
+v15_path <- "data/fresh_nested_loso_v15_postfix_production.rds"
 if (file.exists(v15_path)) {
   v15           <- readRDS(v15_path)
   best_spec_obj <- v15$best_spec
   best_spec_id  <- v15$best_spec_id
-  spec_version  <- "v15_fresh"
-  cat("Using fresh v15 best spec:", best_spec_id, "\n")
+  # Override bias_alpha to 1.0 — boundary expansion showed monotone NLL improvement to 1.0
+  best_spec_obj$bias_alpha <- 1.0
+  best_spec_id <- sub("_ba[0-9.]+_", "_ba1_", best_spec_id)
+  spec_version  <- "v15-postfix_fresh"
+  cat("Using fresh v15-postfix best spec:", best_spec_id, "\n")
 } else {
-  cat("fresh v15 not ready — using documented best spec as placeholder\n")
+  cat("fresh v15-postfix not ready — using documented best spec as placeholder\n")
   best_spec_obj <- stage2_make_spec(
     delta = 0L, Kr = 1L, T = "S",
-    k_f = 4L, k_e = 2L, alpha_state = 0.40,
-    k_r = 2L, k_de = 0L, k_sp = 0L,
+    k_f = 5L, k_e = 2L, alpha_state = 0.40,
+    k_r = 0L, k_de = 0L, k_sp = 2L,
     k_n = 0L, k_w = 0L, k_s = 0L,
     lambda_w = 0, w_floor = 0.05,
-    bias_alpha = 0.4, bias_beta = 0.0
+    bias_alpha = 1.0, bias_beta = 0.0
   )
-  best_spec_id <- "kf4_ke2_as0.40_kr2_kde0_ksp0_placeholder"
-  spec_version <- "v15_fresh_placeholder"
+  best_spec_id <- "d+0_Kr1_kf5_ke2_as0.4_kr0_kde0_ksp2_ba1_bb0"
+  spec_version <- "v15-postfix_fresh_placeholder"
 }
 
 # ---- Fit production GAM ----
