@@ -24,7 +24,7 @@
 #'   \code{M1_PARAMS}, \code{m0_params}, \code{m2_production},
 #'   \code{best_spec}, \code{flag_args}, \code{manual_labels},
 #'   \code{hist_data}, \code{m1_train_preds}, and \code{template_df}.
-#' @keywords internal
+#' @export
 load_prospective_kit <- function(data_dir,
                                  ref_file    = "ref_production.rds",
                                  m2_file     = "m2_production.rds",

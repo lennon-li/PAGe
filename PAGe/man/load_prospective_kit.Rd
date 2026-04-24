@@ -40,4 +40,3 @@ as a named list (the "kit") ready for \code{run_prospective_pipeline()}.
 All heavy training (reference curve, M1 LOSO, M2 nested LOSO) must have
 been completed beforehand and saved as RDS files.
 }
-\keyword{internal}

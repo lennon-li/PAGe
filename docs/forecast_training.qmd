@@ -34,10 +34,10 @@ source("../R/m0_runtime.R")
 source("../R/m2_runtime.R")
 source("../R/pipeline_runtime.R")
 source("../R/m2_spec_grid.R")
-source("../R/m2_nested_loso.R")
-# Pull internal helpers missing from R/ mirror
-.plot_stage2_joint_fit_prosp <- PAGe:::.plot_stage2_joint_fit_prosp
-
+source("../R/m2_loso_utils.R")
+source("../R/m2_loso_fold.R")
+source("../R/m2_loso_cv.R")
+source("../R/m2_loso_eval.R")
 startWeek <- 27L
 
 n_weeks_in_start_year <- function(start_year) {
