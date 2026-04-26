@@ -34,7 +34,7 @@ ul.task-list li input[type="checkbox"] {
 <link href="source_map_files/libs/quarto-html/quarto-syntax-highlighting-7b89279ff1a6dce999919e0e67d4d9ec.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="source_map_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="source_map_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="source_map_files/libs/bootstrap/bootstrap-72c90d482865c1f5bc5a6ce2c4e3a6b3.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="source_map_files/libs/bootstrap/bootstrap-33bdbee00c496199cf46dcc9f15e7c3e.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 
 
 </head>
@@ -135,7 +135,7 @@ Note
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>This page is a source map for the root-level <code>R/</code> directory, which is mirrored into <code>flualign/R/</code> for the installable package. It is meant to answer two questions quickly: which file owns a piece of the pipeline, and which functions live in that file.</p>
+<p>This page is a source map for the root-level <code>R/</code> directory, which is mirrored into <code>PAGe/R/</code> for the installable package. It is meant to answer two questions quickly: which file owns a piece of the pipeline, and which functions live in that file.</p>
 </div>
 </div>
 <section id="at-a-glance" class="level2" data-number="1">
@@ -189,14 +189,14 @@ Note
 <td style="text-align: left;">Apply the four-rule threshold detector to flag the ignition week for a single season.</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">16</td>
+<td style="text-align: left;">17</td>
 <td style="text-align: left;">m1_reference.R</td>
 <td style="text-align: left;">M_1: reference and alignment</td>
 <td style="text-align: right;">3</td>
 <td style="text-align: left;">Estimate the reference epidemic curve and derivative summaries from historical data.</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">17</td>
+<td style="text-align: left;">16</td>
 <td style="text-align: left;">m1_reference_helpers.R</td>
 <td style="text-align: left;">M_1: reference and alignment</td>
 <td style="text-align: right;">3</td>
@@ -269,7 +269,7 @@ Note
 <td style="text-align: left;">19</td>
 <td style="text-align: left;">m2_nested_loso.R</td>
 <td style="text-align: left;">M_2: forecast training and runtime</td>
-<td style="text-align: right;">13</td>
+<td style="text-align: right;">0</td>
 <td style="text-align: left;">Nested LOSO evaluation for the full M_1 -&gt; M_2 forecasting stack, including frozen-fit path and per-fold fold builder.</td>
 </tr>
 <tr class="odd">
@@ -287,17 +287,17 @@ Note
 <td style="text-align: left;">M_1 walk-forward predictions bridge functions: m1_walkforward_predictions(), m1_walkforward_multi(), inject_m1_into_snapshots().</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">26</td>
+<td style="text-align: left;">25</td>
 <td style="text-align: left;">pipeline_runtime_helpers.R</td>
 <td style="text-align: left;">Pipeline orchestration</td>
 <td style="text-align: right;">4</td>
 <td style="text-align: left;">Provide small shared helpers used across runtime code paths.</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">25</td>
+<td style="text-align: left;">26</td>
 <td style="text-align: left;">pipeline_runtime.R</td>
 <td style="text-align: left;">Pipeline orchestration</td>
-<td style="text-align: right;">5</td>
+<td style="text-align: right;">9</td>
 <td style="text-align: left;">End-to-end prospective pipeline entry points: load_prospective_kit(), run_prospective_pipeline(), run_m0_detection(), run_m1_alignment(), run_m2_forecast().</td>
 </tr>
 <tr class="odd">
@@ -388,7 +388,7 @@ Note
 <td style="text-align: left;">30</td>
 <td style="text-align: left;">retired.R</td>
 <td style="text-align: left;">Retired</td>
-<td style="text-align: right;">26</td>
+<td style="text-align: right;">0</td>
 <td style="text-align: left;">Archive of legacy and deprecated functions extracted from active source files. Not sourced by the pipeline.</td>
 </tr>
 </tbody>
@@ -404,458 +404,477 @@ Note
 <div>
 <p></p><figure class="figure"><p></p>
 <div>
-<svg width="1536" height="672" viewbox="0.00 0.00 1272.28 933.18" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" style="; max-width: none; max-height: none">
-<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 929.18)">
+<svg width="1536" height="672" viewbox="0.00 0.00 1271.17 958.57" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" style="; max-width: none; max-height: none">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 954.57)">
 <title>PAGe_pipeline</title>
-<polygon fill="white" stroke="transparent" points="-4,4 -4,-929.18 1268.28,-929.18 1268.28,4 -4,4"></polygon>
+<polygon fill="white" stroke="transparent" points="-4,4 -4,-954.57 1267.17,-954.57 1267.17,4 -4,4"></polygon>
 <g id="clust1" class="cluster">
 <title>cluster_m0</title>
-<polygon fill="#fff3cd" stroke="#856404" points="630.4,-800 630.4,-873 897.83,-873 897.83,-800 630.4,-800"></polygon>
-<text text-anchor="middle" x="764.12" y="-859.1" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#856404">M0: Ignition</text>
+<polygon fill="#fff3cd" stroke="#856404" points="802.68,-811.57 802.68,-942.57 1072.62,-942.57 1072.62,-811.57 802.68,-811.57"></polygon>
+<text text-anchor="middle" x="937.65" y="-928.67" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#856404">M0: Ignition</text>
 </g>
 <g id="clust2" class="cluster">
 <title>cluster_m1</title>
-<polygon fill="#c3e6cb" stroke="#155724" points="807.42,-661 807.42,-792 1084.27,-792 1084.27,-661 807.42,-661"></polygon>
-<text text-anchor="middle" x="945.84" y="-778.1" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#155724">M1: Alignment</text>
+<polygon fill="#c3e6cb" stroke="#155724" points="463.42,-672.57 463.42,-803.57 1078.45,-803.57 1078.45,-672.57 463.42,-672.57"></polygon>
+<text text-anchor="middle" x="770.93" y="-789.67" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#155724">M1: Alignment</text>
 </g>
 <g id="clust3" class="cluster">
 <title>cluster_m2spec</title>
-<polygon fill="#cce5ff" stroke="#004085" points="800.46,-8 800.46,-197 1084.56,-197 1084.56,-8 800.46,-8"></polygon>
-<text text-anchor="middle" x="942.51" y="-183.1" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#004085">M2: Spec &amp; Features</text>
+<polygon fill="#cce5ff" stroke="#004085" points="799.35,-57.57 799.35,-246.57 1083.46,-246.57 1083.46,-57.57 799.35,-57.57"></polygon>
+<text text-anchor="middle" x="941.4" y="-232.67" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#004085">M2: Spec &amp; Features</text>
 </g>
 <g id="clust4" class="cluster">
 <title>cluster_m2train</title>
-<polygon fill="#b8d4f0" stroke="#003060" points="8,-205 8,-476 917.29,-476 917.29,-205 8,-205"></polygon>
-<text text-anchor="middle" x="462.65" y="-462.1" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#003060">M2: Training / LOSO</text>
+<polygon fill="#b8d4f0" stroke="#003060" points="8,-254.57 8,-525.57 916.18,-525.57 916.18,-254.57 8,-254.57"></polygon>
+<text text-anchor="middle" x="462.09" y="-511.67" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#003060">M2: Training / LOSO</text>
 </g>
 <g id="clust5" class="cluster">
 <title>cluster_m2pred</title>
-<polygon fill="#e2ccff" stroke="#4a0080" points="978.01,-547 978.01,-620 1256.28,-620 1256.28,-547 978.01,-547"></polygon>
-<text text-anchor="middle" x="1117.15" y="-606.1" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#4a0080">M2: Predict</text>
+<polygon fill="#e2ccff" stroke="#4a0080" points="976.91,-448.57 976.91,-521.57 1255.17,-521.57 1255.17,-448.57 976.91,-448.57"></polygon>
+<text text-anchor="middle" x="1116.04" y="-507.67" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#4a0080">M2: Predict</text>
 </g>
 <g id="clust6" class="cluster">
 <title>cluster_deploy</title>
-<polygon fill="#f8d7da" stroke="#721c24" points="634.85,-484 634.85,-615 919.23,-615 919.23,-484 634.85,-484"></polygon>
-<text text-anchor="middle" x="777.04" y="-601.1" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#721c24">Deployment</text>
+<polygon fill="#f8d7da" stroke="#721c24" points="634.3,-533.57 634.3,-664.57 918.12,-664.57 918.12,-533.57 634.3,-533.57"></polygon>
+<text text-anchor="middle" x="776.21" y="-650.67" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="11.00" fill="#721c24">Deployment</text>
 </g>
 <!-- fitIgnition -->
 <g id="node1" class="node">
 <title>fitIgnition</title>
-<polygon fill="lightgrey" stroke="black" points="889.84,-844 831.79,-844 831.79,-808 889.84,-808 889.84,-844"></polygon>
-<text text-anchor="middle" x="860.82" y="-823" font-family="Helvetica,sans-Serif" font-size="10.00">fitIgnition</text>
+<polygon fill="lightgrey" stroke="black" points="888.73,-855.57 830.69,-855.57 830.69,-819.57 888.73,-819.57 888.73,-855.57"></polygon>
+<text text-anchor="middle" x="859.71" y="-840.57" font-family="Helvetica,sans-Serif" font-size="10.00">fitIgnition</text>
+<text text-anchor="middle" x="859.71" y="-828.57" font-family="Helvetica,sans-Serif" font-size="10.00">(training)</text>
 </g>
 <!-- run_alignment_prospective -->
 <g id="node2" class="node">
 <title>run_alignment_prospective</title>
-<polygon fill="lightgrey" stroke="black" points="1071.75,-705 990,-705 990,-669 1071.75,-669 1071.75,-705"></polygon>
-<text text-anchor="middle" x="1030.87" y="-690" font-family="Helvetica,sans-Serif" font-size="10.00">run_alignment</text>
-<text text-anchor="middle" x="1030.87" y="-678" font-family="Helvetica,sans-Serif" font-size="10.00">_prospective</text>
+<polygon fill="lightgrey" stroke="black" points="1070.64,-716.57 988.89,-716.57 988.89,-680.57 1070.64,-680.57 1070.64,-716.57"></polygon>
+<text text-anchor="middle" x="1029.76" y="-701.57" font-family="Helvetica,sans-Serif" font-size="10.00">run_alignment</text>
+<text text-anchor="middle" x="1029.76" y="-689.57" font-family="Helvetica,sans-Serif" font-size="10.00">_prospective</text>
 </g>
 <!-- fitIgnition&#45;&gt;run_alignment_prospective -->
 <!-- train_stage2_joint -->
 <g id="node3" class="node">
 <title>train_stage2_joint</title>
-<polygon fill="lightgrey" stroke="black" points="735.87,-307 638.98,-307 638.98,-271 735.87,-271 735.87,-307"></polygon>
-<text text-anchor="middle" x="687.43" y="-286" font-family="Helvetica,sans-Serif" font-size="10.00">train_stage2_joint</text>
+<polygon fill="lightgrey" stroke="black" points="735.32,-356.57 638.43,-356.57 638.43,-320.57 735.32,-320.57 735.32,-356.57"></polygon>
+<text text-anchor="middle" x="686.88" y="-335.57" font-family="Helvetica,sans-Serif" font-size="10.00">train_stage2_joint</text>
 </g>
 <!-- run_alignment_prospective&#45;&gt;train_stage2_joint -->
 <!-- run_prospective_pipeline -->
 <g id="node4" class="node">
 <title>run_prospective_pipeline</title>
-<polygon fill="lightgrey" stroke="black" points="732.08,-557 642.78,-557 642.78,-521 732.08,-521 732.08,-557"></polygon>
-<text text-anchor="middle" x="687.43" y="-542" font-family="Helvetica,sans-Serif" font-size="10.00">run_prospective</text>
-<text text-anchor="middle" x="687.43" y="-530" font-family="Helvetica,sans-Serif" font-size="10.00">_pipeline</text>
+<polygon fill="lightgrey" stroke="black" points="731.53,-606.57 642.22,-606.57 642.22,-570.57 731.53,-570.57 731.53,-606.57"></polygon>
+<text text-anchor="middle" x="686.88" y="-591.57" font-family="Helvetica,sans-Serif" font-size="10.00">run_prospective</text>
+<text text-anchor="middle" x="686.88" y="-579.57" font-family="Helvetica,sans-Serif" font-size="10.00">_pipeline</text>
 </g>
 <!-- train_stage2_joint&#45;&gt;run_prospective_pipeline -->
 <!-- stage2_make_spec -->
-<g id="node9" class="node">
+<g id="node11" class="node">
 <title>stage2_make_spec</title>
-<polygon fill="lightgrey" stroke="black" points="913.04,-52 808.59,-52 808.59,-16 913.04,-16 913.04,-52"></polygon>
-<text text-anchor="middle" x="860.82" y="-31" font-family="Helvetica,sans-Serif" font-size="10.00">stage2_make_spec</text>
+<polygon fill="lightgrey" stroke="black" points="911.93,-101.57 807.49,-101.57 807.49,-65.57 911.93,-65.57 911.93,-101.57"></polygon>
+<text text-anchor="middle" x="859.71" y="-80.57" font-family="Helvetica,sans-Serif" font-size="10.00">stage2_make_spec</text>
 </g>
 <!-- train_stage2_joint&#45;&gt;stage2_make_spec -->
-<g id="edge16" class="edge">
+<g id="edge17" class="edge">
 <title>train_stage2_joint-&gt;stage2_make_spec</title>
-<path fill="none" stroke="black" d="M725.32,-270.66C729.46,-267.52 733.31,-263.97 736.46,-260 793.68,-187.89 740.08,-132.5 800.46,-63 802.71,-60.4 805.26,-58.02 807.99,-55.82"></path>
-<polygon fill="black" stroke="black" points="809.48,-57.33 813.08,-52.09 807,-53.94 809.48,-57.33"></polygon>
+<path fill="none" stroke="black" d="M723.87,-320.54C728.14,-317.32 732.12,-313.66 735.35,-309.57 792.39,-237.31 738.97,-182.07 799.35,-112.57 801.6,-109.97 804.15,-107.59 806.88,-105.4"></path>
+<polygon fill="black" stroke="black" points="808.38,-106.9 811.98,-101.66 805.89,-103.51 808.38,-106.9"></polygon>
 </g>
 <!-- prep_stage2_joint -->
-<g id="node12" class="node">
+<g id="node14" class="node">
 <title>prep_stage2_joint</title>
-<polygon fill="lightgrey" stroke="black" points="909.33,-168 812.31,-168 812.31,-132 909.33,-132 909.33,-168"></polygon>
-<text text-anchor="middle" x="860.82" y="-147" font-family="Helvetica,sans-Serif" font-size="10.00">prep_stage2_joint</text>
+<polygon fill="lightgrey" stroke="black" points="908.22,-217.57 811.2,-217.57 811.2,-181.57 908.22,-181.57 908.22,-217.57"></polygon>
+<text text-anchor="middle" x="859.71" y="-196.57" font-family="Helvetica,sans-Serif" font-size="10.00">prep_stage2_joint</text>
 </g>
 <!-- train_stage2_joint&#45;&gt;prep_stage2_joint -->
-<g id="edge15" class="edge">
+<g id="edge16" class="edge">
 <title>train_stage2_joint-&gt;prep_stage2_joint</title>
-<path fill="none" stroke="black" d="M720.57,-270.88C726,-267.46 731.49,-263.76 736.46,-260 767.54,-236.46 771.31,-225.9 800.46,-200 811.02,-190.61 822.9,-180.51 833.24,-171.87"></path>
-<polygon fill="black" stroke="black" points="834.61,-173.47 837.87,-168.01 831.92,-170.24 834.61,-173.47"></polygon>
+<path fill="none" stroke="black" d="M719.63,-320.42C725,-317 730.43,-313.32 735.35,-309.57 766.37,-285.95 770.2,-275.47 799.35,-249.57 809.92,-240.18 821.79,-230.09 832.13,-221.44"></path>
+<polygon fill="black" stroke="black" points="833.5,-223.04 836.76,-217.58 830.81,-219.81 833.5,-223.04"></polygon>
 </g>
 <!-- train_stage2_joint_prepped -->
-<g id="node15" class="node">
+<g id="node17" class="node">
 <title>train_stage2_joint_prepped</title>
-<polygon fill="lightgrey" stroke="black" points="909.26,-279 812.37,-279 812.37,-243 909.26,-243 909.26,-279"></polygon>
-<text text-anchor="middle" x="860.82" y="-264" font-family="Helvetica,sans-Serif" font-size="10.00">train_stage2_joint</text>
-<text text-anchor="middle" x="860.82" y="-252" font-family="Helvetica,sans-Serif" font-size="10.00">_prepped</text>
+<polygon fill="lightgrey" stroke="black" points="908.15,-328.57 811.26,-328.57 811.26,-292.57 908.15,-292.57 908.15,-328.57"></polygon>
+<text text-anchor="middle" x="859.71" y="-313.57" font-family="Helvetica,sans-Serif" font-size="10.00">train_stage2_joint</text>
+<text text-anchor="middle" x="859.71" y="-301.57" font-family="Helvetica,sans-Serif" font-size="10.00">_prepped</text>
 </g>
 <!-- train_stage2_joint&#45;&gt;train_stage2_joint_prepped -->
-<g id="edge14" class="edge">
+<g id="edge15" class="edge">
 <title>train_stage2_joint-&gt;train_stage2_joint_prepped</title>
-<path fill="none" stroke="black" d="M736.17,-281.2C757.99,-277.64 783.93,-273.4 806.4,-269.73"></path>
-<polygon fill="black" stroke="black" points="806.75,-271.8 812.33,-268.76 806.07,-267.65 806.75,-271.8"></polygon>
+<path fill="none" stroke="black" d="M735.46,-330.77C757.03,-327.24 782.63,-323.04 804.9,-319.39"></path>
+<polygon fill="black" stroke="black" points="805.5,-321.42 811.08,-318.38 804.82,-317.28 805.5,-321.42"></polygon>
 </g>
 <!-- run_m0_detection -->
 <g id="node5" class="node">
 <title>run_m0_detection</title>
-<polygon fill="lightgrey" stroke="black" points="736.48,-844 638.38,-844 638.38,-808 736.48,-808 736.48,-844"></polygon>
-<text text-anchor="middle" x="687.43" y="-823" font-family="Helvetica,sans-Serif" font-size="10.00">run_m0_detection</text>
+<polygon fill="lightgrey" stroke="black" points="908.76,-913.57 810.66,-913.57 810.66,-877.57 908.76,-877.57 908.76,-913.57"></polygon>
+<text text-anchor="middle" x="859.71" y="-892.57" font-family="Helvetica,sans-Serif" font-size="10.00">run_m0_detection</text>
 </g>
 <!-- run_prospective_pipeline&#45;&gt;run_m0_detection -->
-<g id="edge35" class="edge">
+<g id="edge36" class="edge">
 <title>run_prospective_pipeline-&gt;run_m0_detection</title>
-<path fill="none" stroke="black" d="M687.43,-557.22C687.43,-638.65 687.43,-720.09 687.43,-801.52"></path>
-<polygon fill="black" stroke="black" points="685.33,-801.89 687.43,-807.89 689.53,-801.89 685.33,-801.89"></polygon>
+<path fill="none" stroke="black" d="M700.45,-606.75C710.83,-622.35 725.43,-645.72 735.35,-667.57 773.75,-752.17 738.52,-796.34 799.35,-866.57 801.6,-869.17 804.14,-871.56 806.87,-873.75"></path>
+<polygon fill="black" stroke="black" points="805.88,-875.64 811.96,-877.49 808.37,-872.25 805.88,-875.64"></polygon>
 </g>
 <!-- run_m1_alignment -->
-<g id="node26" class="node">
+<g id="node28" class="node">
 <title>run_m1_alignment</title>
-<polygon fill="lightgrey" stroke="black" points="911.15,-586 810.49,-586 810.49,-550 911.15,-550 911.15,-586"></polygon>
-<text text-anchor="middle" x="860.82" y="-565" font-family="Helvetica,sans-Serif" font-size="10.00">run_m1_alignment</text>
+<polygon fill="lightgrey" stroke="black" points="910.04,-635.57 809.38,-635.57 809.38,-599.57 910.04,-599.57 910.04,-635.57"></polygon>
+<text text-anchor="middle" x="859.71" y="-614.57" font-family="Helvetica,sans-Serif" font-size="10.00">run_m1_alignment</text>
 </g>
 <!-- run_prospective_pipeline&#45;&gt;run_m1_alignment -->
-<g id="edge36" class="edge">
+<g id="edge37" class="edge">
 <title>run_prospective_pipeline-&gt;run_m1_alignment</title>
-<path fill="none" stroke="black" d="M732.12,-546.39C754.06,-550.11 780.88,-554.64 804.27,-558.6"></path>
-<polygon fill="black" stroke="black" points="804.19,-560.72 810.45,-559.65 804.89,-556.58 804.19,-560.72"></polygon>
+<path fill="none" stroke="black" d="M731.87,-596.04C753.56,-599.72 779.95,-604.2 803.03,-608.12"></path>
+<polygon fill="black" stroke="black" points="802.87,-610.22 809.13,-609.16 803.57,-606.08 802.87,-610.22"></polygon>
 </g>
 <!-- run_m2_forecast -->
-<g id="node27" class="node">
+<g id="node29" class="node">
 <title>run_m2_forecast</title>
-<polygon fill="lightgrey" stroke="black" points="907.36,-528 814.28,-528 814.28,-492 907.36,-492 907.36,-528"></polygon>
-<text text-anchor="middle" x="860.82" y="-507" font-family="Helvetica,sans-Serif" font-size="10.00">run_m2_forecast</text>
+<polygon fill="lightgrey" stroke="black" points="906.25,-577.57 813.17,-577.57 813.17,-541.57 906.25,-541.57 906.25,-577.57"></polygon>
+<text text-anchor="middle" x="859.71" y="-556.57" font-family="Helvetica,sans-Serif" font-size="10.00">run_m2_forecast</text>
 </g>
 <!-- run_prospective_pipeline&#45;&gt;run_m2_forecast -->
-<g id="edge37" class="edge">
+<g id="edge38" class="edge">
 <title>run_prospective_pipeline-&gt;run_m2_forecast</title>
-<path fill="none" stroke="black" d="M732.12,-531.61C755.25,-527.69 783.81,-522.86 808.05,-518.76"></path>
-<polygon fill="black" stroke="black" points="808.54,-520.81 814.11,-517.73 807.84,-516.66 808.54,-520.81"></polygon>
+<path fill="none" stroke="black" d="M731.87,-581.1C754.84,-577.2 783.07,-572.41 807.07,-568.34"></path>
+<polygon fill="black" stroke="black" points="807.51,-570.39 813.08,-567.32 806.81,-566.25 807.51,-570.39"></polygon>
 </g>
-<!-- run_m0_detection&#45;&gt;fitIgnition -->
+<!-- run_ignition_weekly -->
+<g id="node6" class="node">
+<title>run_ignition_weekly</title>
+<polygon fill="lightgrey" stroke="black" points="1064.47,-913.57 995.06,-913.57 995.06,-877.57 1064.47,-877.57 1064.47,-913.57"></polygon>
+<text text-anchor="middle" x="1029.76" y="-898.57" font-family="Helvetica,sans-Serif" font-size="10.00">run_ignition</text>
+<text text-anchor="middle" x="1029.76" y="-886.57" font-family="Helvetica,sans-Serif" font-size="10.00">_weekly</text>
+</g>
+<!-- run_m0_detection&#45;&gt;run_ignition_weekly -->
 <g id="edge4" class="edge">
-<title>run_m0_detection-&gt;fitIgnition</title>
-<path fill="none" stroke="black" d="M736.63,-826C764.92,-826 800.01,-826 825.49,-826"></path>
-<polygon fill="black" stroke="black" points="825.75,-828.1 831.75,-826 825.75,-823.9 825.75,-828.1"></polygon>
+<title>run_m0_detection-&gt;run_ignition_weekly</title>
+<path fill="none" stroke="black" d="M908.87,-895.57C934.15,-895.57 964.77,-895.57 988.74,-895.57"></path>
+<polygon fill="black" stroke="black" points="989,-897.67 995,-895.57 989,-893.47 989,-897.67"></polygon>
+</g>
+<!-- run_alignment_prospective_multi -->
+<g id="node7" class="node">
+<title>run_alignment_prospective_multi</title>
+<polygon fill="lightgrey" stroke="black" stroke-width="2" points="910.58,-716.57 808.83,-716.57 808.83,-680.57 910.58,-680.57 910.58,-716.57"></polygon>
+<text text-anchor="middle" x="859.71" y="-701.57" font-family="Helvetica,sans-Serif" font-size="10.00">run_alignment</text>
+<text text-anchor="middle" x="859.71" y="-689.57" font-family="Helvetica,sans-Serif" font-size="10.00">_prospective_multi</text>
+</g>
+<!-- run_alignment_prospective_multi&#45;&gt;run_alignment_prospective -->
+<g id="edge7" class="edge">
+<title>run_alignment_prospective_multi-&gt;run_alignment_prospective</title>
+<path fill="none" stroke="black" d="M910.68,-698.57C933.49,-698.57 960.34,-698.57 982.67,-698.57"></path>
+<polygon fill="black" stroke="black" points="982.84,-700.67 988.84,-698.57 982.84,-696.47 982.84,-700.67"></polygon>
 </g>
 <!-- m1_walkforward_predictions -->
-<g id="node6" class="node">
+<g id="node8" class="node">
 <title>m1_walkforward_predictions</title>
-<polygon fill="lightgrey" stroke="black" points="1076.17,-763 985.57,-763 985.57,-727 1076.17,-727 1076.17,-763"></polygon>
-<text text-anchor="middle" x="1030.87" y="-748" font-family="Helvetica,sans-Serif" font-size="10.00">m1_walkforward</text>
-<text text-anchor="middle" x="1030.87" y="-736" font-family="Helvetica,sans-Serif" font-size="10.00">_predictions</text>
+<polygon fill="lightgrey" stroke="black" points="732.18,-716.57 641.57,-716.57 641.57,-680.57 732.18,-680.57 732.18,-716.57"></polygon>
+<text text-anchor="middle" x="686.88" y="-701.57" font-family="Helvetica,sans-Serif" font-size="10.00">m1_walkforward</text>
+<text text-anchor="middle" x="686.88" y="-689.57" font-family="Helvetica,sans-Serif" font-size="10.00">_predictions</text>
+</g>
+<!-- m1_walkforward_predictions&#45;&gt;run_alignment_prospective_multi -->
+<g id="edge6" class="edge">
+<title>m1_walkforward_predictions-&gt;run_alignment_prospective_multi</title>
+<path fill="none" stroke="black" d="M732.31,-698.57C753.82,-698.57 779.87,-698.57 802.72,-698.57"></path>
+<polygon fill="black" stroke="black" points="802.77,-700.67 808.77,-698.57 802.77,-696.47 802.77,-700.67"></polygon>
 </g>
 <!-- m1_walkforward_multi -->
-<g id="node7" class="node">
+<g id="node9" class="node">
 <title>m1_walkforward_multi</title>
-<polygon fill="lightgrey" stroke="black" points="906.12,-763 815.51,-763 815.51,-727 906.12,-727 906.12,-763"></polygon>
-<text text-anchor="middle" x="860.82" y="-748" font-family="Helvetica,sans-Serif" font-size="10.00">m1_walkforward</text>
-<text text-anchor="middle" x="860.82" y="-736" font-family="Helvetica,sans-Serif" font-size="10.00">_multi</text>
-</g>
-<!-- m1_walkforward_multi&#45;&gt;run_alignment_prospective -->
-<g id="edge6" class="edge">
-<title>m1_walkforward_multi-&gt;run_alignment_prospective</title>
-<path fill="none" stroke="black" d="M906.41,-729.61C930.45,-721.31 960.05,-711.1 984.24,-702.75"></path>
-<polygon fill="black" stroke="black" points="984.97,-704.72 989.95,-700.78 983.6,-700.75 984.97,-704.72"></polygon>
+<polygon fill="lightgrey" stroke="black" points="562.12,-716.57 471.52,-716.57 471.52,-680.57 562.12,-680.57 562.12,-716.57"></polygon>
+<text text-anchor="middle" x="516.82" y="-701.57" font-family="Helvetica,sans-Serif" font-size="10.00">m1_walkforward</text>
+<text text-anchor="middle" x="516.82" y="-689.57" font-family="Helvetica,sans-Serif" font-size="10.00">_multi</text>
 </g>
 <!-- m1_walkforward_multi&#45;&gt;m1_walkforward_predictions -->
 <g id="edge5" class="edge">
 <title>m1_walkforward_multi-&gt;m1_walkforward_predictions</title>
-<path fill="none" stroke="black" d="M906.41,-745C928.82,-745 956.06,-745 979.25,-745"></path>
-<polygon fill="black" stroke="black" points="979.36,-747.1 985.36,-745 979.36,-742.9 979.36,-747.1"></polygon>
+<path fill="none" stroke="black" d="M562.41,-698.57C584.82,-698.57 612.06,-698.57 635.25,-698.57"></path>
+<polygon fill="black" stroke="black" points="635.36,-700.67 641.36,-698.57 635.36,-696.47 635.36,-700.67"></polygon>
 </g>
 <!-- inject_m1_into_snapshots -->
-<g id="node8" class="node">
+<g id="node10" class="node">
 <title>inject_m1_into_snapshots</title>
-<polygon fill="lightgrey" stroke="black" points="902.3,-705 819.33,-705 819.33,-669 902.3,-669 902.3,-705"></polygon>
-<text text-anchor="middle" x="860.82" y="-690" font-family="Helvetica,sans-Serif" font-size="10.00">inject_m1_into</text>
-<text text-anchor="middle" x="860.82" y="-678" font-family="Helvetica,sans-Serif" font-size="10.00">_snapshots</text>
+<polygon fill="lightgrey" stroke="black" points="728.36,-774.57 645.39,-774.57 645.39,-738.57 728.36,-738.57 728.36,-774.57"></polygon>
+<text text-anchor="middle" x="686.88" y="-759.57" font-family="Helvetica,sans-Serif" font-size="10.00">inject_m1_into</text>
+<text text-anchor="middle" x="686.88" y="-747.57" font-family="Helvetica,sans-Serif" font-size="10.00">_snapshots</text>
 </g>
-<!-- inject_m1_into_snapshots&#45;&gt;run_alignment_prospective -->
-<g id="edge7" class="edge">
-<title>inject_m1_into_snapshots-&gt;run_alignment_prospective</title>
-<path fill="none" stroke="black" d="M902.07,-687C926.7,-687 958.3,-687 983.91,-687"></path>
-<polygon fill="black" stroke="black" points="983.95,-689.1 989.95,-687 983.95,-684.9 983.95,-689.1"></polygon>
+<!-- inject_m1_into_snapshots&#45;&gt;run_alignment_prospective_multi -->
+<g id="edge8" class="edge">
+<title>inject_m1_into_snapshots-&gt;run_alignment_prospective_multi</title>
+<path fill="none" stroke="black" d="M728.36,-742.83C750.65,-735.26 778.64,-725.75 802.97,-717.5"></path>
+<polygon fill="black" stroke="black" points="803.74,-719.45 808.74,-715.53 802.39,-715.47 803.74,-719.45"></polygon>
 </g>
 <!-- stage2_build_joint_formula -->
-<g id="node10" class="node">
+<g id="node12" class="node">
 <title>stage2_build_joint_formula</title>
-<polygon fill="lightgrey" stroke="black" points="1071.18,-52 990.56,-52 990.56,-16 1071.18,-16 1071.18,-52"></polygon>
-<text text-anchor="middle" x="1030.87" y="-37" font-family="Helvetica,sans-Serif" font-size="10.00">stage2_build</text>
-<text text-anchor="middle" x="1030.87" y="-25" font-family="Helvetica,sans-Serif" font-size="10.00">_joint_formula</text>
+<polygon fill="lightgrey" stroke="black" points="1070.08,-101.57 989.45,-101.57 989.45,-65.57 1070.08,-65.57 1070.08,-101.57"></polygon>
+<text text-anchor="middle" x="1029.76" y="-86.57" font-family="Helvetica,sans-Serif" font-size="10.00">stage2_build</text>
+<text text-anchor="middle" x="1029.76" y="-74.57" font-family="Helvetica,sans-Serif" font-size="10.00">_joint_formula</text>
 </g>
 <!-- stage2_make_spec&#45;&gt;stage2_build_joint_formula -->
-<g id="edge9" class="edge">
+<g id="edge10" class="edge">
 <title>stage2_make_spec-&gt;stage2_build_joint_formula</title>
-<path fill="none" stroke="black" d="M913.15,-34C935.83,-34 962.27,-34 984.24,-34"></path>
-<polygon fill="black" stroke="black" points="984.31,-36.1 990.31,-34 984.31,-31.9 984.31,-36.1"></polygon>
+<path fill="none" stroke="black" d="M912.04,-83.57C934.72,-83.57 961.16,-83.57 983.13,-83.57"></path>
+<polygon fill="black" stroke="black" points="983.21,-85.67 989.21,-83.57 983.21,-81.47 983.21,-85.67"></polygon>
 </g>
 <!-- stage2_exclude_newseason -->
-<g id="node11" class="node">
+<g id="node13" class="node">
 <title>stage2_exclude_newseason</title>
-<polygon fill="lightgrey" stroke="black" points="1074.93,-110 986.82,-110 986.82,-74 1074.93,-74 1074.93,-110"></polygon>
-<text text-anchor="middle" x="1030.87" y="-95" font-family="Helvetica,sans-Serif" font-size="10.00">stage2_exclude</text>
-<text text-anchor="middle" x="1030.87" y="-83" font-family="Helvetica,sans-Serif" font-size="10.00">_newseason</text>
+<polygon fill="lightgrey" stroke="black" points="1073.82,-159.57 985.71,-159.57 985.71,-123.57 1073.82,-123.57 1073.82,-159.57"></polygon>
+<text text-anchor="middle" x="1029.76" y="-144.57" font-family="Helvetica,sans-Serif" font-size="10.00">stage2_exclude</text>
+<text text-anchor="middle" x="1029.76" y="-132.57" font-family="Helvetica,sans-Serif" font-size="10.00">_newseason</text>
 </g>
 <!-- stage2_make_spec&#45;&gt;stage2_exclude_newseason -->
-<g id="edge10" class="edge">
+<g id="edge11" class="edge">
 <title>stage2_make_spec-&gt;stage2_exclude_newseason</title>
-<path fill="none" stroke="black" d="M913.15,-51.72C934.68,-59.15 959.6,-67.75 980.87,-75.09"></path>
-<polygon fill="black" stroke="black" points="980.41,-77.15 986.77,-77.12 981.78,-73.18 980.41,-77.15"></polygon>
+<path fill="none" stroke="black" d="M912.04,-101.29C933.57,-108.72 958.49,-117.32 979.77,-124.66"></path>
+<polygon fill="black" stroke="black" points="979.31,-126.72 985.66,-126.7 980.68,-122.75 979.31,-126.72"></polygon>
 </g>
 <!-- prep_stage2_joint&#45;&gt;m1_walkforward_predictions -->
-<g id="edge8" class="edge">
+<g id="edge9" class="edge">
 <title>prep_stage2_joint-&gt;m1_walkforward_predictions</title>
-<path fill="none" stroke="black" d="M890.54,-168.14C901.33,-176.49 912.59,-187.36 919.23,-200 1026.61,-404.32 850.14,-523.84 978.01,-716 979.64,-718.45 981.55,-720.71 983.66,-722.8"></path>
-<polygon fill="black" stroke="black" points="982.35,-724.44 988.23,-726.84 985.13,-721.29 982.35,-724.44"></polygon>
+<path fill="none" stroke="black" d="M829.26,-217.65C818.14,-226 806.46,-236.88 799.35,-249.57 707,-414.27 839.9,-512.34 735.35,-669.57 733.84,-671.83 732.1,-673.95 730.18,-675.92"></path>
+<polygon fill="black" stroke="black" points="728.44,-674.67 725.43,-680.27 731.27,-677.77 728.44,-674.67"></polygon>
 </g>
 <!-- add_prospective_derivs_link -->
-<g id="node13" class="node">
+<g id="node15" class="node">
 <title>add_prospective_derivs_link</title>
-<polygon fill="lightgrey" stroke="black" points="1076.76,-168 984.99,-168 984.99,-132 1076.76,-132 1076.76,-168"></polygon>
-<text text-anchor="middle" x="1030.87" y="-153" font-family="Helvetica,sans-Serif" font-size="10.00">add_prospective</text>
-<text text-anchor="middle" x="1030.87" y="-141" font-family="Helvetica,sans-Serif" font-size="10.00">_derivs_link</text>
+<polygon fill="lightgrey" stroke="black" points="1075.65,-217.57 983.88,-217.57 983.88,-181.57 1075.65,-181.57 1075.65,-217.57"></polygon>
+<text text-anchor="middle" x="1029.76" y="-202.57" font-family="Helvetica,sans-Serif" font-size="10.00">add_prospective</text>
+<text text-anchor="middle" x="1029.76" y="-190.57" font-family="Helvetica,sans-Serif" font-size="10.00">_derivs_link</text>
 </g>
 <!-- prep_stage2_joint&#45;&gt;add_prospective_derivs_link -->
-<g id="edge13" class="edge">
+<g id="edge14" class="edge">
 <title>prep_stage2_joint-&gt;add_prospective_derivs_link</title>
-<path fill="none" stroke="black" d="M909.53,-150C931.17,-150 956.79,-150 978.82,-150"></path>
-<polygon fill="black" stroke="black" points="978.93,-152.1 984.93,-150 978.93,-147.9 978.93,-152.1"></polygon>
+<path fill="none" stroke="black" d="M908.42,-199.57C930.06,-199.57 955.68,-199.57 977.71,-199.57"></path>
+<polygon fill="black" stroke="black" points="977.82,-201.67 983.82,-199.57 977.82,-197.47 977.82,-201.67"></polygon>
 </g>
 <!-- format_current_for_stage2 -->
-<g id="node14" class="node">
+<g id="node16" class="node">
 <title>format_current_for_stage2</title>
-<polygon fill="lightgrey" stroke="black" points="902.34,-110 819.29,-110 819.29,-74 902.34,-74 902.34,-110"></polygon>
-<text text-anchor="middle" x="860.82" y="-95" font-family="Helvetica,sans-Serif" font-size="10.00">format_current</text>
-<text text-anchor="middle" x="860.82" y="-83" font-family="Helvetica,sans-Serif" font-size="10.00">_for_stage2</text>
+<polygon fill="lightgrey" stroke="black" points="901.23,-159.57 818.19,-159.57 818.19,-123.57 901.23,-123.57 901.23,-159.57"></polygon>
+<text text-anchor="middle" x="859.71" y="-144.57" font-family="Helvetica,sans-Serif" font-size="10.00">format_current</text>
+<text text-anchor="middle" x="859.71" y="-132.57" font-family="Helvetica,sans-Serif" font-size="10.00">_for_stage2</text>
 </g>
 <!-- format_current_for_stage2&#45;&gt;train_stage2_joint -->
-<g id="edge12" class="edge">
+<g id="edge13" class="edge">
 <title>format_current_for_stage2-&gt;train_stage2_joint</title>
-<path fill="none" stroke="black" d="M819,-107.26C812.26,-111.04 805.75,-115.59 800.46,-121 752.92,-169.64 781.79,-209.3 736.46,-260 734.27,-262.45 731.82,-264.76 729.22,-266.92"></path>
-<polygon fill="black" stroke="black" points="727.86,-265.32 724.4,-270.65 730.43,-268.64 727.86,-265.32"></polygon>
+<path fill="none" stroke="black" d="M817.89,-156.84C811.15,-160.61 804.64,-165.16 799.35,-170.57 751.81,-219.21 780.55,-258.75 735.35,-309.57 733.1,-312.1 730.58,-314.47 727.91,-316.7"></path>
+<polygon fill="black" stroke="black" points="726.41,-315.2 722.94,-320.53 728.98,-318.52 726.41,-315.2"></polygon>
 </g>
 <!-- format_current_for_stage2&#45;&gt;add_prospective_derivs_link -->
-<g id="edge11" class="edge">
+<g id="edge12" class="edge">
 <title>format_current_for_stage2-&gt;add_prospective_derivs_link</title>
-<path fill="none" stroke="black" d="M902.5,-106.04C925.61,-114.02 954.75,-124.07 979.32,-132.55"></path>
-<polygon fill="black" stroke="black" points="978.78,-134.59 985.14,-134.56 980.15,-130.62 978.78,-134.59"></polygon>
+<path fill="none" stroke="black" d="M901.39,-155.61C924.5,-163.59 953.64,-173.64 978.21,-182.12"></path>
+<polygon fill="black" stroke="black" points="977.67,-184.16 984.03,-184.13 979.04,-180.19 977.67,-184.16"></polygon>
 </g>
 <!-- train_stage2_joint_prepped&#45;&gt;stage2_build_joint_formula -->
-<g id="edge17" class="edge">
+<g id="edge18" class="edge">
 <title>train_stage2_joint_prepped-&gt;stage2_build_joint_formula</title>
-<path fill="none" stroke="black" d="M882.94,-242.93C894.76,-231.99 909.12,-217.24 919.23,-202 956.32,-146.11 933.26,-112.96 978.01,-63 980.29,-60.45 982.85,-58.08 985.58,-55.88"></path>
-<polygon fill="black" stroke="black" points="987.09,-57.37 990.64,-52.1 984.58,-54.01 987.09,-57.37"></polygon>
+<path fill="none" stroke="black" d="M881.83,-292.5C893.65,-281.56 908.01,-266.81 918.12,-251.57 955.21,-195.68 932.15,-162.53 976.91,-112.57 979.19,-110.03 981.74,-107.65 984.47,-105.45"></path>
+<polygon fill="black" stroke="black" points="985.98,-106.95 989.54,-101.67 983.47,-103.58 985.98,-106.95"></polygon>
 </g>
 <!-- refit_stage2_weekly -->
-<g id="node16" class="node">
+<g id="node18" class="node">
 <title>refit_stage2_weekly</title>
-<polygon fill="lightgrey" stroke="black" points="552.08,-249 481.56,-249 481.56,-213 552.08,-213 552.08,-249"></polygon>
-<text text-anchor="middle" x="516.82" y="-234" font-family="Helvetica,sans-Serif" font-size="10.00">refit_stage2</text>
-<text text-anchor="middle" x="516.82" y="-222" font-family="Helvetica,sans-Serif" font-size="10.00">_weekly</text>
+<polygon fill="lightgrey" stroke="black" points="552.08,-298.57 481.56,-298.57 481.56,-262.57 552.08,-262.57 552.08,-298.57"></polygon>
+<text text-anchor="middle" x="516.82" y="-283.57" font-family="Helvetica,sans-Serif" font-size="10.00">refit_stage2</text>
+<text text-anchor="middle" x="516.82" y="-271.57" font-family="Helvetica,sans-Serif" font-size="10.00">_weekly</text>
 </g>
 <!-- refit_stage2_weekly&#45;&gt;train_stage2_joint -->
-<g id="edge20" class="edge">
+<g id="edge21" class="edge">
 <title>refit_stage2_weekly-&gt;train_stage2_joint</title>
-<path fill="none" stroke="black" d="M552.35,-242.88C575.55,-250.86 606.58,-261.53 632.95,-270.6"></path>
-<polygon fill="black" stroke="black" points="632.49,-272.67 638.85,-272.63 633.85,-268.69 632.49,-272.67"></polygon>
+<path fill="none" stroke="black" d="M552.23,-292.45C575.27,-300.4 606.05,-311.02 632.27,-320.07"></path>
+<polygon fill="black" stroke="black" points="631.77,-322.12 638.13,-322.09 633.14,-318.15 631.77,-322.12"></polygon>
 </g>
 <!-- refit_stage2_weekly&#45;&gt;prep_stage2_joint -->
-<g id="edge19" class="edge">
+<g id="edge20" class="edge">
 <title>refit_stage2_weekly-&gt;prep_stage2_joint</title>
-<path fill="none" stroke="black" d="M688.43,-150C726.38,-138.07 771.43,-138.6 805.81,-141.83"></path>
-<polygon fill="black" stroke="black" points="805.93,-143.95 812.11,-142.46 806.35,-139.78 805.93,-143.95"></polygon>
+<path fill="none" stroke="black" d="M687.88,-141.57C712.28,-135.09 773.73,-159.79 815.86,-178.96"></path>
+<polygon fill="black" stroke="black" points="815.09,-180.91 821.42,-181.5 816.84,-177.09 815.09,-180.91"></polygon>
 </g>
 <!-- refit_stage2_weekly&#45;&gt;format_current_for_stage2 -->
-<g id="edge18" class="edge">
+<g id="edge19" class="edge">
 <title>refit_stage2_weekly-&gt;format_current_for_stage2</title>
-<path fill="none" stroke="black" d="M688.43,-150C730.92,-136.65 778.92,-120.29 813.29,-108.36"></path>
-<polygon fill="black" stroke="black" points="814.14,-110.29 819.12,-106.33 812.76,-106.32 814.14,-110.29"></polygon>
-<path fill="none" stroke="black" d="M548.41,-212.98C581.38,-194.37 635.93,-165.87 686.43,-150"></path>
+<path fill="none" stroke="black" d="M687.88,-141.57C728.62,-130.75 776.79,-131.95 811.58,-135.15"></path>
+<polygon fill="black" stroke="black" points="811.74,-137.28 817.91,-135.77 812.15,-133.1 811.74,-137.28"></polygon>
+<path fill="none" stroke="black" d="M530.9,-262.35C556.21,-229.09 615.61,-160.22 685.88,-141.57"></path>
 </g>
 <!-- score_stage2_metrics -->
-<g id="node17" class="node">
+<g id="node19" class="node">
 <title>score_stage2_metrics</title>
-<polygon fill="lightgrey" stroke="black" points="726.47,-249 648.39,-249 648.39,-213 726.47,-213 726.47,-249"></polygon>
-<text text-anchor="middle" x="687.43" y="-234" font-family="Helvetica,sans-Serif" font-size="10.00">score_stage2</text>
-<text text-anchor="middle" x="687.43" y="-222" font-family="Helvetica,sans-Serif" font-size="10.00">_metrics</text>
+<polygon fill="lightgrey" stroke="black" points="725.91,-298.57 647.84,-298.57 647.84,-262.57 725.91,-262.57 725.91,-298.57"></polygon>
+<text text-anchor="middle" x="686.88" y="-283.57" font-family="Helvetica,sans-Serif" font-size="10.00">score_stage2</text>
+<text text-anchor="middle" x="686.88" y="-271.57" font-family="Helvetica,sans-Serif" font-size="10.00">_metrics</text>
 </g>
 <!-- refit_stage2_weekly&#45;&gt;score_stage2_metrics -->
-<g id="edge21" class="edge">
+<g id="edge22" class="edge">
 <title>refit_stage2_weekly-&gt;score_stage2_metrics</title>
-<path fill="none" stroke="black" d="M552.35,-231C578.23,-231 613.87,-231 641.9,-231"></path>
-<polygon fill="black" stroke="black" points="642.13,-233.1 648.13,-231 642.13,-228.9 642.13,-233.1"></polygon>
+<path fill="none" stroke="black" d="M552.23,-280.57C578.03,-280.57 613.56,-280.57 641.5,-280.57"></path>
+<polygon fill="black" stroke="black" points="641.7,-282.67 647.7,-280.57 641.7,-278.47 641.7,-282.67"></polygon>
 </g>
 <!-- nested_loso_build_fold -->
-<g id="node18" class="node">
+<g id="node20" class="node">
 <title>nested_loso_build_fold</title>
-<polygon fill="lightgrey" stroke="black" points="552.75,-331 480.89,-331 480.89,-295 552.75,-295 552.75,-331"></polygon>
-<text text-anchor="middle" x="516.82" y="-316" font-family="Helvetica,sans-Serif" font-size="10.00">nested_loso</text>
-<text text-anchor="middle" x="516.82" y="-304" font-family="Helvetica,sans-Serif" font-size="10.00">_build_fold</text>
+<polygon fill="lightgrey" stroke="black" points="552.75,-414.57 480.89,-414.57 480.89,-378.57 552.75,-378.57 552.75,-414.57"></polygon>
+<text text-anchor="middle" x="516.82" y="-399.57" font-family="Helvetica,sans-Serif" font-size="10.00">nested_loso</text>
+<text text-anchor="middle" x="516.82" y="-387.57" font-family="Helvetica,sans-Serif" font-size="10.00">_build_fold</text>
 </g>
 <!-- nested_loso_m2_train -->
-<g id="node19" class="node">
+<g id="node21" class="node">
 <title>nested_loso_m2_train</title>
-<polygon fill="lightgrey" stroke="black" points="552.75,-389 480.89,-389 480.89,-353 552.75,-353 552.75,-389"></polygon>
-<text text-anchor="middle" x="516.82" y="-374" font-family="Helvetica,sans-Serif" font-size="10.00">nested_loso</text>
-<text text-anchor="middle" x="516.82" y="-362" font-family="Helvetica,sans-Serif" font-size="10.00">_m2_train</text>
+<polygon fill="lightgrey" stroke="black" points="552.75,-356.57 480.89,-356.57 480.89,-320.57 552.75,-320.57 552.75,-356.57"></polygon>
+<text text-anchor="middle" x="516.82" y="-341.57" font-family="Helvetica,sans-Serif" font-size="10.00">nested_loso</text>
+<text text-anchor="middle" x="516.82" y="-329.57" font-family="Helvetica,sans-Serif" font-size="10.00">_m2_train</text>
 </g>
 <!-- nested_loso_m2_train&#45;&gt;train_stage2_joint -->
-<g id="edge29" class="edge">
+<g id="edge30" class="edge">
 <title>nested_loso_m2_train-&gt;train_stage2_joint</title>
-<path fill="none" stroke="black" d="M552.76,-354.01C579.16,-341.17 615.54,-323.47 643.69,-309.79"></path>
-<polygon fill="black" stroke="black" points="644.72,-311.62 649.2,-307.11 642.88,-307.84 644.72,-311.62"></polygon>
+<path fill="none" stroke="black" d="M553.05,-338.57C575.95,-338.57 606.25,-338.57 632.13,-338.57"></path>
+<polygon fill="black" stroke="black" points="632.26,-340.67 638.26,-338.57 632.26,-336.47 632.26,-340.67"></polygon>
 </g>
 <!-- nested_loso_cv -->
-<g id="node20" class="node">
+<g id="node22" class="node">
 <title>nested_loso_cv</title>
-<polygon fill="lightgrey" stroke="black" points="395.48,-389 307.5,-389 307.5,-353 395.48,-353 395.48,-389"></polygon>
-<text text-anchor="middle" x="351.49" y="-368" font-family="Helvetica,sans-Serif" font-size="10.00">nested_loso_cv</text>
+<polygon fill="lightgrey" stroke="black" points="395.48,-472.57 307.5,-472.57 307.5,-436.57 395.48,-436.57 395.48,-472.57"></polygon>
+<text text-anchor="middle" x="351.49" y="-451.57" font-family="Helvetica,sans-Serif" font-size="10.00">nested_loso_cv</text>
 </g>
 <!-- nested_loso_cv&#45;&gt;m1_walkforward_predictions -->
-<g id="edge24" class="edge">
+<g id="edge25" class="edge">
 <title>nested_loso_cv-&gt;m1_walkforward_predictions</title>
-<path fill="none" stroke="black" d="M517.82,-833C663.18,-938.27 756.59,-952.89 919.23,-877 966.93,-854.74 1001.35,-800.67 1018.19,-769.07"></path>
-<polygon fill="black" stroke="black" points="1020.22,-769.74 1021.13,-763.45 1016.49,-767.79 1020.22,-769.74"></polygon>
+<path fill="none" stroke="black" d="M374.01,-472.66C420.17,-511.07 532.77,-602.76 634.3,-669.57 638.28,-672.19 642.51,-674.81 646.78,-677.35"></path>
+<polygon fill="black" stroke="black" points="645.94,-679.3 652.18,-680.52 648.06,-675.67 645.94,-679.3"></polygon>
 </g>
 <!-- nested_loso_cv&#45;&gt;m1_walkforward_multi -->
-<g id="edge23" class="edge">
+<g id="edge24" class="edge">
 <title>nested_loso_cv-&gt;m1_walkforward_multi</title>
-<path fill="none" stroke="black" d="M517.82,-833C560.95,-863.47 579.51,-809.09 630.4,-795 691.31,-778.14 762.59,-763.36 809.34,-754.33"></path>
-<polygon fill="black" stroke="black" points="809.99,-756.34 815.48,-753.15 809.19,-752.22 809.99,-756.34"></polygon>
-<path fill="none" stroke="black" d="M352.28,-389.33C352.56,-460.93 364.23,-723.23 515.82,-833"></path>
+<path fill="none" stroke="black" d="M364.77,-472.91C394.04,-516.65 467.92,-627.02 500.26,-675.32"></path>
+<polygon fill="black" stroke="black" points="498.54,-676.53 503.62,-680.35 502.03,-674.2 498.54,-676.53"></polygon>
 </g>
 <!-- nested_loso_cv&#45;&gt;nested_loso_build_fold -->
-<g id="edge22" class="edge">
+<g id="edge23" class="edge">
 <title>nested_loso_cv-&gt;nested_loso_build_fold</title>
-<path fill="none" stroke="black" d="M395.4,-355.76C420.08,-347 450.9,-336.05 475.18,-327.43"></path>
-<polygon fill="black" stroke="black" points="475.94,-329.39 480.89,-325.4 474.53,-325.43 475.94,-329.39"></polygon>
+<path fill="none" stroke="black" d="M395.4,-439.33C420.08,-430.57 450.9,-419.63 475.18,-411"></path>
+<polygon fill="black" stroke="black" points="475.94,-412.96 480.89,-408.98 474.53,-409 475.94,-412.96"></polygon>
 </g>
 <!-- nested_loso_cv&#45;&gt;nested_loso_m2_train -->
-<g id="edge25" class="edge">
+<g id="edge26" class="edge">
 <title>nested_loso_cv-&gt;nested_loso_m2_train</title>
-<path fill="none" stroke="black" d="M395.4,-371C419.97,-371 450.64,-371 474.87,-371"></path>
-<polygon fill="black" stroke="black" points="474.89,-373.1 480.89,-371 474.89,-368.9 474.89,-373.1"></polygon>
+<path fill="none" stroke="black" d="M373.41,-436.51C395.16,-418.14 430.57,-389.34 463.42,-367.57 467.38,-364.95 471.6,-362.33 475.85,-359.81"></path>
+<polygon fill="black" stroke="black" points="477.11,-361.51 481.24,-356.68 475,-357.88 477.11,-361.51"></polygon>
 </g>
 <!-- nested_loso_m2_eval_frozen_bias -->
-<g id="node22" class="node">
+<g id="node24" class="node">
 <title>nested_loso_m2_eval_frozen_bias</title>
-<polygon fill="lightgrey" stroke="black" stroke-width="2" points="566.49,-447 467.15,-447 467.15,-411 566.49,-411 566.49,-447"></polygon>
-<text text-anchor="middle" x="516.82" y="-432" font-family="Helvetica,sans-Serif" font-size="10.00">nested_loso_m2</text>
-<text text-anchor="middle" x="516.82" y="-420" font-family="Helvetica,sans-Serif" font-size="10.00">_eval_frozen_bias</text>
+<polygon fill="lightgrey" stroke="black" stroke-width="2" points="566.49,-472.57 467.15,-472.57 467.15,-436.57 566.49,-436.57 566.49,-472.57"></polygon>
+<text text-anchor="middle" x="516.82" y="-457.57" font-family="Helvetica,sans-Serif" font-size="10.00">nested_loso_m2</text>
+<text text-anchor="middle" x="516.82" y="-445.57" font-family="Helvetica,sans-Serif" font-size="10.00">_eval_frozen_bias</text>
 </g>
 <!-- nested_loso_cv&#45;&gt;nested_loso_m2_eval_frozen_bias -->
-<g id="edge26" class="edge">
+<g id="edge27" class="edge">
 <title>nested_loso_cv-&gt;nested_loso_m2_eval_frozen_bias</title>
-<path fill="none" stroke="black" d="M395.4,-386.24C415.62,-393.42 439.96,-402.06 461.45,-409.69"></path>
-<polygon fill="black" stroke="black" points="460.78,-411.68 467.14,-411.71 462.18,-407.73 460.78,-411.68"></polygon>
+<path fill="none" stroke="black" d="M395.4,-454.57C415.45,-454.57 439.54,-454.57 460.9,-454.57"></path>
+<polygon fill="black" stroke="black" points="461.14,-456.67 467.14,-454.57 461.14,-452.47 461.14,-456.67"></polygon>
 </g>
 <!-- nested_loso_grid_search -->
-<g id="node21" class="node">
+<g id="node23" class="node">
 <title>nested_loso_grid_search</title>
-<polygon fill="lightgrey" stroke="black" points="235.65,-249 160.02,-249 160.02,-213 235.65,-213 235.65,-249"></polygon>
-<text text-anchor="middle" x="197.84" y="-234" font-family="Helvetica,sans-Serif" font-size="10.00">nested_loso</text>
-<text text-anchor="middle" x="197.84" y="-222" font-family="Helvetica,sans-Serif" font-size="10.00">_grid_search</text>
+<polygon fill="lightgrey" stroke="black" points="235.65,-472.57 160.02,-472.57 160.02,-436.57 235.65,-436.57 235.65,-472.57"></polygon>
+<text text-anchor="middle" x="197.84" y="-457.57" font-family="Helvetica,sans-Serif" font-size="10.00">nested_loso</text>
+<text text-anchor="middle" x="197.84" y="-445.57" font-family="Helvetica,sans-Serif" font-size="10.00">_grid_search</text>
 </g>
 <!-- nested_loso_grid_search&#45;&gt;stage2_make_spec -->
-<g id="edge28" class="edge">
+<g id="edge29" class="edge">
 <title>nested_loso_grid_search-&gt;stage2_make_spec</title>
-<path fill="none" stroke="black" d="M235.79,-219.99C345.49,-187.29 669.86,-90.62 802.4,-51.11"></path>
-<polygon fill="black" stroke="black" points="803.04,-53.11 808.19,-49.39 801.84,-49.09 803.04,-53.11"></polygon>
+<path fill="none" stroke="black" d="M216.27,-436.18C271.43,-379.25 449.43,-204.9 634.3,-124.57 688.01,-101.23 754.54,-91.18 801.16,-86.84"></path>
+<polygon fill="black" stroke="black" points="801.53,-88.92 807.32,-86.29 801.15,-84.74 801.53,-88.92"></polygon>
 </g>
 <!-- nested_loso_grid_search&#45;&gt;nested_loso_cv -->
-<g id="edge27" class="edge">
+<g id="edge28" class="edge">
 <title>nested_loso_grid_search-&gt;nested_loso_cv</title>
-<path fill="none" stroke="black" d="M218.35,-249.02C245.84,-274.39 295.95,-320.65 325.93,-348.33"></path>
-<polygon fill="black" stroke="black" points="324.73,-350.08 330.57,-352.61 327.58,-347 324.73,-350.08"></polygon>
+<path fill="none" stroke="black" d="M235.94,-454.57C255.65,-454.57 280.14,-454.57 301.4,-454.57"></path>
+<polygon fill="black" stroke="black" points="301.6,-456.67 307.6,-454.57 301.6,-452.47 301.6,-456.67"></polygon>
 </g>
 <!-- m2_predict_one -->
-<g id="node24" class="node">
+<g id="node26" class="node">
 <title>m2_predict_one</title>
-<polygon fill="lightgrey" stroke="black" stroke-width="2" points="1075.59,-591 986.16,-591 986.16,-555 1075.59,-555 1075.59,-591"></polygon>
-<text text-anchor="middle" x="1030.87" y="-570" font-family="Helvetica,sans-Serif" font-size="10.00">m2_predict_one</text>
+<polygon fill="lightgrey" stroke="black" stroke-width="2" points="1074.48,-492.57 985.05,-492.57 985.05,-456.57 1074.48,-456.57 1074.48,-492.57"></polygon>
+<text text-anchor="middle" x="1029.76" y="-471.57" font-family="Helvetica,sans-Serif" font-size="10.00">m2_predict_one</text>
 </g>
 <!-- nested_loso_m2_eval_frozen_bias&#45;&gt;m2_predict_one -->
-<g id="edge30" class="edge">
+<g id="edge31" class="edge">
 <title>nested_loso_m2_eval_frozen_bias-&gt;m2_predict_one</title>
-<path fill="none" stroke="black" d="M522.42,-447.11C533.45,-486.35 565.46,-578.94 630.4,-619 717.39,-672.66 758.02,-644.2 859.82,-635"></path>
-<path fill="none" stroke="black" d="M861.82,-635C908.37,-630.79 958.19,-610.15 991.39,-593.83"></path>
-<polygon fill="black" stroke="black" points="992.55,-595.6 996.98,-591.04 990.68,-591.84 992.55,-595.6"></polygon>
+<path fill="none" stroke="black" d="M566.81,-456.49C664.09,-460.3 880.65,-468.77 978.75,-472.61"></path>
+<polygon fill="black" stroke="black" points="978.96,-474.72 985.04,-472.86 979.13,-470.53 978.96,-474.72"></polygon>
 </g>
 <!-- make_soft_cap_fn -->
-<g id="node25" class="node">
+<g id="node27" class="node">
 <title>make_soft_cap_fn</title>
-<polygon fill="lightgrey" stroke="black" points="1248.14,-591 1148.7,-591 1148.7,-555 1248.14,-555 1248.14,-591"></polygon>
-<text text-anchor="middle" x="1198.42" y="-570" font-family="Helvetica,sans-Serif" font-size="10.00">make_soft_cap_fn</text>
+<polygon fill="lightgrey" stroke="black" points="1247.03,-492.57 1147.6,-492.57 1147.6,-456.57 1247.03,-456.57 1247.03,-492.57"></polygon>
+<text text-anchor="middle" x="1197.31" y="-471.57" font-family="Helvetica,sans-Serif" font-size="10.00">make_soft_cap_fn</text>
 </g>
 <!-- nested_loso_m2_eval_frozen_bias&#45;&gt;make_soft_cap_fn -->
-<g id="edge31" class="edge">
+<g id="edge32" class="edge">
 <title>nested_loso_m2_eval_frozen_bias-&gt;make_soft_cap_fn</title>
-<path fill="none" stroke="black" d="M861.82,-635C961.49,-625.99 986.47,-621.81 1084.56,-602 1103.54,-598.17 1124.09,-593.15 1142.4,-588.37"></path>
-<polygon fill="black" stroke="black" points="1143.25,-590.31 1148.52,-586.75 1142.18,-586.25 1143.25,-590.31"></polygon>
+<path fill="none" stroke="black" d="M554.43,-436.46C558.83,-433.25 562.98,-429.62 566.4,-425.57 620.03,-362.21 587.46,-320.11 634.3,-251.57 668.73,-201.18 696.73,-205.84 735.35,-158.57 770.17,-115.95 751.42,-79.62 799.35,-52.57 909.31,9.49 983.3,24.32 1083.46,-52.57 1148.39,-102.42 1184.06,-368.28 1193.65,-450.39"></path>
+<polygon fill="black" stroke="black" points="1191.57,-450.71 1194.35,-456.43 1195.75,-450.23 1191.57,-450.71"></polygon>
 </g>
 <!-- nested_loso_refit_best -->
-<g id="node23" class="node">
+<g id="node25" class="node">
 <title>nested_loso_refit_best</title>
-<polygon fill="lightgrey" stroke="black" points="87.9,-269 16.03,-269 16.03,-233 87.9,-233 87.9,-269"></polygon>
-<text text-anchor="middle" x="51.97" y="-254" font-family="Helvetica,sans-Serif" font-size="10.00">nested_loso</text>
-<text text-anchor="middle" x="51.97" y="-242" font-family="Helvetica,sans-Serif" font-size="10.00">_refit_best</text>
+<polygon fill="lightgrey" stroke="black" points="87.9,-484.57 16.03,-484.57 16.03,-448.57 87.9,-448.57 87.9,-484.57"></polygon>
+<text text-anchor="middle" x="51.97" y="-469.57" font-family="Helvetica,sans-Serif" font-size="10.00">nested_loso</text>
+<text text-anchor="middle" x="51.97" y="-457.57" font-family="Helvetica,sans-Serif" font-size="10.00">_refit_best</text>
 </g>
 <!-- nested_loso_refit_best&#45;&gt;train_stage2_joint -->
-<g id="edge33" class="edge">
+<g id="edge34" class="edge">
 <title>nested_loso_refit_best-&gt;train_stage2_joint</title>
-<path fill="none" stroke="black" d="M88.11,-254.21C108.97,-256.06 135.95,-258.33 159.93,-260 332.62,-272.02 537.46,-282.1 632.73,-286.56"></path>
-<polygon fill="black" stroke="black" points="632.76,-288.66 638.85,-286.84 632.95,-284.46 632.76,-288.66"></polygon>
+<path fill="none" stroke="black" d="M88.18,-478.19C174.64,-504.59 402.26,-561.01 566.4,-483.57 619.67,-458.44 657.23,-396.63 674.74,-362.38"></path>
+<polygon fill="black" stroke="black" points="676.76,-363.03 677.58,-356.73 673.01,-361.15 676.76,-363.03"></polygon>
 </g>
 <!-- nested_loso_refit_best&#45;&gt;nested_loso_grid_search -->
-<g id="edge32" class="edge">
+<g id="edge33" class="edge">
 <title>nested_loso_refit_best-&gt;nested_loso_grid_search</title>
-<path fill="none" stroke="black" d="M88.16,-246.11C108,-243.35 132.93,-239.88 153.91,-236.97"></path>
-<polygon fill="black" stroke="black" points="154.34,-239.03 160,-236.12 153.77,-234.87 154.34,-239.03"></polygon>
+<path fill="none" stroke="black" d="M88.16,-463.64C108,-461.98 132.93,-459.9 153.91,-458.15"></path>
+<polygon fill="black" stroke="black" points="154.19,-460.24 160,-457.64 153.84,-456.05 154.19,-460.24"></polygon>
 </g>
 <!-- m2_predict_one&#45;&gt;make_soft_cap_fn -->
-<g id="edge34" class="edge">
+<g id="edge35" class="edge">
 <title>m2_predict_one-&gt;make_soft_cap_fn</title>
-<path fill="none" stroke="black" d="M1075.8,-573C1096.29,-573 1120.89,-573 1142.58,-573"></path>
-<polygon fill="black" stroke="black" points="1142.62,-575.1 1148.62,-573 1142.62,-570.9 1142.62,-575.1"></polygon>
+<path fill="none" stroke="black" d="M1074.69,-474.57C1095.18,-474.57 1119.78,-474.57 1141.47,-474.57"></path>
+<polygon fill="black" stroke="black" points="1141.51,-476.67 1147.51,-474.57 1141.51,-472.47 1141.51,-476.67"></polygon>
 </g>
 <!-- run_m1_alignment&#45;&gt;run_alignment_prospective -->
-<g id="edge38" class="edge">
+<g id="edge39" class="edge">
 <title>run_m1_alignment-&gt;run_alignment_prospective</title>
-<path fill="none" stroke="black" d="M887.34,-586.07C917.41,-607.37 967.32,-642.71 999.4,-665.42"></path>
-<polygon fill="black" stroke="black" points="998.27,-667.2 1004.38,-668.95 1000.7,-663.77 998.27,-667.2"></polygon>
+<path fill="none" stroke="black" d="M898.42,-635.75C924.26,-648.2 958.6,-664.75 985.54,-677.74"></path>
+<polygon fill="black" stroke="black" points="984.86,-679.74 991.17,-680.45 986.68,-675.96 984.86,-679.74"></polygon>
 </g>
 <!-- run_m2_forecast&#45;&gt;stage2_exclude_newseason -->
-<g id="edge41" class="edge">
+<g id="edge42" class="edge">
 <title>run_m2_forecast-&gt;stage2_exclude_newseason</title>
-<path fill="none" stroke="black" d="M907.38,-492.44C911.9,-489.2 916,-485.41 919.23,-481 1015.07,-350.24 884.96,-253.75 978.01,-121 979.74,-118.54 981.74,-116.27 983.93,-114.17"></path>
-<polygon fill="black" stroke="black" points="985.49,-115.6 988.68,-110.1 982.76,-112.41 985.49,-115.6"></polygon>
+<path fill="none" stroke="black" d="M906.27,-542.01C910.79,-538.77 914.89,-534.98 918.12,-530.57 1013.96,-399.81 883.85,-303.32 976.91,-170.57 978.63,-168.11 980.63,-165.84 982.82,-163.74"></path>
+<polygon fill="black" stroke="black" points="984.38,-165.17 987.57,-159.67 981.65,-161.98 984.38,-165.17"></polygon>
 </g>
 <!-- run_m2_forecast&#45;&gt;add_prospective_derivs_link -->
-<g id="edge42" class="edge">
+<g id="edge43" class="edge">
 <title>run_m2_forecast-&gt;add_prospective_derivs_link</title>
-<path fill="none" stroke="black" d="M906.71,-491.9C911.34,-488.76 915.65,-485.14 919.23,-481 999.9,-387.68 1022.24,-233.46 1028,-174.21"></path>
-<polygon fill="black" stroke="black" points="1030.1,-174.29 1028.57,-168.12 1025.92,-173.9 1030.1,-174.29"></polygon>
+<path fill="none" stroke="black" d="M905.6,-541.47C910.23,-538.33 914.54,-534.71 918.12,-530.57 998.79,-437.25 1021.13,-283.03 1026.89,-223.78"></path>
+<polygon fill="black" stroke="black" points="1028.99,-223.86 1027.46,-217.69 1024.81,-223.47 1028.99,-223.86"></polygon>
 </g>
 <!-- run_m2_forecast&#45;&gt;m2_predict_one -->
-<g id="edge39" class="edge">
+<g id="edge40" class="edge">
 <title>run_m2_forecast-&gt;m2_predict_one</title>
-<path fill="none" stroke="black" d="M907.74,-527.22C930.23,-535.65 957.33,-545.81 980.29,-554.41"></path>
-<polygon fill="black" stroke="black" points="979.68,-556.43 986.03,-556.57 981.15,-552.49 979.68,-556.43"></polygon>
+<path fill="none" stroke="black" d="M896.54,-541.48C903.69,-537.86 911.15,-534.1 918.12,-530.57 941.05,-518.98 966.64,-506.02 987.44,-495.5"></path>
+<polygon fill="black" stroke="black" points="988.49,-497.32 992.89,-492.74 986.59,-493.57 988.49,-497.32"></polygon>
 </g>
 <!-- run_m2_forecast&#45;&gt;make_soft_cap_fn -->
-<g id="edge40" class="edge">
+<g id="edge41" class="edge">
 <title>run_m2_forecast-&gt;make_soft_cap_fn</title>
-<path fill="none" stroke="black" d="M907.7,-515.64C952.9,-521.51 1023.81,-531.59 1084.56,-544 1103.53,-547.87 1124.08,-552.9 1142.39,-557.68"></path>
-<polygon fill="black" stroke="black" points="1142.17,-559.8 1148.51,-559.29 1143.24,-555.73 1142.17,-559.8"></polygon>
+<path fill="none" stroke="black" d="M906.37,-548.16C951.41,-536.9 1022.2,-519.14 1083.46,-503.57 1102.3,-498.78 1122.91,-493.5 1141.3,-488.77"></path>
+<polygon fill="black" stroke="black" points="1142.16,-490.72 1147.44,-487.19 1141.11,-486.65 1142.16,-490.72"></polygon>
 </g>
 </g>
 </svg>
@@ -873,7 +892,7 @@ Note
 <section id="m0_training.r" class="level3" data-number="4.1">
 <h3 data-number="4.1" class="anchored" data-anchor-id="m0_training.r"><span class="header-section-number">4.1</span> <code>m0_training.R</code></h3>
 <p>Train and tune the ignition detector, including LOSO utilities and ignition decision helpers.</p>
-<p>Mirror: <code>flualign/R/m0_training.R</code>.</p>
+<p>Mirror: <code>PAGe/R/m0_training.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 32%">
@@ -924,7 +943,7 @@ Note
 <section id="m0_retro.r" class="level3" data-number="4.2">
 <h3 data-number="4.2" class="anchored" data-anchor-id="m0_retro.r"><span class="header-section-number">4.2</span> <code>m0_retro.R</code></h3>
 <p>Run retrospective ignition grid searches and helper plots for historical alignment to ignition anchors.</p>
-<p>Mirror: <code>flualign/R/m0_retro.R</code>.</p>
+<p>Mirror: <code>PAGe/R/m0_retro.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 18%">
@@ -955,7 +974,7 @@ Note
 <section id="m0_runtime.r" class="level3" data-number="4.3">
 <h3 data-number="4.3" class="anchored" data-anchor-id="m0_runtime.r"><span class="header-section-number">4.3</span> <code>m0_runtime.R</code></h3>
 <p>Run weekly M_0 detection on a current season and visualize the weekly snapshots.</p>
-<p>Mirror: <code>flualign/R/m0_runtime.R</code>.</p>
+<p>Mirror: <code>PAGe/R/m0_runtime.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 36%">
@@ -982,7 +1001,7 @@ Note
 <section id="flagignition.r" class="level3" data-number="4.4">
 <h3 data-number="4.4" class="anchored" data-anchor-id="flagignition.r"><span class="header-section-number">4.4</span> <code>flagIgnition.R</code></h3>
 <p>Apply the four-rule threshold detector to flag the ignition week for a single season.</p>
-<p>Mirror: <code>flualign/R/flagIgnition.R</code>.</p>
+<p>Mirror: <code>PAGe/R/flagIgnition.R</code>.</p>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1004,7 +1023,7 @@ Note
 <section id="m1_reference.r" class="level3" data-number="5.1">
 <h3 data-number="5.1" class="anchored" data-anchor-id="m1_reference.r"><span class="header-section-number">5.1</span> <code>m1_reference.R</code></h3>
 <p>Estimate the reference epidemic curve and derivative summaries from historical data.</p>
-<p>Mirror: <code>flualign/R/m1_reference.R</code>.</p>
+<p>Mirror: <code>PAGe/R/m1_reference.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 15%">
@@ -1035,7 +1054,7 @@ Note
 <section id="m1_reference_helpers.r" class="level3" data-number="5.2">
 <h3 data-number="5.2" class="anchored" data-anchor-id="m1_reference_helpers.r"><span class="header-section-number">5.2</span> <code>m1_reference_helpers.R</code></h3>
 <p>Define reusable reference-curve closures and shim accessors that wrap the fitted GAM.</p>
-<p>Mirror: <code>flualign/R/m1_reference_helpers.R</code>.</p>
+<p>Mirror: <code>PAGe/R/m1_reference_helpers.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 16%">
@@ -1066,7 +1085,7 @@ Note
 <section id="m1_fit.r" class="level3" data-number="5.3">
 <h3 data-number="5.3" class="anchored" data-anchor-id="m1_fit.r"><span class="header-section-number">5.3</span> <code>m1_fit.R</code></h3>
 <p>Fit tau and delta by matching a season to the reference curve.</p>
-<p>Mirror: <code>flualign/R/m1_fit.R</code>.</p>
+<p>Mirror: <code>PAGe/R/m1_fit.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 29%">
@@ -1081,7 +1100,7 @@ Note
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">negloglik_tau_delta</td>
-<td style="text-align: left;">Compute the alignment objective used to estimate tau and delta.</td>
+<td style="text-align: left;">Negative log-likelihood for tau/delta alignment</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">tau_profile_se</td>
@@ -1109,7 +1128,7 @@ Note
 <section id="m1_hyperparams.r" class="level3" data-number="5.4">
 <h3 data-number="5.4" class="anchored" data-anchor-id="m1_hyperparams.r"><span class="header-section-number">5.4</span> <code>m1_hyperparams.R</code></h3>
 <p>Learn high-level M_1 alignment hyperparameters from retrospective tuning results.</p>
-<p>Mirror: <code>flualign/R/m1_hyperparams.R</code>.</p>
+<p>Mirror: <code>PAGe/R/m1_hyperparams.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 32%">
@@ -1132,7 +1151,7 @@ Note
 <section id="m1_loso.r" class="level3" data-number="5.5">
 <h3 data-number="5.5" class="anchored" data-anchor-id="m1_loso.r"><span class="header-section-number">5.5</span> <code>m1_loso.R</code></h3>
 <p>Run LOSO and walk-forward evaluation for alignment and hyperparameter tuning.</p>
-<p>Mirror: <code>flualign/R/m1_loso.R</code>.</p>
+<p>Mirror: <code>PAGe/R/m1_loso.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 22%">
@@ -1159,7 +1178,7 @@ Note
 <section id="m1_runtime.r" class="level3" data-number="5.6">
 <h3 data-number="5.6" class="anchored" data-anchor-id="m1_runtime.r"><span class="header-section-number">5.6</span> <code>m1_runtime.R</code></h3>
 <p>Run prospective M_1 alignment, peak detection, and peak calibration.</p>
-<p>Mirror: <code>flualign/R/m1_runtime.R</code>.</p>
+<p>Mirror: <code>PAGe/R/m1_runtime.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 26%">
@@ -1194,7 +1213,7 @@ Note
 <section id="m1_multi_template.r" class="level3" data-number="5.7">
 <h3 data-number="5.7" class="anchored" data-anchor-id="m1_multi_template.r"><span class="header-section-number">5.7</span> <code>m1_multi_template.R</code></h3>
 <p>Combine multiple reference templates into the multi-template alignment ensemble.</p>
-<p>Mirror: <code>flualign/R/m1_multi_template.R</code>.</p>
+<p>Mirror: <code>PAGe/R/m1_multi_template.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 40%">
@@ -1225,7 +1244,7 @@ Note
 <section id="m1_peak_status.r" class="level3" data-number="5.8">
 <h3 data-number="5.8" class="anchored" data-anchor-id="m1_peak_status.r"><span class="header-section-number">5.8</span> <code>m1_peak_status.R</code></h3>
 <p>Turn alignment outputs into a coarse peak-state label such as pre-peak or post-peak.</p>
-<p>Mirror: <code>flualign/R/m1_peak_status.R</code>.</p>
+<p>Mirror: <code>PAGe/R/m1_peak_status.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 32%">
@@ -1248,12 +1267,8 @@ Note
 <section id="m1_peak_summary.r" class="level3" data-number="5.9">
 <h3 data-number="5.9" class="anchored" data-anchor-id="m1_peak_summary.r"><span class="header-section-number">5.9</span> <code>m1_peak_summary.R</code></h3>
 <p>Summarize peak timing implied by an alignment fit.</p>
-<p>Mirror: <code>flualign/R/m1_peak_summary.R</code>.</p>
+<p>Mirror: <code>PAGe/R/m1_peak_summary.R</code>.</p>
 <table class="caption-top table">
-<colgroup>
-<col style="width: 22%">
-<col style="width: 78%">
-</colgroup>
 <thead>
 <tr class="header">
 <th style="text-align: left;">Function</th>
@@ -1263,7 +1278,7 @@ Note
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">peak_summary_from_fit</td>
-<td style="text-align: left;">Summarize predicted peak timing and related quantities from an alignment fit.</td>
+<td style="text-align: left;">Summarise the peak of an aligned seasonal fit</td>
 </tr>
 </tbody>
 </table>
@@ -1274,7 +1289,7 @@ Note
 <section id="m2_training.r" class="level3" data-number="6.1">
 <h3 data-number="6.1" class="anchored" data-anchor-id="m2_training.r"><span class="header-section-number">6.1</span> <code>m2_training.R</code></h3>
 <p>Core M_2 prediction functions: m2_predict_one() (shared prediction core), soft-cap, feature derivation, model fitting, and weekly refit.</p>
-<p>Mirror: <code>flualign/R/m2_training.R</code>.</p>
+<p>Mirror: <code>PAGe/R/m2_training.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 25%">
@@ -1341,7 +1356,7 @@ Note
 <section id="m2_spec_grid.r" class="level3" data-number="6.2">
 <h3 data-number="6.2" class="anchored" data-anchor-id="m2_spec_grid.r"><span class="header-section-number">6.2</span> <code>m2_spec_grid.R</code></h3>
 <p>M_2 model specification, formula construction, feature engineering helpers, and the grid-search spec builder.</p>
-<p>Mirror: <code>flualign/R/m2_spec_grid.R</code>.</p>
+<p>Mirror: <code>PAGe/R/m2_spec_grid.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 28%">
@@ -1380,78 +1395,13 @@ Note
 <section id="m2_nested_loso.r" class="level3" data-number="6.3">
 <h3 data-number="6.3" class="anchored" data-anchor-id="m2_nested_loso.r"><span class="header-section-number">6.3</span> <code>m2_nested_loso.R</code></h3>
 <p>Nested LOSO evaluation for the full M_1 -&gt; M_2 forecasting stack, including frozen-fit path and per-fold fold builder.</p>
-<p>Mirror: <code>flualign/R/m2_nested_loso.R</code>.</p>
-<table class="caption-top table">
-<colgroup>
-<col style="width: 30%">
-<col style="width: 69%">
-</colgroup>
-<thead>
-<tr class="header">
-<th style="text-align: left;">Function</th>
-<th style="text-align: left;">Description</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td style="text-align: left;">add_prospective_derivs_link</td>
-<td style="text-align: left;">Prospective (real-time safe) derivatives of positivity on the logit scale</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">nested_loso_build_fold</td>
-<td style="text-align: left;">Build a single LOSO fold: training alignment + reference curve</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">nested_loso_m1_train</td>
-<td style="text-align: left;">Run M1 walk-forward predictions on training seasons</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">nested_loso_m2_train</td>
-<td style="text-align: left;">Train M2 model on one LOSO fold</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">nested_loso_m1_test</td>
-<td style="text-align: left;">Run M1 walk-forward on the held-out test season</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">nested_loso_m2_eval_frozen_bias</td>
-<td style="text-align: left;">Evaluate M2 using a frozen GAM with walk-forward bias correction</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">nested_loso_m2_eval_weekly_refit</td>
-<td style="text-align: left;">Evaluate a Stage-2 spec using weekly GAM refit on the test season</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">nested_loso_run_fold</td>
-<td style="text-align: left;">Run a complete nested LOSO fold</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">nested_loso_cv</td>
-<td style="text-align: left;">Nested M1 → M2 leave-one-season-out cross-validation</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">.fmt_duration</td>
-<td style="text-align: left;">No inline description is available; see the source for details.</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">nested_loso_grid_search</td>
-<td style="text-align: left;">Nested LOSO grid search over M2 specs</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">nested_loso_refit_best</td>
-<td style="text-align: left;">Refit M2 on all historical data with a chosen spec</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">plot_nested_loso_predictions</td>
-<td style="text-align: left;">Plot nested LOSO predictions by season</td>
-</tr>
-</tbody>
-</table>
+<p>Mirror: <code>PAGe/R/m2_nested_loso.R</code>.</p>
+<p>This file does not define top-level functions.</p>
 </section>
 <section id="m2_runtime.r" class="level3" data-number="6.4">
 <h3 data-number="6.4" class="anchored" data-anchor-id="m2_runtime.r"><span class="header-section-number">6.4</span> <code>m2_runtime.R</code></h3>
 <p>Build pseudo-prospective M_2 snapshots and turn them into forecast series.</p>
-<p>Mirror: <code>flualign/R/m2_runtime.R</code>.</p>
+<p>Mirror: <code>PAGe/R/m2_runtime.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 32%">
@@ -1489,7 +1439,7 @@ Note
 <section id="pipeline_bridge.r" class="level3" data-number="7.1">
 <h3 data-number="7.1" class="anchored" data-anchor-id="pipeline_bridge.r"><span class="header-section-number">7.1</span> <code>pipeline_bridge.R</code></h3>
 <p>M_1 walk-forward predictions bridge functions: m1_walkforward_predictions(), m1_walkforward_multi(), inject_m1_into_snapshots().</p>
-<p>Mirror: <code>flualign/R/pipeline_bridge.R</code>.</p>
+<p>Mirror: <code>PAGe/R/pipeline_bridge.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 26%">
@@ -1524,7 +1474,7 @@ Note
 <section id="pipeline_runtime_helpers.r" class="level3" data-number="7.2">
 <h3 data-number="7.2" class="anchored" data-anchor-id="pipeline_runtime_helpers.r"><span class="header-section-number">7.2</span> <code>pipeline_runtime_helpers.R</code></h3>
 <p>Provide small shared helpers used across runtime code paths.</p>
-<p>Mirror: <code>flualign/R/pipeline_runtime_helpers.R</code>.</p>
+<p>Mirror: <code>PAGe/R/pipeline_runtime_helpers.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 27%">
@@ -1559,7 +1509,7 @@ Note
 <section id="pipeline_runtime.r" class="level3" data-number="7.3">
 <h3 data-number="7.3" class="anchored" data-anchor-id="pipeline_runtime.r"><span class="header-section-number">7.3</span> <code>pipeline_runtime.R</code></h3>
 <p>End-to-end prospective pipeline entry points: load_prospective_kit(), run_prospective_pipeline(), run_m0_detection(), run_m1_alignment(), run_m2_forecast().</p>
-<p>Mirror: <code>flualign/R/pipeline_runtime.R</code>.</p>
+<p>Mirror: <code>PAGe/R/pipeline_runtime.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 27%">
@@ -1592,6 +1542,22 @@ Note
 <td style="text-align: left;">run_prospective_pipeline</td>
 <td style="text-align: left;">Run the full M0 -&gt; M1 -&gt; M2 walk-forward pipeline for one season</td>
 </tr>
+<tr class="even">
+<td style="text-align: left;">run_m0</td>
+<td style="text-align: left;">No inline description is available; see the source for details.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">run_m1</td>
+<td style="text-align: left;">No inline description is available; see the source for details.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">run_m2</td>
+<td style="text-align: left;">No inline description is available; see the source for details.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">run_pipeline</td>
+<td style="text-align: left;">No inline description is available; see the source for details.</td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -1601,7 +1567,7 @@ Note
 <section id="align_forecast_pipeline_dilate.r" class="level3" data-number="8.1">
 <h3 data-number="8.1" class="anchored" data-anchor-id="align_forecast_pipeline_dilate.r"><span class="header-section-number">8.1</span> <code>align_forecast_pipeline_dilate.R</code></h3>
 <p>Legacy exploratory helper for dilation-based alignment plus forecasting in one function.</p>
-<p>Mirror: <code>flualign/R/align_forecast_pipeline_dilate.R</code>.</p>
+<p>Mirror: <code>PAGe/R/align_forecast_pipeline_dilate.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 38%">
@@ -1624,7 +1590,7 @@ Note
 <section id="forecast_post_peak_gam.r" class="level3" data-number="8.2">
 <h3 data-number="8.2" class="anchored" data-anchor-id="forecast_post_peak_gam.r"><span class="header-section-number">8.2</span> <code>forecast_post_peak_gam.R</code></h3>
 <p>Legacy post-peak forecasting helper based on a GAM without further alignment updates.</p>
-<p>Mirror: <code>flualign/R/forecast_post_peak_gam.R</code>.</p>
+<p>Mirror: <code>PAGe/R/forecast_post_peak_gam.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 31%">
@@ -1647,12 +1613,8 @@ Note
 <section id="checkseasonlength.r" class="level3" data-number="8.3">
 <h3 data-number="8.3" class="anchored" data-anchor-id="checkseasonlength.r"><span class="header-section-number">8.3</span> <code>checkSeasonLength.R</code></h3>
 <p>Check whether a season has enough observed weeks to support downstream analysis.</p>
-<p>Mirror: <code>flualign/R/checkSeasonLength.R</code>.</p>
+<p>Mirror: <code>PAGe/R/checkSeasonLength.R</code>.</p>
 <table class="caption-top table">
-<colgroup>
-<col style="width: 16%">
-<col style="width: 83%">
-</colgroup>
 <thead>
 <tr class="header">
 <th style="text-align: left;">Function</th>
@@ -1662,7 +1624,7 @@ Note
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">checkSeasonLength</td>
-<td style="text-align: left;">Check whether each season has enough usable observations for the intended analysis window.</td>
+<td style="text-align: left;">Compute in-season length for each season</td>
 </tr>
 </tbody>
 </table>
@@ -1670,7 +1632,7 @@ Note
 <section id="check_scale_identifiability.r" class="level3" data-number="8.4">
 <h3 data-number="8.4" class="anchored" data-anchor-id="check_scale_identifiability.r"><span class="header-section-number">8.4</span> <code>check_scale_identifiability.R</code></h3>
 <p>Check whether scale is identifiable early enough for alignment-based forecasting.</p>
-<p>Mirror: <code>flualign/R/check_scale_identifiability.R</code>.</p>
+<p>Mirror: <code>PAGe/R/check_scale_identifiability.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 28%">
@@ -1693,7 +1655,7 @@ Note
 <section id="getcurrentd.r" class="level3" data-number="8.5">
 <h3 data-number="8.5" class="anchored" data-anchor-id="getcurrentd.r"><span class="header-section-number">8.5</span> <code>getCurrentD.R</code></h3>
 <p>Extract or derive the current scale parameter used in older alignment workflows.</p>
-<p>Mirror: <code>flualign/R/getCurrentD.R</code>.</p>
+<p>Mirror: <code>PAGe/R/getCurrentD.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 15%">
@@ -1716,7 +1678,7 @@ Note
 <section id="score_params.r" class="level3" data-number="8.6">
 <h3 data-number="8.6" class="anchored" data-anchor-id="score_params.r"><span class="header-section-number">8.6</span> <code>score_params.R</code></h3>
 <p>Score ignition-threshold parameter settings on historical data.</p>
-<p>Mirror: <code>flualign/R/score_params.R</code>.</p>
+<p>Mirror: <code>PAGe/R/score_params.R</code>.</p>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1735,7 +1697,7 @@ Note
 <section id="simulate.r" class="level3" data-number="8.7">
 <h3 data-number="8.7" class="anchored" data-anchor-id="simulate.r"><span class="header-section-number">8.7</span> <code>simulate.R</code></h3>
 <p>Simulate flu seasons and load the built-in historical influenza example data.</p>
-<p>Mirror: <code>flualign/R/simulate.R</code>.</p>
+<p>Mirror: <code>PAGe/R/simulate.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 26%">
@@ -1762,7 +1724,7 @@ Note
 <section id="plot.r" class="level3" data-number="8.8">
 <h3 data-number="8.8" class="anchored" data-anchor-id="plot.r"><span class="header-section-number">8.8</span> <code>plot.R</code></h3>
 <p>Generic forecast plotting helper.</p>
-<p>Mirror: <code>flualign/R/plot.R</code>.</p>
+<p>Mirror: <code>PAGe/R/plot.R</code>.</p>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1781,7 +1743,7 @@ Note
 <section id="plotres.r" class="level3" data-number="8.9">
 <h3 data-number="8.9" class="anchored" data-anchor-id="plotres.r"><span class="header-section-number">8.9</span> <code>plotRes.R</code></h3>
 <p>Legacy plotting helper for summarizing result objects.</p>
-<p>Mirror: <code>flualign/R/plotRes.R</code>.</p>
+<p>Mirror: <code>PAGe/R/plotRes.R</code>.</p>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1792,7 +1754,7 @@ Note
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">plotRes</td>
-<td style="text-align: left;">Plot legacy result objects in a compact summary view.</td>
+<td style="text-align: left;">Plot alignment results against history and reference curve</td>
 </tr>
 </tbody>
 </table>
@@ -1800,7 +1762,7 @@ Note
 <section id="plotseasoncurves.r" class="level3" data-number="8.10">
 <h3 data-number="8.10" class="anchored" data-anchor-id="plotseasoncurves.r"><span class="header-section-number">8.10</span> <code>plotSeasonCurves.R</code></h3>
 <p>Plot season-level observed and fitted curves with ignition metadata.</p>
-<p>Mirror: <code>flualign/R/plotSeasonCurves.R</code>.</p>
+<p>Mirror: <code>PAGe/R/plotSeasonCurves.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 18%">
@@ -1823,7 +1785,7 @@ Note
 <section id="utils.r" class="level3" data-number="8.11">
 <h3 data-number="8.11" class="anchored" data-anchor-id="utils.r"><span class="header-section-number">8.11</span> <code>utils.R</code></h3>
 <p>General mathematical and table-building utilities shared across the codebase.</p>
-<p>Mirror: <code>flualign/R/utils.R</code>.</p>
+<p>Mirror: <code>PAGe/R/utils.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 30%">
@@ -1874,7 +1836,7 @@ Note
 </tr>
 <tr class="even">
 <td style="text-align: left;">makeTable</td>
-<td style="text-align: left;">Create a formatted summary table from vector inputs.</td>
+<td style="text-align: left;">Summarise alignment fit as a one-row tibble</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">mark_season_weeks</td>
@@ -1894,7 +1856,7 @@ Note
 <section id="migrate_r_packages.r" class="level3" data-number="8.12">
 <h3 data-number="8.12" class="anchored" data-anchor-id="migrate_r_packages.r"><span class="header-section-number">8.12</span> <code>migrate_r_packages.R</code></h3>
 <p>Local helper for migrating installed R packages between R versions.</p>
-<p>Mirror: <code>flualign/R/migrate_r_packages.R</code>.</p>
+<p>Mirror: <code>PAGe/R/migrate_r_packages.R</code>.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 17%">
@@ -1920,125 +1882,8 @@ Note
 <section id="retired.r" class="level3" data-number="9.1">
 <h3 data-number="9.1" class="anchored" data-anchor-id="retired.r"><span class="header-section-number">9.1</span> <code>retired.R</code></h3>
 <p>Archive of legacy and deprecated functions extracted from active source files. Not sourced by the pipeline.</p>
-<p>Mirror: <code>flualign/R/retired.R</code>.</p>
-<table class="caption-top table">
-<colgroup>
-<col style="width: 29%">
-<col style="width: 70%">
-</colgroup>
-<thead>
-<tr class="header">
-<th style="text-align: left;">Function</th>
-<th style="text-align: left;">Description</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td style="text-align: left;">prep_stage2_m1_features</td>
-<td style="text-align: left;">Retired: prepare Stage-2 M1 features</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">train_stage2_joint_m1</td>
-<td style="text-align: left;">Retired: fit Stage-2 joint M1 model for a given spec</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">tune_stage2_loso_spec_grid</td>
-<td style="text-align: left;">Retired: LOSO tuning over a spec grid with weighted scoring near ignition</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">tune_stage2_loso_spec_grid_parallel</td>
-<td style="text-align: left;">Retired: LOSO tuning over a Stage-2 spec grid (disk-backed parallel; Linux + Windows)</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">tune_stage2_loso_specs</td>
-<td style="text-align: left;">Retired: LOSO spec comparison for Stage-2 models</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">tune_stage2_loso_shift_template</td>
-<td style="text-align: left;">Retired: tune Stage-2 over (delta,K,k_f,alpha_state) with a fixed model structure</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">plot_tune_stage2_heatmap</td>
-<td style="text-align: left;">Retired: heatmap plot for Stage-2 LOSO tuning results</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">.plot_stage2_joint_fit_prosp</td>
-<td style="text-align: left;">Internal plotting helper for prospective Stage-2 fit diagnostics.</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">make_prospective_kit</td>
-<td style="text-align: left;">Retired: bundle all trained components into a prospective forecasting kit</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">check_prospective_kit</td>
-<td style="text-align: left;">Retired: validate a prospective forecasting kit</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">run_m0_m1_m2_weekly</td>
-<td style="text-align: left;">Retired: run the full M0/M1/M2 weekly prospective pipeline</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">check_scale_identifiability_old</td>
-<td style="text-align: left;">No inline description is available; see the source for details.</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">flagPeak</td>
-<td style="text-align: left;">Flag whether the epidemic has passed its peak (real time)</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">load_refCurve</td>
-<td style="text-align: left;">Load all flualign example objects</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">peak_week_distribution</td>
-<td style="text-align: left;">Peak week (newWeek) per season + suggested peak-rule parameters</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">plot_alignment_evolution</td>
-<td style="text-align: left;">Plot multiple aligned curves (full season) as observation window grows</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">fit_tau_delta_old</td>
-<td style="text-align: left;">, , , , and</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">make_reference_functions</td>
-<td style="text-align: left;">Create closures for reference link-scale mean g(u) and se{g(u)}</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">set_reference</td>
-<td style="text-align: left;">Set reference closures globally for convenience</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">get_reference</td>
-<td style="text-align: left;">Get the current reference closures</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">fit_reference_gam</td>
-<td style="text-align: left;">Fit reference GAM and set closures</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">loso_alignment</td>
-<td style="text-align: left;">Leave-one-season-out (or user-specified split) alignment evaluation</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">tune_loso_k</td>
-<td style="text-align: left;">No inline description is available; see the source for details.</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">nested_loso_m2_eval</td>
-<td style="text-align: left;">Evaluate M2 on the held-out test season</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">plot_nested_loso_scores</td>
-<td style="text-align: left;">Plot nested LOSO scores by season</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">loso_m1_m2_joint</td>
-<td style="text-align: left;">Run full M0→M1→M2 weekly forecast chain</td>
-</tr>
-</tbody>
-</table>
+<p>Mirror: <code>PAGe/R/retired.R</code>.</p>
+<p>This file does not define top-level functions.</p>
 </section>
 </section>
 

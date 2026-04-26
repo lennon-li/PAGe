@@ -160,12 +160,12 @@ $M_2$ fits a joint binomial GAM for $h \in \{1,2\}$ on aligned-week space. Covar
 
 Hyperparameters are selected by **nested LOSO**: for each held-out season, the reference curve and all $M_1$ predictions are re-estimated on the remaining seasons only, eliminating template leakage. Phase 1 pre-computes $M_1$ predictions once per fold; Phase 2 sweeps the $M_2$ spec grid in minutes.
 
-**Tuned spec** (v15-postfix + boundary expansion, 192-spec focused LOSO + 5 expansion rounds, 10 seasons, Bernoulli NLL = 0.5959 pre-L2 / 0.5796 post-L2 / 0.5763 post-expansion):
+**Tuned spec** (v16 RE-fix, 1484-spec LOSO over 5 boundary-expansion rounds, 11 seasons, Bernoulli NLL = 0.42646):
 ```
-delta=0, Kr=1, k_f=6, k_e=2, k_r=0, k_de=0, k_sp=2
-alpha_state=0.35, bias_alpha=1.0, bias_beta=0, lambda_w=0, w_floor=0.05
+delta=0, Kr=1, k_f=4, k_e=2, k_r=0, k_de=0, k_sp=6
+alpha_state=0.15, bias_alpha=0.05, bias_beta=0, lambda_w=0, w_floor=0.05
 ```
-Mode: **frozen GAM** (EDF≈26, pre-trained once on all historical seasons) + **Holt EMA bias correction** (level-only, β=0; `bias_alpha=1.0` — boundary expansion showed monotone NLL improvement across the full 0.1–1.0 range; full single-step correction, no smoothing) + online season random effect, applied week-by-week at deployment. The v15-postfix loop fixes four evaluation bugs (Holt asymptote, `dz_ema` standardization, silent online-RE no-op, retrospective `iWeek` leakage in test fold) that biased earlier v15 numbers low. Under the corrected loop, `k_sp` becomes load-bearing and `k_r` drops to 0 — `z_resid` is noisier with prospective `iWeek` and alignment uncertainty now contributes.
+Mode: **frozen GAM** (EDF=30.78, pre-trained once on all historical seasons) + **Holt EMA bias correction** (level-only, β=0; `bias_alpha=0.05`) + online season random effect (post-ignition observations only — v16 RE-fix), applied week-by-week at deployment. The v16 RE-fix corrects `estimate_season_re_online()` to use only post-ignition observations (`weekF >= iWeek_hat`), eliminating the spuriously negative RE from pre-ignition weeks and reducing NLL from 0.5763 to 0.42646. Under the corrected RE, `k_sp=6` and `k_f=4` are preferred; `bias_alpha` drops to 0.05 as the corrected RE absorbs most within-season drift.
 
 **Key functions:** `nested_loso_build_fold()`, `m1_walkforward_multi()`, `nested_loso_m2_train()`, `nested_loso_m2_eval_frozen_bias()`, `prep_stage2_joint()`, `train_stage2_joint()`
 

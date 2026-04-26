@@ -72,10 +72,10 @@ DATA_DIR   <- normalizePath("../data", mustWork = TRUE)
 WF_CACHE   <- file.path(DATA_DIR, "deploy_wf_cache.rds")
 
 # ---- M2 mode ----
-# "frozen" uses the pre-trained GAM (v15-postfix best spec: k_f=5, k_e=2,
-# alpha_state=0.40, k_r=0, k_de=0, k_sp=2, bias_alpha=0.5, bias_beta=0) with
-# adaptive Holt EMA bias correction (level-only β=0) + online season RE at
-# deployment time.
+# "frozen" uses the pre-trained GAM (v16 best spec: k_f=4, k_e=2,
+# alpha_state=0.15, k_r=0, k_de=0, k_sp=6, bias_alpha=0.05, bias_beta=0) with
+# Holt EMA bias correction (level-only β=0) + online season RE (post-ignition
+# obs only, v16 RE-fix) at deployment time.
 M2_MODE <- "frozen"
 
 # ---- Cache control ----
