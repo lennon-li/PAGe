@@ -288,6 +288,14 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
       )
       if (is.null(pr)) next
 
+      # Post-peak: replace M2 output with M1 prediction (mirrors run_m2_forecast).
+      m1_state_now <- if ("m1_state" %in% names(m1_row)) m1_row$m1_state[1L] else NA_character_
+      if (identical(m1_state_now, "post_peak")) {
+        pr$m2_p  <- m1_p
+        pr$m2_lo <- if ("m1_p_lo" %in% names(m1_row)) m1_row$m1_p_lo[1L] else m1_p
+        pr$m2_hi <- if ("m1_p_hi" %in% names(m1_row)) m1_row$m1_p_hi[1L] else m1_p
+      }
+
       # Record prediction for future bias updates.
       # m2_eta_raw: GAM linear predictor BEFORE bias (bl) addition.
       # Used by B1 fix: raw error = logit_obs - m2_eta_raw.
@@ -562,6 +570,12 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
         bias_logit        = bl
       )
       if (is.null(pr)) next
+
+      # Post-peak: replace M2 output with M1 prediction (mirrors run_m2_forecast).
+      m1_state_now <- if ("m1_state" %in% names(m1_row)) m1_row$m1_state[1L] else NA_character_
+      if (identical(m1_state_now, "post_peak")) {
+        pr$m2_p <- m1_p
+      }
 
       # Record prediction for future bias updates
       pred_log_loso[[length(pred_log_loso) + 1L]] <- list(
