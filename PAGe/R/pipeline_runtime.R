@@ -590,6 +590,17 @@ run_m2_forecast <- function(kit,
         ))
       }
 
+      # Post-peak: replace M2 output with M1 prediction.
+      # LOSO analysis (10 seasons): post-peak h=1 bias M2 = +0.090, M1 = +0.004.
+      # z_ema decays slowly (alpha=0.15) so the GAM overpredicts for 3-4 weeks
+      # after peak; k_de=0 means there is no descent-rate term to counter this.
+      # M2 is still computed internally above so the bias corrector keeps running.
+      if (isTRUE(ap$peak_passed)) {
+        pr$m2_p  <- m1_p
+        pr$m2_lo <- m1_lo
+        pr$m2_hi <- m1_hi
+      }
+
       # Record prediction for future bias updates.
       # m2_eta_raw: GAM linear predictor BEFORE bias (bl) addition.
       # Used by B1 fix: raw error = logit_obs - m2_eta_raw.

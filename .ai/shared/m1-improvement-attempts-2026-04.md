@@ -99,9 +99,69 @@ Not implemented. Phase 1's prior already partially addresses tau oscillation by 
 
 ---
 
+---
+
+## Phase 4: M2 post-peak M1 override (SHIPPED — 2026-04-28)
+
+### Motivation
+
+Prospective review of 2025-26 deployment revealed systematic M2 overestimation post-peak: h=1 MAE = 0.037, mean bias = +0.033, with worst errors of +0.23 at eval_weeks 26–28. M1 h=1 over the same period had MAE = 0.005.
+
+LOSO analysis on the v16 best spec (10 seasons, `fresh_nested_loso_v18_phase1.rds` for M1 fold predictions joined with `fresh_nested_loso_v16_production.rds` for M2) confirmed this is a **systematic flaw, not a 2025-26 anomaly**:
+
+| Phase | h=1 MAE | h=1 mean bias |
+|-------|---------|---------------|
+| Pre-peak | 0.040 | −0.005 |
+| Post-peak (M2) | 0.093 | +0.090 |
+| Post-peak (M1) | 0.021 | +0.004 |
+
+8 of 9 seasons with post-peak LOSO weeks showed positive M2 bias.
+
+### Root cause
+
+`s(z_ema, k=2)` in the v16 GAM sees a high EMA for 3–4 weeks after the peak because `alpha_state=0.15` decays slowly. `k_de=0` means there is no descent-rate term to counter this. The GAM has no mechanism to "see" that the season is now declining; M1's alignment template already knows.
+
+### Blend sweep (LOSO, h=1 post-peak)
+
+| w (M1 weight) | MAE | Bias |
+|---------------|-----|------|
+| 0.00 | 0.093 | +0.090 |
+| 0.25 | 0.072 | +0.068 |
+| 0.50 | 0.051 | +0.047 |
+| 0.75 | 0.033 | +0.026 |
+| 1.00 | 0.021 | +0.004 |
+
+Monotonically better through w=1.0. h=2 shows the same pattern (0.113 → 0.028).
+
+### Implementation
+
+**File**: `R/pipeline_runtime.R` and `PAGe/R/pipeline_runtime.R`  
+**Location**: `run_m2_forecast()`, after `m2_predict_one()` returns, before the output tibble.
+
+```r
+if (isTRUE(ap$peak_passed)) {
+  pr$m2_p  <- m1_p
+  pr$m2_lo <- m1_lo
+  pr$m2_hi <- m1_hi
+}
+```
+
+The GAM still runs to completion and the bias corrector still updates — only the output row is replaced. `wf$m2_preds` post-peak now contains M1's prediction and CI.
+
+### Result on 2025-26
+
+| | h=1 MAE | h=1 mean bias |
+|--|---------|--------------|
+| Before | 0.037 | +0.033 |
+| After | 0.009 | +0.002 |
+
+Worst single-week post-peak error dropped from +0.23 to −0.024.
+
+---
+
 ## Net result
 
-No improvement to M1 alignment from this session. The v16 M1 spec (locked, Weibull MAE = 1.276) remains production. The most promising next step for M1 is adding the completed 2025-26 season to training data once the season ends.
+M1 alignment unchanged (Weibull MAE = 1.276, locked spec). M2 **deployment** materially improved by Phase 4: post-peak predictions now come from M1 directly (w=1.0), cutting post-peak MAE by 76% (0.037 → 0.009 on 2025-26; 0.093 → 0.021 on LOSO). The most promising remaining step for M1 is adding the completed 2025-26 season to training data once the season ends.
 
 ---
 
@@ -109,7 +169,7 @@ No improvement to M1 alignment from this session. The v16 M1 spec (locked, Weibu
 
 - `data/fresh_m1_kappa_ckpt/` — kappa sweep checkpoint directory
 - `data/fresh_m1_kappa_sweep.rds` — Phase 1 kappa sweep results
-- `data/fresh_nested_loso_v18_phase1.rds` — M1 fold cache with Phase 2 logit_spread
+- `data/fresh_nested_loso_v18_phase1.rds` — M1 fold cache (also used for Phase 4 blend sweep)
 - `data/fresh_nested_loso_v18_ksp_sweep.rds` — Phase 2 ksp sweep results
 
 ## Scripts generated (untracked, kept for reference)
