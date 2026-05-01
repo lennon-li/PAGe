@@ -360,26 +360,95 @@ season.
 
 ## Using your own data
 
-To apply PAGe to a different virus or geography:
+### Data format
 
-1. **Prepare your data** in the format shown at the top of this document.
-2. **Edit** `TRAIN_SEASONS` in `scripts/train_walkthrough_demo.R` to list the
-   seasons you want for training, and set `PROSP_SEASON` to the current season.
-3. **Run** `Rscript scripts/train_walkthrough_demo.R` once to build Stage 1
-   artifacts. This produces `data/walkthrough/kit.rds`.
-4. **Deploy** — load `kit.rds` and call `run_prospective_pipeline(kit, new_data)`.
+Prepare one row per (season, surveillance week) with these columns:
 
 | Column   | Type      | Note |
 |----------|-----------|------|
-| `season` | character | e.g. `"2022-23"` |
-| `weekF`  | integer   | 1 = first week after season start |
-| `y`      | integer   | positive tests |
-| `N`      | integer   | total tests |
+| `season` | character | Season label, e.g. `"2022-23"` |
+| `weekF`  | integer   | Within-season week index — **1 = first week after `START_WEEK`** |
+| `y`      | integer   | Positive tests |
+| `N`      | integer   | Total tests performed |
 | `neg`    | integer   | `N − y` |
-| `p`      | numeric   | `y / N` |
+| `p`      | numeric   | `y / N` (positivity fraction, not percent) |
+
+### Season start week (`START_WEEK`)
+
+`START_WEEK` is the MMWR week number that divides seasons. The default is **27**
+(late June), which suits influenza in Canada. For other viruses or geographies,
+choose the week just before baseline activity typically begins. All `weekF`
+values in your data must be computed relative to the same `START_WEEK`.
+
+### Training data requirements
+
+**Required**
+
+- **At least 5 complete seasons** for M1 (reference curve) and at least 4 for
+  M2 LOSO cross-validation.
+- Each season should cover a **full epidemic arc** — ideally the entire
+  surveillance year, not just the epidemic peak window. M1 alignment uses
+  pre- and post-peak shape, so truncated seasons degrade the reference curve.
+- **Consistent testing denominators.** Large swings in test volume
+  (e.g., a 10× increase mid-season) create artefactual positivity changes that
+  confuse M2's EMA features. Flag such seasons for exclusion.
+- **No gaps inside a season.** Missing weeks break the EMA computation.
+  Impute or exclude seasons with multi-week gaps during the epidemic period.
+
+**Optional but recommended**
+
+- **Manual ignition labels.** A named integer vector mapping each season to
+  its true onset week:
+  ```r
+  manual_labels <- c("2022-23" = 15L, "2023-24" = 20L)
+  ```
+  PAGe uses these two ways: (1) M0 is tuned against them, so its automatic
+  detector is calibrated to your data; (2) M1 LOSO evaluation reports
+  `iWeek_true` for diagnosis. Without labels, M0 tunes against its own
+  automatic detections — still functional, but harder to verify.
+  A reasonable label is the **first week positivity clearly rises above
+  baseline** (you can identify this by eye from a season plot). You do not
+  need to label every season; unlabeled seasons fall back to automatic
+  detection.
+
+**Not required**
+
+- **Peak labels.** PAGe never asks for a manually labeled peak. The observed
+  maximum positivity week (`which.max(p)`) is used automatically for
+  evaluation. M1 infers the peak position from the alignment template — no
+  hand annotation needed.
+- **Future covariate data.** The model uses only the positivity time series
+  and test volumes.
+
+### Seasons to exclude
+
+Pass unusual seasons via the `exclude` argument in each Stage 1 function.
+Common reasons to exclude:
+
+- **Surveillance disruptions** (e.g., COVID-19 pandemic years 2020-21 and
+  2021-22 in the flu data).
+- **Anomalous ignition timing** that sits far outside all other seasons (e.g.,
+  2015-16 in the flu data — an outlier that destabilises the reference curve).
+- **Incomplete seasons** — current-season data that ends before peak.
+
+When in doubt, run LOSO with and without a suspect season and compare NLL.
+
+### Step-by-step checklist
+
+1. **Prepare data** with the six columns above.
+2. **Set `START_WEEK`** to match your surveillance calendar.
+3. **Plot each season** and annotate approximate ignition weeks for
+   `manual_labels` (even rough labels help).
+4. **Identify seasons to exclude** — pandemic years, truncated records, or
+   extreme outliers.
+5. **Run** `Rscript scripts/train_walkthrough_demo.R` with your data and
+   season lists (edit `TRAIN_SEASONS` and `PROSP_SEASON` at the top of the
+   script).
+6. **Deploy** — load `data/walkthrough/kit.rds` and call
+   `run_prospective_pipeline(kit, new_data, mode = "frozen")`.
 
 <div class="callout-warning">
 **Minimum seasons.** M1 needs at least 5 seasons to build a stable reference
 curve; M2 LOSO requires at least 4 distinct folds. With fewer seasons, results
-will be noisier.
+will be noisier and the LOSO NLL less reliable.
 </div>

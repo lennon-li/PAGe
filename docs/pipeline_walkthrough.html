@@ -2224,7 +2224,14 @@ vertical-align: -.125em;
   <li><a href="#forecast-plot" id="toc-forecast-plot" class="nav-link" data-scroll-target="#forecast-plot">Forecast plot</a></li>
   <li><a href="#accuracy-summary" id="toc-accuracy-summary" class="nav-link" data-scroll-target="#accuracy-summary">Accuracy summary</a></li>
   </ul></li>
-  <li><a href="#using-your-own-data" id="toc-using-your-own-data" class="nav-link" data-scroll-target="#using-your-own-data">Using your own data</a></li>
+  <li><a href="#using-your-own-data" id="toc-using-your-own-data" class="nav-link" data-scroll-target="#using-your-own-data">Using your own data</a>
+  <ul class="collapse">
+  <li><a href="#data-format-1" id="toc-data-format-1" class="nav-link" data-scroll-target="#data-format-1">Data format</a></li>
+  <li><a href="#season-start-week-start_week" id="toc-season-start-week-start_week" class="nav-link" data-scroll-target="#season-start-week-start_week">Season start week (<code>START_WEEK</code>)</a></li>
+  <li><a href="#training-data-requirements" id="toc-training-data-requirements" class="nav-link" data-scroll-target="#training-data-requirements">Training data requirements</a></li>
+  <li><a href="#seasons-to-exclude" id="toc-seasons-to-exclude" class="nav-link" data-scroll-target="#seasons-to-exclude">Seasons to exclude</a></li>
+  <li><a href="#step-by-step-checklist" id="toc-step-by-step-checklist" class="nav-link" data-scroll-target="#step-by-step-checklist">Step-by-step checklist</a></li>
+  </ul></li>
   </ul>
 </nav>
 </div>
@@ -2560,7 +2567,7 @@ Tip
 <span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Forecast rows :&quot;</span>, <span class="fu">nrow</span>(wf<span class="sc">$</span>m2_preds), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Forecast rows : 48 </code></pre>
+<pre><code>Forecast rows : 20 </code></pre>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Horizons      :&quot;</span>, <span class="fu">paste</span>(<span class="fu">sort</span>(<span class="fu">unique</span>(wf<span class="sc">$</span>m2_preds<span class="sc">$</span>h)), <span class="at">collapse =</span> <span class="st">&quot;, &quot;</span>), <span class="st">&quot;weeks</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -2642,16 +2649,16 @@ Tip
 <tr class="odd">
 <td style="text-align: right;">1</td>
 <td style="text-align: right;">9</td>
-<td style="text-align: right;">0.0183</td>
-<td style="text-align: right;">0.0217</td>
-<td style="text-align: right;">0.0050</td>
+<td style="text-align: right;">0.0226</td>
+<td style="text-align: right;">0.0272</td>
+<td style="text-align: right;">0.0133</td>
 </tr>
 <tr class="even">
 <td style="text-align: right;">2</td>
 <td style="text-align: right;">8</td>
-<td style="text-align: right;">0.0232</td>
-<td style="text-align: right;">0.0280</td>
-<td style="text-align: right;">-0.0083</td>
+<td style="text-align: right;">0.0416</td>
+<td style="text-align: right;">0.0598</td>
+<td style="text-align: right;">0.0143</td>
 </tr>
 </tbody>
 </table>
@@ -2675,14 +2682,15 @@ Tip
 </section>
 <section id="using-your-own-data" class="level2">
 <h2 class="anchored" data-anchor-id="using-your-own-data">Using your own data</h2>
-<p>To apply PAGe to a different virus or geography:</p>
-<ol type="1">
-<li><strong>Prepare your data</strong> in the format shown at the top of this document.</li>
-<li><strong>Edit</strong> <code>TRAIN_SEASONS</code> in <code>scripts/train_walkthrough_demo.R</code> to list the seasons you want for training, and set <code>PROSP_SEASON</code> to the current season.</li>
-<li><strong>Run</strong> <code>Rscript scripts/train_walkthrough_demo.R</code> once to build Stage 1 artifacts. This produces <code>data/walkthrough/kit.rds</code>.</li>
-<li><strong>Deploy</strong> — load <code>kit.rds</code> and call <code>run_prospective_pipeline(kit, new_data)</code>.</li>
-</ol>
+<section id="data-format-1" class="level3">
+<h3 class="anchored" data-anchor-id="data-format-1">Data format</h3>
+<p>Prepare one row per (season, surveillance week) with these columns:</p>
 <table class="caption-top table">
+<colgroup>
+<col style="width: 37%">
+<col style="width: 40%">
+<col style="width: 22%">
+</colgroup>
 <thead>
 <tr class="header">
 <th>Column</th>
@@ -2694,22 +2702,22 @@ Tip
 <tr class="odd">
 <td><code>season</code></td>
 <td>character</td>
-<td>e.g. <code>&quot;2022-23&quot;</code></td>
+<td>Season label, e.g. <code>&quot;2022-23&quot;</code></td>
 </tr>
 <tr class="even">
 <td><code>weekF</code></td>
 <td>integer</td>
-<td>1 = first week after season start</td>
+<td>Within-season week index — <strong>1 = first week after <code>START_WEEK</code></strong></td>
 </tr>
 <tr class="odd">
 <td><code>y</code></td>
 <td>integer</td>
-<td>positive tests</td>
+<td>Positive tests</td>
 </tr>
 <tr class="even">
 <td><code>N</code></td>
 <td>integer</td>
-<td>total tests</td>
+<td>Total tests performed</td>
 </tr>
 <tr class="odd">
 <td><code>neg</code></td>
@@ -2719,10 +2727,56 @@ Tip
 <tr class="even">
 <td><code>p</code></td>
 <td>numeric</td>
-<td><code>y / N</code></td>
+<td><code>y / N</code> (positivity fraction, not percent)</td>
 </tr>
 </tbody>
 </table>
+</section>
+<section id="season-start-week-start_week" class="level3">
+<h3 class="anchored" data-anchor-id="season-start-week-start_week">Season start week (<code>START_WEEK</code>)</h3>
+<p><code>START_WEEK</code> is the MMWR week number that divides seasons. The default is <strong>27</strong> (late June), which suits influenza in Canada. For other viruses or geographies, choose the week just before baseline activity typically begins. All <code>weekF</code> values in your data must be computed relative to the same <code>START_WEEK</code>.</p>
+</section>
+<section id="training-data-requirements" class="level3">
+<h3 class="anchored" data-anchor-id="training-data-requirements">Training data requirements</h3>
+<p><strong>Required</strong></p>
+<ul>
+<li><strong>At least 5 complete seasons</strong> for M1 (reference curve) and at least 4 for M2 LOSO cross-validation.</li>
+<li>Each season should cover a <strong>full epidemic arc</strong> — ideally the entire surveillance year, not just the epidemic peak window. M1 alignment uses pre- and post-peak shape, so truncated seasons degrade the reference curve.</li>
+<li><strong>Consistent testing denominators.</strong> Large swings in test volume (e.g., a 10× increase mid-season) create artefactual positivity changes that confuse M2’s EMA features. Flag such seasons for exclusion.</li>
+<li><strong>No gaps inside a season.</strong> Missing weeks break the EMA computation. Impute or exclude seasons with multi-week gaps during the epidemic period.</li>
+</ul>
+<p><strong>Optional but recommended</strong></p>
+<ul>
+<li><p><strong>Manual ignition labels.</strong> A named integer vector mapping each season to its true onset week:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb21"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>manual_labels <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;2022-23&quot;</span> <span class="ot">=</span> <span class="dv">15</span>L, <span class="st">&quot;2023-24&quot;</span> <span class="ot">=</span> <span class="dv">20</span>L)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>PAGe uses these two ways: (1) M0 is tuned against them, so its automatic detector is calibrated to your data; (2) M1 LOSO evaluation reports <code>iWeek_true</code> for diagnosis. Without labels, M0 tunes against its own automatic detections — still functional, but harder to verify. A reasonable label is the <strong>first week positivity clearly rises above baseline</strong> (you can identify this by eye from a season plot). You do not need to label every season; unlabeled seasons fall back to automatic detection.</p></li>
+</ul>
+<p><strong>Not required</strong></p>
+<ul>
+<li><strong>Peak labels.</strong> PAGe never asks for a manually labeled peak. The observed maximum positivity week (<code>which.max(p)</code>) is used automatically for evaluation. M1 infers the peak position from the alignment template — no hand annotation needed.</li>
+<li><strong>Future covariate data.</strong> The model uses only the positivity time series and test volumes.</li>
+</ul>
+</section>
+<section id="seasons-to-exclude" class="level3">
+<h3 class="anchored" data-anchor-id="seasons-to-exclude">Seasons to exclude</h3>
+<p>Pass unusual seasons via the <code>exclude</code> argument in each Stage 1 function. Common reasons to exclude:</p>
+<ul>
+<li><strong>Surveillance disruptions</strong> (e.g., COVID-19 pandemic years 2020-21 and 2021-22 in the flu data).</li>
+<li><strong>Anomalous ignition timing</strong> that sits far outside all other seasons (e.g., 2015-16 in the flu data — an outlier that destabilises the reference curve).</li>
+<li><strong>Incomplete seasons</strong> — current-season data that ends before peak.</li>
+</ul>
+<p>When in doubt, run LOSO with and without a suspect season and compare NLL.</p>
+</section>
+<section id="step-by-step-checklist" class="level3">
+<h3 class="anchored" data-anchor-id="step-by-step-checklist">Step-by-step checklist</h3>
+<ol type="1">
+<li><strong>Prepare data</strong> with the six columns above.</li>
+<li><strong>Set <code>START_WEEK</code></strong> to match your surveillance calendar.</li>
+<li><strong>Plot each season</strong> and annotate approximate ignition weeks for <code>manual_labels</code> (even rough labels help).</li>
+<li><strong>Identify seasons to exclude</strong> — pandemic years, truncated records, or extreme outliers.</li>
+<li><strong>Run</strong> <code>Rscript scripts/train_walkthrough_demo.R</code> with your data and season lists (edit <code>TRAIN_SEASONS</code> and <code>PROSP_SEASON</code> at the top of the script).</li>
+<li><strong>Deploy</strong> — load <code>data/walkthrough/kit.rds</code> and call <code>run_prospective_pipeline(kit, new_data, mode = &quot;frozen&quot;)</code>.</li>
+</ol>
 <div class="callout callout-style-default callout-warning callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -2733,9 +2787,10 @@ Warning
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p><strong>Minimum seasons.</strong> M1 needs at least 5 seasons to build a stable reference curve; M2 LOSO requires at least 4 distinct folds. With fewer seasons, results will be noisier.</p>
+<p><strong>Minimum seasons.</strong> M1 needs at least 5 seasons to build a stable reference curve; M2 LOSO requires at least 4 distinct folds. With fewer seasons, results will be noisier and the LOSO NLL less reliable.</p>
 </div>
 </div>
+</section>
 </section>
 
 </main>
