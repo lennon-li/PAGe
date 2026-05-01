@@ -16,7 +16,6 @@
 #'
 #' @return A named list with `hist`, `ref` (both plotly objects), and `data`
 #'   (the joined data frame used to draw them).
-#' @export
 plotRes <-function(res,seasonIndex = NULL, peakInfo = NULL, currentSeason = NULL){
   
   # passdPeak = F

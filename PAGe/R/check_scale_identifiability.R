@@ -8,7 +8,6 @@
 #' @param p_range_thresh minimum range of crude positivity to trust scaling.
 #'
 #' @return list with allow_scale_rec (TRUE/FALSE) and diagnostics.
-#' @export
 check_scale_identifiability <- function(currentD,
                                         g_ref_fun,
                                         hyper,

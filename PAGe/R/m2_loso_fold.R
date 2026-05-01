@@ -34,7 +34,6 @@
 #'     \item{test_season}{The held-out season label (echoed back).}
 #'   }
 #'
-#' @export
 nested_loso_build_fold <- function(allD,
                                    test_season,
                                    exclude_seasons = NULL,
@@ -126,7 +125,6 @@ nested_loso_build_fold <- function(allD,
 #'   (columns: season, eval_weekF, target_weekF, h, m1_p_hat, …).
 #'   Can be empty if no ignition detected.
 #'
-#' @export
 nested_loso_m1_train <- function(allD,
                                  fold,
                                  params,
@@ -200,7 +198,6 @@ nested_loso_m1_train <- function(allD,
 #' @return Output of \code{train_stage2_joint()} (list with \code{fit},
 #'   \code{train_data}, …), or \code{NULL} if training fails.
 #'
-#' @export
 nested_loso_m2_train <- function(fold,
                                  m1_train_preds = NULL,
                                  spec,
@@ -258,7 +255,6 @@ nested_loso_m2_train <- function(fold,
 #' @return Tibble of M1 walk-forward predictions for the test season,
 #'   or a zero-row tibble if no ignition detected.
 #'
-#' @export
 nested_loso_m1_test <- function(allD,
                                 fold,
                                 params,

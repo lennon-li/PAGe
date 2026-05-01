@@ -85,7 +85,6 @@ stage2_extract_hyperparams <- function(best_mean_nll) {
 #'   \item{df}{Named list of snapshot data.frames, each stacked by \code{lead}.}
 #' }
 #'
-#' @export
 build_stage2_pseudo_prospective_list <- function(
     currentSeason,
     template_df,
@@ -261,7 +260,6 @@ build_stage2_pseudo_prospective_list <- function(
 #' @return If \code{which="latest"}, returns a single data.frame.
 #'   If \code{which="all"}, returns a list of data.frames (one per snapshot) in the same order as input snapshots.
 #'
-#' @export
 stage2_predict_series <- function(pp,
                                   stage2_fit,
                                   which = c("all", "latest"),

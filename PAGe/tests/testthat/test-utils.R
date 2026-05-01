@@ -1,9 +1,9 @@
 test_that("num_deriv approximates known derivatives", {
   # d/dx sin(x) = cos(x)
-  expect_equal(PAGe::num_deriv(0, sin), cos(0), tolerance = 1e-6)
-  expect_equal(PAGe::num_deriv(pi / 4, sin), cos(pi / 4), tolerance = 1e-6)
+  expect_equal(PAGe:::num_deriv(0, sin), cos(0), tolerance = 1e-6)
+  expect_equal(PAGe:::num_deriv(pi / 4, sin), cos(pi / 4), tolerance = 1e-6)
   # d/dx x^3 = 3x^2
-  expect_equal(PAGe::num_deriv(2, function(x) x^3), 12, tolerance = 1e-4)
+  expect_equal(PAGe:::num_deriv(2, function(x) x^3), 12, tolerance = 1e-4)
 })
 
 test_that("logit clips to avoid +/-Inf at the boundary", {

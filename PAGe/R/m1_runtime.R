@@ -87,7 +87,6 @@
 #'   ign_out       = ap$ign_out
 #' )
 #' }
-#' @export
 run_alignment_prospective <- function(
   currentSeason,
   ref,
@@ -302,7 +301,6 @@ run_alignment_prospective <- function(
 #' # Pick smallest buffer_weeks with fp_rate == 0
 #' tuning |> filter(fp_rate == 0) |> arrange(mean_delay)
 #' }
-#' @export
 tune_peak_detection <- function(
   params_df,
   allD,
@@ -475,7 +473,6 @@ tune_peak_detection <- function(
 #' # Use in production:
 #' ap  <- run_alignment_prospective(currentSeason, ref, hyper, params, cal = cal)
 #' }
-#' @export
 fit_peak_calibration <- function(params_df, allD,
                                   anchorWeek = 27L, level = 0.95,
                                   holdout_season = NULL) {

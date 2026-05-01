@@ -78,7 +78,6 @@
 #'   \item \code{p_cls_fs_full}: full fs score including season deviations (if fitted; retrospective only).
 #' }
 #'
-#' @export
 fitIgnition <- function(
     dat,
     season_col = "season",
@@ -525,7 +524,6 @@ plot_season_detection_table <- function(det_all, season) {
 #' @param iWeek Logical. If TRUE return season-level compare table.
 #' @param copy_data Logical. If FALSE operate on input data.table by reference.
 #' @return list with \code{by_season} and optionally \code{data} and \code{compare}.
-#' @export
 detectIgnitionBySeason_M0v2 <- function(ign_fit,
                                         params,
                                         score_col = "p_cls_p",
@@ -654,7 +652,6 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
 #'     p_cls_p_now, n_hit_now, d1_last, d2_last, cond_win, cond_cls, cond_cum,
 #'     cond_p, cond_prev, cond_inc, ignite_ok_now.}
 #'   \item{iWeek_hat}{Integer ignition week estimate, or NA.}
-#' @export
 detectIgnition_oneSeason <- function(d_now, params) {
   det <- detectIgnitionBySeason_M0v2(
     ign_fit      = d_now,
@@ -725,7 +722,6 @@ detectIgnition_oneSeason <- function(d_now, params) {
 #' @param verbose Logical. Print progress.
 #' @param progress_every Integer. Chunk size for progress updates.
 #' @return List with best params, full results, runtime, and evaluation tables.
-#' @export
 tuneIgnitionGrid_M0v2 <- function(ign_fit,
                                   grid,
                                   score_col = "p_cls_p",

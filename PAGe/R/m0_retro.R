@@ -61,7 +61,6 @@
 #'   \item{best_row}{Single-row data.frame containing the best parameter set and its metrics.}
 #' }
 #'
-#' @export
 tuneIgnitionGrid <- function(dat, grid,
                              miss_penalty = 20,
                              lambda = 10,
@@ -262,85 +261,3 @@ plot_det_facet <- function(det_out, smooth_col = NULL) {
     ) +
     theme_bw()
 }
-
-# estimateRef() and estimateDerivs() are defined in m1_reference.R
-#' Align within-season week index by shifting ignition to a common anchor week
-#'
-#' @param outs list of flagIgnition() outputs (each has $data and $ignition)
-#' @param season_col season column name (default "season")
-#' @param week_col within-season week column name (default "weekF")
-#' @param nweek_col season length column name (default "nW_true"); if missing uses max(weekF) per season
-#'
-#' @return data.frame with newWeek and phase_inSeason added; attributes: anchorWeek, ignD
-#' @export
-alignIgnition <- function(outs,
-                          season_col = "season",
-                          week_col   = "weekF",
-                          nweek_col  = "nW_true") {
-  stopifnot(is.list(outs), length(outs) > 0)
-  if (!requireNamespace("data.table", quietly = TRUE)) stop("Need 'data.table'.")
-  if (!requireNamespace("purrr", quietly = TRUE)) stop("Need 'purrr'.")
-  
-  # bind data + ignition
-  allD <- data.table::rbindlist(purrr::map(outs, "data"), fill = TRUE)
-  ignD <- data.table::rbindlist(purrr::map(outs, "ignition"), fill = TRUE)
-  
-  stopifnot(season_col %in% names(allD), week_col %in% names(allD))
-  stopifnot(season_col %in% names(ignD), week_col %in% names(ignD))
-  
-  # robust int coercion (handles factor/character safely)
-  to_int <- function(x) suppressWarnings(as.integer(as.character(x)))
-  
-  allD[, (season_col) := as.character(get(season_col))]
-  allD[, (week_col)   := to_int(get(week_col))]
-  
-  ignD[, (season_col) := as.character(get(season_col))]
-  ignD[, (week_col)   := to_int(get(week_col))]
-  
-  # one ignition week per season (first non-NA)
-  ign_small <- ignD[, .(iWeek = get(week_col)) , by = season_col][
-    , .(iWeek = if (all(is.na(iWeek))) NA_integer_ else iWeek[which(!is.na(iWeek))[1]]),
-    by = season_col
-  ]
-  
-  anchorWeek <- to_int(stats::median(ign_small$iWeek, na.rm = TRUE))
-  
-  # named maps: season -> iWeek and season -> offset
-  iweek_map  <- setNames(ign_small$iWeek, ign_small[[season_col]])
-  offset_map <- setNames(anchorWeek - ign_small$iWeek, ign_small[[season_col]])
-  
-  # season length nW (52/53)
-  if (!is.null(nweek_col) && nweek_col %in% names(allD)) {
-    allD[, nW := to_int(get(nweek_col))]
-    allD[is.na(nW), nW := max(get(week_col), na.rm = TRUE), by = season_col]
-  } else {
-    allD[, nW := max(get(week_col), na.rm = TRUE), by = season_col]
-  }
-  
-  # lookup iWeek and offset WITHOUT merge
-  allD[, iWeek  := iweek_map[get(season_col)]]
-  allD[, offset := offset_map[get(season_col)]]
-  
-  # aligned week (wrap by nW to handle 52 vs 53)
-  allD[, newWeek := ifelse(
-    is.na(get(week_col)) | is.na(iWeek) | is.na(nW) | is.na(anchorWeek),
-    NA_integer_,
-    ((get(week_col) + offset - 1L) %% nW) + 1L
-  )]
-  
-  # ---- phase indicator: in-season (>= ignition) vs pre-season (< ignition) ----
-  allD[, phase := as.integer(
-    !is.na(iWeek) &
-      !is.na(get(week_col)) &
-      (get(week_col) >= iWeek)
-  )]
-  
-  allD[, offset := NULL]  # drop helper
-  
-  out <- as.data.frame(allD)
-  attr(out, "anchorWeek") <- anchorWeek
-  attr(out, "ignD")       <- as.data.frame(ign_small)
-  out
-}
-
-

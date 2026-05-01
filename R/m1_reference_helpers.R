@@ -24,7 +24,6 @@ g_ref_fun   <- function(u) get("g_ref_fun",   envir = .flualign_ref_env, inherit
 #'
 #' @param u Numeric vector of week positions to evaluate.
 #' @return Numeric vector of logit-scale reference values.
-#' @export
 g_ref_safe  <- function(u) get("g_ref_safe",  envir = .flualign_ref_env, inherits = FALSE)(u)
 
 #' Global shim: reference curve mean and SE on logit scale

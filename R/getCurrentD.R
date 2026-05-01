@@ -21,7 +21,6 @@
 #'   \code{week}, \code{N} (total tests), \code{y} (positives), \code{neg},
 #'   \code{p} (positivity), \code{weekS}, \code{weekF}, \code{cYear},
 #'   \code{newWeek}, and \code{date}.
-#' @export
 getCurrentD <- function(data= "https://ws1.publichealthontario.ca/appdata/powerbi/ORVT/ORVT_Lab_Testing_Data_2024-25_2025-26.csv", 
                         startWeek = 27L, 
                         lastWeek = NA,

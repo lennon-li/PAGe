@@ -39,7 +39,6 @@
 #'   \item{m1_state}{M1 state: "aligning" or "post_peak"}
 #' }
 #'
-#' @export
 m1_walkforward_predictions <- function(seasonD,
                                        ref,
                                        hyper,
@@ -193,7 +192,6 @@ m1_walkforward_predictions <- function(seasonD,
 #'
 #' @return A tibble (stacked across seasons) with the same columns as
 #'   \code{m1_walkforward_predictions()}.
-#' @export
 m1_walkforward_multi <- function(allD,
                                  ref,
                                  hyper,
@@ -297,7 +295,6 @@ m1_walkforward_multi <- function(allD,
 #' @param eps Clipping epsilon for logit (default 1e-6).
 #'
 #' @return Modified \code{pp} with \code{logit_f_eff} replaced by M1 predictions.
-#' @export
 inject_m1_into_snapshots <- function(pp,
                                      m1_result,
                                      ref,

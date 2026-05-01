@@ -41,7 +41,6 @@
 #' # Force algorithmic detection for all seasons
 #' # out <- flagIgnition(season_df, p_thresh = 0.01, k1 = 0.05, manual_labels = NULL)
 #'
-#' @export
 flagIgnition <- function(
   df,
   p_thresh     = 0.01,

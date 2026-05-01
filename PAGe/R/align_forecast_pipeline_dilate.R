@@ -22,7 +22,6 @@
 #' @param peak_decay Numeric; exponential decay rate after peak (default 0.3).
 #'
 #' @return list with tau, delta, a, b, pred_df, peak, nll, etc.
-#' @export
 align_forecast_pipeline_dilate <- function(currentD,
                                            g_ref_fun,
                                            g_ref_mu_se,

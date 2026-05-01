@@ -21,7 +21,6 @@
 #' @param min_obs Integer; minimum observations required (default 4L).
 #' @return \code{alignedD} with additional columns \code{d1_link} and
 #'   \code{d2_link}.
-#' @export
 add_prospective_derivs_link <- function(alignedD,
                                         k = 5L,
                                         eps = 1e-6,
@@ -94,7 +93,6 @@ add_prospective_derivs_link <- function(alignedD,
 #'   with columns \code{fit}, \code{fit_low}, \code{fit_high}, \code{d1},
 #'   \code{d1_low}, \code{d1_high}, \code{d2}, \code{d2_low}, \code{d2_high}.
 #'   These values at row \code{i} are computed using only \code{weekF[1:i]}.
-#' @export
 estimateDerivs_walkforward <- function(season_df, k = 10L, min_rows = 4L) {
   stopifnot(is.data.frame(season_df), "weekF" %in% names(season_df))
 

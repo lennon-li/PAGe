@@ -90,7 +90,6 @@
 #'   test_seasons  = "2017-18"
 #' )
 #' }
-#' @export
 loso_walkforward <- function(allD,
                               params,
                               walk_start      = NULL,

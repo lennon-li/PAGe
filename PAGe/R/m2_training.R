@@ -9,12 +9,6 @@
 # Core utilities
 # =========================================================
 
-#' Numerically stable logit (internal)
-#' @keywords internal
-logit_stable <- function(p, eps = 1e-6) {
-  p <- pmin(pmax(p, eps), 1 - eps)
-  stats::qlogis(p)
-}
 
 #' Build a soft positivity cap function from a fitted Stage-2 GAM
 #'
@@ -24,7 +18,6 @@ logit_stable <- function(p, eps = 1e-6) {
 #'
 #' @param fit_obj A fitted mgcv GAM with a binomial response matrix as \code{model[[1]]}.
 #' @return A function \code{f(p)} mapping predicted probabilities through the soft cap.
-#' @export
 make_soft_cap_fn <- function(fit_obj) {
   p_train  <- fit_obj$model[[1]][, 1L] / rowSums(fit_obj$model[[1]])
   p_max_tr <- max(p_train, na.rm = TRUE)
@@ -73,7 +66,6 @@ make_soft_cap_fn <- function(fit_obj) {
 #'
 #' @return A named list with \code{m2_p} (and \code{m2_lo}, \code{m2_hi}
 #'   if \code{return_ci = TRUE}), or \code{NULL} on prediction failure.
-#' @export
 m2_predict_one <- function(fit,
                            ew,
                            h,
@@ -206,7 +198,6 @@ stage2_ramp_weight <- function(t_since, K = 3L) {
 #' @param verbose Logical.
 #'
 #' @return data.frame stacked across leads with engineered covariates.
-#' @export
 prep_stage2_joint <- function(dat,
                               best_mean_nll,
                               template_df,
@@ -723,7 +714,6 @@ train_stage2_joint_prepped <- function(d_all,
 #' @param ex_terms Character vector of additional terms to exclude.
 #' @param lambda_re Shrinkage strength; default 1 (one pseudo-observation at 0).
 #' @return Numeric scalar (the shrinkage RE estimate on the logit scale).
-#' @export
 estimate_season_re_online <- function(fit, obs_df, ex_terms = NULL, lambda_re = 1) {
   if (nrow(obs_df) == 0L) return(0)
 
@@ -783,7 +773,6 @@ estimate_season_re_online <- function(fit, obs_df, ex_terms = NULL, lambda_re = 
 #' @param tuned2 List with at least \code{$best} (1-row data frame with
 #'   \code{spec_id}) and \code{$by_spec_grid} (full grid with hyperparameters).
 #' @return A spec list as returned by \code{stage2_make_spec()}.
-#' @export
 stage2_spec_from_tuning <- function(tuned2) {
   stopifnot(is.list(tuned2), !is.null(tuned2$best), !is.null(tuned2$by_spec_grid))
   best_id  <- tuned2$best$spec_id[[1L]]
@@ -828,7 +817,6 @@ stage2_spec_from_tuning <- function(tuned2) {
 #' @param method mgcv method.
 #' @param verbose logical.
 #'
-#' @export
 train_stage2_joint <- function(dat,
                                template_df,
                                spec = NULL,
@@ -909,7 +897,6 @@ train_stage2_joint <- function(dat,
 #' @param season_label Character label for the current season (default \code{"current"}).
 #' @return data.frame with the required Stage-2 columns, ready to \code{rbind} with
 #'   historical aligned data.
-#' @export
 format_current_for_stage2 <- function(currentSeason,
                                       iWeek_used,
                                       template_df = NULL,
@@ -954,7 +941,6 @@ format_current_for_stage2 <- function(currentSeason,
 #'   origin weeks are available in \code{current_obs}.
 #' @param verbose Logical. Print progress messages.
 #' @return Output of \code{train_stage2_joint()} on the combined dataset.
-#' @export
 refit_stage2_weekly <- function(current_obs,
                                 iWeek_used,
                                 hist_data,

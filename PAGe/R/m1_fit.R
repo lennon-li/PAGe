@@ -18,7 +18,6 @@
 #'   (default `n`, i.e. weight by total tests).
 #'
 #' @return A numeric scalar; the penalised binomial negative log-likelihood.
-#' @export
 negloglik_tau_delta <- function(par, t, y, n, gfun, allow_scale = TRUE,
                                 lam = 0.1, w = n) {
   tau <- par[1]; a <- par[2]

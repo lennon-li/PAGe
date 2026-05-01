@@ -67,7 +67,6 @@
 #' params_hat <- as.list(best)
 #' }
 #'
-#' @export
 score_params <- function(
     grid,
     alignedD_prosp,

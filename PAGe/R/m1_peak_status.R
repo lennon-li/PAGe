@@ -20,7 +20,6 @@
 #'   \item{t_peak}{estimated peak week on the same `newWeek` scale.}
 #'   \item{t_peak_ci}{numeric length-2 vector with the 95\% CI for the peak.}
 #'   \item{threshold_week}{week threshold used for the decision.}
-#' @export
 peak_status_from_align <- function(res,
                                    currentD,
                                    use_ci = TRUE,

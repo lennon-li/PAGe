@@ -26,7 +26,6 @@
 #' @param eps Numeric step size (default \code{1e-3}).
 #'
 #' @return A numeric scalar approximating the derivative of f at x.
-#' @export
 num_deriv <- function(x, f, eps = 1e-3) (f(x + eps) - f(x - eps)) / (2 * eps)
 
 #' Find the peak of a reference template curve
@@ -110,7 +109,6 @@ n_weeks_in_start_year <- function(start_year) {
 #' @keywords internal
 logit <- function(p) qlogis(pmin(pmax(p, 1e-6), 1 - 1e-6))
 
-#' @export
 g_ref_safe <- function(u) g_ref_fun(pmin(pmax(u, 1), 52))
 
 
@@ -121,7 +119,6 @@ g_ref_safe <- function(u) g_ref_fun(pmin(pmax(u, 1), 52))
 #' @param week_grid numeric vector of weeks to interpolate over (default 1:52)
 #'
 #' @return a function f(u) that returns logit(p̂(u)) for arbitrary (possibly fractional) u
-#' @export
 make_g_ref_fun <- function(gam_obj, week_grid = 1:52) {
   grid <- data.frame(newWeek = week_grid)
   eta_hat <- drop(stats::predict(gam_obj, newdata = grid, type = "link"))
@@ -134,7 +131,6 @@ make_g_ref_fun <- function(gam_obj, week_grid = 1:52) {
 #' @param gam_obj a fitted mgcv::gam (or gamm4::$gam)
 #'
 #' @return a function f(u) that returns list(mu = ..., se = ...) on link scale
-#' @export
 make_g_ref_mu_se <- function(gam_obj) {
   function(u) {
     nd <- data.frame(newWeek = u)
@@ -154,7 +150,6 @@ make_g_ref_mu_se <- function(gam_obj) {
 #' @return A one-row tibble with columns `tau_hat`, `delta_hat`,
 #'   `fallback`, `Peak week`, `Peak week (LCL)`, `Peak week (UCL)`, and
 #'   `Peak probability`.
-#' @export
 makeTable <-function(res){
   tibble::tibble(
     `tau_hat`          = res$tau,
@@ -190,7 +185,6 @@ makeTable <-function(res){
 #'         indicating in-season weeks.
 #' }
 #'
-#' @export
 mark_season_weeks <- function(res, threshold = 0.05, min_run = 1L) {
   df <- res$pred_df
   
@@ -240,7 +234,6 @@ mark_season_weeks <- function(res, threshold = 0.05, min_run = 1L) {
 #' @param season_df data frame with columns `week` and `newWeek`
 #' @param week_vec  vector of surveillance weeks to map
 #' @return integer vector of newWeek indices
-#' @export
 get_newWeek_from_week <- function(season_df, week_vec) {
   key <- season_df |>
     dplyr::distinct(week, newWeek)

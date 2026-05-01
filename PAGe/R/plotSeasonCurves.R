@@ -6,7 +6,6 @@
 #'   - ignition (logical TRUE at ignition row)
 #' @param x Character. X-axis column name (default "weekF").
 #' @return A ggplot object.
-#' @export
 plotSeasonCurves <- function(df, x = "weekF") {
   stopifnot(
     is.data.frame(df),

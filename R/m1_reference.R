@@ -40,7 +40,6 @@
 #'   \code{g_ref_mu_se}, \code{ref_df}, \code{pred_df}, \code{dat}, \code{anchorWeek},
 #'   \code{method}.
 #'
-#' @export
 estimateRef <- function(alignedD,
                         exSeason = NULL,
                         k = 10,
@@ -455,7 +454,6 @@ estimateRef <- function(alignedD,
 #'
 #' @importFrom stats as.formula predict qnorm
 #' @import data.table
-#' @export
 estimateDerivs <- function(
     allD,
     k = 10,
@@ -628,7 +626,6 @@ estimateDerivs <- function(
 #' @param nweek_col season length column name (default "nW_true"); if missing uses max(weekF) per season
 #'
 #' @return data.frame with newWeek and phase_inSeason added; attributes: anchorWeek, ignD
-#' @export
 alignIgnition <- function(outs,
                           season_col = "season",
                           week_col   = "weekF",

@@ -53,7 +53,6 @@
 #'     \item{fold}{The fold object from \code{nested_loso_build_fold()}.}
 #'   }
 #'
-#' @export
 nested_loso_run_fold <- function(allD,
                                  test_season,
                                  params,
@@ -271,7 +270,6 @@ nested_loso_run_fold <- function(allD,
 #'     \item{folds}{Named list of fold objects for diagnostics.}
 #'   }
 #'
-#' @export
 nested_loso_cv <- function(allD,
                            params,
                            spec,
@@ -468,7 +466,6 @@ nested_loso_cv <- function(allD,
 #'     \item{cv_results}{Named list of full \code{nested_loso_cv()} outputs per spec.}
 #'   }
 #'
-#' @export
 nested_loso_grid_search <- function(allD,
                                     params,
                                     specs,
@@ -630,7 +627,6 @@ nested_loso_grid_search <- function(allD,
 #' @return Output of \code{train_stage2_joint()} — a list with
 #'   \code{fit}, \code{train_data}, \code{spec}, \code{tuned}, etc.
 #'
-#' @export
 nested_loso_refit_best <- function(alignedD_prosp,
                                    template_df,
                                    spec,

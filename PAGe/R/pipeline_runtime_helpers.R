@@ -13,7 +13,6 @@
 #' @param year Integer calendar year (e.g., 2026).
 #'
 #' @return Integer, typically 52 or 53.
-#' @export
 #'
 #' @examples
 #' \dontrun{
@@ -62,7 +61,6 @@ logit_stable <- function(p, eps = 1e-6) qlogis(pmin(pmax(p, eps), 1 - eps))
 #' @param ign_fit_or_gam A trained classifier model or a container holding one.
 #'
 #' @return An \pkg{mgcv} \code{gam} or \code{bam} object.
-#' @export
 #'
 #' @examples
 #' \dontrun{

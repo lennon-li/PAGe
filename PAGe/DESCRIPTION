@@ -28,7 +28,10 @@ Imports:
     mgcv,
     gamm4,
     plotly,
-    MMWRweek
+    MMWRweek,
+    future,
+    furrr,
+    gratia
 Suggests:
     knitr,
     kableExtra,

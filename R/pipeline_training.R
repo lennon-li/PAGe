@@ -33,6 +33,67 @@
   )
 }
 
+#' Construct an M1 alignment parameter list
+#'
+#' Builds the named list consumed by \code{build_m1()}, \code{build_m2()}, and
+#' \code{train_m2()} via their \code{m1_params} argument. Calling this function
+#' is the recommended way to customise alignment settings rather than
+#' hand-crafting a raw list, as it documents every knob and enforces defaults.
+#'
+#' @param k_ref Integer. Reference curve GAM basis dimension (default 25).
+#' @param ref_method Character. Reference fitting method passed to
+#'   \code{estimateRef()}. One of \code{"fs"} (factor-smooth, default) or
+#'   \code{"re"}.
+#' @param temperature Numeric. Softmax temperature for template weighting
+#'   (default 0.25). Lower values concentrate weight on the best-matching
+#'   template.
+#' @param rise_weight Numeric. Weight given to rise-phase similarity (default
+#'   1.0).
+#' @param trough_weight Numeric. Weight given to trough similarity (default
+#'   0.1).
+#' @param peak_decay Numeric. Exponential decay on peak-proximity weight
+#'   (default 0.3).
+#' @param slope_weight Numeric. Weight on slope similarity at aligned positions
+#'   (default 8.0).
+#' @param slope_window Integer. Number of weeks used to compute the local slope
+#'   (default 6).
+#' @param dynamic_temp Logical. If \code{TRUE}, temperature adapts over the
+#'   season (default \code{FALSE}).
+#' @param dynamic_temp_pivot Integer. Week at which dynamic temperature pivots
+#'   (default 10; ignored when \code{dynamic_temp = FALSE}).
+#'
+#' @return A named list suitable for the \code{m1_params} argument of
+#'   \code{build_m1()}, \code{build_m2()}, and \code{train_m2()}.
+#'
+#' @examples
+#' params <- m1_make_params()
+#' params_custom <- m1_make_params(slope_weight = 12, temperature = 0.15)
+#'
+#' @export
+m1_make_params <- function(k_ref             = 25L,
+                            ref_method        = "fs",
+                            temperature       = 0.25,
+                            rise_weight       = 1.0,
+                            trough_weight     = 0.1,
+                            peak_decay        = 0.3,
+                            slope_weight      = 8.0,
+                            slope_window      = 6L,
+                            dynamic_temp      = FALSE,
+                            dynamic_temp_pivot = 10L) {
+  list(
+    k_ref              = as.integer(k_ref),
+    ref_method         = ref_method,
+    temperature        = temperature,
+    rise_weight        = rise_weight,
+    trough_weight      = trough_weight,
+    peak_decay         = peak_decay,
+    slope_weight       = slope_weight,
+    slope_window       = as.integer(slope_window),
+    dynamic_temp       = dynamic_temp,
+    dynamic_temp_pivot = as.integer(dynamic_temp_pivot)
+  )
+}
+
 .default_m0_grid <- function() {
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Need 'data.table'.")
   data.table::CJ(

@@ -47,7 +47,6 @@
 #'     \item{weights}{Named numeric vector of softmax ensemble weights.}
 #'     \item{template_names}{Character vector of template season labels.}
 #'   }
-#' @export
 align_multi_template <- function(currentD,
                                  eta_mat,
                                  g_ref_fun,
@@ -385,7 +384,6 @@ align_multi_template <- function(currentD,
 #' @param blend_alpha Numeric 0--1; template blending.
 #'
 #' @return List with same structure as \code{run_alignment_prospective()} output.
-#' @export
 run_alignment_prospective_multi <- function(
   currentSeason,
   ref,

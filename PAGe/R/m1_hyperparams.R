@@ -32,7 +32,6 @@
 #'   \code{WEEK_THRESHOLD_DELTA}, \code{LAMBDA_DELTA}, \code{tau_delta_hist},
 #'   \code{delta_stability}, \code{stability_summary}, and
 #'   \code{curvature_Dpp}.
-#' @export
 learn_alignment_hyperparams <- function(
     theD, g_ref_fun,
     tau_range_init   = c(-12, 12),

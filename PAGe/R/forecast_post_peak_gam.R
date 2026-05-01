@@ -19,7 +19,6 @@
 #' @return A list with components similar to align_forecast_pipeline_dilate():
 #'   tau, delta, a, b, allow_scale, delta_on, pred_df, last_obs, V_ab, V_td,
 #'   peak, fallback_reason. The alignment-specific slots are mostly NA.
-#' @export
 forecast_post_peak_gam <- function(currentSeason,
                                    g_ref_fun   = NULL,
                                    max_newWeek = 53,

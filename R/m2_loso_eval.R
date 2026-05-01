@@ -43,7 +43,6 @@
 #' @param verbose Logical.
 #' @return Same structure as \code{nested_loso_m2_eval()}: list with
 #'   \code{scores} and \code{predictions}.
-#' @export
 nested_loso_m2_eval_frozen_bias <- function(allD,
                                             fold,
                                             m2_fit,
@@ -368,7 +367,6 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
 #' @param verbose Logical.
 #' @return Same structure as \code{nested_loso_m2_eval()}: list with
 #'   \code{scores} and \code{predictions}.
-#' @export
 nested_loso_m2_eval_weekly_refit <- function(allD,
                                              fold,
                                              m1_test_preds,

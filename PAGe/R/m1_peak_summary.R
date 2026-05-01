@@ -13,7 +13,6 @@
 #'
 #' @return A list with elements `u_star`, `t_peak`, `t_peak_ci`, `p_peak`,
 #'   `p_peak_ci`.
-#' @export
 peak_summary_from_fit <- function(fit_obj, g_ref_fun, V_ab, V_td, level = 0.95) {
   u_star <- template_peak_u(g_ref_fun)
   t_peak_hat <- fit_obj$tau + (1 + fit_obj$delta) * u_star

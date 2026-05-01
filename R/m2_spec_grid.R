@@ -84,8 +84,14 @@ stage2_make_spec <- function(
     K = NULL,
     pre_buffer = NULL
 ) {
-  if (!is.null(K)) Kr <- K
-  if (!is.null(pre_buffer)) Kb <- pre_buffer
+  if (!is.null(K)) {
+    .Deprecated(old = "K", new = "Kr", msg = "Argument 'K' is deprecated; use 'Kr' instead.")
+    Kr <- K
+  }
+  if (!is.null(pre_buffer)) {
+    .Deprecated(old = "pre_buffer", new = "Kb", msg = "Argument 'pre_buffer' is deprecated; use 'Kb' instead.")
+    Kb <- pre_buffer
+  }
   
   if (!is.null(template_mode)) {
     template_mode <- match.arg(template_mode, choices = c("smooth","offset","none"))
@@ -179,7 +185,6 @@ stage2_make_spec <- function(
 #' @param verbose Logical.
 #'
 #' @return List with \code{specs}, \code{grid}, and \code{n}.
-#' @export
 expand_grid_specs <- function(
     delta_grid = -3:3,
     Kr_grid    = 1:6,
@@ -460,7 +465,6 @@ plot_stage2_joint_fit_by_season <- function(out_m1,
 #'
 #' @param spec A spec list from stage2_make_spec().
 #' @return An R formula suitable for mgcv::bam().
-#' @export
 stage2_build_joint_formula <- function(spec) {
   stopifnot(is.list(spec), all(c("T","k_f","k_w","k_s","k_e","k_n","bs_week","bs_fs_marginal") %in% names(spec)))
   if (is.null(spec$k_r))  spec$k_r  <- 0L
@@ -527,7 +531,6 @@ stage2_build_joint_formula <- function(spec) {
 #'
 #' @param spec A spec list from stage2_make_spec().
 #' @return Character vector of smooth labels to exclude.
-#' @export
 stage2_exclude_newseason <- function(spec) {
   ex <- c("s(season)")  # always exclude season RE for new season
   if (!is.null(spec$k_s) && as.integer(spec$k_s) > 0L) {

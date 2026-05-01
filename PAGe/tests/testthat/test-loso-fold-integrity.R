@@ -7,7 +7,7 @@
 
 test_that("nested_loso_m2_eval_frozen_bias accepts manual_labels_train and manual_labels_test", {
   # Verify the new signature exists (B4 API contract).
-  fn_args <- formals(PAGe::nested_loso_m2_eval_frozen_bias)
+  fn_args <- formals(PAGe:::nested_loso_m2_eval_frozen_bias)
   expect_true("manual_labels_train" %in% names(fn_args),
     label = "B4: function should accept manual_labels_train")
   expect_true("manual_labels_test" %in% names(fn_args),
@@ -27,7 +27,7 @@ test_that("manual_labels still accepted (backward compat) with deprecation warni
   # Passing manual_labels (old API) should trigger a deprecation warning.
   expect_warning(
     tryCatch(
-      PAGe::nested_loso_m2_eval_frozen_bias(
+      PAGe:::nested_loso_m2_eval_frozen_bias(
         allD          = data.frame(season = character(0), weekF = integer(0),
                                    y = integer(0), N = integer(0)),
         fold          = fake_fold,
@@ -55,7 +55,7 @@ test_that("manual_labels_train NULL and manual_labels_test NULL are accepted wit
   # Passing both as NULL should not warn about deprecation.
   expect_no_warning(
     tryCatch(
-      PAGe::nested_loso_m2_eval_frozen_bias(
+      PAGe:::nested_loso_m2_eval_frozen_bias(
         allD                = data.frame(season = character(0), weekF = integer(0),
                                          y = integer(0), N = integer(0)),
         fold                = fake_fold,
@@ -82,7 +82,7 @@ test_that("B4 invariant: training label for test season must NOT leak into test 
   #
   # This is a smoke test checking that the new args exist and the function
   # accepts them without erroring (runtime correctness checked via B4 scripts).
-  fn_args <- formals(PAGe::nested_loso_m2_eval_frozen_bias)
+  fn_args <- formals(PAGe:::nested_loso_m2_eval_frozen_bias)
 
   # manual_labels_test defaults to NULL (prospective, no leakage).
   expect_null(fn_args$manual_labels_test,

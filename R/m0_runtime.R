@@ -32,7 +32,6 @@
 #'   \item{ign_week_locked}{Integer; first week where detection fired
 #'     (\code{ignite_ok_now == TRUE}).}
 #' }
-#' @export
 run_ignition_weekly <- function(currentSeason,
                                 ign_fit_or_gam = NULL,
                                 params,
