@@ -375,10 +375,24 @@ Prepare one row per (season, surveillance week) with these columns:
 
 ### Season start week (`START_WEEK`)
 
-`START_WEEK` is the MMWR week number that divides seasons. The default is **27**
-(late June), which suits influenza in Canada. For other viruses or geographies,
-choose the week just before baseline activity typically begins. All `weekF`
-values in your data must be computed relative to the same `START_WEEK`.
+`START_WEEK` is the MMWR week number used to define the start of `weekF = 1`
+in your data. The default is **27** (early July).
+
+**Why 27 and not 35?** The conventional surveillance season in Canada begins at
+MMWR week 35 (late August). However, PAGe needs several weeks of low-activity
+**pre-season baseline** before the epidemic starts: M0's ignition detector
+compares incoming positivity against a background level, so it must observe that
+background first. Starting at week 27 provides ~8 weeks of pre-season data before
+the typical ignition window (weeks 13–24 of the season, i.e. MMWR weeks ~40–51).
+
+**For a new virus or geography**, choose a `START_WEEK` that is roughly 6–10
+weeks before the earliest plausible ignition in any training season. If your
+surveillance convention already defines a season start week, subtract 6–8 weeks
+from it. The exact value is unlikely to matter much — shifting by ±3 weeks has
+minimal impact on model performance — but keep it consistent across all seasons.
+
+All `weekF` values in your data must be computed relative to the same
+`START_WEEK`.
 
 ### Training data requirements
 
