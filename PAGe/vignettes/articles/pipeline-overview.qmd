@@ -1,0 +1,45 @@
+---
+title: "Pipeline overview"
+execute:
+  eval: false
+---
+
+PAGe produces prospective 1- and 2-week-ahead forecasts of respiratory-virus
+percentage positivity. Within each surveillance week, its three stages run in
+order because each stage supplies state to the next:
+
+1. **M0 -- ignition detection** determines whether sustained seasonal activity
+   has begun using only observations available through the current week.
+2. **M1 -- alignment** aligns the partial season to historical templates and
+   estimates epidemic phase, peak timing, and alignment uncertainty.
+3. **M2 -- forecasting** combines real-time features with M1 covariates in a
+   binomial GAM, then applies adaptive bias correction and an online seasonal
+   effect.
+
+## Data contract
+
+The core input has one row per season and epidemiologic week. It includes
+`season`, positive tests `y`, total tests `N`, positivity `p = y / N`, and a
+within-season index `weekF`. PAGe keeps epidemiologic week, surveillance week,
+flu week, ignition week, aligned week, and peak week distinct; these indices
+must not be substituted for one another.
+
+## Prospective evaluation
+
+All tuning and validation use leave-one-season-out, walk-forward evaluation.
+For a held-out season and issue week, model fitting and feature construction
+may use historical seasons and observations available by that issue week, but
+never later observations from the held-out season. M1 runs before M2 at every
+issue week so that M2 receives only contemporaneously available alignment
+features.
+
+## Production configuration
+
+The production M1 ensemble aligns on the logit scale and propagates
+`logit_spread` to M2 as alignment uncertainty. The production M2 model is a
+frozen GAM with level-only adaptive Holt EMA bias correction. The correction
+rate is a deployment setting rather than a structural parameter in the nested
+LOSO grid.
+
+See the [pipeline walkthrough](pipeline-walkthrough.html) for the public API and
+the [source map](source-map.html) for implementation ownership.

@@ -10,7 +10,8 @@ The PAGe pipeline consists of three models:
 - **M1 (Alignment)**: Aligns partially observed seasons to a learned reference curve using shift (`tau`) and optional dilation (`delta`), generating template-based predictions
 - **M2 (Forecast)**: Binomial GAM with M1 covariates, adaptive Holt EMA bias correction, and online season-specific effects for final 1–2 week ahead forecasts
 
-See [pipeline_overview.qmd](docs/pipeline_overview.qmd) for full architecture details.
+See the [pipeline overview](http://10.48.50.117/PAGe/articles/pipeline-overview.html)
+for full architecture details.
 
 ## Installation
 
@@ -89,9 +90,9 @@ plot_forecast(res, history = allD)
 
 ## Documentation
 
-- **[pipeline_overview.qmd](docs/pipeline_overview.qmd)** — Full pipeline architecture and data flow
-- **[pipeline_walkthrough.qmd](docs/pipeline_walkthrough.qmd)** — End-to-end training and deployment example
-- **[source_map.qmd](docs/source_map.qmd)** — File and function reference
+- **[Pipeline overview](http://10.48.50.117/PAGe/articles/pipeline-overview.html)** — Full pipeline architecture and data flow
+- **[Pipeline walkthrough](http://10.48.50.117/PAGe/articles/pipeline-walkthrough.html)** — End-to-end training and deployment example
+- **[Source map](http://10.48.50.117/PAGe/articles/source-map.html)** — File and function reference
 
 ## Development
 

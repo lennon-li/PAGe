@@ -1,0 +1,47 @@
+---
+title: "Pipeline walkthrough"
+execute:
+  eval: false
+---
+
+This article shows the package-level workflow. The examples are intentionally
+not evaluated during site builds because fitting and nested validation are
+long-running operations.
+
+## Train a deployment kit
+
+```{r}
+library(PAGe)
+
+historical <- load_flu_hist()
+m0 <- build_m0(historical)
+m1 <- build_m1(historical, m0)
+m2 <- train_m2(historical, m0, m1, best_spec = NULL)
+kit <- assemble_kit(m0, m1, m2)
+
+saveRDS(kit, "m2_production.rds")
+```
+
+Retuning is optional when using the production defaults:
+
+```{r}
+m0_tuning <- tune_m0(historical)
+m1_tuning <- tune_m1(historical, m0, m1)
+```
+
+## Run the weekly pipeline
+
+Current-season data must use the same field definitions and feature scales as
+the training data. Given a trained kit, run all stages sequentially:
+
+```{r}
+kit <- load_prospective_kit("m2_production.rds")
+current <- getCurrentD(season = "2025-26")
+forecast <- run_pipeline(kit, current)
+plot_forecast(forecast, history = historical)
+```
+
+For operational systems, archive the issue date, input snapshot, kit version,
+manual overrides, and returned M0/M1/M2 state. This makes every forecast
+reproducible and prevents revised surveillance data from silently changing
+historical evaluations.

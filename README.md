@@ -4,6 +4,7 @@ This repository contains the **PAGe R package** for real-time forecasting of sea
 
 ## Quick Links
 
+- **[Package Website](http://10.48.50.117/PAGe/)** — pkgdown documentation and function reference
 - **[PAGe Package](PAGe/)** — Main installable R package
 - **[Documentation](docs/)** — Pipeline overview, walkthrough, and architecture
 - **[Scripts](scripts/)** — Tuning, validation, and analysis scripts

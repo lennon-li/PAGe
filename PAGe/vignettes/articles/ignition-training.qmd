@@ -1,0 +1,32 @@
+---
+title: "M0 ignition training"
+execute:
+  eval: false
+---
+
+M0 detects the transition from background activity to sustained seasonal
+activity. Training selects decision thresholds using historical seasons while
+preserving the information boundary at every issue week.
+
+## Workflow
+
+```{r}
+library(PAGe)
+
+historical <- load_flu_hist()
+tuning <- tune_m0(historical)
+m0 <- build_m0(historical, tuning = tuning)
+```
+
+The tuning objective should be computed from held-out seasons. Manual ignition
+labels may define the target used for evaluation, but they must not be exposed
+as features to the held-out detector. Report early and late detection errors
+separately; a mean error alone can hide operationally different failure modes.
+
+## Runtime checks
+
+At deployment, retain the weekly detector snapshots rather than only the final
+ignition week. Confirm that each snapshot contains no observations after its
+issue week and that a manual override, when used, is explicit and auditable.
+The plotting functions in the M0 reference section compare weekly detector
+state with historical truth and help diagnose unstable threshold behavior.

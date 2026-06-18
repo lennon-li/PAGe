@@ -3,7 +3,7 @@ Type: Package
 Title: Seasonal Flu Curve Alignment and Forecasting
 Version: 0.1.0
 Authors@R: person("Lennon", "Li", email = "lennon.li@oahpp.ca", role = c("aut", "cre"))
-URL: https://github.com/lennon-li/PAGe
+URL: http://10.48.50.117/PAGe/, https://github.com/lennon-li/PAGe
 BugReports: https://github.com/lennon-li/PAGe/issues
 Description: Align partially observed seasonal positivity curves to a learned reference
   shape via profile likelihood (shift tau and optional dilation delta), then forecast
@@ -35,6 +35,7 @@ Imports:
 Suggests:
     knitr,
     kableExtra,
+    pkgdown,
     rmarkdown,
     testthat (>= 3.0.0)
 VignetteBuilder: knitr

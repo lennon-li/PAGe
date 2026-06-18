@@ -59,8 +59,8 @@ plot_forecast(res, history = allD)
 
 ## Where to read more
 
-* `docs/pipeline_overview.qmd` — architecture and notation.
-* `docs/pipeline_walkthrough.qmd` — an end-to-end training and
-  deployment walkthrough with live data.
+* [Pipeline overview](pipeline-overview.html) — architecture and notation.
+* [Pipeline walkthrough](pipeline-walkthrough.html) — an end-to-end training
+  and deployment walkthrough.
 * `?build_m0`, `?build_m1`, `?build_m2`, `?assemble_kit`,
   `?run_pipeline` — reference pages for the high-level API.
