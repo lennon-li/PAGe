@@ -3,13 +3,20 @@ results/
 .claude/
 *.RData
 *.rds
+*.csv
+*.xlsx
+*.xls
 docs/*_cache/
 
 # Build artifacts and shell history
 *.tar.gz
 *.Rhistory
+PAGe.Rcheck/
+logs/
+PAGe/docs/
 
 # AI-tool config directories (keep .ai/, .github/, .vscode/ tracked)
+.codegraph/
 .adal/
 .agents/
 .augment/

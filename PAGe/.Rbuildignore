@@ -1,3 +1,4 @@
 ^doc$
 ^Meta$
+^inst/extdata/flu_hist\.csv$
 ^_pkgdown\.yml$

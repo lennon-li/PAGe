@@ -47,6 +47,15 @@ simulate_flu_seasons <- function(S = 10, weeks = 1:52, seed = 2025) {
 #'   \code{y}, and \code{neg}).
 #' @export
 load_flu_hist <- function() {
-  fp <- system.file("extdata", "flu_hist.csv", package = "PAGe", mustWork = TRUE)
+  fp <- Sys.getenv("PAGE_FLU_HIST_FILE", "/srv/r-private-repo/app-data/PAGe_flu_hist.csv")
+  if (!file.exists(fp)) {
+    fp <- system.file("extdata", "flu_hist.csv", package = "PAGe", mustWork = FALSE)
+  }
+  if (!nzchar(fp) || !file.exists(fp)) {
+    stop(
+      "Cannot find PAGe flu history data. Set PAGE_FLU_HIST_FILE to the CSV path.",
+      call. = FALSE
+    )
+  }
   utils::read.csv(fp, stringsAsFactors = TRUE)
 }
