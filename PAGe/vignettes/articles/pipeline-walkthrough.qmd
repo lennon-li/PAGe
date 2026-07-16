@@ -4,44 +4,55 @@ execute:
   eval: false
 ---
 
-This article shows the package-level workflow. The examples are intentionally
-not evaluated during site builds because fitting and nested validation are
-long-running operations.
+The examples are not executed during package builds because fitting and nested
+validation are long-running.
 
-## Train a deployment kit
+## Prepare data and refresh
 
 ```{r}
 library(PAGe)
 
-historical <- load_flu_hist()
-m0 <- build_m0(historical)
-m1 <- build_m1(historical, m0)
-m2 <- train_m2(historical, m0, m1, best_spec = NULL)
-kit <- assemble_kit(m0, m1, m2)
-
-saveRDS(kit, "m2_production.rds")
+historical <- load_flu_hist("/authorized/path/flu_history.csv") |>
+  prepare_surveillance_data()
+training <- train_pipeline(historical, mode = "refresh")
+kit <- training$kit
 ```
 
-Retuning is optional when using the production defaults:
+PAGe does not bundle surveillance observations. The default prospective
+holdout is 2025-26, which remains outside every fit until promotion.
+
+## Replay and promote
 
 ```{r}
-m0_tuning <- tune_m0(historical)
-m1_tuning <- tune_m1(historical, m0, m1)
+candidate <- replay_season_holdout(kit, historical, season = "2025-26")
+incumbent <- replay_season_holdout(incumbent_kit, historical, season = "2025-26")
+promotion <- check_promotion(candidate$metrics, incumbent$metrics)
+next_training <- train_pipeline(historical, mode = "refresh", promotion = promotion)
 ```
 
-## Run the weekly pipeline
-
-Current-season data must use the same field definitions and feature scales as
-the training data. Given a trained kit, run all stages sequentially:
+## Retune and select
 
 ```{r}
-kit <- load_prospective_kit("m2_production.rds")
-current <- getCurrentD(season = "2025-26")
-forecast <- run_pipeline(kit, current)
+retuned <- train_pipeline(
+  historical,
+  mode = "retune",
+  previous_results = prior_m2_results,
+  selection_method = "min_nll", # or "one_se" / "pareto"
+  racing = FALSE
+)
+```
+
+The adaptive grid uses compatible prior results and expands around promising
+boundaries. Optional racing requires a callback and cannot replace final full
+nested-LOSO evaluation.
+
+## Forecast
+
+```{r}
+current <- prepare_surveillance_data(current_csv, season = "2026-27")
+forecast <- run_pipeline(kit, current, mode = "frozen")
 plot_forecast(forecast, history = historical)
 ```
 
-For operational systems, archive the issue date, input snapshot, kit version,
-manual overrides, and returned M0/M1/M2 state. This makes every forecast
-reproducible and prevents revised surveillance data from silently changing
-historical evaluations.
+Frozen-GAM prediction is the default; weekly refitting is an explicit legacy
+compatibility option.

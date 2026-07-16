@@ -254,7 +254,10 @@ build_stage2_pseudo_prospective_list <- function(
 #'   on the logit scale using this alpha. Defaults to \code{pp$meta$alpha_state} if present, else 0.3.
 #' @param ref_col Character. Column name used as background reference curve (default \code{"template_fit_shift"}).
 #' @param exclude_season_re Logical. If TRUE (default), excludes \code{s(season)} during prediction.
-#' @param ci_level Confidence level for intervals (default 0.95).
+#' @param interval Interval type, prediction or confidence.
+#' @param level Confidence level for intervals (default 0.95).
+#' @param pi_B Number of prediction-interval simulations.
+#' @param pi_seed Random seed for interval simulation.
 #' @param date_step_days Integer days per week when imputing missing dates (default 7).
 #'
 #' @return If \code{which="latest"}, returns a single data.frame.
@@ -549,6 +552,8 @@ stage2_predict_series <- function(pp,
 #' @param ncol Integer number of facet columns when \code{facet=TRUE}.
 #' @param show_ref Logical. If TRUE, draws \code{p_ref} in grey when available.
 #' @param show_pi Logical. If TRUE, draws ribbons from \code{p_lo_h*}/\code{p_hi_h*}.
+#' @param interval Interval display: prediction, confidence, or none.
+#' @param h_plot Forecast horizons to display.
 #' @param base_size Base font size passed to \code{ggplot2::theme_minimal()}.
 #'
 #' @return A \code{ggplot} object if \code{facet=TRUE}; otherwise a named list of \code{ggplot} objects.
@@ -822,7 +827,7 @@ plot_stage2 <- function(ppp,
 #'         ignition week and all points at/after that ignition week in red.
 #' }
 #'
-#' This function intentionally does **not** visualize any “dynamic” ignition guess
+#' This function intentionally does **not** visualize any "dynamic" ignition guess
 #' prior to lock. Before ignition is locked, everything stays black.
 #'
 #' Output modes:
@@ -885,7 +890,7 @@ plot_stage2 <- function(ppp,
 #'         ignition week and all points at/after that ignition week in red.
 #' }
 #'
-#' This function intentionally does **not** visualize any “dynamic” ignition guess
+#' This function intentionally does **not** visualize any "dynamic" ignition guess
 #' prior to lock. Before ignition is locked, everything stays black.
 #'
 #' Output modes:

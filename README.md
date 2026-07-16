@@ -1,104 +1,101 @@
 # PAGe: Phase-Aligned Gated Epidemic Forecasting
 
-This repository contains the **PAGe R package** for real-time forecasting of seasonal respiratory virus positivity (1–2 weeks ahead) using surveillance data.
-
-## Quick Links
-
-- **[Package Website](https://lennon-li.github.io/PAGe/)** — pkgdown documentation and function reference
-- **[PAGe Package](PAGe/)** — Main installable R package
-- **[Documentation](docs/)** — Pipeline overview, walkthrough, and architecture
-- **[Scripts](scripts/)** — Tuning, validation, and analysis scripts
-- **[Data](data/)** — Input datasets and production model artifacts
-
-## Overview
-
-PAGe combines three models for robust epidemic forecasting:
-
-1. **M0 (Ignition Detection)**: Identifies season start from surveillance signals
-2. **M1 (Alignment)**: Aligns partial observations to a learned reference curve via temporal shifting and optional dilation
-3. **M2 (Forecast)**: Binomial GAM with M1 covariates and adaptive bias correction for 1–2 week ahead predictions
-
-Prospective (walk-forward) validation ensures no data leakage. All modeling is retrospectively trained on historical seasons, then deployed weekly in real time.
+PAGe is an R package for prospective one- and two-week-ahead forecasts of
+seasonal respiratory-virus positivity. Its M0 -> M1 -> M2 pipeline detects
+epidemic ignition, aligns the partial season to historical reference curves,
+and predicts with a frozen binomial GAM plus adaptive bias correction.
 
 ## Installation
 
-```r
-# Install from GitHub
-devtools::install_github("lennon-li/PAGe")
-library(PAGe)
+The package lives in the repository's `PAGe/` subdirectory.
 
-# Or build locally from the PAGe/ subdirectory
+```r
+# From GitHub
+remotes::install_github("lennon-li/PAGe", subdir = "PAGe")
+
+# From a local repository checkout
 devtools::install("PAGe")
 ```
 
-## Quick Start
+## Data and training
+
+PAGe does not distribute surveillance observations. Supply an authorized CSV
+explicitly (or set `PAGE_FLU_HIST_FILE`) and normalize it before training.
+The full refresh is computationally substantial; run it offline and save the
+resulting kit.
 
 ```r
 library(PAGe)
 
-# Historical surveillance data shipped with the package.
-allD <- load_flu_hist()
+allD <- load_flu_hist("/authorized/path/flu_history.csv") |>
+  prepare_surveillance_data()
 
-# Train the three-stage kit.
-m0  <- build_m0(allD)
-m1  <- build_m1(allD, m0)
-m2  <- train_m2(allD, m0, m1, best_spec = NULL)
-kit <- assemble_kit(m0, m1, m2)
-
-# Forecast the current season and plot.
-current <- getCurrentD(season = "2025-26")
-res <- run_pipeline(kit, current)
-plot_forecast(res, history = allD)
+# Uses the locked v16 production specification. The prospective holdout
+# 2025-26 is excluded from every fit by default.
+training <- train_pipeline(allD, mode = "refresh")
+kit <- training$kit
+saveRDS(kit, "page_kit.rds")
 ```
 
-See [PAGe/README.md](PAGe/README.md) for complete installation and usage instructions.
+## Holdout replay and promotion
 
-## Documentation
+Replay 2025-26 with kits that did not train on it, then compare the candidate
+against the incumbent. Promotion requires at least 2% NLL improvement, while
+allowing no more than 5% degradation at any horizon and 10% in any phase.
 
-| File | Purpose |
-|------|---------|
-| `docs/pipeline_overview.qmd` | Full architecture and data flow |
-| `docs/pipeline_walkthrough.qmd` | End-to-end training and deployment |
-| `docs/source_map.qmd` | File structure and function reference |
-| `docs/flu_forecasting.qmd` | Method explanation and theory |
+```r
+candidate <- replay_season_holdout(kit, allD, season = "2025-26")
+incumbent <- replay_season_holdout(incumbent_kit, allD, season = "2025-26")
+promotion <- check_promotion(candidate$metrics, incumbent$metrics)
 
-## Repository Structure
-
-```
-.
-├── PAGe/                  # Installable R package (source of truth)
-│   ├── R/                 # Package functions
-│   ├── man/               # Roxygen2 documentation
-│   ├── inst/extdata/      # Built-in data (flu_hist.csv, ref_curve.RData)
-│   └── DESCRIPTION        # Package metadata
-├── R/                     # Development mirror of PAGe/R/
-├── docs/                  # Quarto documentation and walkthroughs
-├── scripts/               # Pipeline entry points and diagnostics
-├── data/                  # Input/output (gitignored)
-├── test/                  # LOSO validation harness
-└── PAGe_Vault/           # Project notes (Obsidian vault)
+# A passing report releases 2025-26 into the refresh used for 2026-27.
+# Failed or malformed reports keep it excluded.
+# Use the full M2 tuning object retained from an earlier retune. A refresh
+# intentionally has training$tuning = NULL.
+next_training <- train_pipeline(
+  allD,
+  mode = "refresh",
+  previous_results = prior_m2_results, # e.g. retuned$tuning$m2
+  promotion = promotion
+)
 ```
 
-## Key Development Files
+## Frozen prospective forecasting
 
-- `CLAUDE.md` — Project conventions and guidelines
-- `scripts/sync-agent-context.R` — Syncs shared agent instructions to `.ai/`
-- `.ai/shared/` — Canonical shared context for Claude agents
-
-## Current Status
-
-- ✅ **M0 (Ignition)**: Complete and tuned (LOSO MAE ~0.5 weeks)
-- ✅ **M1 (Alignment)**: Complete and tuned (production spec: k_ref=25, slope_weight=8.0, Weibull-weighted peak MAE = 1.275 weeks)
-- ✅ **M2 (Forecast)**: Production kit `v16_fresh` at `data/m2_production.rds` (spec: k_f=4, k_e=2, alpha_state=0.15, k_sp=6, bias_alpha=0.05); Bernoulli NLL = 0.4175
-
-## Citation
-
-If you use PAGe in research, please cite:
-```
-Li, L., et al. (2026). PAGe: Phase-Aligned Gated Epidemic Forecasting.
-Repository: https://github.com/lennon-li/PAGe
+```r
+current <- prepare_surveillance_data(current_csv, season = "2026-27")
+forecast <- run_pipeline(kit, current, mode = "frozen")
+plot_forecast(forecast, history = allD)
 ```
 
-## License
+`mode = "frozen"` is the deployment default. Weekly refitting remains an
+explicit compatibility option, not the validated production path.
 
-MIT License — see `PAGe/LICENSE` for details.
+## Full retuning
+
+```r
+retuned <- train_pipeline(
+  allD,
+  mode = "retune",
+  previous_results = prior_m2_results,
+  selection_method = "min_nll", # or "one_se" / "pareto"
+  racing = FALSE
+)
+```
+
+Retuning creates a bounded grid from compatible prior results, retains the
+v16 incumbent and diverse finalists, adds local neighbors, and expands reached
+boundaries. Optional `racing = TRUE` requires a fold evaluator; it only removes
+clear losers, and all survivors still receive full nested-LOSO evaluation.
+
+See the [pipeline overview](https://lennon-li.github.io/PAGe/articles/pipeline-overview.html)
+and [walkthrough](https://lennon-li.github.io/PAGe/articles/pipeline-walkthrough.html).
+
+## Production reference
+
+The deployed v16 specification is `k_f = 4`, `k_e = 2`,
+`alpha_state = 0.15`, `k_sp = 6`, `k_r = 0`, `k_de = 0`, `delta = 0`,
+`Kr = 1`, `bias_alpha = 0.05`, and `bias_beta = 0`. Its recorded nested-LOSO
+Bernoulli NLL is 0.4175.
+
+PAGe is released under the MIT License.

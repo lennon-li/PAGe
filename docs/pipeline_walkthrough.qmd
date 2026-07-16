@@ -2,467 +2,91 @@
 title: "PAGe: A Practical Guide"
 format:
   html:
-    self-contained: true
+    embed-resources: true
     toc: true
-    toc-depth: 3
-    page-layout: full
-    grid:
-      body-width: 1100px
+    number-sections: true
+execute:
+  eval: false
 ---
 
-```{=html}
-<style>
-h2 {
-  margin-top: 1.8em;
-  padding: 0.4em 0.9em;
-  border-left: 5px solid #1e5f8e;
-  background: #e8f1f8;
-  color: #1a3a5c;
-  border-radius: 0 4px 4px 0;
-}
-h3 {
-  margin-top: 1.6em;
-  padding: 0.35em 0.8em;
-  border-left: 4px solid #4a90d9;
-  background: #f4f8fd;
-  border-radius: 0 4px 4px 0;
-}
-.callout-note    { border-left: 4px solid #4a90d9; background: #f4f8fd; padding: 0.8em 1em; margin: 1em 0; border-radius: 0 4px 4px 0; }
-.callout-tip     { border-left: 4px solid #28a745; background: #f0fff4; padding: 0.8em 1em; margin: 1em 0; border-radius: 0 4px 4px 0; }
-.callout-warning { border-left: 4px solid #ffc107; background: #fffbf0; padding: 0.8em 1em; margin: 1em 0; border-radius: 0 4px 4px 0; }
-table { border-collapse: collapse; width: 100%; }
-th, td { padding: 0.45em 0.75em; border: 1px solid #ddd; }
-th { background: #f0f4f8; }
-</style>
-```
+PAGe training is an offline workflow. The examples below are not executed
+during documentation builds because full fitting and nested LOSO are
+computationally substantial.
 
-```{r setup, include=FALSE}
-knitr::opts_knit$set(root.dir = normalizePath(".."))
-knitr::opts_chunk$set(message = FALSE, warning = FALSE)
-```
+## Prepare authorized surveillance data
 
-PAGe (**Phase-Aligned Gated Epidemic Forecasting**) is an R package for
-producing 1–2 week ahead forecasts of seasonal respiratory virus positivity.
-This guide walks through the complete workflow using Canadian influenza
-surveillance data.
+PAGe does not ship surveillance observations. Input must contain one row per
+season and `weekF`, positive tests `y`, and either total tests `N` or negative
+tests `neg`.
 
-The workflow has two stages:
-
-- **Stage 1 — Training** (run once): fit and tune three model components
-  (M0, M1, M2) on historical seasons and assemble a deployment kit.
-- **Stage 2 — Deployment** (run each week): load the kit and call one function
-  to produce forecasts from current-season data.
-
-<div class="callout-warning">
-**Stage 1 takes 1–3 hours on first run** because it fits M1 alignment
-for every LOSO fold. Run `scripts/train_walkthrough_demo.R` in the background
-before rendering this document. Once the cache exists at
-`data/walkthrough/`, this document renders instantly.
-</div>
-
----
-
-## Data format
-
-The pipeline needs one row per (season, MMWR week) with these columns:
-
-| Column   | Description |
-|----------|-------------|
-| `season` | Season label, e.g. `"2019-20"` |
-| `weekF`  | Within-season week index (1 = first week after the season start) |
-| `y`      | Positive tests |
-| `N`      | Total tests |
-| `neg`    | Negative tests (`N − y`) |
-| `p`      | Positivity fraction (`y / N`) |
-
-The helper below converts the repository's raw surveillance CSV to that
-format. For your own data, write an equivalent function and drop it in at the
-top of `scripts/train_walkthrough_demo.R`.
-
-```{r load_fn, eval=FALSE}
+```{r}
 library(PAGe)
-library(MMWRweek)
-library(dplyr)
 
-START_WEEK <- 27L   # MMWR week that begins each season
-
-n_weeks_in_start_year <- function(start_year) {
-  52L + as.integer(
-    MMWRweek::MMWRweek(as.Date(paste0(start_year, "-12-31")))$MMWRweek == 53L
-  )
-}
-
-load_flu_data <- function(path = "data/flu_testing_data.csv") {
-  read.csv(path) |>
-    dplyr::select(
-      season, week, start_year = seasonstart,
-      y = pos_flua, N = test_flu
-    ) |>
-    dplyr::mutate(
-      neg   = N - y,
-      nW    = n_weeks_in_start_year(start_year),
-      weekF = ((week - START_WEEK) %% nW) + 1L,
-      p     = y / N
-    )
-}
+allD <- load_flu_hist("/authorized/path/flu_history.csv") |>
+  prepare_surveillance_data()
 ```
 
----
+## Refresh the locked production kit
 
-## Stage 1 — Training
+Use refresh when the model structure is already approved. It fits the deployed
+v16 specification (`k_f=4`, `k_e=2`, `alpha_state=0.15`, `k_sp=6`, `k_r=0`,
+`k_de=0`, `delta=0`, `Kr=1`, `bias_alpha=0.05`, `bias_beta=0`). The 2025-26
+season remains excluded as a prospective holdout by default.
 
-Stage 1 code is shown below **but marked `eval=FALSE`** because the computations
-take 1–3 hours and are meant to run once via
-`scripts/train_walkthrough_demo.R`.  The output of each step is cached;
-Stage 2 below loads those cached artifacts.
-
-### Season roles
-
-We use every other season for training and hold out 2025–26 for deployment.
-
-```{r season_roles, eval=FALSE}
-TRAIN_SEASONS <- c("2012-13", "2014-15", "2017-18", "2019-20", "2023-24")
-PROSP_SEASON  <- "2025-26"
-
-allD       <- load_flu_data()
-train_allD <- allD |> dplyr::filter(season %in% TRAIN_SEASONS)
-prosp_data <- allD |> dplyr::filter(season == PROSP_SEASON)
+```{r}
+training <- train_pipeline(allD, mode = "refresh")
+kit <- training$kit
+saveRDS(kit, "page_kit.rds")
 ```
 
-### M0 — Ignition detection
+## Replay the holdout and apply promotion gates
 
-```{r m0, eval=FALSE}
-CACHE_DIR <- "data/walkthrough"
-dir.create(CACHE_DIR, showWarnings = FALSE, recursive = TRUE)
+Both candidate and incumbent kits must have been trained without 2025-26.
 
-# Tunes ignition-detection thresholds via leave-one-season-out grid search.
-# Saves ~28 KB; runs in < 5 minutes.
-m0 <- tune_m0(
-  allD         = train_allD,
-  loso_seasons = "all",
-  exclude      = character(0)
+```{r}
+candidate <- replay_season_holdout(kit, allD, season = "2025-26")
+incumbent <- replay_season_holdout(incumbent_kit, allD, season = "2025-26")
+promotion <- check_promotion(candidate$metrics, incumbent$metrics)
+
+# A passing report releases 2025-26 into the refresh for 2026-27.
+next_training <- train_pipeline(allD, mode = "refresh", promotion = promotion)
+```
+
+Promotion requires at least 2% Bernoulli-NLL improvement, at most 5% MAE
+degradation at any horizon, and at most 10% MAE degradation in any phase. A
+failed or malformed report keeps the holdout excluded. The versioned report
+schema validates the locked thresholds and internal gate consistency; it does
+not provide cryptographic proof of who created the report.
+
+## Retune when model selection is required
+
+```{r}
+retuned <- train_pipeline(
+  allD,
+  mode = "retune",
+  previous_results = prior_m2_results,
+  selection_method = "min_nll", # alternatives: "one_se", "pareto"
+  racing = FALSE,
+  checkpoint_dir = "results/checkpoints"
 )
-saveRDS(m0, file.path(CACHE_DIR, "m0.rds"))
 ```
 
-### M1 — Phase alignment
+The adaptive grid retains the v16 incumbent, uses compatible prior results,
+keeps diverse finalists, adds local neighbors, and expands reached boundaries.
+Optional `racing=TRUE` requires a user-supplied partial-fold evaluator. Racing
+only removes clear losers; every survivor receives full nested-LOSO evaluation
+before selection.
 
-```{r m1, eval=FALSE}
-# Fits the epidemic reference curve and alignment hyperparameters.
-# Saves ~2.4 MB; runs in < 2 minutes.
-m1 <- build_m1(
-  allD    = train_allD,
-  m0      = m0,
-  exclude = character(0)
-)
-saveRDS(m1, file.path(CACHE_DIR, "m1.rds"))
+## Produce a frozen prospective forecast
+
+```{r}
+kit <- readRDS("page_kit.rds")
+current <- prepare_surveillance_data(current_csv, season = "2026-27")
+forecast <- run_pipeline(kit, current, mode = "frozen")
+plot_forecast(forecast, history = allD)
 ```
 
-### M2 — Leave-one-season-out evaluation
-
-```{r m2_loso, eval=FALSE}
-# LOSO grid search over M2 hyperparameters (k_f, k_e, alpha_state, k_sp, …).
-# Phase 1 builds M1 fold predictions (~20 min per fold × 5 folds = ~100 min).
-# Phase 2 fits M2 GAMs across the grid (~5 min for a small grid).
-# Use default_m2_grid() for a full 480-spec production search; the demo grid
-# below finishes in ~30 minutes and is sufficient to illustrate the API.
-demo_grid <- tidyr::crossing(
-  delta       = 0,
-  Kr          = 1,
-  k_f         = c(4L, 6L),
-  k_e         = 2L,
-  alpha_state = 0.15,
-  k_r         = 0L,
-  k_de        = 0L,
-  k_sp        = 6L
-)
-
-loso <- build_m2(
-  allD         = train_allD,
-  m0           = m0,
-  m1           = m1,
-  loso_seasons = "all",
-  exclude_seas = character(0),
-  grid         = demo_grid
-)
-saveRDS(loso, file.path(CACHE_DIR, "m2_loso.rds"))
-```
-
-<div class="callout-note">
-The M1 fold-building phase (Phase 1 inside `build_m2`) is the bottleneck: it
-runs M1 walk-forward predictions for each LOSO fold.  On the first run this
-takes ~20 minutes per fold.  Subsequent renders load `m2_loso.rds` instantly.
-</div>
-
-### M2 — Final model training
-
-```{r m2_train, eval=FALSE}
-m2_model <- train_m2(
-  allD      = train_allD,
-  m0        = m0,
-  m1        = m1,
-  best_spec = loso$best_spec,
-  exclude   = character(0),
-  verbose   = TRUE
-)
-saveRDS(m2_model, file.path(CACHE_DIR, "m2_model.rds"))
-```
-
-### Assemble the deployment kit
-
-```{r kit_assemble, eval=FALSE}
-kit <- assemble_kit(
-  m0       = m0,
-  m1       = m1,
-  m2_model = m2_model
-)
-saveRDS(kit, file.path(CACHE_DIR, "kit.rds"))
-```
-
-<div class="callout-tip">
-**Stage 1 complete.** The kit at `data/walkthrough/kit.rds` contains
-everything needed for deployment. Hand this single file to Stage 2 — no
-training data needs to travel with it.
-</div>
-
----
-
-## Stage 2 — Deployment
-
-Stage 2 is what runs every week during the active season. It loads the kit and
-processes new surveillance data through M0 → M1 → M2 in one call.
-
-Here we demonstrate on **2025–26** (held out from training throughout Stage 1).
-
-```{r stage2_setup}
-library(PAGe)
-library(MMWRweek)
-library(dplyr)
-library(ggplot2)
-
-START_WEEK <- 27L
-n_weeks_in_start_year <- function(start_year) {
-  52L + as.integer(
-    MMWRweek::MMWRweek(as.Date(paste0(start_year, "-12-31")))$MMWRweek == 53L
-  )
-}
-load_flu_data <- function(path = "data/flu_testing_data.csv") {
-  read.csv(path) |>
-    dplyr::select(season, week, start_year = seasonstart,
-                  y = pos_flua, N = test_flu) |>
-    dplyr::mutate(neg = N - y, nW = n_weeks_in_start_year(start_year),
-                  weekF = ((week - START_WEEK) %% nW) + 1L, p = y / N)
-}
-```
-
-### Load kit and deployment data
-
-```{r load_kit}
-# In a real workflow: kit <- readRDS("data/walkthrough/kit.rds")
-# For this demo we load the production kit (same structure as assemble_kit() output).
-kit <- load_prospective_kit("data/")
-
-allD       <- load_flu_data()
-prosp_data <- allD |> dplyr::filter(season == "2025-26")
-
-cat("Training seasons  :", paste(kit$m2_production$training_seasons, collapse = ", "), "\n")
-cat("Deployment season : 2025-26\n")
-cat("Data rows         :", nrow(prosp_data), "\n")
-```
-
-### Walk-forward simulation
-
-`run_prospective_pipeline()` simulates week-by-week deployment: at each week
-it uses only data available up to that point, then forecasts 1 and 2 weeks
-ahead.
-
-```{r deployment}
-CACHE_DIR <- "data/walkthrough"
-dir.create(CACHE_DIR, showWarnings = FALSE, recursive = TRUE)
-wf_cache  <- file.path(CACHE_DIR, "wf.rds")
-
-if (file.exists(wf_cache)) {
-  wf <- readRDS(wf_cache)
-} else {
-  wf <- run_prospective_pipeline(
-    kit          = kit,
-    current_data = prosp_data,
-    mode         = "frozen",
-    verbose      = FALSE
-  )
-  saveRDS(wf, wf_cache)
-}
-
-cat("Forecast rows :", nrow(wf$m2_preds), "\n")
-cat("Horizons      :", paste(sort(unique(wf$m2_preds$h)), collapse = ", "), "weeks\n")
-```
-
-### Forecast plot
-
-```{r forecast_plot, fig.width=11, fig.height=5}
-fc1 <- wf$m2_preds |> dplyr::filter(h == 1L)
-obs <- prosp_data |> dplyr::mutate(pct = y / N)
-
-ggplot() +
-  geom_ribbon(
-    data = fc1,
-    aes(x = target_weekF, ymin = m2_lo, ymax = m2_hi),
-    fill = "#4a90d9", alpha = 0.25
-  ) +
-  geom_line(
-    data = fc1,
-    aes(x = target_weekF, y = m2_p, colour = "Forecast (h=1)"),
-    linewidth = 1
-  ) +
-  geom_point(
-    data = obs,
-    aes(x = weekF, y = pct, colour = "Observed"),
-    size = 2
-  ) +
-  scale_colour_manual(
-    values = c("Forecast (h=1)" = "#1e5f8e", "Observed" = "#333333")
-  ) +
-  labs(
-    title  = "Stage 2 walk-forward deployment — 2025-26",
-    x      = "Season week",
-    y      = "Positivity",
-    colour = NULL
-  ) +
-  theme_minimal() +
-  theme(legend.position = "bottom")
-```
-
-### Accuracy summary
-
-```{r accuracy}
-obs_join <- prosp_data |> dplyr::select(weekF, obs = p)
-
-wf$m2_preds |>
-  dplyr::inner_join(obs_join, by = c("target_weekF" = "weekF")) |>
-  dplyr::group_by(h) |>
-  dplyr::summarise(
-    n    = dplyr::n(),
-    mae  = mean(abs(m2_p - obs), na.rm = TRUE),
-    rmse = sqrt(mean((m2_p - obs)^2, na.rm = TRUE)),
-    bias = mean(m2_p - obs, na.rm = TRUE),
-    .groups = "drop"
-  ) |>
-  knitr::kable(digits = 4, caption = "Walk-forward accuracy — 2025-26")
-```
-
-<div class="callout-tip">
-**That's it.**  Each week append the new observation row to `prosp_data` and
-call `run_prospective_pipeline()` again.  The kit never changes during the
-season.
-</div>
-
----
-
-## Using your own data
-
-### Data format
-
-Prepare one row per (season, surveillance week) with these columns:
-
-| Column   | Type      | Note |
-|----------|-----------|------|
-| `season` | character | Season label, e.g. `"2022-23"` |
-| `weekF`  | integer   | Within-season week index — **1 = first week after `START_WEEK`** |
-| `y`      | integer   | Positive tests |
-| `N`      | integer   | Total tests performed |
-| `neg`    | integer   | `N − y` |
-| `p`      | numeric   | `y / N` (positivity fraction, not percent) |
-
-### Season start week (`START_WEEK`)
-
-`START_WEEK` is the MMWR week number used to define the start of `weekF = 1`
-in your data. The default is **27** (early July).
-
-**Why 27 and not 35?** The conventional surveillance season in Canada begins at
-MMWR week 35 (late August). However, PAGe needs several weeks of low-activity
-**pre-season baseline** before the epidemic starts: M0's ignition detector
-compares incoming positivity against a background level, so it must observe that
-background first. Starting at week 27 provides ~8 weeks of pre-season data before
-the typical ignition window (weeks 13–24 of the season, i.e. MMWR weeks ~40–51).
-
-**For a new virus or geography**, choose a `START_WEEK` that is roughly 6–10
-weeks before the earliest plausible ignition in any training season. If your
-surveillance convention already defines a season start week, subtract 6–8 weeks
-from it. The exact value is unlikely to matter much — shifting by ±3 weeks has
-minimal impact on model performance — but keep it consistent across all seasons.
-
-All `weekF` values in your data must be computed relative to the same
-`START_WEEK`.
-
-### Training data requirements
-
-**Required**
-
-- **At least 5 complete seasons** for M1 (reference curve) and at least 4 for
-  M2 LOSO cross-validation.
-- Each season should cover a **full epidemic arc** — ideally the entire
-  surveillance year, not just the epidemic peak window. M1 alignment uses
-  pre- and post-peak shape, so truncated seasons degrade the reference curve.
-- **Consistent testing denominators.** Large swings in test volume
-  (e.g., a 10× increase mid-season) create artefactual positivity changes that
-  confuse M2's EMA features. Flag such seasons for exclusion.
-- **No gaps inside a season.** Missing weeks break the EMA computation.
-  Impute or exclude seasons with multi-week gaps during the epidemic period.
-
-**Optional but recommended**
-
-- **Manual ignition labels.** A named integer vector mapping each season to
-  its true onset week:
-  ```r
-  manual_labels <- c("2022-23" = 15L, "2023-24" = 20L)
-  ```
-  PAGe uses these two ways: (1) M0 is tuned against them, so its automatic
-  detector is calibrated to your data; (2) M1 LOSO evaluation reports
-  `iWeek_true` for diagnosis. Without labels, M0 tunes against its own
-  automatic detections — still functional, but harder to verify.
-  A reasonable label is the **first week positivity clearly rises above
-  baseline** (you can identify this by eye from a season plot). You do not
-  need to label every season; unlabeled seasons fall back to automatic
-  detection.
-
-**Not required**
-
-- **Peak labels.** PAGe never asks for a manually labeled peak. The observed
-  maximum positivity week (`which.max(p)`) is used automatically for
-  evaluation. M1 infers the peak position from the alignment template — no
-  hand annotation needed.
-- **Future covariate data.** The model uses only the positivity time series
-  and test volumes.
-
-### Seasons to exclude
-
-Pass unusual seasons via the `exclude` argument in each Stage 1 function.
-Common reasons to exclude:
-
-- **Surveillance disruptions** (e.g., COVID-19 pandemic years 2020-21 and
-  2021-22 in the flu data).
-- **Anomalous ignition timing** that sits far outside all other seasons (e.g.,
-  2015-16 in the flu data — an outlier that destabilises the reference curve).
-- **Incomplete seasons** — current-season data that ends before peak.
-
-When in doubt, run LOSO with and without a suspect season and compare NLL.
-
-### Step-by-step checklist
-
-1. **Prepare data** with the six columns above.
-2. **Set `START_WEEK`** to match your surveillance calendar.
-3. **Plot each season** and annotate approximate ignition weeks for
-   `manual_labels` (even rough labels help).
-4. **Identify seasons to exclude** — pandemic years, truncated records, or
-   extreme outliers.
-5. **Run** `Rscript scripts/train_walkthrough_demo.R` with your data and
-   season lists (edit `TRAIN_SEASONS` and `PROSP_SEASON` at the top of the
-   script).
-6. **Deploy** — load `data/walkthrough/kit.rds` and call
-   `run_prospective_pipeline(kit, new_data, mode = "frozen")`.
-
-<div class="callout-warning">
-**Minimum seasons.** M1 needs at least 5 seasons to build a stable reference
-curve; M2 LOSO requires at least 4 distinct folds. With fewer seasons, results
-will be noisier and the LOSO NLL less reliable.
-</div>
+Frozen-GAM deployment is the default validated path. Archive the input
+snapshot, issue date, kit version, manual overrides, and returned M0/M1/M2 state
+for reproducibility. Weekly refitting is available only as an explicit legacy
+compatibility option.

@@ -36,24 +36,29 @@ simulate_flu_seasons <- function(S = 10, weeks = 1:52, seed = 2025) {
   df
 }
 
-# load example data shipped in inst/extdata
-#' Load the built-in historical influenza surveillance data
+#' Load historical influenza surveillance data
 #'
-#' Reads the historical flu positivity dataset shipped with the package
-#' (\code{inst/extdata/flu_hist.csv}) and returns it as a data frame.
+#' Reads a user-supplied historical surveillance CSV. Resolution order is:
+#' explicit \code{path}, the \code{PAGE_FLU_HIST_FILE} environment variable,
+#' then a bundled \code{inst/extdata/flu_hist.csv} if a future distribution
+#' provides one. PAGe does not currently distribute surveillance observations.
 #'
-#' @return A data frame with historical surveillance data (columns depend on
-#'   the packaged CSV; typically includes \code{season}, \code{newWeek},
-#'   \code{y}, and \code{neg}).
+#' @param path Optional path to a historical surveillance CSV.
+#'
+#' @return A data frame containing the CSV fields.
+#' @seealso [prepare_surveillance_data()] for normalization and validation.
 #' @export
-load_flu_hist <- function() {
-  fp <- Sys.getenv("PAGE_FLU_HIST_FILE", "/srv/r-private-repo/app-data/PAGe_flu_hist.csv")
-  if (!file.exists(fp)) {
+load_flu_hist <- function(path = NULL) {
+  fp <- path
+  if (is.null(fp) || !length(fp) || !nzchar(fp[[1L]])) {
+    fp <- Sys.getenv("PAGE_FLU_HIST_FILE", unset = "")
+  }
+  if (!length(fp) || !nzchar(fp[[1L]])) {
     fp <- system.file("extdata", "flu_hist.csv", package = "PAGe", mustWork = FALSE)
   }
-  if (!nzchar(fp) || !file.exists(fp)) {
+  if (length(fp) != 1L || is.na(fp) || !nzchar(fp) || !file.exists(fp)) {
     stop(
-      "Cannot find PAGe flu history data. Set PAGE_FLU_HIST_FILE to the CSV path.",
+      "Historical surveillance CSV not found. Supply `path` or set PAGE_FLU_HIST_FILE.",
       call. = FALSE
     )
   }

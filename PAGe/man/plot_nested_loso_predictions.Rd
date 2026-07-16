@@ -18,6 +18,10 @@ of \code{nested_loso_grid_search()$cv_results}.}
 
 \item{dat_raw}{Optional aligned data for true ignition lines.}
 
+\item{y_max}{Numeric upper y-axis limit.}
+
+\item{show_ci}{Logical; draw approximate prediction intervals.}
+
 \item{title}{Plot title.}
 }
 \value{

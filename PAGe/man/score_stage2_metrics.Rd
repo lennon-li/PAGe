@@ -5,6 +5,7 @@
 \title{Score a fitted Stage-2 GAM on a test set}
 \usage{
 score_stage2_metrics(
+  fit,
   d_test,
   exclude_season_re = TRUE,
   exclude_terms = NULL,
@@ -14,6 +15,8 @@ score_stage2_metrics(
 )
 }
 \arguments{
+\item{fit}{Fitted \code{mgcv::gam} or \code{mgcv::bam} Stage-2 model.}
+
 \item{d_test}{Data frame of test observations. Must contain \code{y_lead}
 and \code{N_lead} (outcome counts) plus any predictors used in
 \code{fit}.}
@@ -33,8 +36,6 @@ default 0).}
 
 \item{soft_cap_fn}{Optional function applied to \code{p_hat} after
 prediction (e.g. a soft ceiling on positivity).}
-
-\item{fit}{Fitted \code{mgcv::gam} or \code{mgcv::bam} Stage-2 model.}
 }
 \value{
 A list with \code{nll}, \code{mean_nll}, \code{brier}, and

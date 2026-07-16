@@ -58,6 +58,14 @@ identifiability is determined automatically via
 
 \item{min_obs}{Integer. Minimum number of rows in \code{currentSeason}
 required before attempting alignment (default \code{4L}).}
+
+\item{cal}{Optional peak-calibration object.}
+
+\item{curvature_ratio}{Numeric coefficient for activating dilation.}
+
+\item{time_weights}{Optional observation weights.}
+
+\item{trough_weight, rise_weight, peak_decay}{Alignment-loss controls.}
 }
 \value{
 A named list with components:

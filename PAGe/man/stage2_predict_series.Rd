@@ -36,9 +36,15 @@ on the logit scale using this alpha. Defaults to \code{pp$meta$alpha_state} if p
 
 \item{exclude_season_re}{Logical. If TRUE (default), excludes \code{s(season)} during prediction.}
 
-\item{date_step_days}{Integer days per week when imputing missing dates (default 7).}
+\item{interval}{Interval type, prediction or confidence.}
 
-\item{ci_level}{Confidence level for intervals (default 0.95).}
+\item{level}{Confidence level for intervals (default 0.95).}
+
+\item{pi_B}{Number of prediction-interval simulations.}
+
+\item{pi_seed}{Random seed for interval simulation.}
+
+\item{date_step_days}{Integer days per week when imputing missing dates (default 7).}
 }
 \value{
 If \code{which="latest"}, returns a single data.frame.

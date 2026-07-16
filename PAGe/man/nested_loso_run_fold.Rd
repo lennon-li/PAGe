@@ -43,7 +43,7 @@ nested_loso_run_fold(
 \arguments{
 \item{allD}{Full multi-season data frame.}
 
-\item{test_season}{Character scalar — the held-out season.}
+\item{test_season}{Character scalar - the held-out season.}
 
 \item{params}{M0 detection parameters.}
 
@@ -61,6 +61,8 @@ nested_loso_run_fold(
 
 \item{n_weeks}{Integer; reference curve period (default 52L).}
 
+\item{ref_method}{Reference-curve method passed to \code{estimateRef()}.}
+
 \item{manual_labels}{Optional manual ignition labels.}
 
 \item{flag_args}{Named list forwarded to \code{flagIgnition()}.}
@@ -75,9 +77,20 @@ nested_loso_run_fold(
 
 \item{curvature_ratio}{Numeric; delta curvature gate (default 1.0).}
 
+\item{temperature, rise_weight, trough_weight, peak_decay}{Ensemble and
+alignment-loss controls.}
+
+\item{slope_weight, slope_window}{Growth-rate similarity controls.}
+
+\item{dynamic_temp, dynamic_temp_pivot}{Early-season temperature controls.}
+
+\item{top_k, blend_alpha}{Template filtering and blending controls.}
+
 \item{method}{GAM fitting method (default \code{"REML"}).}
 
 \item{parallel}{Logical; parallelize M1 walk-forward (default TRUE).}
+
+\item{skip_m1}{Logical; reuse supplied M1 predictions when supported.}
 
 \item{verbose}{Logical; print progress.}
 }
@@ -92,6 +105,6 @@ A named list:
 }
 \description{
 Orchestrates the five steps for a single held-out season:
-build fold → M1 train → M2 train → M1 test → M2 eval.
+build fold -> M1 train -> M2 train -> M1 test -> M2 eval.
 Returns aggregated results; handles errors gracefully.
 }

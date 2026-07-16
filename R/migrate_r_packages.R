@@ -10,27 +10,6 @@
 # Error Handling and Cleanup: All operational output is redirected to a log file for diagnostics. 
 #      Upon completion, the utility prints a success or failure status and automatically removes all temporary files to leave the system clean.
 
-# --- 0. Dependency Check and Setup ---
-# Check for tcltk (needed for the GUI directory selector)
-if (!requireNamespace("tcltk", quietly = TRUE)) {
-  cat("The 'tcltk' package is required for the GUI file browser.\n")
-  if (interactive()) {
-    response <- readline("Would you like to install 'tcltk' now? (y/n): ")
-    if (tolower(response) == "y") {
-      tryCatch({
-        install.packages("tcltk", quiet = TRUE)
-      }, error = function(e) {
-        stop("Failed to install 'tcltk'. Please install it manually and rerun the function.", call. = FALSE)
-      })
-    } else {
-      stop("tcltk not installed. Migration aborted.", call. = FALSE)
-    }
-  } else {
-    stop("tcltk is required. Please install it manually and rerun the function.", call. = FALSE)
-  }
-}
-library(tcltk)
-
 #' Migrates user-installed R packages from an old R version to the current (new) R version.
 #'
 #' Orchestrates the complete two-step migration (save list from old R, then install in new R) 
@@ -83,9 +62,12 @@ migrate_r_packages <- function(old_r_home = NULL) {
   if (is_valid_r_home(old_r_home)) {
     OLD_R_HOME <- gsub("\\\\", "/", old_r_home)
   } else {
+    if (!requireNamespace("tcltk", quietly = TRUE)) {
+      stop("The 'tcltk' package is required to choose `old_r_home` interactively.", call. = FALSE)
+    }
     cat("1. Launching GUI File Browser (Please select your OLD R Home folder)...\n")
     
-    OLD_R_HOME_RAW <- tk_choose.dir(default = "", caption = "Select the root folder of your OLD R installation")
+    OLD_R_HOME_RAW <- tcltk::tk_choose.dir(default = "", caption = "Select the root folder of your OLD R installation")
     
     if (is.na(OLD_R_HOME_RAW) || is.null(OLD_R_HOME_RAW) || OLD_R_HOME_RAW == "") {
       message("Directory selection cancelled by user. Migration aborted.")

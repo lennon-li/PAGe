@@ -49,6 +49,7 @@ make_soft_cap_fn <- function(fit_obj) {
 #' @param logit_f_eff Numeric. logit(M1 predicted positivity at target week).
 #' @param z_ema Numeric. EWMA of logit-observed positivity.
 #' @param dz_ema Numeric. Rate of change of z_ema (z_ema[t] - z_ema[t-1]).
+#' @param logit_spread Numeric alignment-ensemble uncertainty on the logit scale.
 #' @param logN_now Numeric. log(N) at eval week.
 #' @param season_label Character. Season label for newdata: the test/current
 #'   season name (used when the season is in the model's training data,
@@ -62,7 +63,8 @@ make_soft_cap_fn <- function(fit_obj) {
 #'   \code{"s(season)"} is appended to \code{ex_terms} (frozen mode).
 #' @param soft_cap_fn Optional soft-cap function from \code{make_soft_cap_fn()}.
 #' @param return_ci Logical. If \code{TRUE}, returns \code{m2_lo} and
-#'   \code{m2_hi} (±1.96 SE on the link scale).
+#'   \code{m2_hi} (+/-1.96 SE on the link scale).
+#' @param bias_logit Numeric online bias adjustment on the logit scale.
 #'
 #' @return A named list with \code{m2_p} (and \code{m2_lo}, \code{m2_hi}
 #'   if \code{return_ci = TRUE}), or \code{NULL} on prediction failure.
@@ -120,7 +122,7 @@ m2_predict_one <- function(fit,
     post_ign     = TRUE
   )
 
-  # season_h (factor-smooth interaction term) — use matching level if present
+  # season_h (factor-smooth interaction term) -- use matching level if present
   if ("season_h" %in% names(fit$model)) {
     lev_sh <- levels(fit$model$season_h)
     sh_val <- paste0(as.character(nd_season), ":h", h)
@@ -195,6 +197,8 @@ stage2_ramp_weight <- function(t_since, K = 3L) {
 #' @param ign_week_df Optional data.frame with season and iWeek_hat.
 #' @param pre_buffer Integer.
 #' @param alpha_state Numeric in (0,1).
+#' @param m1_preds Optional M1 walk-forward predictions used for stacking.
+#' @param feature_ranges Optional training feature scales reused for prediction.
 #' @param verbose Logical.
 #'
 #' @return data.frame stacked across leads with engineered covariates.
@@ -382,15 +386,15 @@ prep_stage2_joint <- function(dat,
   # ---- Override logit_f_eff with M1 walk-forward predictions ----
   # When m1_preds is supplied (output of m1_walkforward_predictions()),
   # replace the static template feature with M1's aligned prediction, and
-  # add logit_spread (weighted SD of logit template predictions — alignment
-  # uncertainty signal). High spread → templates disagree → M2 should lean
+  # add logit_spread (weighted SD of logit template predictions -- alignment
+  # uncertainty signal). High spread -> templates disagree -> M2 should lean
   # more on z_ema and less on logit_f_eff.
   d$logit_spread <- 0  # default: zero spread (no uncertainty info)
   if (!is.null(m1_preds)) {
     stopifnot(is.data.frame(m1_preds))
     stopifnot(all(c("season", "eval_weekF", "h", "m1_p_hat") %in% names(m1_preds)))
 
-    # Extract h integer from lead factor (e.g., "h1" → 1, "h2" → 2)
+    # Extract h integer from lead factor (e.g., "h1" -> 1, "h2" -> 2)
     d$.h_int <- as.integer(sub("^h", "", as.character(d$lead)))
 
     m1_join <- m1_preds |>
@@ -475,6 +479,7 @@ prep_stage2_joint <- function(dat,
 #'   \code{rmse_p}.
 #' @keywords internal
 score_stage2_metrics <- function(
+                                 fit,
                                  d_test,
                                  exclude_season_re = TRUE,
                                  exclude_terms = NULL,
@@ -719,7 +724,9 @@ estimate_season_re_online <- function(fit, obs_df, ex_terms = NULL, lambda_re = 
 
   # B3 fix: obs_df (current-season raw obs) is missing required GAM columns.
   # Populate them from the fitted model so predict() doesn't fail silently.
-  # TODO: lead=h1 assumes 1-week-ahead horizon; should match actual forecast h.
+  # Locked v16 parity limitation: online RE uses the first lead level (h1).
+  # A horizon-aware estimator would change validated behavior and requires
+  # separate prospective validation before promotion.
   nd <- obs_df
   if (!"lead" %in% names(nd) && "lead" %in% names(fit$model)) {
     lev_lead <- if (is.factor(fit$model$lead))
@@ -813,8 +820,13 @@ stage2_spec_from_tuning <- function(tuned2) {
 #' @param template_df Template curve.
 #' @param spec Stage-2 spec created by \code{stage2_make_spec()}.
 #' @param best_mean_nll Legacy tuned row (delta,K,k_f,alpha_state) if \code{spec=NULL}.
+#' @param pre_buffer Legacy pre-ignition training buffer.
+#' @param alpha_state Legacy EWMA rate.
+#' @param k_e,k_n Legacy smooth basis dimensions.
 #' @param ign_week_df Optional ignition week estimates for alignment in held-out/new seasons.
 #' @param method mgcv method.
+#' @param lambda_w,w_floor Training time-decay rate and minimum weight.
+#' @param m1_preds Optional M1 walk-forward predictions used for stacking.
 #' @param verbose logical.
 #'
 train_stage2_joint <- function(dat,
@@ -930,9 +942,10 @@ format_current_for_stage2 <- function(currentSeason,
 #' @param current_obs data.frame with columns \code{weekF}, \code{y}, \code{N}
 #'   (or \code{y}/\code{neg}) for the current season up to the current week.
 #' @param iWeek_used Numeric. Detected ignition week (on weekF scale).
-#' @param hist_data \code{alignedD_prosp} — historical aligned dataset (all past seasons).
+#' @param hist_data \code{alignedD_prosp} -- historical aligned dataset (all past seasons).
 #' @param template_df Template curve with \code{newWeek} and \code{fit}.
 #' @param spec Stage-2 spec from \code{stage2_spec_from_tuning()}.
+#' @param m1_preds Optional historical M1 walk-forward predictions.
 #' @param season_label Character. Label for the current season (default \code{"current"}).
 #' @param addFS Integer threshold for re-enabling the season-specific factor-smooth
 #'   in a brand-new season refit. If \code{NULL} (default), the factor-smooth is

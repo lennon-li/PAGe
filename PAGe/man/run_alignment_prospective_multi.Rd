@@ -60,6 +60,10 @@ contain \code{eta_mat}.}
 \item{top_k}{Integer or NULL; pre-filter templates.}
 
 \item{blend_alpha}{Numeric 0--1; template blending.}
+
+\item{slope_weight, slope_window}{Growth-rate similarity controls.}
+
+\item{dynamic_temp, dynamic_temp_pivot}{Early-season temperature controls.}
 }
 \value{
 List with same structure as \code{run_alignment_prospective()} output.

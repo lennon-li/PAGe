@@ -1,5 +1,5 @@
 # ============================================================
-# Nested M1 → M2 LOSO: M2 evaluation
+# Nested M1 -> M2 LOSO: M2 evaluation
 #
 # Section 5b: frozen GAM + Holt EMA bias (production path).
 # Section 5c: weekly refit (legacy comparison path).
@@ -20,6 +20,11 @@
 #'
 #' @param allD Full multi-season data frame.
 #' @param fold Fold object from \code{nested_loso_build_fold()}.
+#' @param m1_test_preds Held-out-season M1 predictions.
+#' @param spec Stage-2 specification.
+#' @param eval_window Maximum post-ignition evaluation week.
+#' @param horizons Forecast horizons.
+#' @param manual_labels Optional named ignition labels.
 #' @param m2_fit Output of \code{nested_loso_m2_train()} (the trained M2 GAM).
 #' @param m1_test_preds Output of \code{nested_loso_m1_test()}: tibble with
 #'   columns \code{eval_weekF}, \code{target_weekF}, \code{h}, \code{m1_p_hat},
@@ -27,10 +32,10 @@
 #' @param spec Stage-2 spec from \code{stage2_make_spec()}.
 #' @param eval_window Integer; max t_since to evaluate (default 12L).
 #' @param horizons Integer vector of forecast horizons (default \code{c(1L, 2L)}).
-#' @param bias_alpha Numeric; EMA smoothing for level-only Holt bias correction (default 0.2).
-#'   Not read from \code{spec} — this is a deployment-time parameter fixed outside the LOSO
-#'   spec grid. LOSO showed it is unidentifiable in-distribution (flat NLL from 0.1–0.3).
-#' @param k_deriv Integer; basis dim for M0 derivative estimation (default 10L).
+#' @param bias_alpha Numeric; EMA smoothing for Holt bias level (default 0.2).
+#' @param bias_beta Numeric; EMA smoothing for Holt bias trend (default 0).
+#'   Both bias settings are explicit evaluator inputs; callers may take them
+#'   from a tuning-grid specification.
 #' @param manual_labels Optional named integer vector of manual ignition labels
 #'   (deprecated; use \code{manual_labels_train} and \code{manual_labels_test}).
 #' @param manual_labels_train Optional named integer vector of manual ignition
@@ -51,6 +56,7 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
                                             eval_window        = 12L,
                                             horizons           = c(1L, 2L),
                                             bias_alpha         = 0.2,
+                                            bias_beta          = 0,
                                             manual_labels      = NULL,
                                             manual_labels_train = NULL,
                                             manual_labels_test  = NULL,
@@ -107,12 +113,12 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
 
   # --- Build aligned test data via M0 ---
   # B4 fix: use manual_labels_test (not manual_labels_train) for the test fold.
-  # manual_labels_test = NULL → uses prospective flagIgnition without override.
+  # manual_labels_test = NULL -> uses prospective flagIgnition without override.
   # This prevents the held-out season's true iWeek from leaking into the test fold.
   test_allD  <- dplyr::filter(allD, .data$season == test_s)
   if (nrow(test_allD) == 0L) return(list(scores = na_scores, predictions = empty_preds))
 
-  # L2 fix: walk-forward derivatives — each week w uses only rows with weekF <= w,
+  # L2 fix: walk-forward derivatives -- each week w uses only rows with weekF <= w,
   # so future weeks cannot influence the GAM smoother at earlier time points.
   test_deriv_data <- estimateDerivs_walkforward(test_allD, k = 10L)
   test_outs <- list(test_deriv_data) |>
@@ -143,11 +149,9 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
   all_rows <- vector("list", length(eval_weeks))
 
   # Holt trend-augmented bias tracker (R1) + online season RE (R2)
-  # bias_alpha is a deployment-time parameter, not a LOSO-tuned spec param.
-  # Use the function argument directly; spec$bias_alpha is ignored here.
   bias_alpha_v    <- as.numeric(bias_alpha)
-  bias_alpha_high <- 0.7   # α when ≥2 consecutive same-sign residuals detected
-  bias_beta_v     <- 0.0  # level-only confirmed optimal; trend term never tuned
+  bias_alpha_high <- 0.7   # alpha when >=2 consecutive same-sign residuals detected
+  bias_beta_v     <- as.numeric(bias_beta)
   bias_level      <- list(h1 = 0, h2 = 0)
   bias_trend      <- list(h1 = 0, h2 = 0)
   pred_log        <- list()
@@ -163,7 +167,7 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
 
     obs_to_ew <- dplyr::filter(test_allD, .data$weekF <= ew)
 
-    # Fix B: prospective peak detection — reset bias on first post-peak week
+    # Fix B: prospective peak detection -- reset bias on first post-peak week
     p_to_ew    <- obs_to_ew$y / pmax(obs_to_ew$N, 1L)
     p_ew       <- p_to_ew[obs_to_ew$weekF == ew]
     p_max_prev <- suppressWarnings(max(p_to_ew[obs_to_ew$weekF < ew], na.rm = TRUE))
@@ -192,7 +196,7 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
           hkey     <- paste0("h", pl$h)
           lev_prev <- bias_level[[hkey]]
           trn_prev <- bias_trend[[hkey]]
-          # Adaptive α: boost to bias_alpha_high after ≥2 consecutive same-sign
+          # Adaptive alpha: boost to bias_alpha_high after >=2 consecutive same-sign
           # raw errors (model "not catching up" per deployment intent).
           cur_pos <- err > 0
           if (!is.na(prev_resid_pos[[hkey]]) && cur_pos == prev_resid_pos[[hkey]]) {
@@ -363,6 +367,12 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
 #'
 #' @param allD Full multi-season data frame.
 #' @param fold Fold object from \code{nested_loso_build_fold()}.
+#' @param m1_test_preds Held-out-season M1 predictions.
+#' @param spec Stage-2 specification.
+#' @param m1_train_preds Optional training-season M1 predictions.
+#' @param eval_window Maximum post-ignition evaluation week.
+#' @param horizons Forecast horizons.
+#' @param manual_labels Optional named ignition labels.
 #' @param flag_args Named list forwarded to \code{flagIgnition()}.
 #' @param verbose Logical.
 #' @return Same structure as \code{nested_loso_m2_eval()}: list with
@@ -407,7 +417,7 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
   test_allD  <- dplyr::filter(allD, .data$season == test_s)
   if (nrow(test_allD) == 0L) return(list(scores = na_scores, predictions = empty_preds))
 
-  # L2 fix: walk-forward derivatives — each week w uses only rows with weekF <= w.
+  # L2 fix: walk-forward derivatives -- each week w uses only rows with weekF <= w.
   test_deriv_data <- estimateDerivs_walkforward(test_allD, k = 10L)
   test_outs <- list(test_deriv_data) |>
     purrr::map(~ do.call(flagIgnition,
@@ -419,13 +429,13 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
   )
   if (!is.finite(iWeek_used)) return(list(scores = na_scores, predictions = empty_preds))
 
-  # Training history (no leakage — test season excluded by fold construction)
+  # Training history (no leakage -- test season excluded by fold construction)
   hist_aligned <- fold$aligned_train
   if (!"N" %in% names(hist_aligned))
     hist_aligned$N <- hist_aligned$y + hist_aligned$neg
 
   # alpha used for z_ema computation in the prediction step.
-  # No clamping in LOSO — clamps live only in the deployment pipeline.
+  # No clamping in LOSO -- clamps live only in the deployment pipeline.
   alpha_s_global <- as.numeric(spec$alpha_state %||% 0.25)
 
   # M1 predictions provide template forecast at each eval week
@@ -515,7 +525,7 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
       alpha_s_global * obs_arr$z_now, filter = 1 - alpha_s_global,
       method = "recursive", init = obs_arr$z_now[1]
     ))
-    # No clamping here — LOSO evaluation should match v4 baseline exactly except
+    # No clamping here -- LOSO evaluation should match v4 baseline exactly except
     # for (1) weekly refit and (2) soft cap.  Clamping lives only in the
     # deployment path (pipeline_runtime.R) where it guards against OOD input.
     z_ema_now <- utils::tail(z_ema_v, 1L)

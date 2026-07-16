@@ -1,14 +1,16 @@
 #' PAGe: Seasonal Flu Curve Alignment and Forecasting
-#' @import ggplot2
-#' @import dplyr
+#' @rawNamespace import(ggplot2, except = last_plot)
+#' @rawNamespace import(dplyr, except = c(between, first, last))
 #' @import tidyr
-#' @import purrr
+#' @rawNamespace import(purrr, except = transpose)
 #' @import tibble
 #' @import nloptr
 #' @import mgcv
 #' @import gamm4
-#' @import plotly
+#' @rawNamespace import(plotly, except = last_plot)
 #' @import MMWRweek
+#' @importFrom stats binomial coef dbinom glm logLik median offset optim optimize plogis qlogis rbinom rlnorm rnorm runif setNames vcov
+#' @importFrom utils read.csv tail
 #'
 #' @keywords internal
 "_PACKAGE"
@@ -118,7 +120,7 @@ g_ref_safe <- function(u) g_ref_fun(pmin(pmax(u, 1), 52))
 #' @param gam_obj a fitted mgcv::gam (or gamm4::$gam) with predictor `newWeek`
 #' @param week_grid numeric vector of weeks to interpolate over (default 1:52)
 #'
-#' @return a function f(u) that returns logit(p̂(u)) for arbitrary (possibly fractional) u
+#' @return A function that returns logit probability for arbitrary values of u.
 make_g_ref_fun <- function(gam_obj, week_grid = 1:52) {
   grid <- data.frame(newWeek = week_grid)
   eta_hat <- drop(stats::predict(gam_obj, newdata = grid, type = "link"))
@@ -154,7 +156,7 @@ makeTable <-function(res){
   tibble::tibble(
     `tau_hat`          = res$tau,
     `delta_hat`        = res$delta,
-    `fallback`         = ifelse(is.na(res$fallback_reason), "", "[τ-only fallback]"),
+    `fallback`         = ifelse(is.na(res$fallback_reason), "", "[tau-only fallback]"),
     `Peak week`        = res$peak$t_peak,
     `Peak week (LCL)`  = res$peak$t_peak_ci[1],
     `Peak week (UCL)`  = res$peak$t_peak_ci[2],
@@ -178,10 +180,10 @@ makeTable <-function(res){
 #'
 #' @return A list with elements:
 #' \itemize{
-#'   \item `start_week` – first surveillance week above `threshold`.
-#'   \item `end_week`   – first week after the peak where fitted positivity
+#'   \item `start_week` - first surveillance week above `threshold`.
+#'   \item `end_week`   - first week after the peak where fitted positivity
 #'         falls below `threshold`.
-#'   \item `in_season`  – logical vector the same length as `res$pred_df$newWeek`,
+#'   \item `in_season`  - logical vector the same length as `res$pred_df$newWeek`,
 #'         indicating in-season weeks.
 #' }
 #'

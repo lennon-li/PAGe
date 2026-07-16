@@ -1,8 +1,8 @@
 #!/usr/bin/env Rscript
-# Step 5b — M2 Production Fit v16 (RE-fix)
+# Step 5b -- M2 Production Fit v16 (RE-fix)
 #
 # Reads best spec from fresh_nested_loso_v16_production.rds (RE-fix results).
-# Best spec: kf4/ke2/as0.15/ksp6/ba0.05 | NLL=0.42646
+# Best spec: kf4/ke2/as0.15/ksp6/ba0.05 | canonical NLL=0.4175
 #
 # Reads:   data/fresh_m0_tuning.rds
 #          data/fresh_nested_loso_v16_production.rds
@@ -17,7 +17,7 @@ cat("Start:", format(Sys.time()), "\n\n")
 
 future::plan(future::multisession, workers = n_cores)
 
-# ---- Data (all seasons except permanent, keeps 2025-26) ----
+# ---- Historical data (load_allD() fails closed on the 2025-26 holdout) ----
 allD_all  <- load_allD(exclude = c())
 EXCLUDE_P <- c("2011-12", "2015-16", "2020-21", "2021-22")
 allD_prod <- dplyr::filter(allD_all, !season %in% EXCLUDE_P)
@@ -131,7 +131,7 @@ if (length(coef(gold_m2$fit)) == length(coef(fresh_m2$fit))) {
   cat("Max |coef delta|:", round(max(coef_delta, na.rm = TRUE), 4), "\n")
 } else {
   cat("Coef lengths differ (gold:", length(coef(gold_m2$fit)),
-      "fresh:", length(coef(fresh_m2$fit)), ") — spec architecture changed\n")
+      "fresh:", length(coef(fresh_m2$fit)), ") -- spec architecture changed\n")
 }
 
 cat("Gold dz_ema_sd:", round(gold_m2$feature_ranges$dz_ema_sd, 4),

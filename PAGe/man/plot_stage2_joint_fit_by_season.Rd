@@ -16,17 +16,21 @@ plot_stage2_joint_fit_by_season(
 )
 }
 \arguments{
-\item{alignedD_prosp}{Data with at least season, weekF, newWeek and y/N (or x/n).}
+\item{out_m1}{Fitted Stage-2 result containing \code{fit} and \code{spec}.}
 
-\item{template_df}{Template reference df with columns \code{newWeek} and \code{fit} (logit-scale ref).}
+\item{feat_full}{Feature data used for plotting.}
 
-\item{spec}{Spec from \code{stage2_make_spec()} (uses \code{delta}, \code{Kr}, \code{T}, \code{alpha_state}).}
+\item{dat_raw}{Optional raw observations.}
 
-\item{ignD}{Optional ignition rule table (fallback if iWeek/ignition not available).}
+\item{ign_hat_df}{Optional estimated ignition weeks by season.}
 
-\item{eps}{Numeric clamp for observed p before logit.}
+\item{exclude_season_re}{Logical; omit the season random effect.}
 
-\item{n_weeks}{Optional; inferred from \code{max(template_df$newWeek)} if NULL.}
+\item{exclude_newseason_terms}{Logical; omit terms unavailable for new seasons.}
+
+\item{facet_by_lead}{Logical; facet forecasts by horizon.}
+
+\item{trim_preign}{Logical; omit pre-ignition rows.}
 }
 \value{
 A data.table with original columns plus derived feature columns.

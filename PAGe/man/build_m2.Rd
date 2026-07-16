@@ -10,8 +10,10 @@ build_m2(
   m1,
   loso_seasons = "alternating",
   exclude_seas = "2015-16",
+  holdout_season = "2025-26",
   grid = default_m2_grid(),
   bias_alpha = 0.4,
+  bias_beta = 0,
   n_cores = parallel::detectCores() - 1L,
   checkpoint_dir = NULL,
   verbose = TRUE
@@ -28,12 +30,17 @@ build_m2(
 \code{"alternating"} (default) halves tuning time; \code{"all"} for
 production quality. A character vector selects specific seasons.}
 
-\item{exclude_seas}{Season to exclude from LOSO folds entirely (default
-\code{"2015-16"}, the ignition outlier).}
+\item{exclude_seas}{Seasons to exclude from LOSO folds entirely.}
 
-\item{grid}{Tuning grid. Default: \code{default_m2_grid()} (480 specs).}
+\item{holdout_season}{Prospective season excluded by default. Set to NULL
+only after an explicit promotion release.}
 
-\item{bias_alpha}{Numeric. Holt EMA bias learning rate (default \code{0.4}).}
+\item{grid}{Tuning grid. Default: compact \code{default_m2_grid()} plan.
+Per-row \code{bias_alpha} and \code{bias_beta} columns override their
+scalar fallbacks.}
+
+\item{bias_alpha, bias_beta}{Numeric. Backward-compatible Holt EMA scalar
+fallbacks used when the grid omits the corresponding columns.}
 
 \item{n_cores}{Integer. Parallel cores.}
 

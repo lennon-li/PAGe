@@ -20,31 +20,43 @@ ahead forecasts of seasonal respiratory-virus percentage positivity
 from surveillance data. The pipeline is three stages run in sequence
 each week:
 
-* **M0** — ignition detection (when the season has started)
-* **M1** — alignment to a learned reference curve via shift `tau` and
+* **M0** -- ignition detection (when the season has started)
+* **M1** -- alignment to a learned reference curve via shift `tau` and
   optional dilation `delta`
-* **M2** — binomial GAM forecast with adaptive Holt EMA bias correction
+* **M2** -- binomial GAM forecast with adaptive Holt EMA bias correction
 
-## Training a kit
+## Data and training
 
 ```{r}
 library(PAGe)
 
-# Historical surveillance data shipped with the package.
-allD <- load_flu_hist()
+# PAGe does not bundle surveillance observations.
+allD <- load_flu_hist("/authorized/path/flu_history.csv") |>
+  prepare_surveillance_data()
 
-# M0: ignition detection.
-m0 <- build_m0(allD)
-
-# M1: reference curve + alignment hyperparameters.
-m1 <- build_m1(allD, m0)
-
-# M2: forecast GAM (uses the pre-tuned production spec).
-m2 <- train_m2(allD, m0, m1, best_spec = NULL)
-
-# Bundle everything a deployment needs into one list.
-kit <- assemble_kit(m0, m1, m2)
+# Offline locked-spec refresh. The 2025-26 holdout is excluded by default.
+training <- train_pipeline(allD, mode = "refresh")
+kit <- training$kit
 ```
+
+Use `mode = "retune"` for full M0/M1/M2 tuning. Its adaptive M2 grid is
+informed by compatible prior results and supports `"min_nll"`, `"one_se"`,
+and `"pareto"` selection. Optional conservative racing only removes clear
+losers; finalists still receive full nested-LOSO evaluation.
+
+## Holdout replay and promotion
+
+```{r}
+candidate <- replay_season_holdout(kit, allD, season = "2025-26")
+incumbent <- replay_season_holdout(incumbent_kit, allD, season = "2025-26")
+promotion <- check_promotion(candidate$metrics, incumbent$metrics)
+
+# Passing all gates permits inclusion in training for 2026-27.
+next_training <- train_pipeline(allD, mode = "refresh", promotion = promotion)
+```
+
+The default gates require 2% NLL improvement, at most 5% horizon-MAE
+degradation, and at most 10% phase-MAE degradation.
 
 ## Weekly forecasting
 
@@ -52,15 +64,18 @@ Given `kit` and the current season's observed weeks so far, produce a
 forecast with:
 
 ```{r}
-current <- getCurrentD(season = "2025-26")
-res <- run_pipeline(kit, current)
+current <- prepare_surveillance_data(current_csv, season = "2026-27")
+res <- run_pipeline(kit, current, mode = "frozen")
 plot_forecast(res, history = allD)
 ```
 
+Frozen-GAM prediction is the default validated deployment path. Weekly
+refitting is retained only as an explicit compatibility option.
+
 ## Where to read more
 
-* [Pipeline overview](pipeline-overview.html) — architecture and notation.
-* [Pipeline walkthrough](pipeline-walkthrough.html) — an end-to-end training
+* [Pipeline overview](pipeline-overview.html) -- architecture and notation.
+* [Pipeline walkthrough](pipeline-walkthrough.html) -- an end-to-end training
   and deployment walkthrough.
 * `?build_m0`, `?build_m1`, `?build_m2`, `?assemble_kit`,
-  `?run_pipeline` — reference pages for the high-level API.
+  `?run_pipeline` -- reference pages for the high-level API.

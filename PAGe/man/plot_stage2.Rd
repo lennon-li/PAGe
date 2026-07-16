@@ -29,6 +29,10 @@ plot_stage2(
 
 \item{show_pi}{Logical. If TRUE, draws ribbons from \code{p_lo_h*}/\code{p_hi_h*}.}
 
+\item{interval}{Interval display: prediction, confidence, or none.}
+
+\item{h_plot}{Forecast horizons to display.}
+
 \item{base_size}{Base font size passed to \code{ggplot2::theme_minimal()}.}
 }
 \value{

@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-# Step 5 — M2 Production Fit (fresh run)
+# Step 5 -- M2 Production Fit (fresh run)
 # Adapted from scripts/_rebuild_m2_production_v15.R
 # Key change: reads fresh_m0_tuning.rds (not stage1_tuning.rds);
 #             saves to data/fresh_* paths; updates fresh_ref_production.rds.
@@ -17,8 +17,8 @@ cat("Start:", format(Sys.time()), "\n\n")
 
 future::plan(future::multisession, workers = n_cores)
 
-# ---- Data (all seasons except permanent, keeps 2025-26) ----
-allD_all  <- load_allD(exclude = c())  # full dataset
+# ---- Historical data (load_allD() fails closed on the 2025-26 holdout) ----
+allD_all  <- load_allD(exclude = c())
 EXCLUDE_P <- c("2011-12", "2015-16", "2020-21", "2021-22")
 allD_prod <- dplyr::filter(allD_all, !season %in% EXCLUDE_P)
 train_seas <- sort(unique(allD_prod$season))
@@ -81,13 +81,13 @@ if (file.exists(v15_path)) {
   v15           <- readRDS(v15_path)
   best_spec_obj <- v15$best_spec
   best_spec_id  <- v15$best_spec_id
-  # Override bias_alpha to 1.0 — boundary expansion showed monotone NLL improvement to 1.0
+  # Override bias_alpha to 1.0 -- boundary expansion showed monotone NLL improvement to 1.0
   best_spec_obj$bias_alpha <- 1.0
   best_spec_id <- sub("_ba[0-9.]+_", "_ba1_", best_spec_id)
   spec_version  <- "v15-postfix_fresh"
   cat("Using fresh v15-postfix best spec:", best_spec_id, "\n")
 } else {
-  cat("fresh v15-postfix not ready — using documented best spec as placeholder\n")
+  cat("fresh v15-postfix not ready -- using documented best spec as placeholder\n")
   best_spec_obj <- stage2_make_spec(
     delta = 0L, Kr = 1L, T = "S",
     k_f = 5L, k_e = 2L, alpha_state = 0.40,
@@ -146,7 +146,7 @@ if (length(coef_gold) == length(coef_fresh)) {
   cat("Mean |coef delta|:", round(mean(coef_delta, na.rm = TRUE), 4), "\n")
 } else {
   cat("Coef lengths differ (gold:", length(coef_gold), "fresh:", length(coef_fresh),
-      ") — spec architecture differs\n")
+      ") -- spec architecture differs\n")
 }
 
 cat("Gold dz_ema_sd:", round(gold_m2$feature_ranges$dz_ema_sd, 4),

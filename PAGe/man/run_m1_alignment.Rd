@@ -20,6 +20,8 @@ run_m1(kit, current_data, m0_result, ...)
 Actual start is \code{max(walk_start, iWeek_locked)}.}
 
 \item{verbose}{Logical. Emit progress messages (default \code{TRUE}).}
+
+\item{...}{Additional arguments forwarded by the \code{run_m1()} alias.}
 }
 \value{
 A list with:

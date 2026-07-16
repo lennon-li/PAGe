@@ -1,11 +1,50 @@
 #!/usr/bin/env Rscript
 # Shared setup sourced by every fresh_run script.
-# Source this file at the top of each step: source("scripts/fresh_run/00_shared.R")
+# This directory preserves historical research workflows. New production work
+# should use train_pipeline(), replay_season_holdout(), and check_promotion().
 
-setwd("/home/yeli/PAGe")
+.find_page_repo_root <- function() {
+  script_file <- tryCatch(sys.frame(1L)$ofile, error = function(e) NULL)
+  file_arg <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
+  if (length(file_arg)) {
+    script_file <- c(script_file, sub("^--file=", "", file_arg))
+  }
+  starts <- unique(c(
+    getwd(),
+    dirname(normalizePath(script_file, mustWork = FALSE))
+  ))
+
+  for (start in starts[nzchar(starts)]) {
+    candidate <- normalizePath(start, mustWork = FALSE)
+    repeat {
+      if (file.exists(file.path(candidate, "PAGe", "DESCRIPTION")) &&
+          file.exists(file.path(candidate, "scripts", "fresh_run", "00_shared.R"))) {
+        return(candidate)
+      }
+      parent <- dirname(candidate)
+      if (identical(parent, candidate)) break
+      candidate <- parent
+    }
+  }
+  stop(
+    "Could not locate the PAGe repository root. Source this file from within ",
+    "the repository or run it by its absolute path."
+  )
+}
+
+PAGE_REPO_ROOT <- .find_page_repo_root()
+setwd(PAGE_REPO_ROOT)
+rm(.find_page_repo_root)
+
+if (requireNamespace("PAGe", quietly = TRUE)) {
+  suppressPackageStartupMessages(library(PAGe))
+} else if (requireNamespace("devtools", quietly = TRUE)) {
+  suppressPackageStartupMessages(devtools::load_all("PAGe", quiet = TRUE))
+} else {
+  stop("Install PAGe or devtools before running the historical fresh_run scripts.")
+}
 
 suppressPackageStartupMessages({
-  library(PAGe)
   library(dplyr)
   library(tidyr)
   library(purrr)
@@ -31,7 +70,8 @@ n_cores <- max(1L, parallel::detectCores() - 1L)
 
 # ---- Shared constants ----
 START_WEEK   <- 27L
-EXCLUDE_PERM <- c("2011-12", "2020-21", "2021-22", "2025-26")
+HOLDOUT_SEASON <- "2025-26"
+EXCLUDE_PERM <- c("2011-12", "2020-21", "2021-22", HOLDOUT_SEASON)
 EXCLUDE_M1   <- c(EXCLUDE_PERM, "2015-16")
 
 manual_labels <- c(
@@ -57,7 +97,12 @@ n_weeks_in_start_year <- function(start_year) {
   52L + as.integer(MMWRweek::MMWRweek(as.Date(paste0(start_year, "-12-31")))$MMWRweek == 53L)
 }
 
-load_allD <- function(exclude = EXCLUDE_PERM) {
+load_allD <- function(exclude = EXCLUDE_PERM, include_holdout = FALSE) {
+  # Fail closed: the prospective holdout is never returned for fitting unless
+  # a caller explicitly opts in for replay/evaluation. Production release is
+  # governed by train_pipeline() and a passing check_promotion() report.
+  if (!isTRUE(include_holdout)) exclude <- unique(c(exclude, HOLDOUT_SEASON))
+
   read.csv("data/flu_testing_data.csv") |>
     dplyr::select(season, week, year, start_year = seasonstart,
                   date = week_start_date, y = pos_flua, N = test_flu) |>
@@ -81,4 +126,7 @@ build_aligned <- function(dat) {
   alignIgnition(outs)
 }
 
-cat("Shared setup loaded. Cores:", n_cores, "\n")
+cat(
+  "Research/compatibility fresh_run setup loaded. ",
+  "Use train_pipeline() for production training. Cores:", n_cores, "\n"
+)

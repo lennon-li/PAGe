@@ -1,7 +1,7 @@
 # ============================================================
-# Nested M1 → M2 LOSO: Orchestration, grid search, diagnostics
+# Nested M1 -> M2 LOSO: Orchestration, grid search, diagnostics
 #
-# Sections 6–9: run_fold, cv, grid_search, refit_best,
+# Sections 6-9: run_fold, cv, grid_search, refit_best,
 #               plot_nested_loso_predictions.
 # ============================================================
 
@@ -21,11 +21,11 @@
 #' Run a complete nested LOSO fold
 #'
 #' Orchestrates the five steps for a single held-out season:
-#' build fold → M1 train → M2 train → M1 test → M2 eval.
+#' build fold -> M1 train -> M2 train -> M1 test -> M2 eval.
 #' Returns aggregated results; handles errors gracefully.
 #'
 #' @param allD Full multi-season data frame.
-#' @param test_season Character scalar — the held-out season.
+#' @param test_season Character scalar - the held-out season.
 #' @param params M0 detection parameters.
 #' @param spec M2 hyperparameter spec object.
 #' @param exclude_seasons Character vector of seasons to exclude entirely.
@@ -33,6 +33,7 @@
 #' @param eval_window Integer; max weeks post-ignition (default 12L).
 #' @param k_deriv Integer; basis dim for derivatives (default 10L).
 #' @param k_ref Integer; basis dim for reference curve (default 10L).
+#' @param ref_method Reference-curve method passed to \code{estimateRef()}.
 #' @param n_weeks Integer; reference curve period (default 52L).
 #' @param manual_labels Optional manual ignition labels.
 #' @param flag_args Named list forwarded to \code{flagIgnition()}.
@@ -41,6 +42,12 @@
 #' @param buffer_weeks Integer; peak buffer (default 0L).
 #' @param min_obs Integer; minimum rows for alignment (default 4L).
 #' @param curvature_ratio Numeric; delta curvature gate (default 1.0).
+#' @param temperature,rise_weight,trough_weight,peak_decay Ensemble and
+#'   alignment-loss controls.
+#' @param slope_weight,slope_window Growth-rate similarity controls.
+#' @param dynamic_temp,dynamic_temp_pivot Early-season temperature controls.
+#' @param top_k,blend_alpha Template filtering and blending controls.
+#' @param skip_m1 Logical; reuse supplied M1 predictions when supported.
 #' @param method GAM fitting method (default \code{"REML"}).
 #' @param parallel Logical; parallelize M1 walk-forward (default TRUE).
 #' @param verbose Logical; print progress.
@@ -212,7 +219,6 @@ nested_loso_run_fold <- function(allD,
     m1_test_preds = m1_test_preds,
     spec          = spec,
     eval_window   = eval_window,
-    k_deriv       = k_deriv,
     manual_labels = manual_labels,
     flag_args     = flag_args,
     verbose       = verbose
@@ -229,7 +235,7 @@ nested_loso_run_fold <- function(allD,
 
 # ---------- 7. Full nested LOSO cross-validation ----------
 
-#' Nested M1 → M2 leave-one-season-out cross-validation
+#' Nested M1 -> M2 leave-one-season-out cross-validation
 #'
 #' For each held-out test season, builds a leakage-free reference curve
 #' on training seasons, runs M1 walk-forward to generate stacking
@@ -247,6 +253,7 @@ nested_loso_run_fold <- function(allD,
 #' @param eval_window Integer; max weeks post-ignition (default 12L).
 #' @param k_deriv Integer; basis dim for derivatives (default 10L).
 #' @param k_ref Integer; basis dim for reference curve (default 10L).
+#' @param ref_method Reference-curve method passed to \code{estimateRef()}.
 #' @param n_weeks Integer; reference curve period (default 52L).
 #' @param manual_labels Optional manual ignition labels.
 #' @param flag_args Named list forwarded to \code{flagIgnition()}.
@@ -255,6 +262,12 @@ nested_loso_run_fold <- function(allD,
 #' @param buffer_weeks Integer; peak buffer (default 0L).
 #' @param min_obs Integer; minimum rows for alignment (default 4L).
 #' @param curvature_ratio Numeric; delta curvature gate (default 1.0).
+#' @param temperature,rise_weight,trough_weight,peak_decay Ensemble and
+#'   alignment-loss controls.
+#' @param slope_weight,slope_window Growth-rate similarity controls.
+#' @param dynamic_temp,dynamic_temp_pivot Early-season temperature controls.
+#' @param top_k,blend_alpha Template filtering and blending controls.
+#' @param skip_m1 Logical; reuse supplied M1 predictions when supported.
 #' @param method GAM fitting method (default \code{"REML"}).
 #' @param n_cores Integer; number of worker cores for M1 parallelism
 #'   (default \code{parallel::detectCores() - 1L}).
@@ -561,7 +574,7 @@ nested_loso_grid_search <- function(allD,
 
   if (nrow(scores_df) == 0 || !"spec_id" %in% names(scores_df)) {
     stop("[grid_search] No valid scores produced. ",
-         "Check warnings above — all specs likely failed during fold execution.")
+         "Check warnings above - all specs likely failed during fold execution.")
   }
 
   has_bern <- "bernoulli_nll" %in% names(scores_df)
@@ -609,7 +622,7 @@ nested_loso_grid_search <- function(allD,
 #'
 #' @param alignedD_prosp Aligned historical data with prospective
 #'   derivatives (output of \code{add_prospective_derivs_link()}).
-#' @param template_df Reference curve template (newWeek, fit) — typically
+#' @param template_df Reference curve template (newWeek, fit) - typically
 #'   from the production (full-data) \code{estimateRef()}.
 #' @param spec M2 spec object (from LOSO best or \code{stage2_make_spec()}).
 #' @param m1_preds Optional data frame of M1 walk-forward predictions for all
@@ -624,7 +637,7 @@ nested_loso_grid_search <- function(allD,
 #' @param method GAM fitting method (default \code{"REML"}).
 #' @param verbose Logical; print progress.
 #'
-#' @return Output of \code{train_stage2_joint()} — a list with
+#' @return Output of \code{train_stage2_joint()} - a list with
 #'   \code{fit}, \code{train_data}, \code{spec}, \code{tuned}, etc.
 #'
 nested_loso_refit_best <- function(alignedD_prosp,
@@ -661,6 +674,8 @@ nested_loso_refit_best <- function(alignedD_prosp,
 #' @param cv_result Output of \code{nested_loso_cv()} or one element
 #'   of \code{nested_loso_grid_search()$cv_results}.
 #' @param dat_raw Optional aligned data for true ignition lines.
+#' @param y_max Numeric upper y-axis limit.
+#' @param show_ci Logical; draw approximate prediction intervals.
 #' @param title Plot title.
 #'
 #' @return A ggplot object.

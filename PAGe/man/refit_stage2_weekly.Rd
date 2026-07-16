@@ -22,11 +22,13 @@ refit_stage2_weekly(
 
 \item{iWeek_used}{Numeric. Detected ignition week (on weekF scale).}
 
-\item{hist_data}{\code{alignedD_prosp} — historical aligned dataset (all past seasons).}
+\item{hist_data}{\code{alignedD_prosp} -- historical aligned dataset (all past seasons).}
 
 \item{template_df}{Template curve with \code{newWeek} and \code{fit}.}
 
 \item{spec}{Stage-2 spec from \code{stage2_spec_from_tuning()}.}
+
+\item{m1_preds}{Optional historical M1 walk-forward predictions.}
 
 \item{season_label}{Character. Label for the current season (default \code{"current"}).}
 

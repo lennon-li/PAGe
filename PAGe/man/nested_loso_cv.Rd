@@ -2,7 +2,7 @@
 % Please edit documentation in R/m2_loso_cv.R
 \name{nested_loso_cv}
 \alias{nested_loso_cv}
-\title{Nested M1 → M2 leave-one-season-out cross-validation}
+\title{Nested M1 -> M2 leave-one-season-out cross-validation}
 \usage{
 nested_loso_cv(
   allD,
@@ -62,6 +62,8 @@ If \code{NULL}, every season is tested.}
 
 \item{n_weeks}{Integer; reference curve period (default 52L).}
 
+\item{ref_method}{Reference-curve method passed to \code{estimateRef()}.}
+
 \item{manual_labels}{Optional manual ignition labels.}
 
 \item{flag_args}{Named list forwarded to \code{flagIgnition()}.}
@@ -76,10 +78,21 @@ If \code{NULL}, every season is tested.}
 
 \item{curvature_ratio}{Numeric; delta curvature gate (default 1.0).}
 
+\item{temperature, rise_weight, trough_weight, peak_decay}{Ensemble and
+alignment-loss controls.}
+
+\item{slope_weight, slope_window}{Growth-rate similarity controls.}
+
+\item{dynamic_temp, dynamic_temp_pivot}{Early-season temperature controls.}
+
+\item{top_k, blend_alpha}{Template filtering and blending controls.}
+
 \item{method}{GAM fitting method (default \code{"REML"}).}
 
 \item{n_cores}{Integer; number of worker cores for M1 parallelism
 (default \code{parallel::detectCores() - 1L}).}
+
+\item{skip_m1}{Logical; reuse supplied M1 predictions when supported.}
 
 \item{verbose}{Logical; print progress.}
 }

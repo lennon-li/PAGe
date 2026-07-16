@@ -51,8 +51,15 @@
 #'   Defaults to \code{parallel::detectCores() - 1}. Set to 1 to disable.
 #' @param min_obs Integer. Minimum observations after ignition before attempting
 #'   alignment (default 4).
-#' @param use_smoothed Logical. If \code{TRUE}, feed pre-smoothed synthetic counts
-#'   into \code{estimateRef()} instead of raw counts (default \code{FALSE}).
+#' @param curvature_ratio Numeric coefficient for activating dilation.
+#' @param template_shift Integer shift applied to template coordinates.
+#' @param align_trough_weight,align_rise_weight,align_peak_decay Numeric
+#'   alignment-loss weights for epidemic regions.
+#' @param use_multi_template Logical; use the multi-template ensemble.
+#' @param ref_method Reference-curve method passed to \code{estimateRef()}.
+#' @param multi_temperature,multi_top_k,multi_blend_alpha Ensemble controls.
+#' @param slope_weight,slope_window Growth-rate similarity controls.
+#' @param dynamic_temp,dynamic_temp_pivot Early-season temperature controls.
 #' @param peak_weight_boost Numeric >= 1. Multiplicative weight for observations
 #'   between ignition and peak in \code{estimateDerivs()} (default 1 = no boost).
 #' @param peak_weight_decay Numeric > 0. Exponential decay rate for weights after
@@ -267,7 +274,7 @@ loso_walkforward <- function(allD,
     } else if (!is.na(ign_out$ign_week_locked)) {
       as.integer(ign_out$ign_week_locked)
     } else {
-      walk_end_s + 1L   # empty sequence — no ignition detected
+      walk_end_s + 1L   # empty sequence -- no ignition detected
     }
     eval_weeks_s <- seq(walk_start_s, walk_end_s)
 

@@ -29,6 +29,10 @@
 #'   (default \code{0.95}).
 #' @param min_obs Integer. Minimum number of rows in \code{currentSeason}
 #'   required before attempting alignment (default \code{4L}).
+#' @param cal Optional peak-calibration object.
+#' @param curvature_ratio Numeric coefficient for activating dilation.
+#' @param time_weights Optional observation weights.
+#' @param trough_weight,rise_weight,peak_decay Alignment-loss controls.
 #'
 #' @return A named list with components:
 #' \describe{
@@ -256,7 +260,7 @@ run_alignment_prospective <- function(
 #'
 #' Evaluates combinations of \code{use_ci} and \code{buffer_weeks} for peak
 #' passage detection, using the \code{params_df} from \code{loso_walkforward()}.
-#' No LOSO rerun is required — tuning runs in seconds.
+#' No LOSO rerun is required -- tuning runs in seconds.
 #'
 #' For each grid point \code{(use_ci, buffer_weeks)}, the function simulates
 #' detection at every \code{(season, eval_week)} row in \code{params_df}:
@@ -378,7 +382,7 @@ tune_peak_detection <- function(
 }
 
 
-# ── Internal helper ──────────────────────────────────────────────────────────
+# -- Internal helper ----------------------------------------------------------
 
 #' Apply Bayesian shrinkage + bias correction to a peak estimate
 #'
@@ -387,7 +391,7 @@ tune_peak_detection <- function(
 #' \enumerate{
 #'   \item \strong{Shrinkage (C):} pulls \code{t_peak} toward the historical
 #'     prior mean, weighted by the ratio of prior variance to data variance
-#'     (CI width). Early-season wide CIs → heavy shrinkage.
+#'     (CI width). Early-season wide CIs -> heavy shrinkage.
 #'   \item \strong{Bias correction (A):} subtracts the residual bias predicted
 #'     by a GAM fitted on LOSO errors as a function of \code{t_since_ign}.
 #' }
@@ -443,7 +447,7 @@ tune_peak_detection <- function(
 #'
 #' @param params_df Tibble from \code{loso_walkforward()$params_df}.
 #' @param allD Raw data frame with columns \code{season}, \code{weekF},
-#'   \code{p}, \code{N} — used to determine the true peak week per season.
+#'   \code{p}, \code{N} -- used to determine the true peak week per season.
 #' @param anchorWeek Integer. Alignment anchor week (default \code{27L}).
 #' @param level Numeric. CI level used in \code{params_df} (default \code{0.95}).
 #' @param holdout_season Character scalar or \code{NULL}. When non-\code{NULL},

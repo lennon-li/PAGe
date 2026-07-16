@@ -1,5 +1,5 @@
 # ============================================================
-# M1 → M2 Bridge: Generate M1 walk-forward predictions
+# M1 -> M2 Bridge: Generate M1 walk-forward predictions
 # for use as M2 training features (stacking architecture)
 # ============================================================
 
@@ -24,6 +24,11 @@
 #' @param buffer_weeks Integer; peak buffer (default 0L).
 #' @param min_obs Integer; minimum rows for alignment (default 4L).
 #' @param curvature_ratio Numeric; delta curvature gate (default 1.0).
+#' @param temperature,rise_weight,trough_weight,peak_decay Ensemble and
+#'   alignment-loss controls.
+#' @param slope_weight,slope_window Growth-rate similarity controls.
+#' @param dynamic_temp,dynamic_temp_pivot Early-season temperature controls.
+#' @param top_k,blend_alpha Template filtering and blending controls.
 #'
 #' @return A tibble with columns:
 #' \describe{
@@ -78,7 +83,7 @@ m1_walkforward_predictions <- function(seasonD,
     )
   }
 
-  # No ignition detected → empty result
+  # No ignition detected -> empty result
   if (is.na(ign_out$ign_week_locked))
     return(.empty_m1_preds())
 
@@ -135,7 +140,7 @@ m1_walkforward_predictions <- function(seasonD,
       target_newWeek <- as.numeric(target_weekF - iWeek_hat + anchorWeek)
 
       # Interpolate M1's prediction and spread at target_newWeek.
-      # logit_spread is the weighted SD of logit-scale template predictions —
+      # logit_spread is the weighted SD of logit-scale template predictions --
       # high values indicate M1 ensemble disagreement (alignment uncertainty).
       p_hat  <- stats::approx(fdf$newWeek, fdf$p_hat, xout = target_newWeek,
                               rule = 2)$y
@@ -187,6 +192,11 @@ m1_walkforward_predictions <- function(seasonD,
 #' @param buffer_weeks Passed through.
 #' @param min_obs Passed through.
 #' @param curvature_ratio Passed through.
+#' @param temperature,rise_weight,trough_weight,peak_decay Ensemble and
+#'   alignment-loss controls passed through.
+#' @param slope_weight,slope_window Growth-rate similarity controls.
+#' @param dynamic_temp,dynamic_temp_pivot Early-season temperature controls.
+#' @param top_k,blend_alpha Template filtering and blending controls.
 #' @param parallel Logical; use parallel via furrr (default TRUE).
 #' @param verbose Logical; print progress (default TRUE).
 #'
@@ -329,4 +339,3 @@ inject_m1_into_snapshots <- function(pp,
 
   pp
 }
-

@@ -33,6 +33,23 @@
   )
 }
 
+.default_m0_params <- function() {
+  list(
+    cls_thr = 0.26, p_thr = 0.005, prev_thr = 0.001,
+    p_sum_thr = 0.06, eps = 0, n_consec = 5L, L = 2L,
+    K_sum = 5L, N_req = 4L, w_min = 13L, w_max = 26L
+  )
+}
+
+.default_m2_spec <- function() {
+  stage2_make_spec(
+    delta = 0L, Kr = 1L, T = "S", k_f = 4L, k_e = 2L,
+    alpha_state = 0.15, k_r = 0L, k_de = 0L, k_sp = 6L,
+    k_n = 0L, k_w = 0L, k_s = 0L, lambda_w = 0, w_floor = 0.05,
+    bias_alpha = 0.05, bias_beta = 0
+  )
+}
+
 #' Construct an M1 alignment parameter list
 #'
 #' Builds the named list consumed by \code{build_m1()}, \code{build_m2()}, and
@@ -133,21 +150,15 @@ default_m1_grid <- function() {
 
 #' Return the default M2 forecast tuning grid
 #'
-#' @return A tibble with 480 rows (4 k_f x 2 k_e x 5 alpha_state x 3 k_r x
-#'   2 k_de x 2 k_sp combinations).
+#' Delegates to \code{plan_m2_grid()} to return the compact initial grid. The
+#' deployed v16 incumbent is always included, with one-factor neighbors and
+#' per-row provenance instead of an explosive Cartesian product.
+#'
+#' @return A data frame with M2 parameters, stable specification IDs, and
+#'   provenance.
 #' @export
 default_m2_grid <- function() {
-  if (!requireNamespace("tidyr", quietly = TRUE)) stop("Need 'tidyr'.")
-  tidyr::crossing(
-    delta       = 0L,
-    Kr          = 1L,
-    k_f         = c(2L, 3L, 4L, 5L),
-    k_e         = c(2L, 3L),
-    alpha_state = c(0.30, 0.35, 0.40, 0.45, 0.50),
-    k_r         = c(0L, 2L, 3L),
-    k_de        = c(0L, 2L),
-    k_sp        = c(0L, 2L)
-  )
+  plan_m2_grid()
 }
 
 # Internal season selector
@@ -176,17 +187,20 @@ default_m2_grid <- function() {
 #'   (names = season labels). Defaults to canonical production labels.
 #' @param flag_args List of ignition-flagging hyperparameters. Defaults to
 #'   canonical production values.
+#' @param best_params Locked production M0 parameters. Defaults to the deployed
+#'   fresh-run values and is returned for downstream M1/M2 training.
 #' @param k_deriv Integer. GAM basis functions for derivative smoothing (default
 #'   \code{10L}).
 #'
 #' @return A list with \code{aligned} (aligned data frame), \code{seasons_used},
-#'   \code{manual_labels}, and \code{flag_args}.
+#'   \code{manual_labels}, \code{flag_args}, and \code{best_params}.
 #'
 #' @export
 build_m0 <- function(allD,
                      exclude       = c("2011-12", "2015-16", "2020-21", "2021-22"),
                      manual_labels = .default_manual_labels(),
                      flag_args     = .default_flag_args(),
+                     best_params   = .default_m0_params(),
                      k_deriv       = 10L) {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
   if (!requireNamespace("purrr", quietly = TRUE)) stop("Need 'purrr'.")
@@ -207,7 +221,8 @@ build_m0 <- function(allD,
     aligned       = aligned,
     seasons_used  = seasons_used,
     manual_labels = manual_labels,
-    flag_args     = flag_args
+    flag_args     = flag_args,
+    best_params   = best_params
   )
 }
 
@@ -220,7 +235,7 @@ build_m0 <- function(allD,
 #' @param allD Multi-season surveillance data frame.
 #' @param loso_seasons Which seasons to evaluate as LOSO test folds.
 #'   \code{"all"} (default) evaluates every season; \code{"alternating"}
-#'   uses every other season (removes non-selected from training too —
+#'   uses every other season (removes non-selected from training too --
 #'   acceptable for quick demos). A character vector selects specific seasons.
 #' @param exclude Character vector of seasons to permanently exclude.
 #' @param grid Tuning grid as a data frame. Default: \code{.default_m0_grid()}.
@@ -250,7 +265,7 @@ tune_m0 <- function(allD,
 
   # loso_seasons controls which test folds are evaluated.
   # Non-selected seasons are passed as drop_seasons (also removes from training
-  # — acceptable trade-off for "alternating" quick-demo mode).
+  # -- acceptable trade-off for "alternating" quick-demo mode).
   all_seas   <- sort(unique(aligned$season))
   test_seas  <- .select_loso_seasons(all_seas, loso_seasons)
   extra_drop <- setdiff(all_seas, test_seas)
@@ -390,7 +405,7 @@ build_m1 <- function(allD,
 #'   Uses a temp directory if \code{NULL}.
 #' @param verbose Logical. Print progress.
 #'
-#' @return Output of \code{tune_m1_alignment()} — a list with per-spec MAE
+#' @return Output of \code{tune_m1_alignment()} -- a list with per-spec MAE
 #'   scores and the best spec parameters.
 #'
 #' @export
@@ -470,10 +485,14 @@ tune_m1 <- function(allD,
 #' @param loso_seasons Which seasons to evaluate as LOSO test folds.
 #'   \code{"alternating"} (default) halves tuning time; \code{"all"} for
 #'   production quality. A character vector selects specific seasons.
-#' @param exclude_seas Season to exclude from LOSO folds entirely (default
-#'   \code{"2015-16"}, the ignition outlier).
-#' @param grid Tuning grid. Default: \code{default_m2_grid()} (480 specs).
-#' @param bias_alpha Numeric. Holt EMA bias learning rate (default \code{0.4}).
+#' @param exclude_seas Seasons to exclude from LOSO folds entirely.
+#' @param holdout_season Prospective season excluded by default. Set to NULL
+#'   only after an explicit promotion release.
+#' @param grid Tuning grid. Default: compact \code{default_m2_grid()} plan.
+#'   Per-row \code{bias_alpha} and \code{bias_beta} columns override their
+#'   scalar fallbacks.
+#' @param bias_alpha,bias_beta Numeric. Backward-compatible Holt EMA scalar
+#'   fallbacks used when the grid omits the corresponding columns.
 #' @param n_cores Integer. Parallel cores.
 #' @param checkpoint_dir Character. Directory for Phase 2 checkpoint files.
 #'   Pass \code{NULL} to disable checkpointing.
@@ -489,8 +508,10 @@ build_m2 <- function(allD,
                      m1,
                      loso_seasons   = "alternating",
                      exclude_seas   = "2015-16",
+                     holdout_season = "2025-26",
                      grid           = default_m2_grid(),
                      bias_alpha     = 0.4,
+                     bias_beta      = 0,
                      n_cores        = parallel::detectCores() - 1L,
                      checkpoint_dir = NULL,
                      verbose        = TRUE) {
@@ -509,34 +530,20 @@ build_m2 <- function(allD,
   if (is.null(params)) stop("build_m2 requires m0 from tune_m0() (needs best_params).")
   if (is.null(ref))    stop("build_m2 requires m1 from build_m1() (needs ref).")
 
-  grid_df  <- as.data.frame(grid)
-  perm_excl <- c("2011-12", "2020-21", "2021-22", "2025-26")
-  all_seas  <- sort(setdiff(unique(allD$season), c(exclude_seas, perm_excl)))
+  converted <- .m2_specs_from_grid(
+    grid, bias_alpha = bias_alpha, bias_beta = bias_beta
+  )
+  grid_df <- converted$grid
+  specs_list <- converted$specs
+  spec_ids <- grid_df$spec_id
+  perm_excl <- c("2011-12", "2020-21", "2021-22")
+  exclude_all <- unique(c(exclude_seas, holdout_season, perm_excl))
+  all_seas  <- sort(setdiff(unique(allD$season), exclude_all))
   test_seasons <- .select_loso_seasons(all_seas, loso_seasons)
 
   if (verbose)
-    message(sprintf("[build_m2] %d specs | %d folds | loso=%s | bias_alpha=%.2f | %d cores",
-                    nrow(grid_df), length(test_seasons), loso_seasons, bias_alpha, n_cores))
-
-  # Build specs list from grid
-  specs_list <- purrr::pmap(grid_df, function(delta, Kr, k_f, k_e, alpha_state,
-                                               k_r, k_de, k_sp, ...) {
-    stage2_make_spec(
-      delta = delta, Kr = Kr, T = "S",
-      k_f = k_f, k_e = k_e, alpha_state = alpha_state,
-      k_r = k_r, k_de = k_de, k_sp = k_sp,
-      k_n = 0L, k_w = 0L, k_s = 0L,
-      lambda_w = 0, w_floor = 0.05,
-      bias_alpha = bias_alpha
-    )
-  })
-  spec_ids <- paste0(
-    "d+", grid_df$delta, "_Kr", grid_df$Kr,
-    "_kf", grid_df$k_f, "_ke", grid_df$k_e,
-    "_as", grid_df$alpha_state, "_kr", grid_df$k_r,
-    "_kde", grid_df$k_de, "_ksp", grid_df$k_sp
-  )
-  names(specs_list) <- spec_ids
+    message(sprintf("[build_m2] %d specs | %d folds | loso=%s | %d cores",
+                    nrow(grid_df), length(test_seasons), loso_seasons, n_cores))
 
   # ---- Phase 1: M1 cache per test fold ----
   if (verbose)
@@ -549,7 +556,7 @@ build_m2 <- function(allD,
     fold <- tryCatch(
       nested_loso_build_fold(
         allD            = allD, test_season    = test_s,
-        exclude_seasons = exclude_seas,
+        exclude_seasons = exclude_all,
         k_ref           = as.integer(m1_params$k_ref %||% 25L),
         ref_method      = m1_params$ref_method %||% "fs",
         manual_labels   = manual_labels, verbose = FALSE
@@ -646,7 +653,8 @@ build_m2 <- function(allD,
                 allD          = allD, fold = fc$fold, m2_fit = m2_fit,
                 m1_test_preds = if (!is.null(fc$m1_test) && nrow(fc$m1_test) > 0)
                   fc$m1_test else NULL,
-                spec          = spec, eval_window = 12L, bias_alpha = bias_alpha,
+                spec          = spec, eval_window = 12L,
+                bias_alpha    = spec$bias_alpha, bias_beta = spec$bias_beta,
                 manual_labels = manual_labels, flag_args = flag_args_use, verbose = FALSE
               ),
               error = function(e) NULL
@@ -724,7 +732,8 @@ build_m2 <- function(allD,
 #' @param m0 Output of \code{tune_m0()}. Must include \code{best_params}.
 #' @param m1 Output of \code{build_m1()}. Provides \code{ref} and \code{hyper}.
 #' @param best_spec Stage-2 spec from \code{build_m2()$best_spec} or
-#'   \code{stage2_make_spec()}.
+#'   \code{stage2_make_spec()}. When \code{NULL}, uses the locked deployed v16
+#'   specification for a production-data refresh without retuning.
 #' @param exclude Character vector of seasons to exclude from training.
 #'   Default excludes permanent invalid seasons and 2015-16. Note: 2025-26
 #'   is kept (production training uses the current season).
@@ -738,12 +747,14 @@ build_m2 <- function(allD,
 train_m2 <- function(allD,
                      m0,
                      m1,
-                     best_spec,
+                     best_spec = NULL,
                      exclude  = c("2011-12", "2015-16", "2020-21", "2021-22"),
                      verbose  = FALSE) {
   if (!requireNamespace("dplyr",  quietly = TRUE)) stop("Need 'dplyr'.")
   if (!requireNamespace("purrr",  quietly = TRUE)) stop("Need 'purrr'.")
   if (!requireNamespace("future", quietly = TRUE)) stop("Need 'future'.")
+
+  if (is.null(best_spec)) best_spec <- .default_m2_spec()
 
   manual_labels <- m0$manual_labels %||% .default_manual_labels()
   flag_args_use <- m0$flag_args     %||% .default_flag_args()

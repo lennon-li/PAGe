@@ -23,6 +23,18 @@ nested_loso_m2_eval_weekly_refit(
 
 \item{fold}{Fold object from \code{nested_loso_build_fold()}.}
 
+\item{m1_test_preds}{Held-out-season M1 predictions.}
+
+\item{spec}{Stage-2 specification.}
+
+\item{m1_train_preds}{Optional training-season M1 predictions.}
+
+\item{eval_window}{Maximum post-ignition evaluation week.}
+
+\item{horizons}{Forecast horizons.}
+
+\item{manual_labels}{Optional named ignition labels.}
+
 \item{flag_args}{Named list forwarded to \code{flagIgnition()}.}
 
 \item{verbose}{Logical.}

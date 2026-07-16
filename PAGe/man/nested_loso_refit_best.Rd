@@ -17,7 +17,7 @@ nested_loso_refit_best(
 \item{alignedD_prosp}{Aligned historical data with prospective
 derivatives (output of \code{add_prospective_derivs_link()}).}
 
-\item{template_df}{Reference curve template (newWeek, fit) — typically
+\item{template_df}{Reference curve template (newWeek, fit) - typically
 from the production (full-data) \code{estimateRef()}.}
 
 \item{spec}{M2 spec object (from LOSO best or \code{stage2_make_spec()}).}
@@ -37,7 +37,7 @@ weekly refit are trained on the same feature space. Save it in
 \item{verbose}{Logical; print progress.}
 }
 \value{
-Output of \code{train_stage2_joint()} — a list with
+Output of \code{train_stage2_joint()} - a list with
   \code{fit}, \code{train_data}, \code{spec}, \code{tuned}, etc.
 }
 \description{

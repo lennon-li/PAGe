@@ -53,9 +53,6 @@ ggplot; if \code{FALSE} returns a named list of per-snapshot ggplots.}
 \item{p_col}{Character; name of the positivity column (default \code{"p"}).}
 
 \item{date_col}{Character; name of the date column (default \code{"date"}).}
-
-\item{best_mean_nll}{A list or 1-row data.frame containing tuned parameters. Looks for
-\code{delta} (or \code{shift}), \code{K}, \code{leads}, and optionally \code{use_ramp}.}
 }
 \value{
 A list with elements \code{delta}, \code{K}, \code{leads}, \code{use_ramp}, and \code{extra}.
@@ -73,4 +70,7 @@ A ggplot object (when \code{facet = TRUE}) or a named list of
 \description{
 Helper to pull commonly used Stage-2 hyperparameters from a list or 1-row data.frame,
 supporting alternate names (e.g., \code{shift} for \code{delta}).
+}
+\details{
+\code{delta} (or \code{shift}), \code{K}, \code{leads}, and optionally \code{use_ramp}.
 }

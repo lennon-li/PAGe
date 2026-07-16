@@ -68,7 +68,7 @@ plotRes <-function(res,seasonIndex = NULL, peakInfo = NULL, currentSeason = NULL
       subtitle = if (!any(is.na(res$peak$t_peak))) {
         sprintf("Peak ~ week %.1f ",
                 res$peak$t_peak)
-      } else "Peak CI unavailable yet (early/unstable δ).",
+      } else "Peak CI unavailable yet (early/unstable delta).",
       x = "Week of year", y = "Percentage positivity)"
     ) +
   theme_minimal(base_size = 13)

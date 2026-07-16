@@ -89,6 +89,8 @@ few observations available (wider ensemble early, sharper late).}
 \item{dynamic_temp_pivot}{Integer; observation count below which temperature
 is inflated (default 10). Temperature is scaled by
 \code{pivot / n_obs} when \code{n_obs < pivot}.}
+
+\item{gam_obj}{Optional fitted GAM used to estimate per-template uncertainty.}
 }
 \value{
 List with the same structure as

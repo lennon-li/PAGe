@@ -12,7 +12,7 @@ make_g_ref_fun(gam_obj, week_grid = 1:52)
 \item{week_grid}{numeric vector of weeks to interpolate over (default 1:52)}
 }
 \value{
-a function f(u) that returns logit(p̂(u)) for arbitrary (possibly fractional) u
+A function that returns logit probability for arbitrary values of u.
 }
 \description{
 Build reference link-scale function from a fitted GAM

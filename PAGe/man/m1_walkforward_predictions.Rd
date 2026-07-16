@@ -56,6 +56,15 @@ If NULL, evaluates from ignition lock through end of season.}
 \item{min_obs}{Integer; minimum rows for alignment (default 4L).}
 
 \item{curvature_ratio}{Numeric; delta curvature gate (default 1.0).}
+
+\item{temperature, rise_weight, trough_weight, peak_decay}{Ensemble and
+alignment-loss controls.}
+
+\item{slope_weight, slope_window}{Growth-rate similarity controls.}
+
+\item{dynamic_temp, dynamic_temp_pivot}{Early-season temperature controls.}
+
+\item{top_k, blend_alpha}{Template filtering and blending controls.}
 }
 \value{
 A tibble with columns:

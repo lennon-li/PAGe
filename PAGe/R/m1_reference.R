@@ -98,9 +98,9 @@ estimateRef <- function(alignedD,
   dat <- dplyr::mutate(dat, newWeek = pmin(as.integer(.data$newWeek), as.integer(n_weeks)))
 
   # ---------- helpers for re-smooth models ----------
-  # gaussian_logit: s(season, bs="re") — exclude="s(season)" for population curve
-  # fs: s(newWeek, season, bs="fs") — population curve = average across seasons
-  # gaussian_logit_fs: global s(newWeek) + fs deviations — exclude fs for population curve
+  # gaussian_logit: s(season, bs="re") -- exclude="s(season)" for population curve
+  # fs: s(newWeek, season, bs="fs") -- population curve = average across seasons
+  # gaussian_logit_fs: global s(newWeek) + fs deviations -- exclude fs for population curve
   uses_re_smooth <- method == "gaussian_logit"
   uses_fs        <- method == "fs"              # average-across-seasons approach
   uses_fs_combo  <- method == "gaussian_logit_fs"  # exclude-fs approach
@@ -453,7 +453,7 @@ estimateRef <- function(alignedD,
 #' }
 #'
 #' @importFrom stats as.formula predict qnorm
-#' @import data.table
+#' @rawNamespace import(data.table, except = c(between, first, last, transpose))
 estimateDerivs <- function(
     allD,
     k = 10,
@@ -527,7 +527,7 @@ estimateDerivs <- function(
       wt[past_peak] <- 1 + (peak_weight_boost - 1) *
         exp(-peak_weight_decay * (wk[past_peak] - obs_peak))
 
-      # inflate counts into temporary columns — originals y/neg stay intact in output
+      # inflate counts into temporary columns -- originals y/neg stay intact in output
       dts[, .y_fit   := as.integer(round(wt * get(y_col)))]
       dts[, .neg_fit := as.integer(round(wt * neg))]
     } else {
@@ -695,4 +695,3 @@ alignIgnition <- function(outs,
   attr(out, "ignD")       <- as.data.frame(ign_small)
   out
 }
-

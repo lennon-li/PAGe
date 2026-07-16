@@ -56,6 +56,8 @@ training rows satisfy \code{weekF >= ign_weekF - Kb}.}
 
 \item{k_de}{Integer basis size for dz_ema smooth term. 0L disables it.}
 
+\item{k_r, k_sp}{Integer basis sizes for residual and alignment-spread smooths.}
+
 \item{k_w, k_s, k_e, k_n}{Integer basis sizes for smooth terms.
 Set any to 0L to disable the corresponding term.}
 
@@ -64,6 +66,12 @@ Set any to 0L to disable the corresponding term.}
 \item{bs_fs_marginal}{Marginal basis used by factor-smooth \code{bs="fs"} via \code{xt=list(bs=...)}.}
 
 \item{use_season_re}{Back-compat flag (season RE is always included).}
+
+\item{lambda_w, w_floor}{Training time-decay rate and minimum weight.}
+
+\item{anchorWeek}{Reference-curve ignition anchor week.}
+
+\item{bias_alpha, bias_beta}{Holt level and trend correction rates.}
 
 \item{K}{Deprecated alias of \code{Kr}.}
 

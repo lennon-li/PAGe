@@ -48,7 +48,7 @@ A list with:
 }
 \description{
 Tunes ignition detection thresholds over a parameter grid by repeatedly calling
-\code{\link{detectIgnitionBySeason}} and comparing predicted ignition weeks to
+the legacy season detector and comparing predicted ignition weeks to
 historical "true" ignition weeks inferred from `phase==1`.
 }
 \details{

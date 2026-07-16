@@ -99,11 +99,28 @@ Defaults to \code{parallel::detectCores() - 1}. Set to 1 to disable.}
 \item{min_obs}{Integer. Minimum observations after ignition before attempting
 alignment (default 4).}
 
+\item{curvature_ratio}{Numeric coefficient for activating dilation.}
+
+\item{template_shift}{Integer shift applied to template coordinates.}
+
 \item{peak_weight_boost}{Numeric >= 1. Multiplicative weight for observations
 between ignition and peak in \code{estimateDerivs()} (default 1 = no boost).}
 
 \item{peak_weight_decay}{Numeric > 0. Exponential decay rate for weights after
 the observed peak (default 0.3).}
+
+\item{align_trough_weight, align_rise_weight, align_peak_decay}{Numeric
+alignment-loss weights for epidemic regions.}
+
+\item{use_multi_template}{Logical; use the multi-template ensemble.}
+
+\item{ref_method}{Reference-curve method passed to \code{estimateRef()}.}
+
+\item{multi_temperature, multi_top_k, multi_blend_alpha}{Ensemble controls.}
+
+\item{slope_weight, slope_window}{Growth-rate similarity controls.}
+
+\item{dynamic_temp, dynamic_temp_pivot}{Early-season temperature controls.}
 
 \item{checkpoint_file}{Character path (or \code{NULL}). If provided, saves
 incremental results to this RDS file after each test season completes. On
@@ -111,9 +128,6 @@ restart, completed seasons are loaded from the checkpoint and skipped.
 Delete the file to force a full rerun.}
 
 \item{verbose}{Logical. Print per-season progress (default \code{TRUE}).}
-
-\item{use_smoothed}{Logical. If \code{TRUE}, feed pre-smoothed synthetic counts
-into \code{estimateRef()} instead of raw counts (default \code{FALSE}).}
 }
 \value{
 A list with three elements:

@@ -1,7 +1,7 @@
 # ============================================================
-# Nested M1 → M2 LOSO: Fold building and per-fold training
+# Nested M1 -> M2 LOSO: Fold building and per-fold training
 #
-# Sections 1–4: build fold, M1 train, M2 train, M1 test.
+# Sections 1-4: build fold, M1 train, M2 train, M1 test.
 # ============================================================
 
 # ---------- 1. Build one LOSO fold (M1 training) ----------
@@ -9,16 +9,17 @@
 #' Build a single LOSO fold: training alignment + reference curve
 #'
 #' For a held-out test season, filters to training seasons, runs the
-#' M0 detection pipeline (derivatives → ignition → alignment), fits
+#' M0 detection pipeline (derivatives -> ignition -> alignment), fits
 #' the reference curve, and learns alignment hyperparams. Everything
 #' needed to run M1 on this fold.
 #'
-#' @param allD Data frame with all seasons (columns: season, week, y, neg, …).
-#' @param test_season Character scalar — the held-out season.
+#' @param allD Data frame with all seasons (columns: season, week, y, neg, ...).
+#' @param test_season Character scalar -- the held-out season.
 #' @param exclude_seasons Character vector of seasons to drop entirely
 #'   (before fold splitting).
 #' @param k_deriv Integer; basis dimension for \code{estimateDerivs()}.
 #' @param k_ref Integer; basis dimension for \code{estimateRef()}.
+#' @param ref_method Reference-curve method passed to \code{estimateRef()}.
 #' @param n_weeks Integer; period for reference GAM (default 52).
 #' @param manual_labels Optional named list of manual ignition labels.
 #' @param flag_args Named list of arguments forwarded to \code{flagIgnition()}.
@@ -118,11 +119,16 @@ nested_loso_build_fold <- function(allD,
 #' @param buffer_weeks Integer; peak buffer (default 0L).
 #' @param min_obs Integer; minimum rows for alignment (default 4L).
 #' @param curvature_ratio Numeric; delta curvature gate (default 1.0).
+#' @param temperature,rise_weight,trough_weight,peak_decay Ensemble and
+#'   alignment-loss controls.
+#' @param slope_weight,slope_window Growth-rate similarity controls.
+#' @param dynamic_temp,dynamic_temp_pivot Early-season temperature controls.
+#' @param top_k,blend_alpha Template filtering and blending controls.
 #' @param parallel Logical; run M1 seasons in parallel (default TRUE).
 #' @param verbose Logical; print progress.
 #'
 #' @return Tibble of M1 walk-forward predictions for training seasons
-#'   (columns: season, eval_weekF, target_weekF, h, m1_p_hat, …).
+#'   (columns: season, eval_weekF, target_weekF, h, m1_p_hat, ...).
 #'   Can be empty if no ignition detected.
 #'
 nested_loso_m1_train <- function(allD,
@@ -196,7 +202,7 @@ nested_loso_m1_train <- function(allD,
 #' @param verbose Logical; print progress.
 #'
 #' @return Output of \code{train_stage2_joint()} (list with \code{fit},
-#'   \code{train_data}, …), or \code{NULL} if training fails.
+#'   \code{train_data}, ...), or \code{NULL} if training fails.
 #'
 nested_loso_m2_train <- function(fold,
                                  m1_train_preds = NULL,
@@ -250,6 +256,11 @@ nested_loso_m2_train <- function(fold,
 #' @param buffer_weeks Integer; peak buffer (default 0L).
 #' @param min_obs Integer; minimum rows for alignment (default 4L).
 #' @param curvature_ratio Numeric; delta curvature gate (default 1.0).
+#' @param temperature,rise_weight,trough_weight,peak_decay Ensemble and
+#'   alignment-loss controls.
+#' @param slope_weight,slope_window Growth-rate similarity controls.
+#' @param dynamic_temp,dynamic_temp_pivot Early-season temperature controls.
+#' @param top_k,blend_alpha Template filtering and blending controls.
 #' @param verbose Logical; print progress.
 #'
 #' @return Tibble of M1 walk-forward predictions for the test season,

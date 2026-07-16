@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot.R
 \name{plot_forecast}
 \alias{plot_forecast}
-\title{Plot a flualign 2-week-ahead forecast}
+\title{Plot a PAGe 2-week-ahead forecast}
 \usage{
 plot_forecast(res, history = NULL)
 }
@@ -13,7 +13,8 @@ columns \code{newWeek}, \code{p_hat}, \code{p_lo}, \code{p_hi}, and
 \code{kind}) and \code{$last_obs}.}
 
 \item{history}{Optional data frame of historical seasons with columns
-\code{season}, \code{newWeek}, \code{y}, and \code{neg}. When supplied,
+\code{season}, \code{newWeek} or \code{weekF}, \code{y}, and either
+\code{N} or \code{neg}. When supplied,
 season trajectories are plotted as translucent grey lines.}
 }
 \value{

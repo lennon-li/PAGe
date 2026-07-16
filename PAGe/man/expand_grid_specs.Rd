@@ -43,9 +43,13 @@ expand_grid_specs(
 
 \item{k_w_grid, k_s_grid, k_e_grid, k_n_grid, k_de_grid}{Integer vectors for smooth basis sizes.}
 
+\item{k_r_grid}{Integer vector for residual-smooth basis sizes.}
+
 \item{bs_week_grid}{Character vector for week smooth basis.}
 
 \item{bs_fs_marginal_grid}{Character vector for fs marginal basis.}
+
+\item{bias_alpha_grid, bias_beta_grid}{Numeric vectors for Holt correction rates.}
 
 \item{drop_unused_kf_for_nonS}{If TRUE, sets \code{k_f=NA} for \code{T!="S"}.}
 

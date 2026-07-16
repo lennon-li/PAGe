@@ -39,6 +39,7 @@
 #' @param dynamic_temp_pivot Integer; observation count below which temperature
 #'   is inflated (default 10). Temperature is scaled by
 #'   \code{pivot / n_obs} when \code{n_obs < pivot}.
+#' @param gam_obj Optional fitted GAM used to estimate per-template uncertainty.
 #'
 #' @return List with the same structure as
 #'   \code{align_forecast_pipeline_dilate()} output, plus:
@@ -157,7 +158,7 @@ align_multi_template <- function(currentD,
   }, numeric(1))
 
   if (sum(valid & is.finite(nlls)) == 0) {
-    # All templates failed — fall back to population reference
+    # All templates failed -- fall back to population reference
     return(align_forecast_pipeline_dilate(
       currentD = currentD, g_ref_fun = g_ref_fun, g_ref_mu_se = g_ref_mu_se,
       hyper = hyper, allow_scale = allow_scale, use_weights = use_weights,
@@ -195,7 +196,7 @@ align_multi_template <- function(currentD,
       if (!valid[i] || !is.finite(nlls[i])) next
       # Template slope evaluated at the same raw positions as the observation.
       # Using aligned positions (u_hat) was tried but hurt MAE by ~17% due to
-      # unit inconsistency across templates with different tau/delta — reverted.
+      # unit inconsistency across templates with different tau/delta -- reverted.
       tf <- template_funs[[i]]
       logit_template <- tf$g_ref_safe(t_obs)
       tmpl_slope <- if (length(unique(t_obs)) >= 2) {
@@ -382,6 +383,8 @@ align_multi_template <- function(currentD,
 #' @param temperature Numeric; softmax temperature.
 #' @param top_k Integer or NULL; pre-filter templates.
 #' @param blend_alpha Numeric 0--1; template blending.
+#' @param slope_weight,slope_window Growth-rate similarity controls.
+#' @param dynamic_temp,dynamic_temp_pivot Early-season temperature controls.
 #'
 #' @return List with same structure as \code{run_alignment_prospective()} output.
 run_alignment_prospective_multi <- function(

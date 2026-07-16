@@ -19,9 +19,9 @@ nested_loso_build_fold(
 )
 }
 \arguments{
-\item{allD}{Data frame with all seasons (columns: season, week, y, neg, …).}
+\item{allD}{Data frame with all seasons (columns: season, week, y, neg, ...).}
 
-\item{test_season}{Character scalar — the held-out season.}
+\item{test_season}{Character scalar -- the held-out season.}
 
 \item{exclude_seasons}{Character vector of seasons to drop entirely
 (before fold splitting).}
@@ -31,6 +31,8 @@ nested_loso_build_fold(
 \item{k_ref}{Integer; basis dimension for \code{estimateRef()}.}
 
 \item{n_weeks}{Integer; period for reference GAM (default 52).}
+
+\item{ref_method}{Reference-curve method passed to \code{estimateRef()}.}
 
 \item{manual_labels}{Optional named list of manual ignition labels.}
 
@@ -51,7 +53,7 @@ A named list with components:
 }
 \description{
 For a held-out test season, filters to training seasons, runs the
-M0 detection pipeline (derivatives → ignition → alignment), fits
+M0 detection pipeline (derivatives -> ignition -> alignment), fits
 the reference curve, and learns alignment hyperparams. Everything
 needed to run M1 on this fold.
 }

@@ -11,7 +11,7 @@
 #' Grid search ignition detection parameters (OS-aware parallel)
 #'
 #' Tunes ignition detection thresholds over a parameter grid by repeatedly calling
-#' \code{\link{detectIgnitionBySeason}} and comparing predicted ignition weeks to
+#' the legacy season detector and comparing predicted ignition weeks to
 #' historical "true" ignition weeks inferred from `phase==1`.
 #'
 #' The evaluation is parallelized in an OS-aware way:
@@ -261,4 +261,3 @@ plot_det_facet <- function(det_out, smooth_col = NULL) {
     ) +
     theme_bw()
 }
-

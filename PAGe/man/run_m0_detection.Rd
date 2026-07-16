@@ -24,6 +24,8 @@ run_m0(kit, current_data, ...)
 the M0 automatic ignition estimate with a known value.}
 
 \item{verbose}{Logical. Emit progress messages (default \code{TRUE}).}
+
+\item{...}{Additional arguments forwarded by the \code{run_m0()} alias.}
 }
 \value{
 A list with:

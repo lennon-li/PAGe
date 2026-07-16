@@ -56,6 +56,15 @@ m1_walkforward_multi(
 
 \item{curvature_ratio}{Passed through.}
 
+\item{temperature, rise_weight, trough_weight, peak_decay}{Ensemble and
+alignment-loss controls passed through.}
+
+\item{slope_weight, slope_window}{Growth-rate similarity controls.}
+
+\item{dynamic_temp, dynamic_temp_pivot}{Early-season temperature controls.}
+
+\item{top_k, blend_alpha}{Template filtering and blending controls.}
+
 \item{parallel}{Logical; use parallel via furrr (default TRUE).}
 
 \item{verbose}{Logical; print progress (default TRUE).}

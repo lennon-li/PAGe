@@ -40,6 +40,8 @@ m2_predict_one(
 
 \item{dz_ema}{Numeric. Rate of change of z_ema (z_ema[t] - z_ema[t-1]).}
 
+\item{logit_spread}{Numeric alignment-ensemble uncertainty on the logit scale.}
+
 \item{logN_now}{Numeric. log(N) at eval week.}
 
 \item{season_label}{Character. Season label for newdata: the test/current
@@ -58,7 +60,9 @@ is included in the prediction (weekly-refit mode). If \code{FALSE},
 \item{soft_cap_fn}{Optional soft-cap function from \code{make_soft_cap_fn()}.}
 
 \item{return_ci}{Logical. If \code{TRUE}, returns \code{m2_lo} and
-\code{m2_hi} (±1.96 SE on the link scale).}
+\code{m2_hi} (+/-1.96 SE on the link scale).}
+
+\item{bias_logit}{Numeric online bias adjustment on the logit scale.}
 }
 \value{
 A named list with \code{m2_p} (and \code{m2_lo}, \code{m2_hi}

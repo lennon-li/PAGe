@@ -36,6 +36,10 @@ season, weekF, phase, newWeek, y, N.}
 
 \item{alpha_state}{Numeric in (0,1).}
 
+\item{m1_preds}{Optional M1 walk-forward predictions used for stacking.}
+
+\item{feature_ranges}{Optional training feature scales reused for prediction.}
+
 \item{verbose}{Logical.}
 }
 \value{

@@ -10,7 +10,8 @@ run_prospective_pipeline(
   current_data,
   walk_start = 5L,
   manual_ign_week = NA_integer_,
-  mode = c("weekly_refit", "frozen"),
+  mode = c("frozen", "weekly_refit"),
+  season = NULL,
   verbose = TRUE
 )
 
@@ -25,11 +26,21 @@ run_pipeline(kit, current_data, ...)
 
 \item{manual_ign_week}{Integer or \code{NA_integer_}. Manual ignition override.}
 
+\item{mode}{Character runtime mode. \code{"frozen"} uses the validated
+production GAM; \code{"weekly_refit"} refits using kit history.}
+
+\item{season}{Optional single season identifier. Used only when
+\code{current_data} has no \code{season} column. A unique
+\code{kit$current_season} or \code{kit$forecast_season} is also accepted.}
+
 \item{verbose}{Logical. Emit progress messages (default \code{TRUE}).}
+
+\item{...}{Additional arguments passed by the \code{run_pipeline()} alias.}
 }
 \value{
 A list with \code{params_df}, \code{m1_curves}, \code{m2_preds},
-  \code{ign_out} — compatible with the prospective deployment QMD.
+  \code{pred_df}, \code{last_obs}, and \code{ign_out}. The plot fields are
+  consumed directly by \code{plot_forecast()}.
 }
 \description{
 Thin wrapper around \code{run_m0_detection()}, \code{run_m1_alignment()},

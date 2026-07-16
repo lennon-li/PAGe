@@ -30,9 +30,19 @@ train_stage2_joint(
 
 \item{best_mean_nll}{Legacy tuned row (delta,K,k_f,alpha_state) if \code{spec=NULL}.}
 
+\item{pre_buffer}{Legacy pre-ignition training buffer.}
+
+\item{alpha_state}{Legacy EWMA rate.}
+
+\item{k_e, k_n}{Legacy smooth basis dimensions.}
+
 \item{ign_week_df}{Optional ignition week estimates for alignment in held-out/new seasons.}
 
 \item{method}{mgcv method.}
+
+\item{lambda_w, w_floor}{Training time-decay rate and minimum weight.}
+
+\item{m1_preds}{Optional M1 walk-forward predictions used for stacking.}
 
 \item{verbose}{logical.}
 }

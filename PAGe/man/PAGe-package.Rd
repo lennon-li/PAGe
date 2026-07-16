@@ -6,11 +6,12 @@
 \alias{PAGe-package}
 \title{PAGe: Seasonal Flu Curve Alignment and Forecasting}
 \description{
-Align partially observed seasonal positivity curves to a learned reference shape via profile likelihood (shift tau and optional dilation delta), then forecast the remainder of the season with sensible prediction intervals and peak timing.
+Prospective one- and two-week-ahead forecasts of seasonal respiratory-virus positivity. A gated pipeline detects epidemic ignition, aligns partial seasons to historical reference curves, and produces binomial generalized additive model forecasts with adaptive bias correction. Training and evaluation support leakage-safe leave-one-season-out validation, prior-informed tuning, candidate racing, and explicit promotion gates.
 }
 \seealso{
 Useful links:
 \itemize{
+  \item \url{https://lennon-li.github.io/PAGe/}
   \item \url{https://github.com/lennon-li/PAGe}
   \item Report bugs at \url{https://github.com/lennon-li/PAGe/issues}
 }
@@ -18,6 +19,11 @@ Useful links:
 }
 \author{
 \strong{Maintainer}: Lennon Li \email{lennon.li@oahpp.ca}
+
+Authors:
+\itemize{
+  \item Lennon Li \email{lennon.li@oahpp.ca}
+}
 
 }
 \keyword{internal}

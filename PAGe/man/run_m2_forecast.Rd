@@ -9,7 +9,7 @@ run_m2_forecast(
   kit,
   current_data,
   m1_result,
-  mode = c("weekly_refit", "frozen"),
+  mode = c("frozen", "weekly_refit"),
   verbose = TRUE
 )
 
@@ -22,9 +22,11 @@ run_m2(kit, current_data, m1_result, ...)
 
 \item{m1_result}{Output of \code{run_m1_alignment()}.}
 
-\item{mode}{Character. \code{"weekly_refit"} (default) or \code{"frozen"}.}
+\item{mode}{Character. \code{"frozen"} (default) or \code{"weekly_refit"}.}
 
 \item{verbose}{Logical. Emit progress messages (default \code{TRUE}).}
+
+\item{...}{Additional arguments forwarded by the \code{run_m2()} alias.}
 }
 \value{
 A list with \code{m2_preds}: tibble with columns
@@ -39,12 +41,12 @@ from the M1 alignment output and predicts 1- and 2-week-ahead positivity.
 \details{
 Two modes are supported via \code{mode}:
 \describe{
-  \item{\code{"weekly_refit"} (default)}{Each week, combines \code{kit$hist_data}
+  \item{\code{"frozen"} (default)}{Predicts directly from the frozen
+    production GAM stored in \code{kit$m2_production$fit}. This matches the
+    validated production evaluation path.}
+  \item{\code{"weekly_refit"}}{Each week, combines \code{kit$hist_data}
     with current-season observations up to that week and refits the Stage-2 GAM
     via \code{refit_stage2_weekly()}. Requires \code{kit$hist_data} (produced
     by \code{docs/run.qmd} and loaded by \code{load_prospective_kit()}).}
-  \item{\code{"frozen"}}{Predicts directly from the frozen production GAM stored
-    in \code{kit$m2_production$fit}. Use this as a fallback when
-    \code{hist_data} is not available.}
 }
 }

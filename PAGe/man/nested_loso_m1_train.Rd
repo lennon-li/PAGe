@@ -47,13 +47,22 @@ nested_loso_m1_train(
 
 \item{curvature_ratio}{Numeric; delta curvature gate (default 1.0).}
 
+\item{temperature, rise_weight, trough_weight, peak_decay}{Ensemble and
+alignment-loss controls.}
+
+\item{slope_weight, slope_window}{Growth-rate similarity controls.}
+
+\item{dynamic_temp, dynamic_temp_pivot}{Early-season temperature controls.}
+
+\item{top_k, blend_alpha}{Template filtering and blending controls.}
+
 \item{parallel}{Logical; run M1 seasons in parallel (default TRUE).}
 
 \item{verbose}{Logical; print progress.}
 }
 \value{
 Tibble of M1 walk-forward predictions for training seasons
-  (columns: season, eval_weekF, target_weekF, h, m1_p_hat, …).
+  (columns: season, eval_weekF, target_weekF, h, m1_p_hat, ...).
   Can be empty if no ignition detected.
 }
 \description{

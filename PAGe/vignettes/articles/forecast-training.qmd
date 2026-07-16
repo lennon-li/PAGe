@@ -13,9 +13,16 @@ the same issue week.
 ```{r}
 library(PAGe)
 
-spec <- stage2_make_spec(k_f = 4, k_e = 2, alpha_state = 0.40)
+spec <- stage2_make_spec(
+  delta = 0, Kr = 1, k_f = 4, k_e = 2,
+  alpha_state = 0.15, k_r = 0, k_de = 0, k_sp = 6,
+  bias_alpha = 0.05, bias_beta = 0
+)
 m2 <- train_m2(historical, m0, m1, best_spec = spec)
 ```
+
+These are the deployed `v16_fresh` values. Use nested LOSO before promoting a
+different specification.
 
 Production training uses nested leave-one-season-out validation. For every
 outer held-out season, M0 and M1 tuning, feature construction, model selection,

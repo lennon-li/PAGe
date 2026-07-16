@@ -21,6 +21,7 @@
 #'   \code{week}, \code{N} (total tests), \code{y} (positives), \code{neg},
 #'   \code{p} (positivity), \code{weekS}, \code{weekF}, \code{cYear},
 #'   \code{newWeek}, and \code{date}.
+#' @export
 getCurrentD <- function(data= "https://ws1.publichealthontario.ca/appdata/powerbi/ORVT/ORVT_Lab_Testing_Data_2024-25_2025-26.csv", 
                         startWeek = 27L, 
                         lastWeek = NA,
@@ -30,8 +31,6 @@ getCurrentD <- function(data= "https://ws1.publichealthontario.ca/appdata/powerb
   n_weeks_in_start_year <- function(start_year) {
     52L + as.integer(MMWRweek(as.Date(paste0(start_year, "-12-31")))$MMWRweek == 53L)
   }
-  
-  season <- "2025-26"
   
   years <- strsplit(season, "-", fixed = TRUE)[[1]]
   start_year <- as.integer(years[1]) - 1
@@ -54,9 +53,9 @@ getCurrentD <- function(data= "https://ws1.publichealthontario.ca/appdata/powerb
                          y = X..of.positive.tests,
                          PHU = Public.health.unit,
                          Virus) |> 
-        filter(Virus == virus) |>
+        filter(.data$Virus == .env$virus) |>
         group_by(season, week) |> summarise( N = sum(N), y = sum(y)) |> 
-        ungroup() |> filter(season %in% c(season, prev_season)) |>
+        ungroup() |> filter(.data$season %in% c(.env$season, prev_season)) |>
         group_by(season) |> 
         mutate( neg = N-y,
                 p = y/N,
@@ -66,7 +65,7 @@ getCurrentD <- function(data= "https://ws1.publichealthontario.ca/appdata/powerb
                 nW_true    = n_weeks_in_start_year(start_year),
                 weekS      = ((week - 35L) %% nW_true) + 1L,
                 weekF      = ((week - startWeek) %% nW_true) + 1L,
-                cYear      = as.factor(lubridate::year(Rdate)),
+                cYear      = as.factor(format(Rdate, "%Y")),
                 newWeek    = weekF
         )  |>  ungroup() |> arrange(season, weekS, Rdate) |> 
         filter(Rdate > date) |> rename(date = Rdate)

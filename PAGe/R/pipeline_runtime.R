@@ -107,7 +107,7 @@ load_prospective_kit <- function(data_dir,
   # Required by refit_stage2_weekly() so that logit_f_eff during the weekly
   # refit is M1-based (matching the feature space used to train the frozen
   # production GAM).  If absent (old kit), falls back to template-based
-  # logit_f_eff — predictions remain valid but less accurate.
+  # logit_f_eff; predictions remain valid but less accurate.
   m1_train_preds <- m2_production$m1_train_preds
 
   # template_df: prefer stored in m2_production, fall back to ref$pred_df
@@ -152,6 +152,7 @@ load_prospective_kit <- function(data_dir,
 #' @param manual_ign_week Integer or \code{NA_integer_}. When set, overrides
 #'   the M0 automatic ignition estimate with a known value.
 #' @param verbose Logical. Emit progress messages (default \code{TRUE}).
+#' @param ... Additional arguments forwarded by the \code{run_m0()} alias.
 #'
 #' @return A list with:
 #'   \describe{
@@ -219,6 +220,7 @@ run_m0_detection <- function(kit,
 #' @param walk_start Integer. Minimum evaluation week (default \code{5L}).
 #'   Actual start is \code{max(walk_start, iWeek_locked)}.
 #' @param verbose Logical. Emit progress messages (default \code{TRUE}).
+#' @param ... Additional arguments forwarded by the \code{run_m1()} alias.
 #'
 #' @return A list with:
 #'   \describe{
@@ -333,20 +335,21 @@ run_m1_alignment <- function(kit,
 #'
 #' Two modes are supported via \code{mode}:
 #' \describe{
-#'   \item{\code{"weekly_refit"} (default)}{Each week, combines \code{kit$hist_data}
+#'   \item{\code{"frozen"} (default)}{Predicts directly from the frozen
+#'     production GAM stored in \code{kit$m2_production$fit}. This matches the
+#'     validated production evaluation path.}
+#'   \item{\code{"weekly_refit"}}{Each week, combines \code{kit$hist_data}
 #'     with current-season observations up to that week and refits the Stage-2 GAM
 #'     via \code{refit_stage2_weekly()}. Requires \code{kit$hist_data} (produced
 #'     by \code{docs/run.qmd} and loaded by \code{load_prospective_kit()}).}
-#'   \item{\code{"frozen"}}{Predicts directly from the frozen production GAM stored
-#'     in \code{kit$m2_production$fit}. Use this as a fallback when
-#'     \code{hist_data} is not available.}
 #' }
 #'
 #' @param kit A kit list returned by \code{load_prospective_kit()}.
 #' @param current_data Data frame for the current season.
 #' @param m1_result Output of \code{run_m1_alignment()}.
-#' @param mode Character. \code{"weekly_refit"} (default) or \code{"frozen"}.
+#' @param mode Character. \code{"frozen"} (default) or \code{"weekly_refit"}.
 #' @param verbose Logical. Emit progress messages (default \code{TRUE}).
+#' @param ... Additional arguments forwarded by the \code{run_m2()} alias.
 #'
 #' @return A list with \code{m2_preds}: tibble with columns
 #'   \code{eval_week}, \code{h}, \code{target_weekF},
@@ -357,7 +360,7 @@ run_m1_alignment <- function(kit,
 run_m2_forecast <- function(kit,
                              current_data,
                              m1_result,
-                             mode    = c("weekly_refit", "frozen"),
+                             mode    = c("frozen", "weekly_refit"),
                              verbose = TRUE) {
   mode <- match.arg(mode)
   if (!requireNamespace("dplyr",  quietly = TRUE)) stop("Please install dplyr.")
@@ -372,9 +375,13 @@ run_m2_forecast <- function(kit,
   ex_terms <- best_spec$exclude_newseason
   if (is.null(ex_terms)) ex_terms <- stage2_exclude_newseason(best_spec)
   # Season RE handling is delegated to m2_predict_one() via include_season_re.
-  # ex_terms here should NOT include "s(season)" — m2_predict_one adds it when needed.
+  # ex_terms here should NOT include "s(season)"; m2_predict_one adds it when needed.
   anchorWeek     <- ref$anchorWeek
-  logN_train_max <- max(m2_fit$model$logN_now, na.rm = TRUE)
+  logN_train_max <- if ("logN_now" %in% names(m2_fit$model)) {
+    max(m2_fit$model$logN_now, na.rm = TRUE)
+  } else {
+    Inf
+  }
   # Use feature_ranges attached at training time (LOSO/deployment parity).
   # Fall back to deriving from the model for kits built before this change.
   fr               <- m2_production$feature_ranges
@@ -388,18 +395,18 @@ run_m2_forecast <- function(kit,
   if (verbose) {
     cat(sprintf("run_m2_forecast: mode=%s, logN_max=%.2f\n", mode, logN_train_max))
     if (mode == "weekly_refit" && is.null(kit$hist_data))
-      message("[run_m2_forecast] hist_data not found in kit — falling back to frozen fit")
+      message("[run_m2_forecast] hist_data not found in kit; falling back to frozen fit")
   }
 
   # --- Holt trend-augmented bias correction tracker ---
   # Per-horizon level + trend of logit-scale residuals from prior predictions.
   # Correction applied = level + h * trend  (h=1 or 2).
   bias_alpha      <- as.numeric(best_spec$bias_alpha %||% 0.2)
-  bias_alpha_high <- 0.7   # α when ≥2 consecutive same-sign residuals detected
+  bias_alpha_high <- 0.7   # alpha after at least 2 same-sign residuals
   bias_beta       <- as.numeric(best_spec$bias_beta  %||% 0.0)
   bias_level      <- list(h1 = 0, h2 = 0)
   bias_trend      <- list(h1 = 0, h2 = 0)
-  # Adaptive α state: track sign-run per horizon to detect "not catching up"
+  # Adaptive alpha state: track sign-run per horizon to detect "not catching up"
   prev_resid_pos  <- list(h1 = NA, h2 = NA)   # TRUE = last resid was positive
   consec_ss       <- list(h1 = 0L, h2 = 0L)   # consecutive same-sign count
   re_hat         <- 0          # online season RE estimate (R2)
@@ -442,7 +449,7 @@ run_m2_forecast <- function(kit,
           hkey     <- paste0("h", pl$h)
           lev_prev <- bias_level[[hkey]]
           trn_prev <- bias_trend[[hkey]]
-          # Adaptive α: boost to bias_alpha_high after ≥2 consecutive same-sign
+          # Adaptive alpha: boost after at least 2 consecutive same-sign
           # raw errors (model "not catching up" per user intent).
           cur_pos <- err > 0
           if (!is.na(prev_resid_pos[[hkey]]) && cur_pos == prev_resid_pos[[hkey]]) {
@@ -499,7 +506,7 @@ run_m2_forecast <- function(kit,
         error = function(e) {
           if (verbose)
             message("[run_m2_forecast] weekly refit failed at ew=", ew,
-                    ": ", conditionMessage(e), " — using frozen fit")
+                    ": ", conditionMessage(e), "; using frozen fit")
           NULL
         }
       )
@@ -627,6 +634,77 @@ run_m2_forecast <- function(kit,
 }
 
 
+.as_forecast_plot_data <- function(m2_preds, current_data) {
+  plot_columns <- c("newWeek", "p_hat", "p_lo", "p_hi", "kind")
+
+  if (all(plot_columns %in% names(m2_preds))) {
+    pred_df <- as.data.frame(m2_preds[, plot_columns, drop = FALSE])
+  } else {
+    p_obs <- rep(NA_real_, nrow(current_data))
+    if ("p" %in% names(current_data)) {
+      p_obs <- as.numeric(current_data$p)
+    }
+    if (all(c("y", "neg") %in% names(current_data))) {
+      use <- !is.finite(p_obs) & (current_data$y + current_data$neg) > 0
+      p_obs[use] <- current_data$y[use] /
+        (current_data$y[use] + current_data$neg[use])
+    }
+    if (all(c("y", "N") %in% names(current_data))) {
+      use <- !is.finite(p_obs) & current_data$N > 0
+      p_obs[use] <- current_data$y[use] / current_data$N[use]
+    }
+
+    observed <- data.frame(
+      newWeek = as.integer(current_data$weekF),
+      p_hat = p_obs,
+      p_lo = NA_real_,
+      p_hi = NA_real_,
+      kind = "observed"
+    )
+    observed <- observed[is.finite(observed$newWeek) &
+      is.finite(observed$p_hat), , drop = FALSE]
+
+    forecast <- data.frame(
+      newWeek = integer(), p_hat = numeric(), p_lo = numeric(),
+      p_hi = numeric(), kind = character()
+    )
+    required <- c("eval_week", "target_weekF", "m2_p", "m2_lo", "m2_hi")
+    if (nrow(m2_preds) > 0L && all(required %in% names(m2_preds))) {
+      latest_week <- max(m2_preds$eval_week, na.rm = TRUE)
+      latest <- m2_preds[m2_preds$eval_week == latest_week, , drop = FALSE]
+      forecast <- data.frame(
+        newWeek = as.integer(latest$target_weekF),
+        p_hat = as.numeric(latest$m2_p),
+        p_lo = as.numeric(latest$m2_lo),
+        p_hi = as.numeric(latest$m2_hi),
+        kind = "forecast"
+      )
+    }
+    pred_df <- rbind(observed, forecast)
+  }
+
+  if (nrow(pred_df) > 0L) {
+    key <- paste(pred_df$newWeek, pred_df$kind, sep = "\r")
+    pred_df <- pred_df[!duplicated(key), , drop = FALSE]
+    rownames(pred_df) <- NULL
+  }
+
+  observed_weeks <- pred_df$newWeek[
+    pred_df$kind == "observed" & is.finite(pred_df$newWeek)
+  ]
+  current_weeks <- current_data$weekF[is.finite(current_data$weekF)]
+  last_obs <- if (length(observed_weeks) > 0L) {
+    as.integer(max(observed_weeks))
+  } else if (length(current_weeks) > 0L) {
+    as.integer(max(current_weeks))
+  } else {
+    NA_integer_
+  }
+
+  list(pred_df = pred_df, last_obs = last_obs)
+}
+
+
 #' Run the full M0 -> M1 -> M2 walk-forward pipeline for one season
 #'
 #' Thin wrapper around \code{run_m0_detection()}, \code{run_m1_alignment()},
@@ -638,31 +716,70 @@ run_m2_forecast <- function(kit,
 #' @param current_data Data frame for the current season.
 #' @param walk_start Integer. Minimum evaluation week (default \code{5L}).
 #' @param manual_ign_week Integer or \code{NA_integer_}. Manual ignition override.
+#' @param mode Character runtime mode. \code{"frozen"} uses the validated
+#'   production GAM; \code{"weekly_refit"} refits using kit history.
+#' @param season Optional single season identifier. Used only when
+#'   \code{current_data} has no \code{season} column. A unique
+#'   \code{kit$current_season} or \code{kit$forecast_season} is also accepted.
 #' @param verbose Logical. Emit progress messages (default \code{TRUE}).
+#' @param ... Additional arguments passed by the \code{run_pipeline()} alias.
 #'
 #' @return A list with \code{params_df}, \code{m1_curves}, \code{m2_preds},
-#'   \code{ign_out} — compatible with the prospective deployment QMD.
+#'   \code{pred_df}, \code{last_obs}, and \code{ign_out}. The plot fields are
+#'   consumed directly by \code{plot_forecast()}.
 #'
 #' @export
 run_prospective_pipeline <- function(kit,
                                      current_data,
                                      walk_start      = 5L,
                                      manual_ign_week = NA_integer_,
-                                     mode            = c("weekly_refit", "frozen"),
+                                     mode            = c("frozen", "weekly_refit"),
+                                     season          = NULL,
                                      verbose         = TRUE) {
   mode <- match.arg(mode)
+  kit <- validate_page_kit(kit, mode = mode)
+  assigned_season <- .resolve_runtime_season(kit, current_data, season)
+  current_data <- prepare_surveillance_data(current_data, season = assigned_season)
+  if (!nrow(current_data)) {
+    stop("`current_data` must contain at least one surveillance row.")
+  }
   m0 <- run_m0_detection(kit, current_data,
                           manual_ign_week = manual_ign_week, verbose = verbose)
   m1 <- run_m1_alignment(kit, current_data,
                           m0_result = m0, walk_start = walk_start, verbose = verbose)
   m2 <- run_m2_forecast(kit, current_data,
                          m1_result = m1, mode = mode, verbose = verbose)
-  list(
+  plot_data <- .as_forecast_plot_data(m2$m2_preds, current_data)
+  structure(list(
     params_df = m1$params_df,
     m1_curves = m1$m1_curves,
     m2_preds  = m2$m2_preds,
+    pred_df   = plot_data$pred_df,
+    last_obs  = plot_data$last_obs,
     ign_out   = m0$ign_out
+  ), class = c("page_forecast", "list"))
+}
+
+.resolve_runtime_season <- function(kit, current_data, season) {
+  if (!is.null(season)) {
+    .check_one_season(season)
+    return(as.character(season))
+  }
+  if (is.data.frame(current_data) && "season" %in% names(current_data)) {
+    return(NULL)
+  }
+  candidates <- c(
+    kit$current_season,
+    kit$forecast_season,
+    kit$m2_production$current_season,
+    kit$m2_production$forecast_season
   )
+  candidates <- unique(trimws(as.character(candidates)))
+  candidates <- candidates[!is.na(candidates) & nzchar(candidates)]
+  if (length(candidates) > 1L) {
+    stop("Kit metadata contain multiple candidate seasons; supply `season` explicitly.")
+  }
+  if (length(candidates) == 1L) candidates else NULL
 }
 
 

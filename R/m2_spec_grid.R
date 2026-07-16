@@ -35,9 +35,13 @@
 #' @param k_w,k_s,k_e,k_n Integer basis sizes for smooth terms.
 #'   Set any to 0L to disable the corresponding term.
 #' @param k_de Integer basis size for dz_ema smooth term. 0L disables it.
+#' @param k_r,k_sp Integer basis sizes for residual and alignment-spread smooths.
 #' @param bs_week Basis name for week smooths (typical: "ts").
 #' @param bs_fs_marginal Marginal basis used by factor-smooth \code{bs="fs"} via \code{xt=list(bs=...)}.
 #' @param use_season_re Back-compat flag (season RE is always included).
+#' @param lambda_w,w_floor Training time-decay rate and minimum weight.
+#' @param anchorWeek Reference-curve ignition anchor week.
+#' @param bias_alpha,bias_beta Holt level and trend correction rates.
 #'
 #' @param K Deprecated alias of \code{Kr}.
 #' @param pre_buffer Deprecated alias of \code{Kb}.
@@ -77,7 +81,7 @@ stage2_make_spec <- function(
 
     anchorWeek = 20L,
 
-    bias_alpha = 0.2,   # Holt level EMA — deployment only, not a LOSO grid dimension
+    bias_alpha = 0.2,   # Holt level EMA -- deployment only, not a LOSO grid dimension
     bias_beta  = 0.0,   # Holt trend EMA (0 = level-only; trend confirmed uninformative)
 
     # --- deprecated aliases ---
@@ -178,8 +182,10 @@ stage2_make_spec <- function(
 #' @param leads Integer vector of horizons (typically fixed to \code{c(1L,2L)}).
 #'
 #' @param k_w_grid,k_s_grid,k_e_grid,k_n_grid,k_de_grid Integer vectors for smooth basis sizes.
+#' @param k_r_grid Integer vector for residual-smooth basis sizes.
 #' @param bs_week_grid Character vector for week smooth basis.
 #' @param bs_fs_marginal_grid Character vector for fs marginal basis.
+#' @param bias_alpha_grid,bias_beta_grid Numeric vectors for Holt correction rates.
 #'
 #' @param drop_unused_kf_for_nonS If TRUE, sets \code{k_f=NA} for \code{T!="S"}.
 #' @param verbose Logical.
@@ -317,12 +323,14 @@ expand_grid_specs <- function(
 #' Requires helper functions already in your file:
 #' \code{wrap_week()}, \code{ewma_recursive()}, \code{make_ref_logit_fun_from_template()}.
 #'
-#' @param alignedD_prosp Data with at least season, weekF, newWeek and y/N (or x/n).
-#' @param template_df Template reference df with columns \code{newWeek} and \code{fit} (logit-scale ref).
-#' @param spec Spec from \code{stage2_make_spec()} (uses \code{delta}, \code{Kr}, \code{T}, \code{alpha_state}).
-#' @param ignD Optional ignition rule table (fallback if iWeek/ignition not available).
-#' @param eps Numeric clamp for observed p before logit.
-#' @param n_weeks Optional; inferred from \code{max(template_df$newWeek)} if NULL.
+#' @param out_m1 Fitted Stage-2 result containing \code{fit} and \code{spec}.
+#' @param feat_full Feature data used for plotting.
+#' @param dat_raw Optional raw observations.
+#' @param ign_hat_df Optional estimated ignition weeks by season.
+#' @param exclude_season_re Logical; omit the season random effect.
+#' @param exclude_newseason_terms Logical; omit terms unavailable for new seasons.
+#' @param facet_by_lead Logical; facet forecasts by horizon.
+#' @param trim_preign Logical; omit pre-ignition rows.
 #'
 #' @return A data.table with original columns plus derived feature columns.
 #' @export

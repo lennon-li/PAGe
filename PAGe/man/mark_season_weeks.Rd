@@ -19,10 +19,10 @@ threshold to declare the start of the season.}
 \value{
 A list with elements:
 \itemize{
-  \item `start_week` – first surveillance week above `threshold`.
-  \item `end_week`   – first week after the peak where fitted positivity
+  \item `start_week` - first surveillance week above `threshold`.
+  \item `end_week`   - first week after the peak where fitted positivity
         falls below `threshold`.
-  \item `in_season`  – logical vector the same length as `res$pred_df$newWeek`,
+  \item `in_season`  - logical vector the same length as `res$pred_df$newWeek`,
         indicating in-season weeks.
 }
 }
