@@ -200,7 +200,17 @@ grid_v15 <- tidyr::crossing(
 - **Phase 2** (`nested_loso_v15_phase2.rds`): Evaluate 480×10 = 4800 fits; resumable checkpoint
 - **Final** (`nested_loso_v15_production.rds`): Assembled results
 
-**Gold standard:** `k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0` → Bernoulli NLL = **0.406**
+**Gold standard (v15):** `k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0` → Bernoulli NLL = **0.406**
+
+> **Deployed production kit is v16, not v15.** `data/m2_production.rds` is now
+> `spec_version = "v16_fresh"` (`k_f=4, k_e=2, alpha_state=0.15, k_sp=6,
+> bias_alpha=0.05`), nested-LOSO Bernoulli NLL = **0.4175**
+> (`data/fresh_nested_loso_v16_postpeak.rds`), built by the `scripts/fresh_run/`
+> pipeline (`04e_m2_loso_v16.R` / `04f_m2_loso_v16_expand.R` →
+> `05b_m2_production_v16.R`). v16 adds post-peak handling (`k_sp=6`); its slightly
+> higher NLL vs the v15 gold is an accepted tradeoff, not a regression. The v15
+> grid/gold numbers below remain the reproduction targets for the **v15**
+> methodology this section documents, pending a full v16 rewrite.
 
 **Key functions:**
 - `nested_loso_build_fold()` — reference curve + hyperparams per fold
@@ -290,7 +300,8 @@ saveRDS(wf, "data/deploy_wf_cache.rds")
 |-------|--------|--------|
 | M0 | Per-season ignition error (weeks) | 0 for all seasons |
 | M1 | Weibull-weighted peak MAE | ≤ 1.275 weeks |
-| M2 LOSO | Bernoulli NLL | ≤ 0.406 |
+| M2 LOSO | Bernoulli NLL (v15 gold repro) | ≤ 0.406 |
+| M2 LOSO | Bernoulli NLL (v16 deployed) | ≈ 0.4175 |
 | M2 LOSO | cor(gold, fresh NLL) | ≥ 0.999 |
 | Prospective | Max forecast delta | < 0.005 |
 

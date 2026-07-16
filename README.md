@@ -4,7 +4,7 @@ This repository contains the **PAGe R package** for real-time forecasting of sea
 
 ## Quick Links
 
-- **[Package Website](http://10.48.50.117/PAGe/)** — pkgdown documentation and function reference
+- **[Package Website](https://lennon-li.github.io/PAGe/)** — pkgdown documentation and function reference
 - **[PAGe Package](PAGe/)** — Main installable R package
 - **[Documentation](docs/)** — Pipeline overview, walkthrough, and architecture
 - **[Scripts](scripts/)** — Tuning, validation, and analysis scripts
@@ -36,16 +36,19 @@ devtools::install("PAGe")
 ```r
 library(PAGe)
 
-# Load and train
-flu_hist <- load_flu_hist()
-fit_reference_gam(flu_hist)
-hyper <- learn_alignment_hyperparams(flu_hist, g_ref_fun)
+# Historical surveillance data shipped with the package.
+allD <- load_flu_hist()
 
-# Forecast one season (first 20 weeks observed)
-currentD <- subset(flu_hist, season == "2018-19" & newWeek <= 20, 
-                   select = c("newWeek", "y", "neg"))
-res <- align_forecast_pipeline_dilate(currentD, g_ref_fun, hyper)
-plot_forecast(res, history = flu_hist)
+# Train the three-stage kit.
+m0  <- build_m0(allD)
+m1  <- build_m1(allD, m0)
+m2  <- train_m2(allD, m0, m1, best_spec = NULL)
+kit <- assemble_kit(m0, m1, m2)
+
+# Forecast the current season and plot.
+current <- getCurrentD(season = "2025-26")
+res <- run_pipeline(kit, current)
+plot_forecast(res, history = allD)
 ```
 
 See [PAGe/README.md](PAGe/README.md) for complete installation and usage instructions.
@@ -86,7 +89,7 @@ See [PAGe/README.md](PAGe/README.md) for complete installation and usage instruc
 
 - ✅ **M0 (Ignition)**: Complete and tuned (LOSO MAE ~0.5 weeks)
 - ✅ **M1 (Alignment)**: Complete and tuned (production spec: k_ref=25, slope_weight=8.0, Weibull-weighted peak MAE = 1.275 weeks)
-- ✅ **M2 (Forecast)**: Tuned through v15 (production model at `data/m2_production.rds`, Bernoulli NLL = 0.406)
+- ✅ **M2 (Forecast)**: Production kit `v16_fresh` at `data/m2_production.rds` (spec: k_f=4, k_e=2, alpha_state=0.15, k_sp=6, bias_alpha=0.05); Bernoulli NLL = 0.4175
 
 ## Citation
 

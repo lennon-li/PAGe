@@ -54,21 +54,25 @@ alignment-derived covariates from M1.
 - Built-in historical data lives in `PAGe/inst/extdata/flu_hist.csv` and
   `PAGe/ref_curve.RData`.
 
-## Current Status (2026-04-12)
+## Current Status (2026-04-21)
 
 **M0 (Ignition)** and **M1 (Alignment)** are complete and tuned. M1 uses
 multi-template ensemble alignment with slope-similarity weighting:
 k_ref=25, temperature=0.25, slope_weight=8.0, slope_window=6, dynamic_temp=FALSE, ref_method="fs"
-(LOSO Weibull-weighted peak MAE = 1.275 weeks across 67-spec grid search, v5–v7).
+(LOSO Weibull-weighted peak MAE = 1.275 weeks across 67-spec grid search, v5–v7; logit-scale ensemble).
 Ensemble operates on logit scale; outputs logit_spread (alignment uncertainty)
 propagated to M2.
 
-**M2 (Forecast)** is tuned through v15. Production kit at `data/m2_production.rds`
-(v15 spec: k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0, delta=0, Kr=1).
-Frozen GAM + adaptive Holt EMA bias correction (level-only β=0; bias_alpha is a
-deployment parameter set per season, NOT part of the LOSO grid — NLL is flat across
-0.1–0.3 making it unidentifiable as a structural parameter). 480-spec nested LOSO
-(v15), Bernoulli NLL = 0.406. Entry-point: `scripts/run_nested_loso_v15.R`.
+**M2 (Forecast)** is tuned through the `fresh_run` pipeline (v16). The deployed
+production kit at `data/m2_production.rds` is `spec_version = "v16_fresh"`
+(best_spec_id `d+0_Kr1_kf4_ke2_as0.15_kr0_kde0_ksp6_ba0.05_bb0`: k_f=4, k_e=2,
+alpha_state=0.15, k_sp=6, k_r=0, k_de=0, delta=0, Kr=1, bias_alpha=0.05,
+bias_beta=0, use_season_re=TRUE, template_mode="smooth"). Frozen GAM + adaptive
+Holt EMA bias correction (level-only β=0). Nested LOSO Bernoulli NLL = 0.4175
+(`data/fresh_nested_loso_v16_postpeak.rds`). Entry-point: `scripts/fresh_run/`
+(stage `04e_m2_loso_v16.R` / `04f_m2_loso_v16_expand.R`; kit built by
+`05b_m2_production_v16.R`). The earlier v15-postfix specs (k_f=6, NLL ~0.576) are
+superseded by this deployed kit.
 
 Key data for M2 development:
 - `data/m1_alignment_tuning_combined.rds` — full M1 grid (67 specs, v5–v7)
@@ -127,12 +131,5 @@ on your platform. Package code (`R/`, `PAGe/R/`) and QMDs use relative paths.
 
 ## Shared Repo Skills
 
-- `r-bayes` — Patterns for Bayesian inference in R using brms, including multilevel models, DAG validation, and marginal effects. Use when performing Bayesian analysis.
-- `r-efficient-dev` — Efficient R development guidance for this repository. Use when editing R code, refactoring, debugging, or working on package code with an emphasis on vectorization, minimal patches, concise output, and practical execution.
-- `r-oop` — R object-oriented programming guide for S7, S3, S4, and vctrs. Use when designing R classes or choosing an OOP system.
-- `r-performance` — R performance best practices including profiling, benchmarking, vctrs, and optimization strategies. Use when optimizing R code.
-- `r-style-guide` — R style guide covering naming conventions, spacing, layout, and function design best practices. Use when writing R code.
-- `rlang-patterns` — rlang metaprogramming patterns for data-masking, injection operators, and dynamic dots. Use when writing functions that use tidy evaluation.
-- `tdd-workflow` — Test-driven development workflow for R using testthat. Use when writing new features, fixing bugs, or refactoring code. Enforces test-first development with 80%+ coverage.
-- `tidyverse-patterns` — Modern tidyverse patterns for R including pipes, joins, grouping, purrr, and stringr. Use when writing tidyverse R code.
+- `seasonal-forecast` — Train, tune, evaluate, or deploy the PAGe seasonal respiratory virus forecasting pipeline. Covers the full M0 → M1 → M2 → prospective deployment chain.
 

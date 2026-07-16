@@ -10,7 +10,7 @@ The PAGe pipeline consists of three models:
 - **M1 (Alignment)**: Aligns partially observed seasons to a learned reference curve using shift (`tau`) and optional dilation (`delta`), generating template-based predictions
 - **M2 (Forecast)**: Binomial GAM with M1 covariates, adaptive Holt EMA bias correction, and online season-specific effects for final 1–2 week ahead forecasts
 
-See the [pipeline overview](http://10.48.50.117/PAGe/articles/pipeline-overview.html)
+See the [pipeline overview](https://lennon-li.github.io/PAGe/articles/pipeline-overview.html)
 for full architecture details.
 
 ## Installation
@@ -44,13 +44,16 @@ library(PAGe)
 # Historical surveillance data shipped with the package.
 allD <- load_flu_hist()
 
-# Fit each stage.
-m0 <- build_m0(allD)                         # ignition detection
-m1 <- build_m1(allD, m0)                     # reference curve + alignment
-m2 <- train_m2(allD, m0, m1, best_spec = NULL) # forecast GAM
-
-# Bundle everything a deployment needs into one list.
+# Train the three-stage kit.
+m0  <- build_m0(allD)
+m1  <- build_m1(allD, m0)
+m2  <- train_m2(allD, m0, m1, best_spec = NULL)
 kit <- assemble_kit(m0, m1, m2)
+
+# Forecast the current season and plot.
+current <- getCurrentD(season = "2025-26")
+res <- run_pipeline(kit, current)
+plot_forecast(res, history = allD)
 ```
 
 ### 2. Retune hyperparameters (optional)
@@ -90,9 +93,9 @@ plot_forecast(res, history = allD)
 
 ## Documentation
 
-- **[Pipeline overview](http://10.48.50.117/PAGe/articles/pipeline-overview.html)** — Full pipeline architecture and data flow
-- **[Pipeline walkthrough](http://10.48.50.117/PAGe/articles/pipeline-walkthrough.html)** — End-to-end training and deployment example
-- **[Source map](http://10.48.50.117/PAGe/articles/source-map.html)** — File and function reference
+- **[Pipeline overview](https://lennon-li.github.io/PAGe/articles/pipeline-overview.html)** — Full pipeline architecture and data flow
+- **[Pipeline walkthrough](https://lennon-li.github.io/PAGe/articles/pipeline-walkthrough.html)** — End-to-end training and deployment example
+- **[Source map](https://lennon-li.github.io/PAGe/articles/source-map.html)** — File and function reference
 
 ## Development
 

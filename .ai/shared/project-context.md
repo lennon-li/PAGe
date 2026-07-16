@@ -50,18 +50,20 @@ alignment-derived covariates from M1.
 **M0 (Ignition)** and **M1 (Alignment)** are complete and tuned. M1 uses
 multi-template ensemble alignment with slope-similarity weighting:
 k_ref=25, temperature=0.25, slope_weight=8.0, slope_window=6, dynamic_temp=FALSE, ref_method="fs"
-(LOSO Weibull-weighted peak MAE = 1.338 weeks across 67-spec grid search, v5–v7; logit-scale ensemble).
+(LOSO Weibull-weighted peak MAE = 1.275 weeks across 67-spec grid search, v5–v7; logit-scale ensemble).
 Ensemble operates on logit scale; outputs logit_spread (alignment uncertainty)
 propagated to M2.
 
-**M2 (Forecast)** is tuned through v15-postfix + boundary expansion. Production kit at
-`data/m2_production.rds` (v15-postfix spec: k_f=6, k_e=2, alpha_state=0.35,
-k_r=0, k_de=0, k_sp=2, delta=0, Kr=1, bias_alpha=1.0, bias_beta=0). Frozen GAM
-(EDF≈26) + adaptive Holt EMA bias correction (level-only β=0; bias_alpha=1.0
-from boundary expansion, monotone improvement through 0.1–1.0). 192-spec focused
-nested LOSO + 5-round boundary expansion, Bernoulli NLL = 0.5959 pre-L2 / 0.5796
-post-L2 / 0.5767 post-L2+ba-retune / 0.5763 post-expansion (k_f 5→6, as 0.40→0.35).
-Entry-point: `scripts/run_nested_loso_v15_postfix.R`.
+**M2 (Forecast)** is tuned through the `fresh_run` pipeline (v16). The deployed
+production kit at `data/m2_production.rds` is `spec_version = "v16_fresh"`
+(best_spec_id `d+0_Kr1_kf4_ke2_as0.15_kr0_kde0_ksp6_ba0.05_bb0`: k_f=4, k_e=2,
+alpha_state=0.15, k_sp=6, k_r=0, k_de=0, delta=0, Kr=1, bias_alpha=0.05,
+bias_beta=0, use_season_re=TRUE, template_mode="smooth"). Frozen GAM + adaptive
+Holt EMA bias correction (level-only β=0). Nested LOSO Bernoulli NLL = 0.4175
+(`data/fresh_nested_loso_v16_postpeak.rds`). Entry-point: `scripts/fresh_run/`
+(stage `04e_m2_loso_v16.R` / `04f_m2_loso_v16_expand.R`; kit built by
+`05b_m2_production_v16.R`). The earlier v15-postfix specs (k_f=6, NLL ~0.576) are
+superseded by this deployed kit.
 
 Key data for M2 development:
 - `data/m1_alignment_tuning_combined.rds` — full M1 grid (67 specs, v5–v7)
