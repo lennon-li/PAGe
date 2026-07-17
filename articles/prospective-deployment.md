@@ -1,0 +1,49 @@
+# Prospective deployment
+
+Deployment is a stateful weekly process built around a frozen, versioned
+kit. Each run should use one immutable current-season snapshot and
+should persist both the forecast and its intermediate stage outputs.
+
+## Weekly sequence
+
+``` r
+
+library(PAGe)
+
+kit <- load_prospective_kit("m2_production.rds")
+result <- run_prospective_pipeline(
+  kit = kit,
+  current_data = current_snapshot
+)
+```
+
+The orchestration performs the following operations in order:
+
+1.  validate and normalize the current snapshot;
+2.  run M0 and determine the current ignition state;
+3.  run M1 using observations available at the issue week;
+4.  inject M1 phase and uncertainty covariates into the M2 snapshot;
+5.  generate 1- and 2-week forecasts and apply online correction.
+
+## Operational controls
+
+- Treat the trained kit as immutable and identify it with a version or
+  hash.
+- Use explicit manual ignition overrides and record the reason for each
+  one.
+- Reject snapshots with inconsistent counts, duplicate season-weeks, or
+  a feature scale that differs from training.
+- Never update a historical forecast after revised observations arrive.
+  Store revisions separately from the original as-issued result.
+- Monitor M0 state, M1 peak status and spread, raw M2 predictions, and
+  corrected predictions; these distinguish model drift from upstream
+  data failures.
+
+Stage-specific entry points
+([`run_m0()`](https://lennon-li.github.io/PAGe/reference/run_m0_detection.md),
+[`run_m1()`](https://lennon-li.github.io/PAGe/reference/run_m1_alignment.md),
+and
+[`run_m2()`](https://lennon-li.github.io/PAGe/reference/run_m2_forecast.md))
+support diagnostics, while
+[`run_pipeline()`](https://lennon-li.github.io/PAGe/reference/run_prospective_pipeline.md)
+is the preferred high-level interface.

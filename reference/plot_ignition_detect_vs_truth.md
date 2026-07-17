@@ -1,0 +1,54 @@
+# Plot truth vs detected ignition week by season (faceted)
+
+Plot truth vs detected ignition week by season (faceted)
+
+## Usage
+
+``` r
+plot_ignition_detect_vs_truth(
+  det_out,
+  x_col = "weekF",
+  y_cols = c("p", "p_sm"),
+  x_max = 30L,
+  ncol = 4L,
+  y_max = NULL,
+  use_plotly = TRUE
+)
+```
+
+## Arguments
+
+- det_out:
+
+  Output list from detectIgnitionBySeason_M0v2(). Must contain \$data
+  with per-week rows. If \$compare is present, it is used for truth/hat
+  weeks; otherwise it will be constructed from phase==1 and \$by_season.
+
+- x_col:
+
+  Week index column. Default "weekF".
+
+- y_cols:
+
+  Character vector of columns to plot as time series (if present).
+  Default c("p","p_sm").
+
+- x_max:
+
+  Optional max week to plot (e.g., 30). Default 30.
+
+- ncol:
+
+  Facet columns. Default 4.
+
+- y_max:
+
+  Optional y-axis max (e.g., 0.3). Default NULL (no cap).
+
+- use_plotly:
+
+  If TRUE return plotly::ggplotly(p). Default TRUE.
+
+## Value
+
+ggplot or plotly object.

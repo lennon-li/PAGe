@@ -1,0 +1,77 @@
+# Getting started with PAGe
+
+**PAGe** (Phase-Aligned Gated Epidemic Forecasting) produces 1–2 week
+ahead forecasts of seasonal respiratory-virus percentage positivity from
+surveillance data. The pipeline is three stages run in sequence each
+week:
+
+- **M0** – ignition detection (when the season has started)
+- **M1** – alignment to a learned reference curve via shift `tau` and
+  optional dilation `delta`
+- **M2** – binomial GAM forecast with adaptive Holt EMA bias correction
+
+## Data and training
+
+``` r
+
+library(PAGe)
+
+# PAGe does not bundle surveillance observations.
+allD <- load_flu_hist("/authorized/path/flu_history.csv") |>
+  prepare_surveillance_data()
+
+# Offline locked-spec refresh. The 2025-26 holdout is excluded by default.
+training <- train_pipeline(allD, mode = "refresh")
+kit <- training$kit
+```
+
+Use `mode = "retune"` for full M0/M1/M2 tuning. Its adaptive M2 grid is
+informed by compatible prior results and supports `"min_nll"`,
+`"one_se"`, and `"pareto"` selection. Optional conservative racing only
+removes clear losers; finalists still receive full nested-LOSO
+evaluation.
+
+## Holdout replay and promotion
+
+``` r
+
+candidate <- replay_season_holdout(kit, allD, season = "2025-26")
+incumbent <- replay_season_holdout(incumbent_kit, allD, season = "2025-26")
+promotion <- check_promotion(candidate$metrics, incumbent$metrics)
+
+# Passing all gates permits inclusion in training for 2026-27.
+next_training <- train_pipeline(allD, mode = "refresh", promotion = promotion)
+```
+
+The default gates require 2% NLL improvement, at most 5% horizon-MAE
+degradation, and at most 10% phase-MAE degradation.
+
+## Weekly forecasting
+
+Given `kit` and the current season’s observed weeks so far, produce a
+forecast with:
+
+``` r
+
+current <- prepare_surveillance_data(current_csv, season = "2026-27")
+res <- run_pipeline(kit, current, mode = "frozen")
+plot_forecast(res, history = allD)
+```
+
+Frozen-GAM prediction is the default validated deployment path. Weekly
+refitting is retained only as an explicit compatibility option.
+
+## Where to read more
+
+- [Pipeline
+  overview](https://lennon-li.github.io/PAGe/articles/pipeline-overview.md)
+  – architecture and notation.
+- [Pipeline
+  walkthrough](https://lennon-li.github.io/PAGe/articles/pipeline-walkthrough.md)
+  – an end-to-end training and deployment walkthrough.
+- [`?build_m0`](https://lennon-li.github.io/PAGe/reference/build_m0.md),
+  [`?build_m1`](https://lennon-li.github.io/PAGe/reference/build_m1.md),
+  [`?build_m2`](https://lennon-li.github.io/PAGe/reference/build_m2.md),
+  [`?assemble_kit`](https://lennon-li.github.io/PAGe/reference/assemble_kit.md),
+  [`?run_pipeline`](https://lennon-li.github.io/PAGe/reference/run_prospective_pipeline.md)
+  – reference pages for the high-level API.

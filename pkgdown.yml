@@ -1,0 +1,15 @@
+pandoc: 3.8.3
+pkgdown: 2.2.1
+pkgdown_sha: ~
+articles:
+  articles/forecast-training: forecast-training.html
+  articles/ignition-training: ignition-training.html
+  intro: intro.html
+  articles/pipeline-overview: pipeline-overview.html
+  articles/pipeline-walkthrough: pipeline-walkthrough.html
+  articles/prospective-deployment: prospective-deployment.html
+  articles/source-map: source-map.html
+last_built: 2026-07-17T21:01Z
+urls:
+  reference: https://lennon-li.github.io/PAGe/reference
+  article: https://lennon-li.github.io/PAGe/articles

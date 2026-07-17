@@ -1,0 +1,132 @@
+# Train all PAGe pipeline components
+
+Runs either a locked production refresh or a full M0, M1, and M2 retune.
+Refresh mode performs no LOSO tuning and uses a compatible prior best M2
+specification when available, otherwise deployed v16. Retune mode uses
+[`plan_m2_grid()`](https://lennon-li.github.io/PAGe/reference/plan_m2_grid.md)
+unless an explicit M2 grid is supplied, then fits the winning M2
+specification on all non-excluded seasons.
+
+## Usage
+
+``` r
+train_pipeline(
+  allD,
+  mode = c("refresh", "retune"),
+  previous_results = NULL,
+  exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
+  prospective_holdout = "2025-26",
+  promotion = NULL,
+  loso_seasons = "all",
+  n_cores = parallel::detectCores() - 1L,
+  checkpoint_dir = NULL,
+  verbose = TRUE,
+  m0_grid = .default_m0_grid(),
+  m1_grid = default_m1_grid(),
+  m2_grid = NULL,
+  max_m2_finalists = 6L,
+  max_m2_specs = 64L,
+  selection_method = c("min_nll", "one_se", "pareto"),
+  racing = FALSE,
+  racing_evaluator = NULL,
+  racing_stages = c(3L, 6L),
+  racing_min_survivors = 3L,
+  manual_labels = .default_manual_labels(),
+  flag_args = .default_flag_args(),
+  m1_params = .default_m1_params()
+)
+```
+
+## Arguments
+
+- allD:
+
+  Multi-season surveillance data.
+
+- mode:
+
+  `"refresh"` for locked fitting or `"retune"` for LOSO tuning followed
+  by production fitting.
+
+- previous_results:
+
+  Optional prior M2 tuning result.
+
+- exclude:
+
+  Seasons excluded from component and final production fitting.
+
+- prospective_holdout:
+
+  Season kept out of every tuning and fitting stage until an explicit
+  passing promotion report releases it. Defaults to 2025-26; use NULL
+  only when no prospective holdout exists.
+
+- promotion:
+
+  Optional canonical report returned by
+  [`check_promotion()`](https://lennon-li.github.io/PAGe/reference/check_promotion.md)
+  with the locked 2 percent NLL, 5 percent horizon, and 10 percent phase
+  thresholds. Schema validation checks structure and internal
+  consistency, not cryptographic provenance. A malformed, custom-
+  threshold, or failed report never releases the holdout.
+
+- loso_seasons:
+
+  LOSO folds passed to all tuning stages.
+
+- n_cores:
+
+  Parallel worker count passed to tuning stages.
+
+- checkpoint_dir:
+
+  Optional parent checkpoint directory.
+
+- verbose:
+
+  Logical progress flag.
+
+- m0_grid, m1_grid:
+
+  Optional explicit M0 and M1 tuning grids.
+
+- m2_grid:
+
+  Optional explicit M2 grid; `NULL` uses
+  `plan_m2_grid(previous_results)`.
+
+- max_m2_finalists, max_m2_specs:
+
+  Adaptive M2 plan caps.
+
+- selection_method:
+
+  Final full-LOSO selection rule passed to
+  [`select_m2_candidate()`](https://lennon-li.github.io/PAGe/reference/select_m2_candidate.md).
+  Defaults to minimum Bernoulli NLL.
+
+- racing:
+
+  Logical; conservatively pre-race the planned M2 grid. This is off by
+  default and requires `racing_evaluator`.
+
+- racing_evaluator:
+
+  Callback returning partial fold-level scores. Partial results only
+  eliminate clear losers; surviving specs still run full LOSO.
+
+- racing_stages, racing_min_survivors:
+
+  Racing schedule and survivor floor.
+
+- manual_labels, flag_args, m1_params:
+
+  Locked component settings.
+
+## Value
+
+A transparent list with `mode`, `components`, `tuning` (NULL for
+refresh), `grid`, `grid_provenance`, full-result `selection`, optional
+`racing` diagnostics, transparent `holdout` release state, and
+deployment `kit`.

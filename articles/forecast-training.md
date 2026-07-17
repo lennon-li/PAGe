@@ -1,0 +1,41 @@
+# M2 forecast training
+
+M2 forecasts positivity one and two weeks ahead with a binomial GAM. Its
+covariates include current surveillance features and M1 outputs
+constructed at the same issue week.
+
+## Fit and specify
+
+``` r
+
+library(PAGe)
+
+spec <- stage2_make_spec(
+  delta = 0, Kr = 1, k_f = 4, k_e = 2,
+  alpha_state = 0.15, k_r = 0, k_de = 0, k_sp = 6,
+  bias_alpha = 0.05, bias_beta = 0
+)
+m2 <- train_m2(historical, m0, m1, best_spec = spec)
+```
+
+These are the deployed `v16_fresh` values. Use nested LOSO before
+promoting a different specification.
+
+Production training uses nested leave-one-season-out validation. For
+every outer held-out season, M0 and M1 tuning, feature construction,
+model selection, and calibration must be learned without that season’s
+future observations. The outer fold is used only for prospective
+scoring.
+
+## Frozen model and online correction
+
+The fitted GAM remains frozen during deployment. A level-only Holt EMA
+updates the forecast bias from errors observed so far in the active
+season, and the season-specific effect is estimated online from eligible
+post-ignition observations. Both updates must use errors whose targets
+are already observed at the issue date.
+
+Use Bernoulli negative log likelihood as the primary probabilistic score
+and retain horizon-specific calibration and absolute-error summaries.
+Pooling only across all weeks can conceal poor performance near ignition
+or the seasonal peak.
