@@ -1,6 +1,0 @@
-wf <- readRDS("C:/Users/lennon.li/Documents/claude/PAGe/data/run_wf_cache.rds")
-cat("=== params_df ===\n")
-print(wf$params_df[, c("eval_week","iWeek_hat","state","peak_weekF","t_peak","peak_passed")])
-cat("\nign_week_locked:", wf$ign_out$ign_week_locked, "\n")
-cat("iWeek_hat_locked:", wf$ign_out$iWeek_hat_locked, "\n")
-cat("forecast_df rows:", nrow(wf$forecast_df), "\n")
