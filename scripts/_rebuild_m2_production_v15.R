@@ -1,9 +1,42 @@
 #!/usr/bin/env Rscript
-# Rebuild production kit with v15 best spec and LOCKED M1 params
-# - Stores M1_PARAMS in ref_production.rds (so load_prospective_kit uses them)
+# RESEARCH-ONLY ARCHIVE: rebuild the historical v15 fit with locked M1 params.
+# This is not a promotion path and must never replace mutable production files.
+# - Stores M1_PARAMS in a unique research reference sidecar
 # - Regenerates m1_train_preds with slope_weight=8, slope_window=6
-# - Fits production GAM with v15 best spec (update SPEC section below after v15 grid completes)
-cat("=== Rebuild production kit (v15 spec, locked M1) ===\n")
+# - Fits the historical v15 GAM (update SPEC section below after v15 grid completes)
+cli_args <- commandArgs(trailingOnly = TRUE)
+output_arg <- grep("^--output=", cli_args, value = TRUE)
+if (!"--research-only" %in% cli_args || length(output_arg) != 1L) {
+  stop(
+    "Research-only archive. Re-run with --research-only and exactly one ",
+    "--output=/path/to/unique-v15-artifact.rds.",
+    call. = FALSE
+  )
+}
+OUTPUT_PATH <- sub("^--output=", "", output_arg)
+if (!grepl("[.]rds$", OUTPUT_PATH, ignore.case = TRUE) ||
+    !dir.exists(dirname(OUTPUT_PATH))) {
+  stop("`--output` must be a new .rds path in an existing directory.", call. = FALSE)
+}
+REF_OUTPUT_PATH <- file.path(
+  dirname(OUTPUT_PATH),
+  paste0(tools::file_path_sans_ext(basename(OUTPUT_PATH)), "_ref.rds")
+)
+mutable_paths <- normalizePath(
+  c("data/m2_production.rds", "data/ref_production.rds"),
+  mustWork = FALSE
+)
+requested_paths <- normalizePath(c(OUTPUT_PATH, REF_OUTPUT_PATH), mustWork = FALSE)
+if (tolower(basename(OUTPUT_PATH)) %in%
+    c("m2_production.rds", "ref_production.rds") ||
+    any(requested_paths %in% mutable_paths) ||
+    any(file.exists(c(OUTPUT_PATH, REF_OUTPUT_PATH)))) {
+  stop(
+    "Refusing mutable or existing output; choose a unique research artifact path.",
+    call. = FALSE
+  )
+}
+cat("=== Research-only v15 rebuild (locked M1) ===\n")
 
 suppressPackageStartupMessages({
   library(PAGe); library(dplyr); library(purrr); library(mgcv); library(MMWRweek)
@@ -27,6 +60,12 @@ allD <- read.csv('data/flu_testing_data.csv') |>
   dplyr::mutate(neg = N - y, date = as.Date(date),
                 nW_true = n_weeks_in_start_year(start_year),
                 weekF = ((week - 27L) %% nW_true) + 1L, p = y / N)
+if ("2025-26" %in% as.character(allD$season)) {
+  stop(
+    "Historical v15 rebuild refuses data containing the 2025-26 holdout.",
+    call. = FALSE
+  )
+}
 
 params        <- readRDS('data/stage1_tuning.rds')$best_params
 manual_labels <- c('2012-13' = 18L, '2013-14' = 20L, '2014-15' = 20L,
@@ -45,8 +84,8 @@ M1_PARAMS <- list(
   rise_weight        = 1.0,
   trough_weight      = 0.1,
   peak_decay         = 0.3,
-  slope_weight       = 8.0,   # ← LOCKED
-  slope_window       = 6L,    # ← LOCKED
+  slope_weight       = 8.0,   # <- LOCKED
+  slope_window       = 6L,    # <- LOCKED
   dynamic_temp       = FALSE,
   dynamic_temp_pivot = 10L
 )
@@ -97,8 +136,8 @@ m1_train_preds <- m1_walkforward_multi(
 )
 cat('m1_train_preds:', nrow(m1_train_preds), 'rows\n\n')
 
-# ---- Save ref_production.rds with M1_PARAMS ----
-cat('Saving ref_production.rds (with M1_PARAMS)...\n')
+# ---- Save a research-only reference sidecar with M1_PARAMS ----
+cat('Saving research reference sidecar (with M1_PARAMS)...\n')
 ref_cache_old <- readRDS('data/ref_production.rds')
 saveRDS(list(
   ref          = ref,
@@ -107,10 +146,10 @@ saveRDS(list(
   M1_PARAMS    = M1_PARAMS,
   flag_args    = flag_args,
   manual_labels = manual_labels
-), 'data/ref_production.rds')
-cat('Saved ref_production.rds\n\n')
+), REF_OUTPUT_PATH)
+cat('Saved research reference sidecar:', REF_OUTPUT_PATH, '\n\n')
 
-# ---- M2 SPEC — update after v15 LOSO completes ----
+# ---- M2 SPEC -- update after v15 LOSO completes ----
 # Placeholder: uses v14 spec until v15 grid is complete.
 # After run_nested_loso_v15.R finishes, update k_f, k_e, k_sp, k_de below.
 cat('M2: loading best spec...\n')
@@ -122,7 +161,7 @@ if (file.exists(v15_path)) {
   spec_version  <- 'v15'
   cat('Using v15 best spec:', best_spec_id, '\n')
 } else {
-  cat('v15 not ready — using v14 spec as placeholder\n')
+  cat('v15 not ready -- using v14 spec as placeholder\n')
   best_spec_obj <- stage2_make_spec(
     delta = 0L, Kr = 1L, T = 'S',
     k_f = 4L, k_e = 2L, alpha_state = 0.40,
@@ -160,6 +199,6 @@ saveRDS(list(
   training_seasons = train_seas,
   spec_version     = spec_version,
   best_spec_id     = best_spec_id
-), 'data/m2_production.rds')
-cat('Saved data/m2_production.rds\n')
+), OUTPUT_PATH)
+cat('Saved research artifact:', OUTPUT_PATH, '\n')
 cat('Done:', format(Sys.time()), '\n')

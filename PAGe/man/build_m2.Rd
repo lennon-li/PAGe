@@ -12,7 +12,7 @@ build_m2(
   exclude_seas = "2015-16",
   holdout_season = "2025-26",
   grid = default_m2_grid(),
-  bias_alpha = 0.4,
+  bias_alpha = 0.05,
   bias_beta = 0,
   n_cores = parallel::detectCores() - 1L,
   checkpoint_dir = NULL,

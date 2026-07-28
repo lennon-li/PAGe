@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-# Step 6 — Prospective Deployment (fresh run)
+# Step 6 -- Prospective Deployment (fresh run)
 # Adapted from docs/prospective_deployment.qmd runtime section.
 # Loads the fresh kit, snapshots live data, runs walk-forward pipeline.
 #
@@ -9,12 +9,28 @@
 #          data/fresh_currentD_snapshot.rds
 # Compare: data/deploy_wf_cache.rds
 
-source("scripts/fresh_run/00_shared.R")
+cli_args <- commandArgs(trailingOnly = TRUE)
+kit_smoke <- "--kit-smoke" %in% cli_args
+kit_data_dir <- sub("^--kit-smoke-dir=", "", grep(
+  "^--kit-smoke-dir=", cli_args, value = TRUE
+))
+if (length(kit_data_dir) > 1L) {
+  stop("Supply --kit-smoke-dir at most once.")
+}
+kit_data_dir <- if (length(kit_data_dir)) kit_data_dir else "data"
 
-# prospective_deployment.qmd sources two files from PAGe/R/ (not root R/)
-for (f in c("PAGe/R/identifiability.R", "PAGe/R/m1_peak_flags.R")) {
-  if (file.exists(f)) source(f) else
-    message("Optional file not found (skipping): ", f)
+if (kit_smoke) {
+  # Keep the smoke path independent of optional package/devtools loading so it
+  # can validate a synthetic artifact fixture in a minimal R environment.
+  source("R/pipeline_runtime.R")
+} else {
+  source("scripts/fresh_run/00_shared.R")
+
+  # prospective_deployment.qmd sources two files from PAGe/R/ (not root R/)
+  for (f in c("PAGe/R/identifiability.R", "PAGe/R/m1_peak_flags.R")) {
+    if (file.exists(f)) source(f) else
+      message("Optional file not found (skipping): ", f)
+  }
 }
 
 cat("=== Step 6: Prospective Deployment (fresh run) ===\n")
@@ -23,12 +39,17 @@ cat("Start:", format(Sys.time()), "\n\n")
 # ---- Load fresh production kit ----
 cat("Loading fresh production kit...\n")
 fresh_kit <- load_prospective_kit(
-  data_dir    = "data",
+  data_dir    = kit_data_dir,
   ref_file    = "fresh_ref_production.rds",
   m2_file     = "fresh_m2_production.rds",
   stage1_file = "fresh_m0_tuning.rds"
 )
-cat("Kit loaded: spec_version =", fresh_kit$m2$spec_version, "\n\n")
+cat("Kit loaded: spec_version =", fresh_kit$m2_production$spec_version, "\n\n")
+
+if (kit_smoke) {
+  cat("Kit smoke passed: canonical artifacts loaded; exiting before live data and replay.\n")
+  quit(save = "no", status = 0L)
+}
 
 # ---- Snapshot current season data ----
 cat("Fetching current season data (2025-26)...\n")
@@ -57,9 +78,9 @@ cat("\n=== Comparison vs gold (data/deploy_wf_cache.rds) ===\n")
 # NOTE (D2): deploy_wf_cache.rds was built on 2026-04-16 with pre-B3 code in
 # which estimate_season_re_online() silently returned 0 (predict() failed with
 # "object 'season' not found" because obs_df lacked GAM columns).  The B3 fix
-# populates missing columns so predict() now succeeds, yielding re_hat ≈ −2.03
+# populates missing columns so predict() now succeeds, yielding re_hat ~ -2.03
 # at eval_week=19 from pre-ignition observations.  This is the primary driver of
-# Max|M2 forecast delta| ≈ 0.22; it is expected and correct — deploy_wf_cache is
+# Max|M2 forecast delta| ~ 0.22; it is expected and correct -- deploy_wf_cache is
 # NOT a valid B3-corrected baseline.  See also the kf5-corrected comparison below.
 gold_wf <- readRDS("data/deploy_wf_cache.rds")
 
@@ -130,7 +151,6 @@ kit_kf5 <- load_prospective_kit(data_dir = "data")
 m2_kf5_bk <- readRDS("data/m2_production_v15postfix_kf5_backup.rds")
 kit_kf5$m2_production <- m2_kf5_bk
 kit_kf5$best_spec     <- m2_kf5_bk$spec
-kit_kf5$m2            <- m2_kf5_bk
 wf_kf5 <- run_prospective_pipeline(
   kit = kit_kf5, current_data = currentD,
   walk_start = 5L, manual_ign_week = NA_integer_,
@@ -143,12 +163,12 @@ if (!is.null(fresh_wf$m2_preds) && !is.null(wf_kf5$m2_preds)) {
     dplyr::filter(wf_kf5$m2_preds,   eval_week %in% common_kf5),
     by = c("eval_week", "h"), suffix = c(".fresh_kf6", ".kf5")
   ) |> dplyr::mutate(delta = m2_p.fresh_kf6 - m2_p.kf5)
-  cat("kf5 (B3-corrected) vs fresh kf6 — Max |M2 delta|:",
+  cat("kf5 (B3-corrected) vs fresh kf6 -- Max |M2 delta|:",
       round(max(abs(cmp_kf5$delta), na.rm = TRUE), 4),
-      "(warn if > 0.05 — indicates spec-driven shift)\n")
+      "(warn if > 0.05 -- indicates spec-driven shift)\n")
   peak_kf5   <- max(wf_kf5$m2_preds$m2_p,    na.rm = TRUE)
   peak_fresh <- max(fresh_wf$m2_preds$m2_p,   na.rm = TRUE)
-  cat("Peak m2_p — kf5:", round(peak_kf5, 4), "| fresh kf6:", round(peak_fresh, 4), "\n")
+  cat("Peak m2_p -- kf5:", round(peak_kf5, 4), "| fresh kf6:", round(peak_fresh, 4), "\n")
 }
 
 cat("\nEnd:", format(Sys.time()), "\n")

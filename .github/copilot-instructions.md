@@ -51,28 +51,33 @@ alignment-derived covariates from M1.
   passing raw GAM objects around.
 - In Quarto docs, do not use body-level h1 headings; the YAML `title:` already
   provides the page h1.
-- Built-in historical data lives in `PAGe/inst/extdata/flu_hist.csv` and
-  `PAGe/ref_curve.RData`.
+- Historical surveillance observations are private and are not distributed with
+  the package. Supply an authorized CSV explicitly to `load_flu_hist(path)`,
+  or set `PAGE_FLU_HIST_FILE`; `prepare_surveillance_data()` then enforces the
+  canonical contract. `simulate_flu_seasons()` supplies synthetic example data.
+- A future package distribution may bundle `inst/extdata/flu_hist.csv`, but it
+  is absent from this repository and must not be assumed to exist. `ref_curve.RData`
+  is likewise not a portable public-data input contract.
 
-## Current Status (2026-04-21)
+## Current Status (audited 2026-07-27)
 
-**M0 (Ignition)** and **M1 (Alignment)** are complete and tuned. M1 uses
-multi-template ensemble alignment with slope-similarity weighting:
-k_ref=25, temperature=0.25, slope_weight=8.0, slope_window=6, dynamic_temp=FALSE, ref_method="fs"
-(LOSO Weibull-weighted peak MAE = 1.275 weeks across 67-spec grid search, v5–v7; logit-scale ensemble).
-Ensemble operates on logit scale; outputs logit_spread (alignment uncertainty)
-propagated to M2.
+**M0 (Ignition)** and **M1 (Alignment)** are implemented and have historical
+tuning workflows. M1 uses multi-template alignment with slope-similarity
+weighting; the published historical peak-MAE values conflict and are not yet a
+verified canonical result. The ensemble operates on the logit scale and emits
+`logit_spread` (alignment uncertainty) for M2.
 
-**M2 (Forecast)** is tuned through the `fresh_run` pipeline (v16). The deployed
-production kit at `data/m2_production.rds` is `spec_version = "v16_fresh"`
-(best_spec_id `d+0_Kr1_kf4_ke2_as0.15_kr0_kde0_ksp6_ba0.05_bb0`: k_f=4, k_e=2,
-alpha_state=0.15, k_sp=6, k_r=0, k_de=0, delta=0, Kr=1, bias_alpha=0.05,
-bias_beta=0, use_season_re=TRUE, template_mode="smooth"). Frozen GAM + adaptive
-Holt EMA bias correction (level-only β=0). Nested LOSO Bernoulli NLL = 0.4175
-(`data/fresh_nested_loso_v16_postpeak.rds`). Entry-point: `scripts/fresh_run/`
-(stage `04e_m2_loso_v16.R` / `04f_m2_loso_v16_expand.R`; kit built by
-`05b_m2_production_v16.R`). The earlier v15-postfix specs (k_f=6, NLL ~0.576) are
-superseded by this deployed kit.
+**M2 (Forecast)** implements a frozen-GAM deployment path with adaptive online
+bias correction. The high-level API defaults to frozen deployment; weekly refit
+is explicit compatibility/research behavior. The v16 parameterization is coded
+as the locked incumbent, but recorded M2 NLL values and saved-artifact names
+remain unverified because the private artifacts are absent. Do not present the
+current historical M2 LOSO as fully nested validation: it is conditional on
+globally selected M0/M1 choices. Untouched 2025-26 is the intended confirmatory
+evaluation, and no replay or post-promotion refit is verified by this repository.
+
+See `docs/workflow-status.md` for the status of legacy scripts, rendered HTML,
+and the safe production entry points.
 
 Key data for M2 development:
 - `data/m1_alignment_tuning_combined.rds` — full M1 grid (67 specs, v5–v7)

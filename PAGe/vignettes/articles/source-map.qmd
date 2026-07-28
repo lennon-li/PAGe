@@ -8,6 +8,10 @@ The installable package under `PAGe/` is the source of truth. The repository's
 root-level `R/` directory is a development mirror and must remain synchronized
 when implementation files are changed.
 
+For operational loading, use `load_promoted_kit()` with an immutable registry
+artifact and its deployment manifest. `load_prospective_kit()` is a strict
+component-level loader, not proof that acceptance or promotion occurred.
+
 | Area | Main package files | Responsibility |
 |---|---|---|
 | M0 | `m0_training.R`, `m0_retro.R`, `m0_runtime.R`, `flagIgnition.R` | Tune and run prospective ignition detection |

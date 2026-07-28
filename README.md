@@ -39,30 +39,43 @@ saveRDS(kit, "page_kit.rds")
 
 ## Holdout replay and promotion
 
-Replay 2025-26 with kits that did not train on it, then compare the candidate
-against the incumbent. Promotion requires at least 2% NLL improvement, while
-allowing no more than 5% degradation at any horizon and 10% in any phase.
+Production release follows a four-phase, artifact-bound workflow:
 
-```r
-candidate <- replay_season_holdout(kit, allD, season = "2025-26")
-incumbent <- replay_season_holdout(incumbent_kit, allD, season = "2025-26")
-promotion <- check_promotion(candidate$metrics, incumbent$metrics)
+1. replay frozen candidate and incumbent kits that both exclude `2025-26`;
+2. preserve the locked gate decision and source hashes as immutable evidence;
+3. after a pass, refresh the accepted fixed specification with `2025-26`
+   included; and
+4. register the refreshed kit immutably and load it only with its verified
+   deployment manifest.
 
-# A passing report releases 2025-26 into the refresh used for 2026-27.
-# Failed or malformed reports keep it excluded.
-# Use the full M2 tuning object retained from an earlier retune. A refresh
-# intentionally has training$tuning = NULL.
-next_training <- train_pipeline(
-  allD,
-  mode = "refresh",
-  previous_results = prior_m2_results, # e.g. retuned$tuning$m2
-  promotion = promotion
-)
+Retuning belongs before the untouched holdout. Changing a grid, feature,
+threshold, or specification after viewing holdout results starts a new
+development cycle; it is not a continuation of the accepted refresh.
+
+See the [governed deployment workflow](docs/deployment-workflow.qmd) for the
+operator commands, private versus disclosure-safe output locations,
+`--preflight-only` checks, and no-overwrite rules. This repository does not
+preserve evidence that a real `2025-26` acceptance, refresh, or promotion
+completed.
+
+The bounded public smoke command exercises the same artifact-governance chain
+using synthetic fixtures and temporary outputs:
+
+```sh
+Rscript scripts/public/synthetic_release_workflow.R --smoke
 ```
+
+It is disclosure-safe and suitable for CI. It does not fit or validate the
+real PAGe model, and it is not evidence that the private `2025-26` workflow ran.
 
 ## Frozen prospective forecasting
 
 ```r
+kit <- load_promoted_kit(
+  kit_path = "/secure/PAGe/deployment-registry/<deployment-id>/promoted_kit.rds",
+  deployment_manifest_path =
+    "results/deployment-audit/<deployment-id>/deployment_manifest.json"
+)
 current <- prepare_surveillance_data(current_csv, season = "2026-27")
 forecast <- run_pipeline(kit, current, mode = "frozen")
 plot_forecast(forecast, history = allD)
@@ -71,7 +84,7 @@ plot_forecast(forecast, history = allD)
 `mode = "frozen"` is the deployment default. Weekly refitting remains an
 explicit compatibility option, not the validated production path.
 
-## Full retuning
+## Pre-acceptance retuning
 
 ```r
 retuned <- train_pipeline(
@@ -87,15 +100,35 @@ Retuning creates a bounded grid from compatible prior results, retains the
 v16 incumbent and diverse finalists, adds local neighbors, and expands reached
 boundaries. Optional `racing = TRUE` requires a fold evaluator; it only removes
 clear losers, and all survivors still receive full nested-LOSO evaluation.
+When `previous_results` is supplied, the planner consolidates finite NLL by
+specification, falls back to finite fold scores where needed, rejects ambiguous
+identities by requiring unique IDs that exactly match the parameter-derived
+canonical IDs, and uses the spacing adjacent to the previous winner for
+boundary expansion. Bernoulli NLL is preferred to `mean_nll`; ranking ties use
+the canonical ID. The v16 incumbent and best prior specification survive even
+a tight grid cap.
 
-See the [pipeline overview](https://lennon-li.github.io/PAGe/articles/pipeline-overview.html)
-and [walkthrough](https://lennon-li.github.io/PAGe/articles/pipeline-walkthrough.html).
+`selection_method` is an explicit user choice:
 
-## Production reference
+- `"min_nll"` selects the lowest full-LOSO Bernoulli NLL, breaking ties by
+  complexity and specification ID.
+- `"one_se"` selects the simplest candidate within one standard error of the
+  best NLL; it requires finite fold-level scores.
+- `"pareto"` retains candidates not dominated jointly on NLL, worst-horizon
+  MAE, and worst-phase MAE, then selects by NLL, complexity, and specification
+  ID.
 
-The deployed v16 specification is `k_f = 4`, `k_e = 2`,
+See the [pipeline overview](docs/pipeline_overview.qmd), the
+[governed deployment workflow](docs/deployment-workflow.qmd), and the
+[walkthrough](docs/pipeline_walkthrough.qmd).
+
+## Coded production reference
+
+The locked v16 incumbent in code is `k_f = 4`, `k_e = 2`,
 `alpha_state = 0.15`, `k_sp = 6`, `k_r = 0`, `k_de = 0`, `delta = 0`,
-`Kr = 1`, `bias_alpha = 0.05`, and `bias_beta = 0`. Its recorded nested-LOSO
-Bernoulli NLL is 0.4175.
+`Kr = 1`, `bias_alpha = 0.05`, and `bias_beta = 0`. Historical notes record a
+nested-LOSO Bernoulli NLL of 0.4175, but the corresponding private artifact is
+absent, so this repository does not verify that value or establish a promoted
+deployment.
 
 PAGe is released under the MIT License.

@@ -96,6 +96,140 @@ summarize_forecast_metrics <- function(predictions,
   )
 }
 
+.calibration_summary <- function(frame) {
+  if (nrow(frame) < 3L || length(unique(frame$p_hat)) < 2L ||
+    length(unique(frame$p_obs)) < 2L) {
+    return(list(intercept = NA_real_, slope = NA_real_, status = "not_estimable"))
+  }
+  fit <- tryCatch(
+    stats::glm(
+      p_obs ~ stats::qlogis(p_hat),
+      weights = frame$weight,
+      family = stats::quasibinomial(), data = frame
+    ),
+    error = function(e) NULL
+  )
+  coefficients <- if (is.null(fit)) numeric(0) else stats::coef(fit)
+  if (length(coefficients) != 2L || any(!is.finite(coefficients))) {
+    return(list(intercept = NA_real_, slope = NA_real_, status = "not_estimable"))
+  }
+  list(intercept = coefficients[[1L]], slope = coefficients[[2L]], status = "ok")
+}
+
+.interval_summary <- function(frame, interval_level) {
+  if (!all(c("p_lo", "p_hi") %in% names(frame))) {
+    return(list(
+      coverage_trial = NA_real_, coverage_week = NA_real_,
+      width_trial = NA_real_, width_week = NA_real_,
+      score_trial = NA_real_, score_week = NA_real_, status = "not_available"
+    ))
+  }
+  valid <- is.finite(frame$p_lo) & is.finite(frame$p_hi) &
+    frame$p_lo >= 0 & frame$p_hi <= 1 & frame$p_lo <= frame$p_hi
+  if (!any(valid)) {
+    return(list(
+      coverage_trial = NA_real_, coverage_week = NA_real_,
+      width_trial = NA_real_, width_week = NA_real_,
+      score_trial = NA_real_, score_week = NA_real_, status = "not_estimable"
+    ))
+  }
+  x <- frame[valid, , drop = FALSE]
+  alpha <- 1 - interval_level
+  width <- x$p_hi - x$p_lo
+  covered <- x$p_obs >= x$p_lo & x$p_obs <= x$p_hi
+  score <- width + (2 / alpha) *
+    ((x$p_lo - x$p_obs) * (x$p_obs < x$p_lo) +
+      (x$p_obs - x$p_hi) * (x$p_obs > x$p_hi))
+  list(
+    coverage_trial = stats::weighted.mean(covered, x$weight),
+    coverage_week = mean(covered),
+    width_trial = stats::weighted.mean(width, x$weight),
+    width_week = mean(width),
+    score_trial = stats::weighted.mean(score, x$weight),
+    score_week = mean(score),
+    status = if (all(valid)) "ok" else "partial_valid"
+  )
+}
+
+#' Summarize aggregate replay diagnostics
+#'
+#' Computes disclosure-safe overall and by-horizon diagnostics from replay
+#' predictions. This summary contains no prediction rows or surveillance values.
+#'
+#' @param predictions Prediction data frame containing `p_hat`, observed
+#'   probability (`p_obs`, or `y_lead`/`N_lead`), and `lead`.
+#' @param interval_level Nominal central coverage for `p_lo`/`p_hi` intervals.
+#' @param eps Probability clipping value.
+#'
+#' @return A list with one-row `overall` and aggregate `horizon` data frames.
+#'   Calibration and interval metrics use `NA` plus a status when they cannot be
+#'   estimated safely.
+#' @export
+summarize_replay_diagnostics <- function(predictions,
+                                         interval_level = 0.90,
+                                         eps = 1e-12) {
+  predictions <- as.data.frame(predictions)
+  if (!is.numeric(interval_level) || length(interval_level) != 1L ||
+    !is.finite(interval_level) || interval_level <= 0 || interval_level >= 1) {
+    stop("`interval_level` must be one finite number strictly between 0 and 1.")
+  }
+  if (!all(c("p_hat", "lead") %in% names(predictions))) {
+    stop("`predictions` must contain `p_hat` and `lead`.")
+  }
+  p_obs <- if ("p_obs" %in% names(predictions)) {
+    as.numeric(predictions$p_obs)
+  } else if (all(c("y_lead", "N_lead") %in% names(predictions))) {
+    as.numeric(predictions$y_lead) / as.numeric(predictions$N_lead)
+  } else {
+    stop("`predictions` must contain `p_obs` or both `y_lead` and `N_lead`.")
+  }
+  weight <- if ("N_lead" %in% names(predictions)) as.numeric(predictions$N_lead) else rep(1, nrow(predictions))
+  frame <- data.frame(
+    lead = as.character(predictions$lead),
+    p_hat = pmin(1 - eps, pmax(eps, as.numeric(predictions$p_hat))),
+    p_obs = pmin(1 - eps, pmax(eps, p_obs)),
+    weight = weight,
+    stringsAsFactors = FALSE
+  )
+  if (all(c("p_lo", "p_hi") %in% names(predictions))) {
+    frame$p_lo <- as.numeric(predictions$p_lo)
+    frame$p_hi <- as.numeric(predictions$p_hi)
+  }
+  frame <- frame[is.finite(frame$p_hat) & is.finite(frame$p_obs) &
+    is.finite(frame$weight) & frame$weight > 0, , drop = FALSE]
+  if (!nrow(frame)) stop("No finite predictions with positive trial weights.")
+
+  summarize_one <- function(x) {
+    residual <- x$p_hat - x$p_obs
+    loss <- -(x$p_obs * log(x$p_hat) + (1 - x$p_obs) * log(1 - x$p_hat))
+    calibration <- .calibration_summary(x)
+    interval <- .interval_summary(x, interval_level)
+    data.frame(
+      brier_trial_weighted = stats::weighted.mean(residual^2, x$weight),
+      brier_week_weighted = mean(residual^2),
+      rmse_trial_weighted = sqrt(stats::weighted.mean(residual^2, x$weight)),
+      rmse_week_weighted = sqrt(mean(residual^2)),
+      bernoulli_nll_trial_weighted = stats::weighted.mean(loss, x$weight),
+      bernoulli_nll_week_weighted = mean(loss),
+      calibration_intercept = calibration$intercept,
+      calibration_slope = calibration$slope,
+      calibration_status = calibration$status,
+      interval_coverage_trial_weighted = interval$coverage_trial,
+      interval_coverage_week_weighted = interval$coverage_week,
+      interval_mean_width_trial_weighted = interval$width_trial,
+      interval_mean_width_week_weighted = interval$width_week,
+      interval_score_trial_weighted = interval$score_trial,
+      interval_score_week_weighted = interval$score_week,
+      interval_status = interval$status,
+      n_trials = sum(x$weight), n_predictions = nrow(x),
+      stringsAsFactors = FALSE
+    )
+  }
+  horizon <- do.call(rbind, lapply(split(frame, frame$lead, drop = TRUE), summarize_one))
+  horizon <- cbind(lead = names(split(frame, frame$lead, drop = TRUE)), horizon, row.names = NULL)
+  list(overall = summarize_one(frame), horizon = horizon)
+}
+
 .relative_degradation <- function(candidate, incumbent) {
   if (!is.finite(candidate) || !is.finite(incumbent) || incumbent < 0) {
     return(Inf)
@@ -530,6 +664,9 @@ race_m2_candidates <- function(grid,
 #' @param season Holdout season to replay.
 #' @param runner Injectable prospective runner; defaults to
 #'   run_prospective_pipeline() in frozen mode.
+#' @param kit_compatibility Identity mode. The default \code{"strict"} requires
+#'   canonical \code{m2_production}; \code{"legacy_m2"} explicitly permits a
+#'   legacy \code{m2} field with a warning.
 #' @param ... Additional runner arguments.
 #'
 #' @return Replay predictions, standardized metrics, and explicit workflow
@@ -540,8 +677,9 @@ replay_season_holdout <- function(kit,
                                   allD,
                                   season = "2025-26",
                                   runner = run_prospective_pipeline,
+                                  kit_compatibility = c("strict", "legacy_m2"),
                                   ...) {
-  m2 <- kit$m2 %||% kit$m2_production %||% kit
+  m2 <- .resolve_kit_m2_identity(kit, kit_compatibility)
   training_seasons <- as.character(m2$training_seasons %||% character(0))
   if (season %in% training_seasons) {
     stop("Holdout leakage: season `", season, "` is present in kit training seasons.")
@@ -551,11 +689,19 @@ replay_season_holdout <- function(kit,
   if (!nrow(current_data)) stop("Holdout season `", season, "` is absent from `allD`.")
   replay <- runner(kit, current_data, mode = "frozen", verbose = FALSE, ...)
   predictions <- .standardize_replay_predictions(replay, current_data, season)
+  runtime_ignition <- replay$ign_out$ign_week_locked %||%
+    replay$ign_out$iWeek_hat_locked %||% NA_real_
+  ignition_week <- if (is.finite(runtime_ignition)) as.numeric(runtime_ignition) else NA_real_
+  ignition_status <- replay$ign_out$status %||% replay$ign_out$ignition_status %||%
+    if (is.finite(ignition_week)) "locked" else "not_available"
   list(
     season = season,
     status = "unseen_replay_complete",
     predictions = predictions,
     metrics = summarize_forecast_metrics(predictions),
+    diagnostics = summarize_replay_diagnostics(predictions),
+    ignition_week = ignition_week,
+    ignition_status = as.character(ignition_status)[1L],
     eligible_for_refresh = FALSE,
     required_sequence = c(
       "historical_training", "unseen_holdout_replay", "promotion_gates",
@@ -563,6 +709,48 @@ replay_season_holdout <- function(kit,
     ),
     next_step = "Compare candidate and incumbent metrics with check_promotion()."
   )
+}
+
+.resolve_kit_m2_identity <- function(kit,
+                                     compatibility = c("strict", "legacy_m2"),
+                                     label = "kit") {
+  compatibility <- match.arg(compatibility)
+  if (!is.list(kit)) {
+    stop("The ", label, " must be an R list.", call. = FALSE)
+  }
+  canonical <- kit$m2_production
+  legacy <- kit$m2
+  if (!is.null(canonical) && !is.null(legacy) && !identical(canonical, legacy)) {
+    stop(
+      "The ", label,
+      " has conflicting `m2_production` and legacy `m2` identities.",
+      call. = FALSE
+    )
+  }
+  if (!is.null(canonical)) {
+    if (!is.list(canonical)) {
+      stop("The ", label, " has an invalid `m2_production` component.", call. = FALSE)
+    }
+    return(canonical)
+  }
+  if (!is.null(legacy)) {
+    if (!identical(compatibility, "legacy_m2")) {
+      stop(
+        "The ", label,
+        " uses legacy `m2`; set compatibility = \"legacy_m2\" explicitly.",
+        call. = FALSE
+      )
+    }
+    if (!is.list(legacy)) {
+      stop("The ", label, " has an invalid legacy `m2` component.", call. = FALSE)
+    }
+    warning(
+      "Using legacy `m2` identity compatibility for the ", label, ".",
+      call. = FALSE
+    )
+    return(legacy)
+  }
+  kit
 }
 
 .standardize_replay_predictions <- function(replay, current_data, season) {
@@ -621,4 +809,198 @@ replay_season_holdout <- function(kit,
   )
   out[is.finite(out$p_hat) & is.finite(out$p_obs) &
     is.finite(out$N_lead) & out$N_lead > 0, , drop = FALSE]
+}
+
+.result_manifest_schema <- function() "page_result_manifest"
+
+.result_manifest_schema_version <- function() 1L
+
+.manifest_error <- function(field, message) {
+  stop("Invalid result manifest field `", field, "`: ", message, call. = FALSE)
+}
+
+.is_sha256 <- function(x) {
+  is.character(x) && length(x) == 1L && !is.na(x) &&
+    grepl("^[0-9a-f]{64}$", x)
+}
+
+.is_nonempty_character <- function(x) {
+  is.character(x) && length(x) > 0L && !anyNA(x) && all(nzchar(x))
+}
+
+.validate_named_versions <- function(x, field) {
+  if (!.is_nonempty_character(x) || is.null(names(x)) || any(!nzchar(names(x)))) {
+    .manifest_error(field, "must be a named, non-empty character vector.")
+  }
+}
+
+.validate_named_hashes <- function(x, field) {
+  if (!is.character(x) || !length(x) || is.null(names(x)) ||
+    any(!nzchar(names(x))) || !all(vapply(x, .is_sha256, logical(1)))) {
+    .manifest_error(field, "must be a named vector of lowercase SHA-256 hashes.")
+  }
+}
+
+.validate_result_manifest_provenance <- function(provenance) {
+  expected <- c(
+    "code_commit", "run_timestamp", "r_version", "package_versions",
+    "input_fingerprint", "seasons", "exclusions", "row_counts", "spec_id",
+    "training_seasons", "source_artifact_hashes", "fold_ids",
+    "evaluation_seasons"
+  )
+  if (!is.list(provenance)) {
+    .manifest_error("provenance", "must be a named list with the canonical provenance schema.")
+  }
+  missing_fields <- setdiff(expected, names(provenance))
+  if (length(missing_fields)) {
+    .manifest_error(missing_fields[1L], "is required.")
+  }
+  unexpected_fields <- setdiff(names(provenance), expected)
+  if (length(unexpected_fields)) {
+    .manifest_error(
+      unexpected_fields[1L],
+      "is not allowed in the disclosure-safe provenance schema."
+    )
+  }
+  if (!identical(names(provenance), expected)) {
+    .manifest_error("provenance", "fields must use canonical schema order.")
+  }
+  if (!is.character(provenance$code_commit) || length(provenance$code_commit) != 1L ||
+    is.na(provenance$code_commit) ||
+    !grepl("^[0-9a-f]{7,64}$", provenance$code_commit)) {
+    .manifest_error("code_commit", "must be a 7-64 character lowercase Git commit hash.")
+  }
+  if (!is.character(provenance$run_timestamp) || length(provenance$run_timestamp) != 1L ||
+    is.na(provenance$run_timestamp) ||
+    !grepl("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:Z|[+-]\\d{2}:?\\d{2})$", provenance$run_timestamp) ||
+    is.na(as.POSIXct(provenance$run_timestamp, tz = "UTC"))) {
+    .manifest_error("run_timestamp", "must be an ISO-8601 timestamp with timezone.")
+  }
+  if (!.is_nonempty_character(provenance$r_version) || length(provenance$r_version) != 1L) {
+    .manifest_error("r_version", "must be one non-empty version string.")
+  }
+  .validate_named_versions(provenance$package_versions, "package_versions")
+  if (!.is_sha256(provenance$input_fingerprint)) {
+    .manifest_error("input_fingerprint", "must be one lowercase SHA-256 hash.")
+  }
+  for (field in c("seasons", "exclusions", "training_seasons", "fold_ids", "evaluation_seasons")) {
+    if (!.is_nonempty_character(provenance[[field]])) {
+      .manifest_error(field, "must be a non-empty character vector; use `none` when applicable.")
+    }
+  }
+  counts <- provenance$row_counts
+  if (!is.numeric(counts) || !length(counts) || is.null(names(counts)) ||
+    any(!nzchar(names(counts))) || any(!is.finite(counts)) || any(counts < 0) ||
+    any(counts != floor(counts))) {
+    .manifest_error("row_counts", "must be a named vector of non-negative integer counts.")
+  }
+  if (!.is_nonempty_character(provenance$spec_id) || length(provenance$spec_id) != 1L) {
+    .manifest_error("spec_id", "must be one non-empty character value.")
+  }
+  .validate_named_hashes(provenance$source_artifact_hashes, "source_artifact_hashes")
+}
+
+#' Compute a SHA-256 file fingerprint
+#'
+#' @param path Path to a regular source artifact file.
+#'
+#' @return A lowercase SHA-256 hash string.
+#' @export
+hash_file_sha256 <- function(path) {
+  if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path)) {
+    stop("`path` must be one non-empty file path.", call. = FALSE)
+  }
+  if (!file.exists(path) || dir.exists(path)) {
+    stop("File does not exist or is not a regular file: `", path, "`.", call. = FALSE)
+  }
+  digest::digest(file = path, algo = "sha256", serialize = FALSE)
+}
+
+#' Construct a disclosure-safe result manifest
+#'
+#' The manifest records aggregate provenance only. It must not contain
+#' row-level predictions or surveillance data.
+#'
+#' @param artifact_role Role of the aggregate result artifact.
+#' @param classification Disclosure classification; currently must be
+#'   `"disclosure_safe"`.
+#' @param code_commit Git commit hash for the code used in the run.
+#' @param run_timestamp ISO-8601 run timestamp with timezone.
+#' @param r_version R version used for the run.
+#' @param package_versions Named package-version vector.
+#' @param input_fingerprint SHA-256 fingerprint of the declared input set.
+#' @param seasons,exclusions Included seasons and exclusions (`"none"` if none).
+#' @param row_counts Named aggregate row counts.
+#' @param spec_id Model specification identifier.
+#' @param training_seasons Training seasons.
+#' @param source_artifact_hashes Named SHA-256 hashes of source artifacts.
+#' @param fold_ids,evaluation_seasons Fold identifiers and evaluation seasons.
+#'
+#' @return A validated `page_result_manifest` object.
+#' @export
+new_result_manifest <- function(artifact_role,
+                                classification,
+                                code_commit,
+                                run_timestamp,
+                                r_version,
+                                package_versions,
+                                input_fingerprint,
+                                seasons,
+                                exclusions,
+                                row_counts,
+                                spec_id,
+                                training_seasons,
+                                source_artifact_hashes,
+                                fold_ids,
+                                evaluation_seasons) {
+  manifest <- structure(
+    list(
+      schema = .result_manifest_schema(),
+      schema_version = .result_manifest_schema_version(),
+      artifact = list(role = artifact_role, classification = classification),
+      provenance = list(
+        code_commit = code_commit, run_timestamp = run_timestamp,
+        r_version = r_version, package_versions = package_versions,
+        input_fingerprint = input_fingerprint, seasons = seasons,
+        exclusions = exclusions, row_counts = row_counts, spec_id = spec_id,
+        training_seasons = training_seasons,
+        source_artifact_hashes = source_artifact_hashes, fold_ids = fold_ids,
+        evaluation_seasons = evaluation_seasons
+      )
+    ),
+    class = "page_result_manifest"
+  )
+  validate_result_manifest(manifest)
+  manifest
+}
+
+#' Validate a disclosure-safe result manifest
+#'
+#' @param manifest A manifest created by [new_result_manifest()].
+#'
+#' @return `TRUE` if `manifest` is valid; otherwise an informative error.
+#' @export
+validate_result_manifest <- function(manifest) {
+  expected <- c("schema", "schema_version", "artifact", "provenance")
+  if (!is.list(manifest) || !identical(names(manifest), expected)) {
+    .manifest_error(
+      "manifest",
+      "must use the canonical schema and cannot contain row-level payload fields."
+    )
+  }
+  if (!inherits(manifest, "page_result_manifest") ||
+    !identical(manifest$schema, .result_manifest_schema()) ||
+    !identical(manifest$schema_version, .result_manifest_schema_version())) {
+    .manifest_error("schema", "must identify page_result_manifest schema version 1.")
+  }
+  artifact <- manifest$artifact
+  if (!is.list(artifact) || !identical(names(artifact), c("role", "classification")) ||
+    !.is_nonempty_character(artifact$role) || length(artifact$role) != 1L) {
+    .manifest_error("artifact.role", "must be one non-empty character value.")
+  }
+  if (!identical(artifact$classification, "disclosure_safe")) {
+    .manifest_error("artifact.classification", "must be `disclosure_safe`.")
+  }
+  .validate_result_manifest_provenance(manifest$provenance)
+  TRUE
 }

@@ -100,7 +100,9 @@ h4 {
 
 ## Production reference curve
 
-Trained on all non-excluded historical seasons (`r paste(sort(unique(filter(allD_hist, !season %in% EXCLUDE_SEAS)$season)), collapse = ", ")`). Cached in `../data/ref_production.rds`.
+Trained on the non-excluded historical seasons 2012-13 through 2024-25,
+excluding 2015-16 and the permanently excluded 2020-21 and 2021-22 seasons.
+The private result is cached in `../data/ref_production.rds`.
 
 ```{r build-ref}
 #| message: false
@@ -178,7 +180,8 @@ cat(sprintf("Season: 2025-26 | Weeks observed: %d | weekF range: %d – %d\n",
 
 ## Walk-forward alignment
 
-Starting at `weekF = WALK_START` (`r WALK_START`). Results cached in `../data/run_wf_cache.rds`.
+Starting at `weekF = 5`. Results are cached privately in
+`../data/run_wf_cache.rds`.
 
 ```{r run-wf}
 #| message: false

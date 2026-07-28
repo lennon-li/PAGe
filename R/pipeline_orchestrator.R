@@ -44,7 +44,7 @@
   }, character(1))
 }
 
-.validate_m2_grid <- function(grid, bias_alpha = 0.4, bias_beta = 0) {
+.validate_m2_grid <- function(grid, bias_alpha = 0.05, bias_beta = 0) {
   grid <- as.data.frame(grid)
   required <- c(
     "delta", "Kr", "k_f", "k_e", "alpha_state",
@@ -96,7 +96,7 @@
   )
 }
 
-.m2_specs_from_grid <- function(grid, bias_alpha = 0.4, bias_beta = 0) {
+.m2_specs_from_grid <- function(grid, bias_alpha = 0.05, bias_beta = 0) {
   grid <- .validate_m2_grid(grid, bias_alpha = bias_alpha, bias_beta = bias_beta)
   grid$spec_id <- .m2_spec_ids(grid)
   specs <- lapply(seq_len(nrow(grid)), function(i) {
@@ -164,53 +164,97 @@
   }
 
   grid <- .validate_m2_grid(previous_results$grid)
-  prior_ids <- if ("spec_id" %in% names(previous_results$grid)) {
-    as.character(previous_results$grid$spec_id)
-  } else {
-    .m2_spec_ids(grid)
+  canonical_ids <- .m2_spec_ids(grid)
+  prior_ids <- canonical_ids
+  if ("spec_id" %in% names(previous_results$grid)) {
+    prior_ids <- as.character(previous_results$grid$spec_id)
+    if (length(prior_ids) != nrow(grid) ||
+      anyNA(prior_ids) || any(!nzchar(prior_ids)) ||
+      !identical(prior_ids, canonical_ids)) {
+      stop(
+        "`previous_results$grid$spec_id` must exactly match the grid ",
+        "parameter identities."
+      )
+    }
+  }
+  if (anyDuplicated(prior_ids)) {
+    stop("`previous_results$grid` must contain unique parameter specifications.")
   }
   summary <- as.data.frame(previous_results$summary)
   if (!"spec_id" %in% names(summary)) {
     stop("`previous_results$summary` must contain `spec_id`.")
   }
-  metric <- if ("bernoulli_nll" %in% names(summary)) {
-    "bernoulli_nll"
-  } else if ("mean_nll" %in% names(summary)) {
-    "mean_nll"
+
+  collapse_metric <- function(data, metric) {
+    if (!is.data.frame(data) ||
+      !all(c("spec_id", metric) %in% names(data))) {
+      return(NULL)
+    }
+    if (!is.numeric(data[[metric]])) {
+      stop("Previous M2 metric `", metric, "` must be numeric.")
+    }
+    ids <- as.character(data$spec_id)
+    keep <- !is.na(ids) & nzchar(ids) & is.finite(data[[metric]])
+    if (!any(keep)) {
+      return(NULL)
+    }
+    values <- split(as.numeric(data[[metric]][keep]), ids[keep])
+    data.frame(
+      spec_id = names(values),
+      metric = vapply(values, mean, numeric(1)),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  scores <- if (is.data.frame(previous_results$scores)) {
+    as.data.frame(previous_results$scores)
   } else {
     NULL
   }
-  if (is.null(metric) && is.data.frame(previous_results$scores) &&
-    "spec_id" %in% names(previous_results$scores)) {
-    scores <- as.data.frame(previous_results$scores)
-    metric <- if ("bernoulli_nll" %in% names(scores)) {
-      "bernoulli_nll"
-    } else if ("mean_nll" %in% names(scores)) {
-      "mean_nll"
+  metric_values <- NULL
+  metric_source <- NULL
+  for (metric in c("bernoulli_nll", "mean_nll")) {
+    from_summary <- collapse_metric(summary, metric)
+    from_scores <- collapse_metric(scores, metric)
+    summary_match <- if (is.null(from_summary)) {
+      rep(NA_integer_, length(prior_ids))
     } else {
-      NULL
+      match(prior_ids, from_summary$spec_id)
     }
-    if (!is.null(metric)) {
-      summary <- stats::aggregate(
-        scores[[metric]],
-        list(spec_id = as.character(scores$spec_id)),
-        mean,
-        na.rm = TRUE
-      )
-      names(summary)[2L] <- metric
+    scores_match <- if (is.null(from_scores)) {
+      rep(NA_integer_, length(prior_ids))
+    } else {
+      match(prior_ids, from_scores$spec_id)
+    }
+    values <- rep(NA_real_, length(prior_ids))
+    sources <- rep(NA_character_, length(prior_ids))
+    has_summary_value <- !is.na(summary_match)
+    if (any(has_summary_value)) {
+      values[has_summary_value] <- from_summary$metric[summary_match[has_summary_value]]
+      sources[has_summary_value] <- "summary"
+    }
+    has_score_value <- is.na(values) & !is.na(scores_match)
+    if (any(has_score_value)) {
+      values[has_score_value] <- from_scores$metric[scores_match[has_score_value]]
+      sources[has_score_value] <- "scores"
+    }
+    if (any(is.finite(values))) {
+      metric_values <- values
+      metric_source <- sources
+      break
     }
   }
-  if (is.null(metric)) {
-    stop("Previous M2 results need `bernoulli_nll` or `mean_nll` scores.")
+  if (is.null(metric_values)) {
+    stop("Previous M2 results need finite `bernoulli_nll` or `mean_nll` scores.")
   }
 
-  matched <- match(as.character(summary$spec_id), prior_ids)
-  keep <- !is.na(matched) & is.finite(summary[[metric]])
+  keep <- is.finite(metric_values)
   if (!any(keep)) {
     stop("Previous M2 `summary$spec_id` values do not match its grid.")
   }
-  ranked <- grid[matched[keep], .m2_parameter_names(), drop = FALSE]
-  ranked$.metric <- as.numeric(summary[[metric]][keep])
+  ranked <- grid[keep, .m2_parameter_names(), drop = FALSE]
+  ranked$.metric <- metric_values[keep]
+  ranked$.metric_source <- metric_source[keep]
   ranked <- ranked[order(ranked$.metric, .m2_spec_ids(ranked)), , drop = FALSE]
   attr(ranked, "previous_grid") <- grid[, .m2_parameter_names(), drop = FALSE]
   ranked
@@ -252,11 +296,15 @@
 #' results, the plan contains the deployed v16 specification and one-factor
 #' neighbors. With prior results, it retains v16, greedily retains diverse
 #' high-performing finalists, adds one-factor neighbors around the prior
-#' winner, and expands grid boundaries reached by that winner.
+#' winner, and expands grid boundaries reached by that winner using the
+#' spacing adjacent to each reached boundary.
 #'
 #' @param previous_results Optional prior \code{build_m2()} result containing
-#'   \code{summary} and \code{grid}; \code{scores} may supply a missing summary
-#'   metric. Ranking uses \code{bernoulli_nll}, then \code{mean_nll}.
+#'   \code{summary} and \code{grid}. Grid specification IDs, when supplied,
+#'   must match their canonical parameter identities. Duplicate finite summary
+#'   metrics are averaged by specification; fold-level \code{scores} fill
+#'   missing or non-finite summary metrics. Ranking uses
+#'   \code{bernoulli_nll}, then \code{mean_nll}.
 #' @param max_finalists Maximum number of diverse prior finalists to retain.
 #' @param max_specs Hard cap on returned specifications.
 #'
@@ -266,14 +314,18 @@
 plan_m2_grid <- function(previous_results = NULL,
                          max_finalists = 6L,
                          max_specs = 64L) {
-  max_finalists <- as.integer(max_finalists)
-  max_specs <- as.integer(max_specs)
-  if (length(max_finalists) != 1L || is.na(max_finalists) || max_finalists < 1L) {
+  if (!is.numeric(max_finalists) || length(max_finalists) != 1L ||
+    !is.finite(max_finalists) || max_finalists < 1L ||
+    max_finalists != floor(max_finalists)) {
     stop("`max_finalists` must be a positive integer.")
   }
-  if (length(max_specs) != 1L || is.na(max_specs) || max_specs < 1L) {
+  if (!is.numeric(max_specs) || length(max_specs) != 1L ||
+    !is.finite(max_specs) || max_specs < 1L ||
+    max_specs != floor(max_specs)) {
     stop("`max_specs` must be a positive integer.")
   }
+  max_finalists <- as.integer(max_finalists)
+  max_specs <- as.integer(max_specs)
 
   ranked <- .rank_previous_m2(previous_results)
   if (is.null(ranked)) {
@@ -298,11 +350,24 @@ plan_m2_grid <- function(previous_results = NULL,
   for (nm in .m2_parameter_names()) {
     observed <- sort(unique(previous_grid[[nm]]))
     current <- winner[[nm]]
-    step <- if (length(observed) > 1L) min(diff(observed)) else default_steps[[nm]]
 
     boundary_values <- numeric(0)
-    if (current == min(observed)) boundary_values <- c(boundary_values, current - step)
-    if (current == max(observed)) boundary_values <- c(boundary_values, current + step)
+    if (current == min(observed)) {
+      step <- if (length(observed) > 1L) {
+        observed[2L] - observed[1L]
+      } else {
+        default_steps[[nm]]
+      }
+      boundary_values <- c(boundary_values, current - step)
+    }
+    if (current == max(observed)) {
+      step <- if (length(observed) > 1L) {
+        observed[length(observed)] - observed[length(observed) - 1L]
+      } else {
+        default_steps[[nm]]
+      }
+      boundary_values <- c(boundary_values, current + step)
+    }
     for (value in unique(boundary_values)) {
       candidate <- winner
       candidate[[nm]] <- value
@@ -385,13 +450,17 @@ plan_m2_grid <- function(previous_results = NULL,
       promotion_pass = NULL
     ))
   }
-  if (!.is_canonical_promotion_report(promotion, require_locked = TRUE)) {
+  if (!.is_verified_promotion_evidence(
+    promotion,
+    allD = allD,
+    holdout_season = holdout_season
+  )) {
     stop(
-      "`promotion` must be a canonical check_promotion() report using the ",
-      "locked release thresholds."
+      "`promotion` must be verified promotion evidence created by ",
+      "verify_promotion_evidence() for these data and this holdout season."
     )
   }
-  released <- present && isTRUE(promotion$pass)
+  released <- present && isTRUE(promotion$report$pass)
   list(
     season = holdout_season, present = present, released = released,
     status = if (!present) {
@@ -401,7 +470,7 @@ plan_m2_grid <- function(previous_results = NULL,
     } else {
       "promotion_failed"
     },
-    promotion_pass = isTRUE(promotion$pass)
+    promotion_pass = isTRUE(promotion$report$pass)
   )
 }
 
@@ -421,11 +490,11 @@ plan_m2_grid <- function(previous_results = NULL,
 #' @param prospective_holdout Season kept out of every tuning and fitting stage
 #'   until an explicit passing promotion report releases it. Defaults to
 #'   2025-26; use NULL only when no prospective holdout exists.
-#' @param promotion Optional canonical report returned by
-#'   \code{check_promotion()} with the locked 2 percent NLL, 5 percent horizon,
-#'   and 10 percent phase thresholds. Schema validation checks structure and
-#'   internal consistency, not cryptographic provenance. A malformed, custom-
-#'   threshold, or failed report never releases the holdout.
+#' @param promotion Optional artifact-bound evidence returned by
+#'   \code{verify_promotion_evidence()}. A bare \code{check_promotion()} report
+#'   is not governed production evidence and cannot release the holdout. The R
+#'   class is forgeable; verification of the retained bundle, manifest, data,
+#'   candidate, and incumbent artifacts is the safety boundary.
 #' @param loso_seasons LOSO folds passed to all tuning stages.
 #' @param n_cores Parallel worker count passed to tuning stages.
 #' @param checkpoint_dir Optional parent checkpoint directory.
@@ -442,6 +511,10 @@ plan_m2_grid <- function(previous_results = NULL,
 #'   results only eliminate clear losers; surviving specs still run full LOSO.
 #' @param racing_stages,racing_min_survivors Racing schedule and survivor floor.
 #' @param manual_labels,flag_args,m1_params Locked component settings.
+#' @param m0_params Locked M0 parameters for refresh mode. Defaults to the
+#'   deployed M0 configuration; supply the promoted candidate's parameters to
+#'   reproduce its fixed component configuration after holdout acceptance.
+#' @param m2_spec_id Optional explicit identity for the fixed refresh M2 spec.
 #'
 #' @return A transparent list with \code{mode}, \code{components},
 #'   \code{tuning} (NULL for refresh), \code{grid},
@@ -472,7 +545,9 @@ train_pipeline <- function(
   racing_min_survivors = 3L,
   manual_labels = .default_manual_labels(),
   flag_args = .default_flag_args(),
-  m1_params = .default_m1_params()
+  m1_params = .default_m1_params(),
+  m0_params = .default_m0_params(),
+  m2_spec_id = NULL
 ) {
   mode <- match.arg(mode)
   selection_method <- match.arg(selection_method)
@@ -495,7 +570,7 @@ train_pipeline <- function(
     m0 <- build_m0(
       pipeline_data,
       exclude = effective_exclude, manual_labels = manual_labels,
-      flag_args = flag_args
+      flag_args = flag_args, best_params = m0_params
     )
     m1 <- build_m1(
       pipeline_data,
@@ -508,7 +583,10 @@ train_pipeline <- function(
       m0 = m0, m1 = m1, best_spec = best_spec,
       exclude = effective_exclude, verbose = verbose
     )
-    kit <- assemble_kit(m0, m1, m2_model)
+    kit <- assemble_kit(
+      m0, m1, m2_model,
+      best_spec_id = .m2_spec_identity(best_spec, m2_spec_id)
+    )
     return(structure(list(
       mode = mode,
       components = list(m0 = m0, m1 = m1, m2 = m2_model),

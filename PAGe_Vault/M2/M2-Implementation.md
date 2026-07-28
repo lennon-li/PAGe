@@ -1,5 +1,12 @@
 # M2 Implementation
 
+> [!CAUTION]
+> **Historical implementation note.** Mutable `data/*.rds` artifacts and the
+> recorded v12/v15 metrics below are research history, not verified deployment
+> evidence. The current coded path is frozen M2 with canonical online
+> correction; operational loading must use `load_promoted_kit()` and the
+> immutable workflow in `docs/deployment-workflow.qmd`.
+
 ## Main files
 
 - `R/m2_training.R`
@@ -17,7 +24,7 @@
 - `refit_stage2_weekly()`: weekly refit appending current-season rows to historical data
 - `nested_loso_build_fold()`: constructs leakage-safe train/test fold objects
 - `nested_loso_m2_train()`: trains M2 inside a fold
-- `nested_loso_m2_eval_frozen_bias()`: evaluates fold forecasts with frozen GAM + sequential Holt bias correction (production-equivalent)
+- `nested_loso_m2_eval_frozen_bias()`: evaluates fold forecasts with frozen GAM + sequential Holt bias correction, conditional on previously selected M0/M1 choices
 - `nested_loso_grid_search()`: full nested LOSO spec sweep
 - `run_m2_forecast()`: deployment entry point
 - `run_prospective_pipeline()`: top-level wrapper for M0 → M1 → M2
@@ -30,11 +37,11 @@
 4. Build M2 features with `prep_stage2_joint()`
 5. Train fold-specific GAMs with `train_stage2_joint()`
 6. Score the held-out season with `nested_loso_m2_eval_frozen_bias()` (frozen GAM + Holt correction)
-7. Select best spec; refit on all historical seasons with `nested_loso_refit_best()` → save to `m2_production.rds`
+7. Select a candidate spec and fit it on authorized training seasons; release requires separate acceptance, fixed-spec refresh, and immutable promotion
 
 ## Runtime flow
 
-1. `load_prospective_kit()` loads ref cache, M0 params, and `m2_production.rds`
+1. `load_promoted_kit()` verifies the immutable kit and deployment manifest
 2. `run_m0_detection()` resolves ignition week
 3. `run_m1_alignment()` generates per-week alignment state
 4. `run_m2_forecast()` (frozen mode) iterates over eval weeks:
@@ -47,13 +54,16 @@
 
 - `prep_stage2_joint()` is the critical consistency point; training, LOSO eval, and deployment must all call it
 - `m2_predict_one()` centralises factor handling, excluded terms, soft caps, and CI behaviour
-- Bias correction is **level-only Holt EMA** (`alpha = 0.4`), per-horizon, reset at peak transition
-- `load_prospective_kit()` loads `hist_data` and `m1_train_preds` for weekly-refit consistency with tuning
+- Canonical correction is level-only (`bias_beta=0`) with base
+  `bias_alpha=0.05` and high `bias_alpha=0.7` after two same-sign transitions
+  (the third consecutive same-sign residual), reset at the post-peak transition
+- `load_prospective_kit()` is a strict component/compatibility loader;
+  `load_promoted_kit()` is required for manifest-verified operational loading
 - Retired/legacy functions live in `R/retired.R` — do not call them from new code
 
 ## Artifacts
 
-- `data/m2_production.rds` — production GAM, spec, M1 train preds
+- `data/m2_production.rds` — historical mutable research artifact; not a promoted identity
 - `data/nested_loso_v12_production.rds` — v12 LOSO results (best: NLL 33.49)
 - `data/ref_production.rds` — reference curve, M1 hyperparams, hist_data
 - `data/stage1_tuning.rds` — M0 ignition tuned params

@@ -27,7 +27,9 @@ train_pipeline(
   racing_min_survivors = 3L,
   manual_labels = .default_manual_labels(),
   flag_args = .default_flag_args(),
-  m1_params = .default_m1_params()
+  m1_params = .default_m1_params(),
+  m0_params = .default_m0_params(),
+  m2_spec_id = NULL
 )
 }
 \arguments{
@@ -77,6 +79,12 @@ results only eliminate clear losers; surviving specs still run full LOSO.}
 \item{racing_stages, racing_min_survivors}{Racing schedule and survivor floor.}
 
 \item{manual_labels, flag_args, m1_params}{Locked component settings.}
+
+\item{m0_params}{Locked M0 parameters for refresh mode. Defaults to the
+deployed M0 configuration; supply the promoted candidate's parameters to
+reproduce its fixed component configuration after holdout acceptance.}
+
+\item{m2_spec_id}{Optional explicit identity for the fixed refresh M2 spec.}
 }
 \value{
 A transparent list with \code{mode}, \code{components},

@@ -18,6 +18,14 @@ execute:
 This page is a source map for the root-level `R/` directory, which is mirrored into `PAGe/R/` for the installable package. It is meant to answer two questions quickly: which file owns a piece of the pipeline, and which functions live in that file.
 :::
 
+::: {.callout-caution}
+This generated inventory includes research and compatibility functions. A
+function being listed here does not make it a production entry point. Governed
+runtime loading uses `load_promoted_kit()` with an immutable registry artifact
+and verified deployment manifest; see
+[`deployment-workflow.qmd`](deployment-workflow.qmd).
+:::
+
 ## At a glance
 
 ```{r}
@@ -150,13 +158,13 @@ desc_overrides <- c(
   stage2_exclude_newseason = "Return the smooth terms to exclude when predicting for a season not in the training data.",
   nested_loso_grid_search = "Parallel nested LOSO grid search over Stage-2 specs, supporting both weekly-refit and frozen-fit modes.",
   nested_loso_m2_eval_weekly_refit = "Evaluate one Stage-2 spec on one LOSO fold using weekly refit; calls m2_predict_one().",
-  nested_loso_refit_best = "Refit the production Stage-2 model on all historical data using the best spec from grid search.",
+  nested_loso_refit_best = "Fit a fixed-spec Stage-2 candidate on authorized training data; promotion requires the separate governed release workflow.",
   m1_walkforward_predictions = "Compute M_1 walk-forward alignment predictions at each evaluation week across a season.",
   m1_walkforward_multi = "Run m1_walkforward_predictions() for all LOSO folds in parallel.",
   run_prospective_pipeline = "Top-level entry point: run the full M_0 -> M_1 -> M_2 prospective pipeline for one season.",
-  run_m2_forecast = "Run the M_2 weekly refit and produce forecasts for the current season; calls m2_predict_one().",
+  run_m2_forecast = "Run frozen-mode M_2 forecasts and online correction for the current season; weekly refit is explicit compatibility behavior.",
   .plot_stage2_joint_fit_prosp = "Internal plotting helper for prospective Stage-2 fit diagnostics.",
-  load_prospective_kit = "Load the data bundle needed to run the prospective weekly pipeline.",
+  load_prospective_kit = "Load strict component files for research or compatibility use; this does not verify immutable promotion evidence.",
   plot_forecast = "Plot observed data alongside forecast trajectories.",
   plotRes = "Plot legacy result objects in a compact summary view.",
   simulate_flu_seasons = "Simulate synthetic seasonal flu trajectories for experimentation.",

@@ -1,10 +1,16 @@
 #!/usr/bin/env Rscript
 # ============================================================
-# M1 Holdout Test — 2025-26 season
+# HISTORICAL EXPLORATORY ANALYSIS -- NOT A CONFIRMATORY HOLDOUT DECISION
 #
-# 2025-26 is excluded from all LOSO folds (used in production training).
-# This script uses it as a genuine out-of-sample test to check whether
-# the slope_weight gains in v5/v6 generalize beyond the 10 LOSO seasons.
+# This script was written before the governed candidate/incumbent acceptance
+# workflow. It sweeps slope weights after examining 2025-26 and therefore must
+# not be used as promotion, acceptance, or untouched-holdout evidence.
+#
+# M1 exploratory analysis -- 2025-26 season
+#
+# In the original exploratory design, 2025-26 was excluded from the historical
+# LOSO fits. This script then compared several slope weights on that season;
+# because it searches after disclosure, it is not a genuine confirmatory test.
 #
 # True peak: week 51 (weekF=25), positivity=0.357 (already confirmed declining)
 #
@@ -12,7 +18,7 @@
 # (training on all 10 LOSO seasons), compute Weibull-weighted peak MAE.
 # ============================================================
 
-cat("=== M1 holdout test: 2025-26 ===\n")
+cat("=== Historical exploratory M1 analysis: 2025-26 (non-confirmatory) ===\n")
 cat("Start:", format(Sys.time()), "\n\n")
 
 suppressPackageStartupMessages({

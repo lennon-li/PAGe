@@ -14,13 +14,16 @@ execute:
 ---
 
 ::: {.callout-important title="Historical research record"}
-This article preserves executable v15/v16 research and cache diagnostics; it
-is not the operational production guide. The current supported workflow is
+This article preserves source-level v15/v16 research and cache diagnostics; its
+chunks are disabled by default and it is not the operational production guide.
+The current supported workflow is
 [`train_pipeline()`](pipeline_walkthrough.html), followed by
-`replay_season_holdout()` and `check_promotion()`. The canonical deployed v16
-specification is `alpha_state=0.15`, `k_sp=6`, `bias_alpha=0.05`, and
-`bias_beta=0`, with recorded nested-LOSO Bernoulli NLL **0.4175**. Retired v15
-and v15-postfix results below are historical comparisons only.
+the governed sequence in
+[`deployment-workflow.qmd`](deployment-workflow.qmd). The coded v16 incumbent
+uses `alpha_state=0.15`, `k_sp=6`, `bias_alpha=0.05`, and `bias_beta=0`.
+Historical notes record nested-LOSO Bernoulli NLL 0.4175, but the private
+artifact is absent, so the metric and any real deployment remain unverified.
+Retired v15 and v15-postfix results below are historical comparisons only.
 :::
 
 ```{r setup}
@@ -340,7 +343,11 @@ where $t_{\text{floor}}$ (`t_floor_start`, default 14) activates the floor beyon
 
 ## Frozen GAM with online bias correction {#sec-bias-correction}
 
-$M_2$ is trained **once** on all historical seasons and deployed as a frozen GAM. Instead of weekly refit (which re-estimates the entire GAM each week with the current season appended), we use a **Holt EMA bias correction** applied on the logit scale at prediction time.
+The coded deployment path fits $M_2$ **once** on the authorized training
+seasons and uses it as a frozen GAM. Instead of weekly refit (which
+re-estimates the entire GAM each week with the current season appended), it
+applies a **Holt EMA bias correction** on the logit scale at prediction time.
+A fit is not promoted until it completes the governed workflow.
 
 ### Why frozen + bias replaces weekly refit
 
@@ -364,9 +371,14 @@ r^h_w &= \mathrm{logit}(p^{(\mathrm{obs})}_w) - \mathrm{logit}(\hat{p}^{h}_{w}),
 \end{aligned}
 $$
 
-where $\ell^h_w$ is the bias level, $\tau^h_w$ is the bias trend, and $\beta^h_{w,h'}$ is the correction added to $\eta^{h'}_{s,w}$ before applying $\mathrm{logit}^{-1}$ (with $h'$ the forecast horizon). Parameters $\alpha$ (level smoothing) and $\beta$ (trend smoothing) are jointly tuned by LOSO grid search.
+where $\ell^h_w$ is the bias level, $\tau^h_w$ is the bias trend, and $\beta^h_{w,h'}$ is the correction added to $\eta^{h'}_{s,w}$ before applying $\mathrm{logit}^{-1}$ (with $h'$ the forecast horizon). The joint $\alpha$/$\beta$ search below describes historical v15 research.
 
-**Tuning selected $\beta = 0$ (level-only).** The grid searched $\alpha \in \{0.2, 0.3, 0.4, 0.5\}$ and $\beta \in \{0.0, 0.1\}$. The trend term provided no benefit: $\beta=0$ won at every $\alpha$ level. With $\beta=0$ the formula collapses to standard level-only EMA with $\alpha=0.4$ (~2.5-week half-life). The implementation retains the full Holt structure for generality.
+**Historical v15 tuning selected $\beta = 0$ (level-only).** That retired grid
+searched $\alpha \in \{0.2, 0.3, 0.4, 0.5\}$ and
+$\beta \in \{0.0, 0.1\}$ and recorded $\alpha=0.4$. It is not the current
+runtime rule. The coded incumbent uses base `bias_alpha=0.05`,
+`bias_beta=0`, and high `bias_alpha=0.7` after two same-sign transitions,
+meaning on the third consecutive same-sign residual.
 
 **Online season random effect.** Each week, a shrinkage estimate of the current season's amplitude offset is added to the bias correction:
 $$
@@ -446,7 +458,7 @@ Rounds of grid search:
 - **v14b** extended `alpha_state` under Bernoulli NLL; optimum flat 0.30-0.50 (interior).
 - **v15** (480 specs) tested `k_de` and `k_sp`; reported best NLL = 0.406. **Later retired** -- the evaluation loop had four bugs (Holt B/2 asymptote, missing dz_ema standardization, silent online-RE no-op, retrospective `iWeek` in test fold) that biased NLL low.
 - **v15-postfix** (7200 specs) re-tunes under the corrected evaluation loop: B1 Holt raw-error update, B2 `dz_ema` standardized via `feature_ranges$dz_ema_sd`, B3 online season RE correctly applied, B4 `manual_labels` split into train/test so the test fold uses prospective M0 ignition detection. `bias_alpha` is back in the grid since the corrected loop makes it identifiable; the L2 fix (walk-forward `estimateDerivs` in the test fold) was verified post-hoc and lowers the best-spec NLL from 0.5959 to 0.5796 without changing the best spec. Entry-point: `scripts/run_nested_loso_v15_postfix.R`.
-- **v16 research expansion** (1484 specs, 5 boundary-expansion rounds) fixes `estimate_season_re_online()` to use only post-ignition observations (`weekF >= iWeek_hat`). Previously the online RE was estimated from all current-season obs including pre-ignition weeks, which made it spuriously negative and nearly cancelled the bias corrector. This historical run lowered NLL from 0.5763 to **0.42646** and shifted the best spec to `k_f=4, k_sp=6, bias_alpha=0.05`. Subsequent canonical validation recorded NLL **0.4175** for the same deployed parameterization. Entry-point: `scripts/fresh_run/04f_m2_loso_v16_expand.R`.
+- **v16 research expansion** (1484 specs, 5 boundary-expansion rounds) fixes `estimate_season_re_online()` to use only post-ignition observations (`weekF >= iWeek_hat`). Historical notes report NLL 0.42646 and later 0.4175 for the coded parameterization, but neither private result is verified here. Entry-point: `scripts/fresh_run/04f_m2_loso_v16_expand.R`.
 
 **Historical v15-postfix search space (retired):**
 
@@ -456,7 +468,8 @@ Rounds of grid search:
 - `k_r` ∈ {0, 2, 3} -- basis dimension for amplitude-residual smooth `s(z_resid)`; best = 0 (residual smooth off -- `z_resid` is noisier under prospective `iWeek`).
 - `k_de` ∈ {0, 2} -- basis dimension for rate-of-change smooth `s(dz_ema)`; best = 0.
 - `k_sp` ∈ {0, 2} -- basis dimension for alignment uncertainty smooth `s(logit_spread)`, where `logit_spread` is the weighted SD of per-template logit predictions from M1; best = 2.
-- `bias_alpha` ∈ {0.1..0.5} -- EMA rate for online Holt bias correction; best = 0.5.
+- `bias_alpha` ∈ {0.1..0.5} -- EMA rate for the historical v15-postfix Holt
+  bias correction search; recorded best = 0.5.
 - `bias_beta` ∈ {0, 0.05, 0.1} -- Holt trend rate; best = 0 (level-only).
 
 **Fixed parameters:** `delta = 0`, `Kr = 1`, `lambda_w = 0`, `k_n = k_w = k_s = 0`.
@@ -542,14 +555,24 @@ cat("Best:", prod_results$best_spec_id,
 best_spec_nested <- prod_results$best_spec
 ```
 
-**Canonical production spec (v16):** `k_f=4, k_e=2, alpha_state=0.15, k_r=0, k_de=0, k_sp=6, bias_alpha=0.05, bias_beta=0` with `delta=0, Kr=1, lambda_w=0`. Its recorded nested-LOSO Bernoulli NLL is **0.4175**. The earlier research expansion above reported 0.42646 before the final canonical validation. v16 corrects the online season RE to use only post-ignition observations; the corrected RE absorbs most within-season drift, so `bias_alpha` drops to 0.05 and `k_sp` shifts to 6.
+**Coded v16 incumbent:** `k_f=4, k_e=2, alpha_state=0.15, k_r=0,
+k_de=0, k_sp=6, bias_alpha=0.05, bias_beta=0` with `delta=0, Kr=1,
+lambda_w=0`. Historical notes report NLL 0.4175, but the source artifact is
+absent and no immutable promoted deployment is preserved here.
 
 For parity with the validated v16 implementation, online season-RE estimation
 uses the first lead level (`h1`). This is a locked compatibility limitation,
 not a horizon-general API: changing it requires separate prospective
 validation and promotion.
 
-The canonical model uses three effective smooth covariates: template position (`s(logit_f_eff, k=4)`), EMA state (`s(z_ema, k=2)`, alpha=0.15), and alignment uncertainty (`s(logit_spread, k=6`). The amplitude-residual and rate-of-change smooths are off. Holt EMA bias correction is level-only (β=0), with `bias_alpha=0.05`. Online season random effect is applied at deployment. The v15-postfix interpretations that follow describe the retired comparison fit, not the deployed v16 specification.
+The coded incumbent uses three effective smooth covariates: template position
+(`s(logit_f_eff, k=4)`), EMA state (`s(z_ema, k=2)`, alpha=0.15), and
+alignment uncertainty (`s(logit_spread, k=6`). The amplitude-residual and
+rate-of-change smooths are off. The canonical correction rule is level-only
+(`bias_beta=0`), with base `bias_alpha=0.05` and high `bias_alpha=0.7` after
+two same-sign transitions (the third consecutive same-sign residual). The
+v15-postfix interpretations that follow describe the retired comparison fit,
+not verified deployment evidence.
 
 #### Historical v15-postfix interpretation (retired)
 
@@ -585,8 +608,11 @@ The optimum is flat from 0.30-0.50 across both v14b and v15:
 **`k_sp = 2` -- alignment uncertainty is a load-bearing covariate.**
 `logit_spread` (weighted SD of per-template logit predictions from M1's ensemble) is now in the best spec at `k_sp=2`. Under the pre-fix v15 loop the term appeared inert; under the corrected loop it contributes non-trivially, presumably because the other uncertainty channels (`z_resid` drop, prospective `iWeek`) made alignment variance more informative.
 
-**`bias_alpha = 0.5, bias_beta = 0` -- level-only Holt EMA, tuned in LOSO.** {#sec-deployment-bias}
-`bias_beta = 0` (level-only) is set by design: the trend term provides no benefit and can cause oscillation. Under the v15-postfix loop, `bias_alpha` becomes identifiable: NLL decreases monotonically across 0.5->1.0 (0.5959 -> 0.5932) but the plateau is flat and alpha=1.0 degenerates to a naive last-residual carry-forward. We ship alpha=0.5 -- the lower edge of the flat region -- for robustness against single-week outliers, paying a 0.5% NLL cost for that margin. The corrector resets at the first post-peak week.
+**Historical v15-postfix `bias_alpha = 0.5, bias_beta = 0`.** {#sec-deployment-bias}
+The retired notes report a flat high-alpha region and chose 0.5 for that
+comparison. This is not the coded incumbent rule; the coded values are base
+0.05, beta 0, and high 0.7 after two same-sign transitions (the third
+consecutive same-sign residual).
 
 **`lambda_w = 0` -- uniform training weights.**
 Down-weighting late-season observations provides no benefit.
@@ -596,9 +622,18 @@ Down-weighting late-season observations provides no benefit.
 
 This section has two parts:
 
-1. **In-sample GAM baseline** (`fit_back_by_season.png`) -- the production GAM fitted on *all* historical seasons and predicted back on the same data. **No bias correction. Not deployment-equivalent.** Use this only to check whether the GAM formula is well-specified (i.e., does it capture the seasonal shape?).
+1. **In-sample GAM baseline** (`fit_back_by_season.png`) -- a fixed GAM fitted
+on *all* historical seasons and predicted back on the same data. **No bias
+correction. Not deployment-equivalent.** Use this only to check whether the GAM
+formula is well-specified (i.e., does it capture the seasonal shape?).
 
-2. **Out-of-sample LOSO predictions** (`loso_oos_by_season.png`) -- each season held out, GAM trained on the remaining 9 seasons, Holt bias correction applied sequentially week-by-week as in deployment. **This is the honest, deployment-equivalent view.** The x-axis is weeks since ignition (ignition = 0); the evaluation window covers ignition through ignition + 12 weeks.
+2. **Out-of-sample LOSO predictions** (`loso_oos_by_season.png`) -- each season
+held out, GAM trained on the remaining 9 seasons, and Holt bias correction
+applied sequentially week-by-week. This simulates the deployment loop
+conditional on the previously selected M0/M1 choices; it is not a fully nested
+validation of the entire pipeline. The x-axis is weeks since ignition
+(ignition = 0); the evaluation window covers ignition through ignition + 12
+weeks.
 
 **M1 walk-forward predictions for historical seasons** are computed here and saved with the production kit. They are passed to `nested_loso_refit_best()` (frozen GAM) and `run_m2_forecast()` at deployment so that `logit_f_eff` is M1-based in both contexts. No data leakage: the predictions are walk-forward and the current season is never included.
 

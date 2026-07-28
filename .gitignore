@@ -1,5 +1,12 @@
 data/
 results/
+!results/
+results/*
+!results/audit/
+results/audit/*
+!results/audit/*.json
+!results/audit/*.csv
+!results/audit/*.md
 .claude/
 *.RData
 *.rds
@@ -11,6 +18,8 @@ docs/*_cache/
 # Build artifacts and shell history
 *.tar.gz
 *.Rhistory
+__pycache__/
+*.pyc
 PAGe.Rcheck/
 logs/
 PAGe/docs/

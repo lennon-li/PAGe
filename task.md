@@ -1,3 +1,10 @@
+> **Historical task record -- not an active workflow.** This file preserves the
+> original M0 tuning request and reported output for provenance. It predates the
+> current package workflow and has not been reconciled with the audit inventory.
+> Do not use it to train, validate, or deploy PAGe. Use `train_pipeline()`,
+> `replay_season_holdout()`, `check_promotion()`, and
+> `docs/workflow-status.md` instead.
+
 # Ignition Detection Parameter Tuning Task
 
 ## Context

@@ -143,14 +143,14 @@ test_that("refresh training uses a compatible prior best and skips tuning", {
       phase = data.frame(phase = c("early", "late"), mae = c(0.10, 0.10))
     )
   )
-  failed_result <- PAGe::train_pipeline(
-    workflow_surveillance("2025-26", 1L),
-    mode = "refresh", previous_results = list(best_spec = prior_spec),
-    promotion = failed, n_cores = 1L, verbose = FALSE
+  expect_error(
+    PAGe::train_pipeline(
+      workflow_surveillance("2025-26", 1L),
+      mode = "refresh", previous_results = list(best_spec = prior_spec),
+      promotion = failed, n_cores = 1L, verbose = FALSE
+    ),
+    "verified promotion evidence"
   )
-  expect_true("2025-26" %in% calls$exclude)
-  expect_false(failed_result$holdout$released)
-  expect_identical(failed_result$holdout$status, "promotion_failed")
 })
 
 test_that("refresh falls back to locked v16 for an incompatible prior best", {
@@ -242,10 +242,12 @@ test_that("retune training runs all tuning stages and fits the winning M2 spec",
     )
   )
 
+  training_data <- workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L))
+  evidence <- training_promotion_evidence(training_data, passing_promotion)
   result <- PAGe::train_pipeline(
-    workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L)),
+    training_data,
     mode = "retune",
-    promotion = passing_promotion,
+    promotion = evidence,
     loso_seasons = "alternating",
     n_cores = 1L,
     verbose = FALSE,
@@ -352,7 +354,12 @@ test_that("holdout release requires the locked canonical promotion contract", {
   )
   genuine <- PAGe::check_promotion(candidate, incumbent)
 
-  released <- PAGe:::.resolve_holdout_release(allD, "2025-26", genuine)
+  expect_error(
+    PAGe:::.resolve_holdout_release(allD, "2025-26", genuine),
+    "verified promotion evidence"
+  )
+  evidence <- training_promotion_evidence(allD, genuine)
+  released <- PAGe:::.resolve_holdout_release(allD, "2025-26", evidence)
   expect_true(released$released)
 
   fabricated <- list(
@@ -363,7 +370,7 @@ test_that("holdout release requires the locked canonical promotion contract", {
   )
   expect_error(
     PAGe:::.resolve_holdout_release(allD, "2025-26", fabricated),
-    "canonical check_promotion"
+    "verified promotion evidence"
   )
 
   lenient <- genuine
@@ -371,36 +378,136 @@ test_that("holdout release requires the locked canonical promotion contract", {
   lenient$gates$threshold[lenient$gates$gate == "nll"] <- 0.01
   expect_error(
     PAGe:::.resolve_holdout_release(allD, "2025-26", lenient),
-    "canonical check_promotion"
+    "verified promotion evidence"
   )
 
   wrong_direction <- genuine
   wrong_direction$gates$direction[wrong_direction$gates$gate == "nll"] <- "at_most"
   expect_error(
     PAGe:::.resolve_holdout_release(allD, "2025-26", wrong_direction),
-    "canonical check_promotion"
+    "verified promotion evidence"
   )
 
   wrong_gate <- genuine
   wrong_gate$gates$gate[wrong_gate$gates$gate == "phase"] <- "overall"
   expect_error(
     PAGe:::.resolve_holdout_release(allD, "2025-26", wrong_gate),
-    "canonical check_promotion"
+    "verified promotion evidence"
   )
 
   inconsistent_value <- genuine
   inconsistent_value$gates$value[inconsistent_value$gates$gate == "nll"] <- 0.01
   expect_error(
     PAGe:::.resolve_holdout_release(allD, "2025-26", inconsistent_value),
-    "canonical check_promotion"
+    "verified promotion evidence"
   )
 
   inconsistent_overall <- genuine
   inconsistent_overall$pass <- FALSE
   expect_error(
     PAGe:::.resolve_holdout_release(allD, "2025-26", inconsistent_overall),
-    "canonical check_promotion"
+    "verified promotion evidence"
   )
+})
+
+test_that("promotion evidence verifies every bound artifact hash", {
+  allD <- workflow_surveillance("2025-26", 1L)
+  candidate <- list(
+    overall = data.frame(bernoulli_nll = 0.48),
+    horizon = data.frame(lead = c("1", "2"), mae = c(0.103, 0.103)),
+    phase = data.frame(phase = c("early", "late"), mae = c(0.105, 0.105))
+  )
+  incumbent <- list(
+    overall = data.frame(bernoulli_nll = 0.50),
+    horizon = data.frame(lead = c("1", "2"), mae = c(0.10, 0.10)),
+    phase = data.frame(phase = c("early", "late"), mae = c(0.10, 0.10))
+  )
+  fixture <- training_promotion_fixture(allD, PAGe::check_promotion(candidate, incumbent))
+  withr::defer(unlink(fixture$root, recursive = TRUE))
+
+  evidence <- do.call(PAGe::verify_promotion_evidence, fixture$args)
+  expect_s3_class(evidence, "page_verified_promotion_evidence")
+
+  saveRDS(list(tampered = TRUE), fixture$args$candidate_path)
+  expect_error(
+    do.call(PAGe::verify_promotion_evidence, fixture$args),
+    "candidate.*SHA-256"
+  )
+})
+
+test_that("promotion evidence verifies kit identity and pre-holdout training", {
+  allD <- workflow_surveillance("2025-26", 1L)
+  report <- PAGe::check_promotion(
+    list(
+      overall = data.frame(bernoulli_nll = 0.48),
+      horizon = data.frame(lead = c("1", "2"), mae = c(0.103, 0.103)),
+      phase = data.frame(phase = c("early", "late"), mae = c(0.105, 0.105))
+    ),
+    list(
+      overall = data.frame(bernoulli_nll = 0.50),
+      horizon = data.frame(lead = c("1", "2"), mae = c(0.10, 0.10)),
+      phase = data.frame(phase = c("early", "late"), mae = c(0.10, 0.10))
+    )
+  )
+
+  leaked <- training_promotion_fixture(allD, report)
+  withr::defer(unlink(leaked$root, recursive = TRUE))
+  candidate <- readRDS(leaked$args$candidate_path)
+  candidate$m2_production$training_seasons <- c("2024-25", "2025-26")
+  saveRDS(candidate, leaked$args$candidate_path)
+  leaked <- training_rebind_fixture(leaked)
+  expect_error(
+    do.call(PAGe::verify_promotion_evidence, leaked$args),
+    "includes the holdout"
+  )
+
+  mismatched <- training_promotion_fixture(allD, report)
+  withr::defer(unlink(mismatched$root, recursive = TRUE))
+  candidate <- readRDS(mismatched$args$candidate_path)
+  candidate$m2_production$best_spec_id <- "different-candidate"
+  saveRDS(candidate, mismatched$args$candidate_path)
+  mismatched <- training_rebind_fixture(mismatched)
+  expect_error(
+    do.call(PAGe::verify_promotion_evidence, mismatched$args),
+    "spec identity"
+  )
+})
+
+test_that("legacy incumbent identity requires an explicit compatibility option", {
+  allD <- workflow_surveillance("2025-26", 1L)
+  report <- PAGe::check_promotion(
+    list(
+      overall = data.frame(bernoulli_nll = 0.48),
+      horizon = data.frame(lead = c("1", "2"), mae = c(0.103, 0.103)),
+      phase = data.frame(phase = c("early", "late"), mae = c(0.105, 0.105))
+    ),
+    list(
+      overall = data.frame(bernoulli_nll = 0.50),
+      horizon = data.frame(lead = c("1", "2"), mae = c(0.10, 0.10)),
+      phase = data.frame(phase = c("early", "late"), mae = c(0.10, 0.10))
+    )
+  )
+  fixture <- training_promotion_fixture(allD, report)
+  withr::defer(unlink(fixture$root, recursive = TRUE))
+  saveRDS(
+    list(m2 = list(
+      best_spec_id = "incumbent",
+      training_seasons = "2024-25"
+    )),
+    fixture$args$incumbent_path
+  )
+  fixture <- training_rebind_fixture(fixture)
+
+  expect_error(
+    do.call(PAGe::verify_promotion_evidence, fixture$args),
+    "legacy `m2`"
+  )
+  fixture$args$kit_compatibility <- "legacy_m2"
+  expect_warning(
+    evidence <- do.call(PAGe::verify_promotion_evidence, fixture$args),
+    "legacy `m2` identity"
+  )
+  expect_s3_class(evidence, "page_verified_promotion_evidence")
 })
 
 test_that("retune exposes every approved final selection method", {
@@ -410,6 +517,8 @@ test_that("retune exposes every approved final selection method", {
   )
   expect_false(eval(formals(PAGe::train_pipeline)$racing))
   expect_identical(eval(formals(PAGe::build_m2)$holdout_season), "2025-26")
+  expect_identical(eval(formals(PAGe::build_m2)$bias_alpha), 0.05)
+  expect_identical(eval(formals(PAGe::stage2_make_spec)$bias_alpha), 0.05)
 })
 
 test_that("malformed prior tuning objects fail clearly", {

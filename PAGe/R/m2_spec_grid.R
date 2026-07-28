@@ -54,39 +54,33 @@
 #' }
 #' @export
 stage2_make_spec <- function(
-    delta = 0L,
-    Kr = 3L,
-    k_f = 6L,
-    alpha_state = 0.30,
-    Kb = 0L,
-    leads = c(1L, 2L),
-    
-    T = c("S", "O", "N"),
-    template_mode = NULL,
-    use_ramp = NULL,
-    
-    k_e = 6L,
-    k_n = 0L,
-    k_de = 0L,
-    k_r = 0L,
-    k_w = 0L,
-    k_s = 0L,
-    k_sp = 0L,   # knots for template-spread smooth s(logit_spread, by=lead)
-    
-    bs_week = "ts",
-    bs_fs_marginal = "tp",
-    use_season_re = TRUE,
-    lambda_w = 0,       # training preference (not tuned): time-decay weight for early-season emphasis
-    w_floor  = 0.05,
-
-    anchorWeek = 20L,
-
-    bias_alpha = 0.2,   # Holt level EMA -- deployment only, not a LOSO grid dimension
-    bias_beta  = 0.0,   # Holt trend EMA (0 = level-only; trend confirmed uninformative)
-
-    # --- deprecated aliases ---
-    K = NULL,
-    pre_buffer = NULL
+  delta = 0L,
+  Kr = 3L,
+  k_f = 6L,
+  alpha_state = 0.30,
+  Kb = 0L,
+  leads = c(1L, 2L),
+  T = c("S", "O", "N"),
+  template_mode = NULL,
+  use_ramp = NULL,
+  k_e = 6L,
+  k_n = 0L,
+  k_de = 0L,
+  k_r = 0L,
+  k_w = 0L,
+  k_s = 0L,
+  k_sp = 0L, # knots for template-spread smooth s(logit_spread, by=lead)
+  bs_week = "ts",
+  bs_fs_marginal = "tp",
+  use_season_re = TRUE,
+  lambda_w = 0, # training preference (not tuned): time-decay weight for early-season emphasis
+  w_floor = 0.05,
+  anchorWeek = 20L,
+  bias_alpha = 0.05, # canonical Holt level EMA base rate
+  bias_beta = 0.0, # Holt trend EMA (0 = level-only; trend confirmed uninformative)
+  # --- deprecated aliases ---
+  K = NULL,
+  pre_buffer = NULL
 ) {
   if (!is.null(K)) {
     .Deprecated(old = "K", new = "Kr", msg = "Argument 'K' is deprecated; use 'Kr' instead.")
@@ -96,57 +90,61 @@ stage2_make_spec <- function(
     .Deprecated(old = "pre_buffer", new = "Kb", msg = "Argument 'pre_buffer' is deprecated; use 'Kb' instead.")
     Kb <- pre_buffer
   }
-  
+
   if (!is.null(template_mode)) {
-    template_mode <- match.arg(template_mode, choices = c("smooth","offset","none"))
-    T <- switch(template_mode, smooth = "S", offset = "O", none = "N")
+    template_mode <- match.arg(template_mode, choices = c("smooth", "offset", "none"))
+    T <- switch(template_mode,
+      smooth = "S",
+      offset = "O",
+      none = "N"
+    )
   } else {
-    T <- match.arg(T, choices = c("S","O","N"))
+    T <- match.arg(T, choices = c("S", "O", "N"))
   }
-  template_mode2 <- switch(T, S = "smooth", O = "offset", N = "none")
-  
+  template_mode2 <- switch(T,
+    S = "smooth",
+    O = "offset",
+    N = "none"
+  )
+
   if (!is.null(use_ramp) && !isTRUE(use_ramp)) Kr <- 1L
   if (!isTRUE(use_season_re)) use_season_re <- TRUE
-  
+
   spec <- list(
     delta = if (is.na(delta)) NA_integer_ else as.integer(delta),
-    Kr    = if (is.na(Kr))    NA_integer_ else as.integer(Kr),
-    k_f   = as.integer(k_f),
+    Kr = if (is.na(Kr)) NA_integer_ else as.integer(Kr),
+    k_f = as.integer(k_f),
     alpha_state = as.numeric(alpha_state),
-    Kb    = as.integer(Kb),
+    Kb = as.integer(Kb),
     leads = as.integer(leads),
-    
     T = T,
     template_mode = template_mode2,
-    
-    k_w  = as.integer(k_w),
-    k_s  = as.integer(k_s),
-    k_e  = as.integer(k_e),
-    k_n  = as.integer(k_n),
+    k_w = as.integer(k_w),
+    k_s = as.integer(k_s),
+    k_e = as.integer(k_e),
+    k_n = as.integer(k_n),
     k_de = as.integer(k_de),
-    k_r  = as.integer(k_r),
+    k_r = as.integer(k_r),
     k_sp = as.integer(k_sp),
-    
     bs_week = bs_week,
     bs_fs_marginal = bs_fs_marginal,
-
     use_season_re = TRUE,
-    lambda_w   = as.numeric(lambda_w),
-    w_floor    = as.numeric(w_floor),
+    lambda_w = as.numeric(lambda_w),
+    w_floor = as.numeric(w_floor),
     anchorWeek = as.integer(anchorWeek),
     bias_alpha = as.numeric(bias_alpha),
-    bias_beta  = as.numeric(bias_beta)
+    bias_beta = as.numeric(bias_beta)
   )
-  
+
   spec$best_row <- data.frame(
     delta = spec$delta,
-    Kr    = spec$Kr,
-    k_f   = spec$k_f,
+    Kr = spec$Kr,
+    k_f = spec$k_f,
     alpha_state = spec$alpha_state,
     Kb = spec$Kb,
     stringsAsFactors = FALSE
   )
-  
+
   spec$exclude_newseason <- stage2_exclude_newseason(spec)
   spec$formula <- stage2_build_joint_formula(spec)
   spec
@@ -192,79 +190,79 @@ stage2_make_spec <- function(
 #'
 #' @return List with \code{specs}, \code{grid}, and \code{n}.
 expand_grid_specs <- function(
-    delta_grid = -3:3,
-    Kr_grid    = 1:6,
-    T_grid     = c("O","S"),
-    k_f_grid   = c(6L, 8L, 10L),
-    alpha_state = c(0.25),
-    Kb_grid     = c(0L, 1L),
-    leads = c(1L, 2L),
-    k_w_grid = c(8L),
-    k_s_grid = c(0L),
-    k_e_grid = c(6L),
-    k_n_grid = c(6L),
-    k_de_grid = c(0L),
-    k_r_grid  = c(0L),
-    bs_week_grid        = "ts",
-    bs_fs_marginal_grid = "tp",
-    bias_alpha_grid = c(0.4),
-    bias_beta_grid  = c(0.0),
-    drop_unused_kf_for_nonS = TRUE,
-    verbose = TRUE
+  delta_grid = -3:3,
+  Kr_grid = 1:6,
+  T_grid = c("O", "S"),
+  k_f_grid = c(6L, 8L, 10L),
+  alpha_state = c(0.25),
+  Kb_grid = c(0L, 1L),
+  leads = c(1L, 2L),
+  k_w_grid = c(8L),
+  k_s_grid = c(0L),
+  k_e_grid = c(6L),
+  k_n_grid = c(6L),
+  k_de_grid = c(0L),
+  k_r_grid = c(0L),
+  bs_week_grid = "ts",
+  bs_fs_marginal_grid = "tp",
+  bias_alpha_grid = c(0.4),
+  bias_beta_grid = c(0.0),
+  drop_unused_kf_for_nonS = TRUE,
+  verbose = TRUE
 ) {
   if (!exists("stage2_make_spec", mode = "function")) {
     stop("expand_grid_specs() expects stage2_make_spec() to be defined.")
   }
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Please install data.table.")
-  
+
   DT <- data.table::CJ(
     delta = as.integer(delta_grid),
-    Kr    = as.integer(Kr_grid),
-    T     = as.character(T_grid),
-
+    Kr = as.integer(Kr_grid),
+    T = as.character(T_grid),
     alpha_state = as.numeric(alpha_state),
-    Kb    = as.integer(Kb_grid),
-
-    k_w   = as.integer(k_w_grid),
-    k_s   = as.integer(k_s_grid),
-    k_e   = as.integer(k_e_grid),
-    k_n   = as.integer(k_n_grid),
-    k_de  = as.integer(k_de_grid),
-    k_r   = as.integer(k_r_grid),
-
-    bs_week        = as.character(bs_week_grid),
+    Kb = as.integer(Kb_grid),
+    k_w = as.integer(k_w_grid),
+    k_s = as.integer(k_s_grid),
+    k_e = as.integer(k_e_grid),
+    k_n = as.integer(k_n_grid),
+    k_de = as.integer(k_de_grid),
+    k_r = as.integer(k_r_grid),
+    bs_week = as.character(bs_week_grid),
     bs_fs_marginal = as.character(bs_fs_marginal_grid),
-    bias_alpha     = as.numeric(bias_alpha_grid),
-    bias_beta      = as.numeric(bias_beta_grid),
-
+    bias_alpha = as.numeric(bias_alpha_grid),
+    bias_beta = as.numeric(bias_beta_grid),
     unique = TRUE,
     sorted = FALSE
   )
-  
+
   k_f_grid <- as.integer(k_f_grid)
-  
+
   DT_S <- DT[T == "S"]
   DT_N <- DT[T != "S"]
-  
+
   if (nrow(DT_S) > 0L) {
     DT_S <- DT_S[, .(k_f = k_f_grid), by = setdiff(names(DT_S), "k_f")]
   } else {
     DT_S <- DT_S[, k_f := integer(0)]
   }
-  
+
   if (nrow(DT_N) > 0L) {
     if (isTRUE(drop_unused_kf_for_nonS)) DT_N[, k_f := NA_integer_] else DT_N[, k_f := k_f_grid[1]]
   }
-  
+
   grid <- data.table::rbindlist(list(DT_N, DT_S), use.names = TRUE, fill = TRUE)
   data.table::setorder(grid, T, delta, Kr, k_f, alpha_state, Kb, k_w, k_s, k_e, k_n, k_de, k_r, bias_alpha, bias_beta)
 
   grid[, spec_id := ifelse(
     T == "S",
-    sprintf("T%s_d%+d_Kr%d_kf%d_as%.2f_Kb%d_kw%d_ks%d_ke%d_kn%d_kde%d_kr%d",
-            T, delta, Kr, k_f, alpha_state, Kb, k_w, k_s, k_e, k_n, k_de, k_r),
-    sprintf("T%s_d%+d_Kr%d_as%.2f_Kb%d_kw%d_ks%d_ke%d_kn%d_kde%d_kr%d",
-            T, delta, Kr, alpha_state, Kb, k_w, k_s, k_e, k_n, k_de, k_r)
+    sprintf(
+      "T%s_d%+d_Kr%d_kf%d_as%.2f_Kb%d_kw%d_ks%d_ke%d_kn%d_kde%d_kr%d",
+      T, delta, Kr, k_f, alpha_state, Kb, k_w, k_s, k_e, k_n, k_de, k_r
+    ),
+    sprintf(
+      "T%s_d%+d_Kr%d_as%.2f_Kb%d_kw%d_ks%d_ke%d_kn%d_kde%d_kr%d",
+      T, delta, Kr, alpha_state, Kb, k_w, k_s, k_e, k_n, k_de, k_r
+    )
   )]
 
   specs <- Map(
@@ -289,16 +287,18 @@ expand_grid_specs <- function(
     grid$bias_alpha, grid$bias_beta
   )
   names(specs) <- grid$spec_id
-  
+
   if (isTRUE(verbose)) {
-    message("[expand_grid_specs] n_specs=", nrow(grid),
-            " | delta=", length(delta_grid),
-            " Kr=", length(Kr_grid),
-            " Kb=", length(Kb_grid),
-            " T=", paste(unique(T_grid), collapse=","),
-            " | alpha_state=", paste(as.numeric(alpha_state), collapse=","))
+    message(
+      "[expand_grid_specs] n_specs=", nrow(grid),
+      " | delta=", length(delta_grid),
+      " Kr=", length(Kr_grid),
+      " Kb=", length(Kb_grid),
+      " T=", paste(unique(T_grid), collapse = ","),
+      " | alpha_state=", paste(as.numeric(alpha_state), collapse = ",")
+    )
   }
-  
+
   list(specs = specs, grid = as.data.frame(grid), n = nrow(grid))
 }
 
@@ -345,13 +345,13 @@ plot_stage2_joint_fit_by_season <- function(out_m1,
   stopifnot(is.list(out_m1), !is.null(out_m1$fit), !is.null(out_m1$spec))
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Please install data.table.")
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Please install ggplot2.")
-  
+
   fit_mod <- out_m1$fit
-  spec    <- out_m1$spec
-  H       <- as.integer(spec$leads %||% c(1L,2L))
-  
+  spec <- out_m1$spec
+  H <- as.integer(spec$leads %||% c(1L, 2L))
+
   DT <- data.table::as.data.table(data.table::copy(feat_full))
-  data.table::setorderv(DT, c("season","weekF"))
+  data.table::setorderv(DT, c("season", "weekF"))
   if (!"y_now" %in% names(DT) && "y" %in% names(DT)) DT[, y_now := as.integer(y)]
   if (!"N_now" %in% names(DT) && "N" %in% names(DT)) DT[, N_now := as.integer(N)]
   if (!"ign_weekF" %in% names(DT)) {
@@ -400,27 +400,28 @@ plot_stage2_joint_fit_by_season <- function(out_m1,
   d_all <- d_all[!is.na(y_lead) & !is.na(N_lead)]
   d_all[, p_obs := y_lead / N_lead]
   d_all[, post_ign := weekF >= ign_weekF]
-  
+
   d_all[, season := factor(season)]
-  d_all[, lead   := factor(lead, levels = lead_levels)]
+  d_all[, lead := factor(lead, levels = lead_levels)]
   d_all[, season_h := factor(interaction(season, lead, drop = TRUE))]
-  
-  if (!is.null(dat_raw) && all(c("season","weekF","phase") %in% names(dat_raw))) {
+
+  if (!is.null(dat_raw) && all(c("season", "weekF", "phase") %in% names(dat_raw))) {
     ign_true <- data.table::as.data.table(dat_raw)[
-      , .(iWeek_true = suppressWarnings(min(weekF[phase == 1L], na.rm = TRUE))), by = season
+      , .(iWeek_true = suppressWarnings(min(weekF[phase == 1L], na.rm = TRUE))),
+      by = season
     ]
     ign_true[!is.finite(iWeek_true), iWeek_true := NA_real_]
   } else {
     ign_true <- d_all[, .(iWeek_true = unique(ign_weekF)[1]), by = season]
   }
-  
+
   ex <- NULL
   if (isTRUE(exclude_newseason_terms)) {
     ex <- spec$exclude_newseason
   } else if (isTRUE(exclude_season_re)) {
     ex <- "s(season)"
   }
-  
+
   d_fit <- d_all[post_ign == TRUE]
   # predict OUTSIDE data.table NSE using fit_mod (avoids collision with a column named "fit")
   d_fit[, p_hat := as.numeric(stats::predict(fit_mod, newdata = d_fit, type = "response", exclude = ex))]
@@ -441,21 +442,23 @@ plot_stage2_joint_fit_by_season <- function(out_m1,
       title = "Stage-2 fitted (post-ignition) vs observed (all weeks), by season"
     ) +
     ggplot2::theme_bw()
-  
+
   if (!is.null(ign_hat_df)) {
-    stopifnot(all(c("season","iWeek_hat") %in% names(ign_hat_df)))
+    stopifnot(all(c("season", "iWeek_hat") %in% names(ign_hat_df)))
     ign_hat <- data.table::as.data.table(ign_hat_df)[, .(
       season = as.character(season),
       iWeek_hat = as.numeric(iWeek_hat)
     )]
-    p <- p + ggplot2::geom_vline(data = ign_hat, ggplot2::aes(xintercept = iWeek_hat),
-                                 linetype = "dashed", linewidth = 0.6)
+    p <- p + ggplot2::geom_vline(
+      data = ign_hat, ggplot2::aes(xintercept = iWeek_hat),
+      linetype = "dashed", linewidth = 0.6
+    )
   }
-  
+
   if (isTRUE(facet_by_lead)) {
     p + ggplot2::facet_grid(lead ~ season, scales = "free_y")
   } else {
-    p + ggplot2::facet_wrap(~ season, scales = "free_y")
+    p + ggplot2::facet_wrap(~season, scales = "free_y")
   }
 }
 
@@ -474,49 +477,53 @@ plot_stage2_joint_fit_by_season <- function(out_m1,
 #' @param spec A spec list from stage2_make_spec().
 #' @return An R formula suitable for mgcv::bam().
 stage2_build_joint_formula <- function(spec) {
-  stopifnot(is.list(spec), all(c("T","k_f","k_w","k_s","k_e","k_n","bs_week","bs_fs_marginal") %in% names(spec)))
-  if (is.null(spec$k_r))  spec$k_r  <- 0L
+  stopifnot(is.list(spec), all(c("T", "k_f", "k_w", "k_s", "k_e", "k_n", "bs_week", "bs_fs_marginal") %in% names(spec)))
+  if (is.null(spec$k_r)) spec$k_r <- 0L
   if (is.null(spec$k_de)) spec$k_de <- 0L
   if (is.null(spec$k_sp)) spec$k_sp <- 0L
-  
+
   bs1 <- spec$bs_week %||% "ts"
-  
-  rhs <- c("-1 + lead",
-           "s(season, bs='re')")
-  
+
+  rhs <- c(
+    "-1 + lead",
+    "s(season, bs='re')"
+  )
+
   # template term
   if (identical(spec$T, "O")) {
     rhs <- c(rhs, "offset(logit_f_eff)")
   } else if (identical(spec$T, "S")) {
     rhs <- c(rhs, sprintf("s(logit_f_eff, by=lead, bs='%s', k=%d)", bs1, as.integer(spec$k_f)))
   }
-  
+
   # global aligned-time correction
   if (as.integer(spec$k_w) > 0L) {
     rhs <- c(rhs, sprintf("s(newWeek, by=lead, bs='%s', k=%d)", bs1, as.integer(spec$k_w)))
   }
-  
+
   # season-specific deviation (factor-smooth)
   if (as.integer(spec$k_s) > 0L) {
-    rhs <- c(rhs, sprintf("s(newWeek, season_h, bs='fs', k=%d, xt=list(bs='%s'))",
-                          as.integer(spec$k_s), spec$bs_fs_marginal %||% "tp"))
+    rhs <- c(rhs, sprintf(
+      "s(newWeek, season_h, bs='fs', k=%d, xt=list(bs='%s'))",
+      as.integer(spec$k_s), spec$bs_fs_marginal %||% "tp"
+    ))
   }
-  
+
   # EMA state
   if (as.integer(spec$k_e) > 0L) {
     rhs <- c(rhs, sprintf("s(z_ema, by=lead, bs='%s', k=%d)", bs1, as.integer(spec$k_e)))
   }
-  
+
   # amplitude residual: z_resid = z_ema - logit_f_eff
   if (as.integer(spec$k_r) > 0L) {
     rhs <- c(rhs, sprintf("s(z_resid, by=lead, bs='%s', k=%d)", bs1, as.integer(spec$k_r)))
   }
-  
+
   # testing volume
   if (as.integer(spec$k_n) > 0L) {
     rhs <- c(rhs, sprintf("s(logN_now, by=lead, bs='%s', k=%d)", bs1, as.integer(spec$k_n)))
   }
-  
+
   # rate of change of observed EMA (purely observation-driven)
   if (as.integer(spec$k_de) > 0L) {
     rhs <- c(rhs, sprintf("s(dz_ema, by=lead, bs='%s', k=%d)", bs1, as.integer(spec$k_de)))
@@ -540,7 +547,7 @@ stage2_build_joint_formula <- function(spec) {
 #' @param spec A spec list from stage2_make_spec().
 #' @return Character vector of smooth labels to exclude.
 stage2_exclude_newseason <- function(spec) {
-  ex <- c("s(season)")  # always exclude season RE for new season
+  ex <- c("s(season)") # always exclude season RE for new season
   if (!is.null(spec$k_s) && as.integer(spec$k_s) > 0L) {
     ex <- c(ex, "s(newWeek,season_h)")
   }

@@ -1,5 +1,5 @@
 ---
-title: "Prospective Deployment Pipeline"
+title: "Historical Prospective Deployment Snapshot"
 format:
   html:
     self-contained: true
@@ -8,6 +8,8 @@ format:
     page-layout: full
     grid:
       body-width: 1200px
+execute:
+  eval: false
 ---
 
 ```{=html}
@@ -37,20 +39,22 @@ h4 {
 </style>
 ```
 
-::: {.callout-important}
-## What This Page Shows
+::: {.callout-caution}
+## Historical, Unverified Private-Data Snapshot
 
-- The live walk-forward pipeline for the current season.
-- The current state of ignition, alignment, and forecast outputs.
-- How weekly `$M_2$` forecasts evolve as more 2025-26 data arrive.
+This source preserves the private 2025-26 walk-forward page and cache logic as
+a historical research record. Its cached values, plots, and "current" labels
+must not be interpreted as fresh runtime output, a completed acceptance run, or
+a promoted deployment. The required production sequence is
+[`deployment-workflow.qmd`](deployment-workflow.qmd).
 
-This page is the runtime view. Training details live in
+Execution is disabled by default. The historical design references
 [`estimateRef.html`](estimateRef.html),
 [`loso_walkforward.html`](loso_walkforward.html), and
 [`forecast_training.html`](forecast_training.html).
 :::
 
-## Runtime Setup
+## Historical Runtime Example
 
 ```{r setup}
 #| include: false
@@ -72,16 +76,15 @@ DATA_DIR   <- normalizePath("../data", mustWork = TRUE)
 WF_CACHE   <- file.path(DATA_DIR, "deploy_wf_cache.rds")
 
 # ---- M2 mode ----
-# "frozen" uses the pre-trained GAM (v16 best spec: k_f=4, k_e=2,
+# "frozen" uses the coded v16 incumbent (k_f=4, k_e=2,
 # alpha_state=0.15, k_r=0, k_de=0, k_sp=6, bias_alpha=0.05, bias_beta=0) with
 # Holt EMA bias correction (level-only β=0) + online season RE (post-ignition
-# obs only, v16 RE-fix) at deployment time.
+# obs only, v16 RE-fix). This source does not establish a promoted deployment.
 M2_MODE <- "frozen"
 
 # ---- Cache control ----
-# Set FORCE_REFRESH = TRUE to rerun the walk-forward (e.g., after new data
-# arrive, changing MANUAL_IGN_WEEK, or updating pipeline code).
-# The cache auto-invalidates when kit files or data change (via hash check).
+# Historical cache controls only. A cache hit is not evidence of a fresh,
+# governed deployment run.
 FORCE_REFRESH <- FALSE
 
 # ---- Manual ignition override ----
@@ -90,7 +93,7 @@ FORCE_REFRESH <- FALSE
 MANUAL_IGN_WEEK <- NA_integer_
 ```
 
-## Inputs
+## Historical Inputs
 
 All offline-trained components (reference curve, $M_1$ hyperparameters, $M_0$ thresholds,
 $M_2$ model) are loaded from `data/` via `load_prospective_kit()`.
@@ -109,7 +112,7 @@ cat(sprintf(
 ))
 ```
 
-### Current season data
+### Historical 2025-26 data-loading code
 
 ```{r get-current}
 #| message: false
@@ -123,13 +126,13 @@ cat(sprintf("Season: 2025-26 | Weeks observed: %d | weekF range: %d–%d\n",
             min(currentD_full$weekF), max(currentD_full$weekF)))
 ```
 
-## Walk-forward Results: $M_0$ → $M_1$ → $M_2$
+## Historical Walk-forward Results: $M_0$ → $M_1$ → $M_2$
 
 For each evaluation week $w$, the pipeline runs sequentially:
 
 1. **$M_0$ — Ignition detection**: `run_ignition_weekly()` determines whether the season has ignited. Once locked, $\hat{w}^{(\text{ign})}$ is fixed.
 2. **$M_1$ — Alignment**: `run_alignment_prospective_multi()` fits $\tau$, $\delta$, $a$, $b$ to align the partial curve to reference templates, producing a peak estimate and forecast curve.
-3. **$M_2$ — Forecast**: The production GAM predicts $\hat{p}_{w+1}$ and $\hat{p}_{w+2}$ using $M_1$'s aligned prediction as a stacking covariate. An online Holt EMA bias corrector (base $\alpha = 0.4$; raised to $\alpha = 0.7$ after $\geq 2$ consecutive same-sign residuals) adjusts for systematic under- or over-prediction within the season. The corrector resets at the post-peak transition.
+3. **$M_2$ — Forecast**: The frozen GAM predicts $\hat{p}_{w+1}$ and $\hat{p}_{w+2}$ using $M_1$'s aligned prediction as a stacking covariate. The canonical online correction is level-only (`bias_beta = 0`), with base `bias_alpha = 0.05`; it switches to high `bias_alpha = 0.7` after two same-sign transitions, meaning on the third consecutive same-sign residual. The corrector resets at the post-peak transition.
 
 ```{r walk-forward}
 #| message: false
@@ -144,11 +147,11 @@ if (file.exists(WF_CACHE) && !isTRUE(FORCE_REFRESH)) {
   cache_meta <- attr(readRDS(WF_CACHE), "cache_hash")
   stale <- is.null(cache_meta) || !identical(unname(cache_hash), unname(cache_meta))
   if (stale) {
-    message("Cache stale (kit files changed). Rerunning walk-forward.")
+    message("Historical cache stale (kit files changed). Recomputing example.")
   } else {
     wf  <- readRDS(WF_CACHE)
     ref <- kit$ref
-    message(sprintf("Loaded walk-forward from cache (mode=%s). Set FORCE_REFRESH = TRUE to rerun.",
+    message(sprintf("Loaded historical walk-forward cache (mode=%s). Set FORCE_REFRESH = TRUE to recompute the example.",
                     attr(wf, "m2_mode") %||% "unknown"))
   }
 }
@@ -168,12 +171,13 @@ if (!exists("wf")) {
     file.path(DATA_DIR, "m2_production.rds")
   ))
   saveRDS(wf, WF_CACHE)
-  message(sprintf("Walk-forward complete (mode=%s). Saved to %s", M2_MODE, WF_CACHE))
+  message(sprintf("Historical walk-forward example complete (mode=%s). Saved to %s",
+                  M2_MODE, WF_CACHE))
 }
 ```
 
 
-## Current Snapshot
+## Historical Snapshot Code
 
 ```{r current-state}
 #| echo: false
@@ -266,12 +270,13 @@ if (nrow(df_params) > 0) {
 :::
 
 
-## $M_2$ forecast evolution
+## Historical $M_2$ forecast evolution
 
 Each tab shows the $M_2$ 2-week-ahead forecast at a given evaluation week, overlaid
 with $M_1$ alignment and observed data. Blue = $M_1$ (solid: fitted, dashed: forecast).
-Red = $M_2$ (solid: past h=1 predictions, dashed: current forecast). Green dashed =
-estimated peak. Vertical black line = current evaluation week.
+Red = $M_2$ (solid: past h=1 predictions, dashed: forecast from that historical
+evaluation week). Green dashed = estimated peak. The vertical black line marks
+that historical evaluation week.
 
 ```{r m2-forecast-plots}
 #| echo: false
@@ -625,8 +630,9 @@ if (nrow(wf$params_df) > 0) {
 
 ## Function call graph
 
-Functions used in this document for weekly prospective deployment: M0
-detection, M1 alignment walk-forward, and M2 refit + prediction.
+Functions represented in this historical source: M0 detection, M1 alignment
+walk-forward, and M2 prediction. This call graph is descriptive and is not a
+verified promoted-runtime trace.
 
 ```{dot}
 //| fig-width: 12

@@ -1,8 +1,14 @@
 # M1 Alignment Improvement Attempts (2026-04)
 
+> **Historical, unverified research note.** The numerical values below came
+> from private local artifacts that are not preserved in this repository.
+> Phase 4 is implemented in code, but the claimed improvements are not
+> confirmatory 2025-26 evidence and no immutable promoted deployment is proven
+> here. Current decisions must use `docs/deployment-workflow.qmd`.
+
 ## Background
 
-Current locked M1 spec: `k_ref=25, slope_window=6, slope_weight=8, temperature=0.25, ref_method="fs"`
+Historical locked M1 spec: `k_ref=25, slope_window=6, slope_weight=8, temperature=0.25, ref_method="fs"`
 LOSO Weibull-weighted peak MAE = **1.276 weeks** (logit-scale ensemble; 67-spec grid v5–v7).
 
 Three failure modes were hypothesized:
@@ -101,13 +107,16 @@ Not implemented. Phase 1's prior already partially addresses tau oscillation by 
 
 ---
 
-## Phase 4: M2 post-peak M1 override (SHIPPED — 2026-04-28)
+## Phase 4: M2 post-peak M1 override (implemented; results unverified)
 
 ### Motivation
 
 Prospective review of 2025-26 deployment revealed systematic M2 overestimation post-peak: h=1 MAE = 0.037, mean bias = +0.033, with worst errors of +0.23 at eval_weeks 26–28. M1 h=1 over the same period had MAE = 0.005.
 
-LOSO analysis on the v16 best spec (10 seasons, `fresh_nested_loso_v18_phase1.rds` for M1 fold predictions joined with `fresh_nested_loso_v16_production.rds` for M2) confirmed this is a **systematic flaw, not a 2025-26 anomaly**:
+The historical private LOSO analysis (10 seasons,
+`fresh_nested_loso_v18_phase1.rds` joined with
+`fresh_nested_loso_v16_production.rds`) recorded the same pattern across
+seasons; those absent artifacts cannot confirm the claim in this repository:
 
 | Phase | h=1 MAE | h=1 mean bias |
 |-------|---------|---------------|
@@ -148,7 +157,7 @@ if (isTRUE(ap$peak_passed)) {
 
 The GAM still runs to completion and the bias corrector still updates — only the output row is replaced. `wf$m2_preds` post-peak now contains M1's prediction and CI.
 
-### Result on 2025-26
+### Historical recorded result on 2025-26 (unverified)
 
 | | h=1 MAE | h=1 mean bias |
 |--|---------|--------------|
@@ -159,9 +168,12 @@ Worst single-week post-peak error dropped from +0.23 to −0.024.
 
 ---
 
-## Net result
+## Historical recorded result (unverified)
 
-M1 alignment unchanged (Weibull MAE = 1.276, locked spec). M2 **deployment** materially improved by Phase 4: post-peak predictions now come from M1 directly (w=1.0), cutting post-peak MAE by 76% (0.037 → 0.009 on 2025-26; 0.093 → 0.021 on LOSO). The most promising remaining step for M1 is adding the completed 2025-26 season to training data once the season ends.
+The private note recorded unchanged M1 alignment and improved post-peak M2
+errors after Phase 4. Those values are historical reproduction leads, not
+verified deployment or holdout results. Adding 2025-26 to a fixed-spec refresh
+is permitted only after a separately preserved passing acceptance decision.
 
 ---
 

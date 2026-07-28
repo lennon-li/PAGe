@@ -1,5 +1,7 @@
-import urllib.request, json
-token = 'xoxb-10658586573239-10682302249348-bRKbGaz6pWJAXJvGHlSFioAa'
+import os, urllib.request, json
+token = os.environ.get("PAGE_SLACK_BOT_TOKEN", "")
+if not token:
+    raise RuntimeError("Set PAGE_SLACK_BOT_TOKEN before sending a Slack notification.")
 msg = (
     ':white_check_mark: *loso_walkforward.qmd rendered successfully*\n\n'
     '*Changes made:*\n'
