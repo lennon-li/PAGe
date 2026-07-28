@@ -6,7 +6,7 @@ format:
     toc: true
     code-fold: show
 execute:
-  eval: false
+  eval: true
 ---
 
 This document provides the exact code used to reproduce the full PAGe pipeline retrain (incorporating the 2025-26 season) and retrospectively evaluate the final model on each season in a walk-forward manner.
@@ -14,14 +14,14 @@ This document provides the exact code used to reproduce the full PAGe pipeline r
 ## Setup and Data Preparation
 
 ```{r setup, message=FALSE, warning=FALSE}
-library(PAGe)
+devtools::load_all("../PAGe")
 library(dplyr)
 library(ggplot2)
 library(purrr)
 library(future)
 
 # 1. Load historical data
-source("scripts/fresh_run/00_shared.R")
+source("../scripts/fresh_run/00_shared.R")
 histD <- load_allD(exclude = c(), include_holdout = TRUE) %>% 
   filter(season != "2025-26")
 
@@ -36,42 +36,50 @@ allD <- prepare_surveillance_data(all_raw)
 # Setup multisession parallelization
 n_cores <- parallel::detectCores() - 1L
 plan(multisession, workers = n_cores)
+
+# Load the pre-computed results from the cluster
+retuned <- readRDS("season2526/retuned_pipeline.rds")
+kit <- retuned$kit
 ```
 
 ## Section 1: M0 - Ignition Detection Tuning
 
 M0 identifies the start of the exponential growth phase. We retune the ignition parameters using a grid search over the newly assembled dataset.
 
-```{r m0-tuning}
+```{r m0-tuning, eval=FALSE}
 # Tune M0 over the default grid
 m0_tuning <- tune_m0(allD, n_cores = n_cores, verbose = TRUE)
 m0_best <- m0_tuning$best_params
+```
 
+```{r m0-results}
 cat("Best M0 parameters:\n")
-print(m0_best)
+print(retuned$tuning$m0$best_params)
 ```
 
 ## Section 2: M1 - Alignment Tuning
 
 M1 aligns the current season to the reference median curve and historical templates. 
 
-```{r m1-tuning}
+```{r m1-tuning, eval=FALSE}
 # Build M1 reference curve
 m1_built <- build_m1(allD, m0 = m0_tuning)
 
 # Retune M1 hyperparameters
 m1_tuning <- tune_m1(allD, m0 = m0_tuning, m1 = m1_built, n_cores = n_cores, verbose = TRUE)
 m1_best <- m1_tuning$best_params
+```
 
+```{r m1-results}
 cat("Best M1 parameters:\n")
-print(m1_best)
+print(retuned$tuning$m1$best_params)
 ```
 
 ## Section 3: M2 - Forecast Model Construction
 
 M2 builds the final GAM utilizing the M1 aligned projections as covariates.
 
-```{r m2-tuning}
+```{r m2-tuning, eval=FALSE}
 # Build and evaluate the M2 specification grid using Nested LOSO
 m2_built <- build_m2(
   allD, 
@@ -82,9 +90,6 @@ m2_built <- build_m2(
   verbose = TRUE
 )
 m2_best_spec <- m2_built$best_spec
-
-cat("Best M2 nested-LOSO NLL:", m2_built$summary$bernoulli_nll[1], "\n")
-print(m2_best_spec)
 
 # Train the final production M2 model on all data
 m2_trained <- train_m2(
@@ -97,26 +102,26 @@ m2_trained <- train_m2(
 
 # Assemble and save the final production kit
 kit <- assemble_kit(m2_trained)
-saveRDS(kit, "data/retuned_pipeline_kit.rds")
 ```
 
-*(Note: The above three sections can also be run in a single pass using `train_pipeline(allD, mode = "retune")` as we did on the remote worker).*
+```{r m2-results}
+cat("Best M2 nested-LOSO NLL:", retuned$tuning$m2$summary$bernoulli_nll[1], "\n")
+print(retuned$tuning$m2$best_spec)
+cat("Final GAM EDF:", sum(kit$m2_production$fit$edf), "\n")
+```
 
 ## Walk-forward Retrospective Evaluation
 
 We now use the fully retuned kit to perform a retrospective walk-forward evaluation on every season. This simulates what the prospective pipeline would have forecasted at each weekly step during the given season.
 
-```{r evaluate-walkforward, fig.width=10, fig.height=6}
-# Load the final kit
-kit <- readRDS("data/retuned_pipeline_kit.rds")
-
+```{r evaluate-walkforward, fig.width=10, fig.height=6, message=FALSE, warning=FALSE}
 # Identify all valid seasons to evaluate
 eval_seasons <- sort(setdiff(unique(allD$season), c("2011-12", "2015-16", "2020-21", "2021-22")))
 
 # Run walkforward evaluation for each season
 walkforward_results <- map(eval_seasons, function(s) {
   message("Replaying season: ", s)
-  replay_season_holdout(kit, allD, season = s)
+  current_data <- allD %>% filter(season == s); wf <- run_prospective_pipeline(kit, current_data, mode = "frozen", verbose = FALSE); list(season = s, predictions = wf$m2_preds, history = allD)
 })
 names(walkforward_results) <- eval_seasons
 
