@@ -24,23 +24,36 @@ new_result_manifest(
 }
 \arguments{
 \item{artifact_role}{Role of the aggregate result artifact.}
-\item{classification}{Disclosure classification; currently must be \code{"disclosure_safe"}.}
+
+\item{classification}{Disclosure classification; currently must be
+`"disclosure_safe"`.}
+
 \item{code_commit}{Git commit hash for the code used in the run.}
+
 \item{run_timestamp}{ISO-8601 run timestamp with timezone.}
+
 \item{r_version}{R version used for the run.}
+
 \item{package_versions}{Named package-version vector.}
+
 \item{input_fingerprint}{SHA-256 fingerprint of the declared input set.}
-\item{seasons, exclusions}{Included seasons and exclusions (\code{"none"} if none).}
+
+\item{seasons, exclusions}{Included seasons and exclusions (`"none"` if none).}
+
 \item{row_counts}{Named aggregate row counts.}
+
 \item{spec_id}{Model specification identifier.}
+
 \item{training_seasons}{Training seasons.}
+
 \item{source_artifact_hashes}{Named SHA-256 hashes of source artifacts.}
+
 \item{fold_ids, evaluation_seasons}{Fold identifiers and evaluation seasons.}
 }
 \value{
-A validated \code{page_result_manifest} object.
+A validated `page_result_manifest` object.
 }
 \description{
-The manifest records aggregate provenance only. It must not contain row-level
-predictions or surveillance data.
+The manifest records aggregate provenance only. It must not contain
+row-level predictions or surveillance data.
 }

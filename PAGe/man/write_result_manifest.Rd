@@ -7,7 +7,7 @@
 write_result_manifest(manifest, path, overwrite = FALSE)
 }
 \arguments{
-\item{manifest}{A manifest created by \code{\link[=new_result_manifest]{new_result_manifest()}}.}
+\item{manifest}{A manifest created by [new_result_manifest()].}
 
 \item{path}{Destination path with a \code{.json} or \code{.rds} extension.}
 

@@ -31,11 +31,26 @@ promoted kit used in the chain.
 
 ## Before the holdout: development and retuning
 
-Model search belongs before Phase 1. `train_pipeline(mode = "retune")` may use
-compatible prior tuning results to build a bounded grid, retain the coded v16
-incumbent, add local neighbors, and expand a boundary reached by the previous
-winner. Freeze the selected candidate and record its training seasons before
-examining `2025-26`.
+Model search belongs before Phase 1. The preferred low-level path starts with
+`validate_season_selection()`, with `2025-26` in `holdout_seasons`, and then
+runs the guarded lifecycle in order:
+
+```text
+tune_m0 -> validate_m0_tuning -> fit_m0 -> freeze_m0
+tune_m1 -> validate_m1_tuning -> fit_m1 -> freeze_m1
+tune_m2 -> validate_m2_tuning -> fit_m2 -> freeze_m2
+assemble_kit -> validate_page_kit
+```
+
+M1 cannot consume a draft M0, M2 cannot consume a draft or mismatched M0/M1,
+and governed kit assembly checks the exact upstream identity chain.
+
+`train_pipeline(mode = "retune")` is the high-level compatibility orchestrator
+and now composes the guarded lifecycle. It may use compatible prior tuning
+results to build a bounded grid, retain the coded v16 incumbent, add local
+neighbors, and expand a boundary reached by the previous winner. Whichever
+interface is used, freeze the selected candidate and record its training
+seasons before examining `2025-26`.
 
 With `previous_results`, `plan_m2_grid()` consolidates finite NLL by stable
 specification identity and falls back to finite fold scores when the summary is
@@ -51,6 +66,13 @@ threshold, or correction rule starts a **new development cycle**. The resulting
 model is not validated by the decision made on the model that was previously
 frozen. Do not rerun the same `2025-26` data and describe the result as a new
 untouched confirmatory evaluation.
+
+Before freezing, inspect every tuned axis for a boundary winner. Expand a
+winning edge by one adjacent valid step while retaining the incumbent, winner,
+and local neighbors; or document why the edge is a meaningful null or hard
+constraint. A computational cap leaves an unresolved boundary and does not
+prove an optimum. The stage-specific procedure and stopping rules are in the
+[tuning playbook](tuning-playbook.md).
 
 This differs from the Phase 3 refresh. A post-acceptance refresh keeps the
 accepted M0, M1, M2, and runtime settings fixed and only refits them after the

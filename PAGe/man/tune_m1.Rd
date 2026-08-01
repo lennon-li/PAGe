@@ -7,12 +7,14 @@
 tune_m1(
   allD,
   m0,
-  m1,
+  m1 = NULL,
   loso_seasons = "all",
   grid = default_m1_grid(),
   n_cores = parallel::detectCores() - 1L,
   checkpoint_dir = NULL,
-  verbose = TRUE
+  verbose = TRUE,
+  selection = NULL,
+  manual_labels = NULL
 )
 }
 \arguments{
@@ -34,9 +36,18 @@ every other season.}
 Uses a temp directory if \code{NULL}.}
 
 \item{verbose}{Logical. Print progress.}
+
+\item{selection}{Optional governed \code{page_season_selection}. When
+supplied, \code{m0} must be frozen, only selected training seasons are
+used, and the result is a \code{page_m1_tuning}.}
+
+\item{manual_labels}{Optional named ignition-week vector in the M0 week
+coordinate system. Defaults to labels stored in \code{m0}. M1 tuning
+applies its historical one-week coordinate offset after resolving this
+value.}
 }
 \value{
-Output of \code{tune_m1_alignment()} — a list with per-spec MAE
+Output of \code{tune_m1_alignment()} -- a list with per-spec MAE
   scores and the best spec parameters.
 }
 \description{

@@ -24,9 +24,17 @@ A data frame with M2 parameters, stable \code{spec_id}, and
 }
 \description{
 Creates a compact, explainable M2 grid. Without compatible prior tuning
-results, the plan contains the deployed v16 specification and one-factor
+results, the plan contains the coded v16 incumbent and one-factor
 neighbors. With prior results, it retains v16, greedily retains diverse
 high-performing finalists, adds one-factor neighbors around the prior
 winner, and expands grid boundaries reached by that winner using the
 spacing adjacent to each reached boundary.
+}
+\details{
+Boundary expansion proposes only new configurations that pass the M2 grid
+validity contract. A meaningful null boundary, such as an optional smooth
+set to zero, need not be expanded past its valid domain. If
+\code{max_specs} truncates a search with a remaining boundary, report that
+boundary as unresolved rather than as a bracketed optimum. Grid expansion
+is a pre-holdout development activity.
 }

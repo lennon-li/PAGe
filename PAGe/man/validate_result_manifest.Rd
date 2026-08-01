@@ -7,10 +7,10 @@
 validate_result_manifest(manifest)
 }
 \arguments{
-\item{manifest}{A manifest created by \code{new_result_manifest()}.}
+\item{manifest}{A manifest created by [new_result_manifest()].}
 }
 \value{
-\code{TRUE} if \code{manifest} is valid; otherwise an informative error.
+`TRUE` if `manifest` is valid; otherwise an informative error.
 }
 \description{
 Validate a disclosure-safe result manifest

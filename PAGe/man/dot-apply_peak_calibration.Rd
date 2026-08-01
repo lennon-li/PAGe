@@ -35,7 +35,7 @@ Internal helper used by \code{run_alignment_prospective()} when
 \enumerate{
   \item \strong{Shrinkage (C):} pulls \code{t_peak} toward the historical
     prior mean, weighted by the ratio of prior variance to data variance
-    (CI width). Early-season wide CIs → heavy shrinkage.
+    (CI width). Early-season wide CIs -> heavy shrinkage.
   \item \strong{Bias correction (A):} subtracts the residual bias predicted
     by a GAM fitted on LOSO errors as a function of \code{t_since_ign}.
 }

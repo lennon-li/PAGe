@@ -1,5 +1,15 @@
 # Public training orchestration and adaptive M2 grid planning.
 
+.unwrap_stage_payload <- function(fit) {
+  reserved <- c(
+    "stage", "status", "selection", "config",
+    "upstream_ids", "data_id", "artifact_id"
+  )
+  payload <- fit[setdiff(names(fit), reserved)]
+  class(payload) <- "list"
+  payload
+}
+
 .m2_parameter_names <- function() {
   c(
     "delta", "Kr", "k_f", "k_e", "alpha_state",
@@ -293,11 +303,18 @@
 #' Plan a bounded M2 tuning grid
 #'
 #' Creates a compact, explainable M2 grid. Without compatible prior tuning
-#' results, the plan contains the deployed v16 specification and one-factor
+#' results, the plan contains the coded v16 incumbent and one-factor
 #' neighbors. With prior results, it retains v16, greedily retains diverse
 #' high-performing finalists, adds one-factor neighbors around the prior
 #' winner, and expands grid boundaries reached by that winner using the
 #' spacing adjacent to each reached boundary.
+#'
+#' Boundary expansion proposes only new configurations that pass the M2 grid
+#' validity contract. A meaningful null boundary, such as an optional smooth
+#' set to zero, need not be expanded past its valid domain. If
+#' \code{max_specs} truncates a search with a remaining boundary, report that
+#' boundary as unresolved rather than as a bracketed optimum. Grid expansion
+#' is a pre-holdout development activity.
 #'
 #' @param previous_results Optional prior \code{build_m2()} result containing
 #'   \code{summary} and \code{grid}. Grid specification IDs, when supplied,
@@ -559,67 +576,113 @@ train_pipeline <- function(
     exclude,
     if (holdout$present && !holdout$released) prospective_holdout else character(0)
   ))
-  pipeline_data <- if (holdout$present && !holdout$released) {
-    allD[as.character(allD$season) != prospective_holdout, , drop = FALSE]
-  } else {
-    allD
-  }
   holdout$effective_exclude <- effective_exclude
 
   if (mode == "refresh") {
-    m0 <- build_m0(
-      pipeline_data,
-      exclude = effective_exclude, manual_labels = manual_labels,
-      flag_args = flag_args, best_params = m0_params
+    data_seasons <- unique(as.character(allD$season))
+    held_out <- holdout$present && !holdout$released
+    holdout_seasons <- if (held_out) prospective_holdout else character(0)
+    exclude_seasons <- intersect(exclude, data_seasons)
+    training_seasons <- setdiff(data_seasons, c(exclude_seasons, holdout_seasons))
+    if (!length(training_seasons)) {
+      stop("`allD` must contain at least one trainable season after exclusions.")
+    }
+    selection <- validate_season_selection(
+      allD,
+      training_seasons = training_seasons,
+      exclude_seasons = exclude_seasons,
+      holdout_seasons = holdout_seasons
     )
-    m1 <- build_m1(
-      pipeline_data,
-      m0 = m0, exclude = effective_exclude, m1_params = m1_params
-    )
+    m0 <- freeze_m0(fit_m0(
+      allD, selection,
+      config = m0_params,
+      manual_labels = manual_labels,
+      flag_args = flag_args
+    ))
+    m1 <- freeze_m1(fit_m1(allD, selection, m0 = m0, config = m1_params))
     best_spec <- .valid_previous_m2_spec(previous_results)
     if (is.null(best_spec)) best_spec <- .default_m2_spec()
-    m2_model <- train_m2(
-      pipeline_data,
-      m0 = m0, m1 = m1, best_spec = best_spec,
-      exclude = effective_exclude, verbose = verbose
-    )
+    m2_model <- freeze_m2(fit_m2(
+      allD, selection,
+      m0 = m0, m1 = m1,
+      config = best_spec,
+      verbose = verbose
+    ))
     kit <- assemble_kit(
       m0, m1, m2_model,
       best_spec_id = .m2_spec_identity(best_spec, m2_spec_id)
     )
     return(structure(list(
       mode = mode,
-      components = list(m0 = m0, m1 = m1, m2 = m2_model),
+      components = list(
+        m0 = .unwrap_stage_payload(m0),
+        m1 = .unwrap_stage_payload(m1),
+        m2 = .unwrap_stage_payload(m2_model)
+      ),
       tuning = NULL, grid = NULL, grid_provenance = NULL,
       selection = NULL, racing = NULL, holdout = holdout, kit = kit
     ), class = c("page_training_result", "list")))
   }
 
-  m0 <- tune_m0(
-    pipeline_data,
-    loso_seasons = loso_seasons, exclude = effective_exclude,
+  data_seasons <- unique(as.character(allD$season))
+  held_out <- holdout$present && !holdout$released
+  holdout_seasons <- if (held_out) prospective_holdout else character(0)
+  exclude_seasons <- intersect(exclude, data_seasons)
+  eligible_seasons <- setdiff(data_seasons, c(exclude_seasons, holdout_seasons))
+  training_seasons <- if (identical(loso_seasons, "all")) {
+    eligible_seasons
+  } else if (identical(loso_seasons, "alternating")) {
+    eligible_seasons[c(TRUE, FALSE)]
+  } else if (is.character(loso_seasons)) {
+    intersect(loso_seasons, eligible_seasons)
+  } else {
+    stop("`loso_seasons` must be 'all', 'alternating', or a character vector.")
+  }
+  if (!length(training_seasons)) {
+    stop("`loso_seasons` must identify at least one eligible training season.")
+  }
+  application_seasons <- setdiff(eligible_seasons, training_seasons)
+  selection <- validate_season_selection(
+    allD,
+    training_seasons = training_seasons,
+    exclude_seasons = exclude_seasons,
+    holdout_seasons = holdout_seasons,
+    application_seasons = application_seasons
+  )
+
+  m0_tuning <- tune_m0(
+    allD,
     grid = m0_grid, manual_labels = manual_labels, flag_args = flag_args,
-    n_cores = n_cores, verbose = verbose
+    n_cores = n_cores, verbose = verbose,
+    selection = selection
   )
-  m1_initial <- build_m1(
-    pipeline_data,
-    m0 = m0, exclude = effective_exclude, m1_params = m1_params
+  validate_m0_tuning(m0_tuning)
+  m0 <- freeze_m0(
+    fit_m0(
+      allD, selection,
+      config = m0_tuning$best_params,
+      manual_labels = manual_labels, flag_args = flag_args
+    ),
+    tuning = m0_tuning
   )
+
   m1_checkpoint <- if (is.null(checkpoint_dir)) {
     NULL
   } else {
     file.path(checkpoint_dir, "m1")
   }
   m1_tuning <- tune_m1(
-    pipeline_data,
-    m0 = m0, m1 = m1_initial, loso_seasons = loso_seasons,
+    allD,
+    m0 = m0, m1 = list(m1_params = m1_params),
     grid = m1_grid, n_cores = n_cores,
-    checkpoint_dir = m1_checkpoint, verbose = verbose
+    checkpoint_dir = m1_checkpoint, verbose = verbose,
+    selection = selection
   )
+  validate_m1_tuning(m1_tuning)
   tuned_m1_params <- .m1_params_from_tuning(m1_params, m1_tuning)
-  m1 <- build_m1(
-    pipeline_data,
-    m0 = m0, exclude = effective_exclude, m1_params = tuned_m1_params
+  m1 <- freeze_m1(
+    fit_m1(allD, selection, m0 = m0, config = tuned_m1_params),
+    tuning = m1_tuning
   )
 
   if (is.null(m2_grid)) {
@@ -635,11 +698,9 @@ train_pipeline <- function(
     file.path(checkpoint_dir, "m2")
   }
   run_full_m2 <- function(grid, ...) {
-    build_m2(
-      pipeline_data,
-      m0 = m0, m1 = m1, loso_seasons = loso_seasons,
-      exclude_seas = effective_exclude,
-      holdout_season = if (holdout$released) NULL else prospective_holdout,
+    tune_m2(
+      allD,
+      selection = selection, m0 = m0, m1 = m1,
       grid = grid, n_cores = n_cores,
       checkpoint_dir = m2_checkpoint, verbose = verbose
     )
@@ -660,27 +721,36 @@ train_pipeline <- function(
   } else {
     m2_tuning <- run_full_m2(m2_grid)
   }
-  selection <- select_m2_candidate(m2_tuning, method = selection_method)
-  if (is.null(selection$selected_spec)) {
+  validate_m2_tuning(m2_tuning)
+  m2_selection <- select_m2_candidate(m2_tuning, method = selection_method)
+  if (is.null(m2_selection$selected_spec)) {
     stop("Selected M2 specification could not be reconstructed from tuning results.")
   }
-  m2_model <- train_m2(
-    pipeline_data,
-    m0 = m0, m1 = m1, best_spec = selection$selected_spec,
-    exclude = effective_exclude, verbose = verbose
+  m2_model <- freeze_m2(
+    fit_m2(
+      allD, selection,
+      m0 = m0, m1 = m1,
+      config = m2_selection$selected_spec,
+      verbose = verbose
+    ),
+    tuning = m2_tuning
   )
   kit <- assemble_kit(
     m0, m1, m2_model,
-    best_spec_id = selection$selected_spec_id
+    best_spec_id = m2_selection$selected_spec_id
   )
 
   structure(list(
     mode = mode,
-    components = list(m0 = m0, m1 = m1, m2 = m2_model),
-    tuning = list(m0 = m0$tuning, m1 = m1_tuning, m2 = m2_tuning),
+    components = list(
+      m0 = .unwrap_stage_payload(m0),
+      m1 = .unwrap_stage_payload(m1),
+      m2 = .unwrap_stage_payload(m2_model)
+    ),
+    tuning = list(m0 = m0_tuning$tuning, m1 = m1_tuning, m2 = m2_tuning),
     grid = m2_tuning$grid,
     grid_provenance = m2_tuning$grid$provenance %||% NULL,
-    selection = selection,
+    selection = m2_selection,
     racing = racing_result,
     holdout = holdout,
     kit = kit

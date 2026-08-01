@@ -16,7 +16,7 @@ fit_peak_calibration(
 \item{params_df}{Tibble from \code{loso_walkforward()$params_df}.}
 
 \item{allD}{Raw data frame with columns \code{season}, \code{weekF},
-\code{p}, \code{N} — used to determine the true peak week per season.}
+\code{p}, \code{N} -- used to determine the true peak week per season.}
 
 \item{anchorWeek}{Integer. Alignment anchor week (default \code{27L}).}
 

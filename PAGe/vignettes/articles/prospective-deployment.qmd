@@ -25,6 +25,7 @@ kit <- load_promoted_kit(
   deployment_manifest_path =
     "results/deployment-audit/<deployment-id>/deployment_manifest.json"
 )
+validate_page_kit(kit)
 result <- run_prospective_pipeline(
   kit = kit,
   current_data = current_snapshot
@@ -52,3 +53,5 @@ The orchestration performs the following operations in order:
 
 Stage-specific entry points (`run_m0()`, `run_m1()`, and `run_m2()`) support
 diagnostics, while `run_pipeline()` is the preferred high-level interface.
+When a kit contains governed stage metadata, validation also checks the season
+selection, M0/M1/M2 artifact identities, and deterministic governance identity.

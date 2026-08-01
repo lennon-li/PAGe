@@ -49,8 +49,29 @@ alignment-derived covariates from M1.
 - A future package distribution may bundle `inst/extdata/flu_hist.csv`, but it
   is absent from this repository and must not be assumed to exist. `ref_curve.RData`
   is likewise not a portable public-data input contract.
+- Inspect every genuinely tuned axis for a boundary winner before freezing a
+  stage. Expand one adjacent valid step, or document a meaningful null/hard
+  constraint. Keep all expansion pre-holdout and follow
+  `docs/tuning-playbook.md`.
+- Supervise long-running local jobs with a detached, zero-token OS watchdog.
+  Do not keep a persistent AI goal/session alive for periodic polling, and do
+  not schedule recurring model wake-ups, unless the user explicitly approves
+  both the cadence and a token budget. The AI handles launch/preflight, resumes
+  on a detected exception, and performs one bounded terminal audit. Watchdogs
+  write compact machine-readable status; AI log reads must be bounded and must
+  exclude generated HTML and full warning streams. Follow
+  `docs/long-job-supervision.md`.
 
-## Current Status (audited 2026-07-27)
+## Current Status (audited 2026-08-01)
+
+The package exposes guarded stage lifecycles for M0, M1, and M2. A governed
+workflow declares disjoint season sets with `validate_season_selection()`, then
+runs `tune_*() -> validate_*_tuning() -> fit_*() -> freeze_*()` in stage order.
+M1 requires a frozen matching M0; M2 requires the exact frozen M0/M1 identity
+chain; governed `assemble_kit()` rejects drafts and provenance mismatches.
+`train_pipeline()` composes these contracts for both refresh and retune modes,
+including explicit season selection and governed M2 racing full evaluation;
+its compatibility result shape is preserved through payload unwrapping.
 
 **M0 (Ignition)** and **M1 (Alignment)** are implemented and have historical
 tuning workflows. M1 uses multi-template alignment with slope-similarity

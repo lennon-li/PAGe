@@ -212,24 +212,35 @@ conditional on prior M0/M1 choices.
 
 ---
 
-## Deployment sequence {#sec-train-deploy}
+## Training and deployment sequence {#sec-train-deploy}
 
-Within each week: $M_1$ aligns -> for any post-ignition state, $M_2$ forecasts using the frozen GAM and updates the adaptive Holt bias corrector. Full implementation: [`prospective_deployment.html`](prospective_deployment.html).
+Offline training is guarded stage by stage. Within each live week, $M_1$
+aligns and, for a post-ignition state, $M_2$ forecasts using the frozen GAM and
+updates the adaptive Holt bias corrector. Full runtime implementation:
+[`prospective_deployment.html`](prospective_deployment.html).
 
-| Step | What | When |
-|------|------|------|
-| 1 | Reference curve + `hyper` | Offline, once |
-| 2 | $M_0$ ignition thresholds | Offline, once |
-| 3 | $M_1$ LOSO walk-forward -> `params_df` | Offline, once |
-| 4 | Post-peak flag parameters | Offline, once |
-| 5 | $M_2$ nested LOSO hyperparameter tuning | Offline, once |
-| 6 | $M_2$ initial fit on full historical data | Offline, before season start |
-| **7** | **Weekly: $M_1$ aligns -> $M_2$ forecasts (frozen GAM + adaptive Holt bias)** | **Online, every week** |
+| Step | What | Gate | When |
+|------|------|------|------|
+| 1 | Declare training, exclusion, holdout, and application seasons | `validate_season_selection()` | Offline, once per development cycle |
+| 2 | Tune, validate, fit, and freeze $M_0$ ignition | Finite selected metric, complete folds, frozen artifact | Offline |
+| 3 | Tune, validate, fit, and freeze $M_1$ alignment | Frozen matching $M_0$, evaluable seasons, finite selected metric | Offline |
+| 4 | Tune, validate, fit, and freeze $M_2$ forecast | Frozen matching $M_0/M_1$, complete finite candidate selection | Offline |
+| 5 | Assemble and validate the kit | All stages frozen with matching selection and upstream identities | Offline, before acceptance |
+| 6 | Accept, fixed-spec refresh, and register | Hash-bound governed release chain | Offline, before deployment |
+| **7** | **Weekly: $M_0$ detects -> $M_1$ aligns -> $M_2$ forecasts** | **Validated registered kit** | **Online, every week** |
 
 ### Training and promotion governance
 
-`train_pipeline(mode="refresh")` refits the locked production specification.
-`mode="retune"` retunes M0, M1, and M2. Its bounded M2 grid is seeded by
+The guarded low-level API is
+`tune_*() -> validate_*_tuning() -> fit_*() -> freeze_*()` for each stage,
+followed by `assemble_kit()` and `validate_page_kit()`. A downstream stage
+rejects an unfrozen, selection-mismatched, or identity-mismatched upstream
+artifact.
+
+`train_pipeline(mode="refresh")` is a compatibility orchestrator that refits
+the locked production specification through the guarded lifecycle.
+`mode="retune"` retunes M0, M1, and M2 through the same guarded sequence. Its
+bounded M2 grid is seeded by
 compatible previous results, always retains the v16 incumbent, preserves
 diverse finalists, adds local neighbors, and expands boundaries reached by the
 previous winner. Finalists are selected by minimum Bernoulli NLL by default;
@@ -239,6 +250,15 @@ and worst-phase MAE before its deterministic tie order. These are three
 explicit user options. Optional staged racing removes only candidates whose
 uncertainty intervals clearly lose, and every survivor is still evaluated with
 full nested LOSO.
+
+Grid adequacy is checked after every valid tuning round. A winning value at a
+tested minimum or maximum normally triggers one controlled expansion using the
+adjacent observed spacing, while retaining the incumbent, winner, and local
+neighbors. A boundary may instead be accepted when it is a meaningful null
+(for example, an optional smooth set to zero) or a hard valid constraint.
+Every decision is recorded; a computational cap leaves the boundary unresolved
+rather than proving an optimum. See the
+[tuning playbook](tuning-playbook.md).
 
 Retuning and holdout evaluation are separated. Retuning must finish before
 `2025-26` is examined. A change to the grid, model, thresholds, or correction
@@ -276,6 +296,7 @@ or deployment occurred.
 | [`m1_m2_stacking.html`](m1_m2_stacking.html) | Describe how walk-forward `$M_1$` predictions replace the static `$M_2$` template feature |
 | [`prospective_deployment.html`](prospective_deployment.html) | Preserve the historical, unverified private 2025-26 walk-forward snapshot; it is not current runtime evidence |
 | [`deployment-workflow.qmd`](deployment-workflow.qmd) | Define the governed acceptance, fixed-spec refresh, immutable registry, and verified loading sequence |
+| [`tuning-playbook.md`](tuning-playbook.md) | Diagnose boundary winners, expand grids safely, and apply stage-specific stopping rules |
 | [`run.html`](run.html) | Current-season `$M_1$` alignment view on 2025-26 data |
 | *(this document)* | Provide the cross-document map and stage-level architecture summary |
 

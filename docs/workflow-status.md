@@ -1,6 +1,6 @@
 # PAGe workflow status map
 
-Last reconciled: 2026-07-28. This map makes the discoverable entry points
+Last reconciled: 2026-08-01. This map makes the discoverable entry points
 explicit without deleting historical research. Status describes intended use,
 not evidence that a private-data run completed. In particular, reported
 historical M2 LOSO is conditional on globally selected M0/M1 settings; it is
@@ -12,7 +12,16 @@ registry promotion is preserved in this repository.
 
 | Entry point or family | Status | Use and safe replacement |
 |---|---|---|
-| High-level package API: `load_flu_hist()`, `prepare_surveillance_data()`, `train_pipeline()`, `run_pipeline()`, `run_prospective_pipeline()`, `replay_season_holdout()`, `check_promotion()`, `verify_promotion_evidence()` | canonical | The supported interface. Supply authorized surveillance data through an explicit `load_flu_hist(path)` argument or `PAGE_FLU_HIST_FILE`; observations are not bundled. Use `simulate_flu_seasons()` for public synthetic examples. A bare promotion report cannot release a holdout. |
+| Guarded stage API: `validate_season_selection()`, `tune_*()`, `validate_*_tuning()`, `fit_*()`, `freeze_*()`, `assemble_kit()` | canonical | Preferred low-level training interface. It enforces explicit disjoint season sets, validated tuning results, frozen upstream dependencies, matching artifact identities, and guarded kit assembly. M0, then M1, then M2 must pass before proceeding. |
+| `docs/tuning-playbook.md` | canonical | Grid-design and expansion guidance: boundary reports, adjacent-step expansion, valid null/constraint boundaries, stage-specific parameter tips, stopping rules, and the prohibition on post-holdout tuning. |
+| `docs/long-job-supervision.md` | canonical | Long jobs use a detached zero-token watchdog and compact status records. AI involvement is limited to launch/preflight, detected exceptions, and bounded terminal review unless the user explicitly approves a monitoring cadence and token budget. |
+| High-level package API: `load_flu_hist()`, `prepare_surveillance_data()`, `train_pipeline()`, `run_pipeline()`, `run_prospective_pipeline()`, `replay_season_holdout()`, `check_promotion()`, `verify_promotion_evidence()` | canonical compatibility | `train_pipeline()` now composes the guarded stage lifecycle for refresh and retune, including explicit season selection, validation gates, frozen upstream identities, and governed M2 racing full evaluation. It preserves the compatibility result shape. Supply authorized surveillance data through an explicit `load_flu_hist(path)` argument or `PAGE_FLU_HIST_FILE`; observations are not bundled. A bare promotion report cannot release a holdout. |
+| Legacy stage builders: `build_m0()`, `build_m1()`, `build_m2()`, `train_m2()` | compatibility | Retained for existing callers and as underlying statistical implementations. New stage-controlled workflows should call the guarded tune/validate/fit/freeze API instead. |
+
+The canonical `build_m2()` path enforces fold-specific label isolation:
+`manual_labels_train` excludes the held-out season and
+`manual_labels_test = NULL`. Checkpoints made with a held-out label available
+to evaluation are not valid prospective evidence and must be recomputed.
 | Frozen runtime: `run_pipeline(..., mode = "frozen")` and `run_prospective_pipeline(..., mode = "frozen")` | canonical | Canonical deployment behavior: a pre-trained/frozen kit with online updates. |
 | `scripts/acceptance/replay_2025_26.R` | canonical | Manual, opt-in confirmatory replay and decision-evidence entry point. It requires authorized data plus candidate and incumbent kits, verifies both excluded `2025-26`, and writes private replay/bundle files separately from aggregate audit evidence. Canonical kit identity is strict by default; only a legacy incumbent may use the explicit compatibility option. Reusing a run ID fails. Its execution and any real-data output are unverified. |
 | `season2526/run_retrain_venkata.R` | canonical | Post-acceptance fixed-spec refresh only. It requires the passing decision bundle, its manifest, the exact candidate and incumbent kits, and authorized data, then constructs artifact-bound verified evidence. Use `--preflight-only` first. Private model output and disclosure-safe manifests are separate and never overwritten. No completed real-data refit is preserved here. |

@@ -46,11 +46,11 @@ tuning followed by production fitting.}
 until an explicit passing promotion report releases it. Defaults to
 2025-26; use NULL only when no prospective holdout exists.}
 
-\item{promotion}{Optional canonical report returned by
-\code{check_promotion()} with the locked 2 percent NLL, 5 percent horizon,
-and 10 percent phase thresholds. Schema validation checks structure and
-internal consistency, not cryptographic provenance. A malformed, custom-
-threshold, or failed report never releases the holdout.}
+\item{promotion}{Optional artifact-bound evidence returned by
+\code{verify_promotion_evidence()}. A bare \code{check_promotion()} report
+is not governed production evidence and cannot release the holdout. The R
+class is forgeable; verification of the retained bundle, manifest, data,
+candidate, and incumbent artifacts is the safety boundary.}
 
 \item{loso_seasons}{LOSO folds passed to all tuning stages.}
 

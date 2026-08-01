@@ -14,19 +14,61 @@ fixed-spec refresh, and deployment manifests before loading the promoted kit.
 The examples are not executed during package builds because fitting and nested
 validation are long-running.
 
-## Prepare data and refresh
+## Prepare data and declare season sets
 
 ```{r}
 library(PAGe)
 
 historical <- load_flu_hist("/authorized/path/flu_history.csv") |>
   prepare_surveillance_data()
+selection <- validate_season_selection(
+  historical,
+  training_seasons = development_seasons,
+  exclude_seasons = excluded_seasons,
+  holdout_seasons = "2025-26",
+  application_seasons = "2026-27"
+)
+```
+
+PAGe does not bundle surveillance observations. The four season sets are
+explicit and disjoint; 2025-26 remains outside every development fit.
+
+## Guard M0, M1, and M2 independently
+
+```{r}
+m0_tuning <- tune_m0(historical, selection = selection)
+validate_m0_tuning(m0_tuning)
+m0 <- fit_m0(historical, selection, m0_tuning$best_params) |>
+  freeze_m0(m0_tuning)
+
+m1_tuning <- tune_m1(historical, m0 = m0, selection = selection)
+validate_m1_tuning(m1_tuning)
+m1_config <- as.list(m1_tuning$best[1, , drop = FALSE])
+m1 <- fit_m1(historical, selection, m0, m1_config) |>
+  freeze_m1(m1_tuning)
+
+m2_tuning <- tune_m2(historical, selection, m0, m1, m2_grid)
+validate_m2_tuning(m2_tuning)
+m2 <- fit_m2(historical, selection, m0, m1, m2_tuning$best_spec) |>
+  freeze_m2(m2_tuning)
+
+kit <- assemble_kit(m0, m1, m2)
+validate_page_kit(kit)
+```
+
+Tuning, fitting, and freezing are distinct states. M1 requires a frozen,
+selection-matched M0; M2 requires the exact frozen M0/M1 chain; governed kit
+assembly rejects drafts and identity mismatches.
+
+For a locked-spec compatibility refresh:
+
+```{r}
 training <- train_pipeline(historical, mode = "refresh")
 kit <- training$kit
 ```
 
-PAGe does not bundle surveillance observations. The default prospective
-holdout is 2025-26, which remains outside every fit until promotion.
+`train_pipeline()` has not yet been refactored to compose the guarded lifecycle
+above.
 
 ## Replay and promote
 
@@ -57,6 +99,31 @@ retuned <- train_pipeline(
 The adaptive grid uses compatible prior results and expands around promising
 boundaries. Optional racing requires a callback and cannot replace final full
 nested-LOSO evaluation.
+
+### Tuning tips
+
+A winning parameter should usually be bracketed by tested values. When it sits
+at a lower or upper grid edge, retain the current candidates and add one valid
+level beyond that edge using adjacent observed spacing. Rerun the same complete
+LOSO folds and selection rule. Start with one-factor local neighbors; add
+targeted interactions only when fold results suggest them.
+
+Boundary values can be legitimate. Zero may mean an optional M2 smooth is off,
+and probability, count, window, and basis-size parameters have hard valid
+domains. Record each boundary as expanded, accepted as a null/constraint, or
+unresolved at the computational cap.
+
+For the default M1 grid, lower-edge selections at `k_ref=25` and
+`slope_weight=8` suggest controlled next values of `20` and `4`, respectively,
+if they remain selected after complete validation. For M2,
+`plan_m2_grid(previous_results, max_finalists, max_specs)` retains the
+incumbent and finalists, adds local neighbors, and expands valid winning
+boundaries one adjacent step.
+
+Stop when material axes are bracketed, a boundary has a documented
+null/constraint interpretation, improvement is flat relative to fold
+uncertainty, or the predeclared cap is reached. Finish all expansion before
+opening the prospective holdout.
 
 ## Forecast
 

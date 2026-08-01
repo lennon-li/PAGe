@@ -1,5 +1,11 @@
 # PAGe 0.2.0
 
+- Adds independently guarded M0, M1, and M2 lifecycles:
+  `validate_season_selection()`, stage tuning validators, `fit_*()`, and
+  `freeze_*()`. Downstream stages require frozen, selection-matched upstream
+  artifacts with stable identities.
+- Extends `assemble_kit()` and `validate_page_kit()` with governed-stage
+  provenance and tamper checks while retaining legacy kit compatibility.
 - Introduces a coherent public workflow for surveillance-data validation,
   training, holdout replay, promotion, frozen-kit forecasting, and result
   summaries.

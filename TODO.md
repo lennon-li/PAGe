@@ -1,6 +1,6 @@
 # PAGe Audit Inventory and TODO
 
-Last reconciled: 2026-07-28
+Last reconciled: 2026-07-29
 Repository baseline: `ab3aeb6` (`master`) plus the current audit implementation
 patch
 Scope: package code, root/package mirrors, tests, scripts, reports, generated
@@ -25,6 +25,7 @@ closed. A report or comment is not evidence that a run completed. Statuses mean:
 | Area | Status | Audit conclusion |
 |---|---|---|
 | Package structure and public API | Verified implemented | Installable package source exists under `PAGe/`; high-level training, forecasting, plotting, validation, and promotion APIs are present. |
+| Guarded M0/M1/M2 stage lifecycle | Verified implemented in code/tests | Explicit season selection, tune/validate/fit/freeze states, frozen upstream guards, stable stage identities, guarded kit assembly, tamper checks, and legacy compatibility are implemented. `train_pipeline()` integration remains open. |
 | Root/package R mirrors | Verified implemented | All 42 files in `R/` match their counterparts in `PAGe/R/` byte-for-byte in the current audit patch. |
 | Input data contract | Verified implemented | Explicit loading, normalization, validation, and synthetic-season generation are implemented and tested. Private surveillance observations are not committed. |
 | M0 ignition | Verified implemented in code | Build, tune, retrospective, and prospective runtime paths exist. Numerical production result still depends on ignored local artifacts. |
@@ -41,7 +42,7 @@ closed. A report or comment is not evidence that a run completed. Statuses mean:
 | External/simple forecast baselines | Incomplete | Historical PAGe versions and internal ablations exist; LOCF, historical mean/median, unaligned forecast, and other prespecified external/simple baselines are not implemented as a canonical benchmark suite. |
 | Publication-ready evaluation | Incomplete | NLL, Brier, RMSE, MAE, horizon and phase machinery partly exists; locked tables, calibration, interval evaluation, uncertainty, baseline comparisons, and a preserved confirmatory chain remain incomplete. |
 | Reproducible public example | Partly implemented | Synthetic data generation, governance tests, and `scripts/public/synthetic_release_workflow.R --smoke` exist. No single public reproduction creates all manuscript tables and figures. |
-| Automated tests | Repository suite and source-package check verified locally | 113 tests / 504 expectations passed; source build, vignette rebuild, and `R CMD check --no-manual` completed with no errors or warnings (two inherited static-analysis/environment notes). |
+| Automated tests | Repository suite and source-package check verified locally | The repository test suite, including 74 guarded stage-contract expectations, passes against the clean preflight installation. The earlier source build, vignette rebuild, and `R CMD check --no-manual` completed with no errors or warnings (two inherited static-analysis/environment notes). On 2026-07-29, the default development library could not load `devtools` because installed `fs` 1.6.5 is below a transitive `>= 2.1.0` requirement; the clean preflight library remains usable. |
 | CI | Configured; execution pending | `R-CMD-check` now includes a bounded synthetic governance smoke step before the full package check; pkgdown remains separate. The updated workflow has not yet run on GitHub. |
 
 ## Verified implementation inventory
@@ -56,6 +57,14 @@ closed. A report or comment is not evidence that a run completed. Statuses mean:
 - [x] Public documentation, `NAMESPACE`, roxygen output, pkgdown configuration,
   package tests, and GitHub Actions configuration exist.
 - [x] `R/` and `PAGe/R/` are synchronized at the audited commit.
+- [x] `validate_season_selection()` records mutually disjoint training,
+  exclusion, holdout, and application seasons.
+- [x] M0, M1, and M2 expose independent tuning-validation, draft-fit, and
+  freeze gates; downstream stages verify frozen upstream identities.
+- [x] Governed `assemble_kit()` and `validate_page_kit()` preserve and verify
+  season selection plus M0/M1/M2 artifact identities.
+- [ ] Refactor `train_pipeline()` to compose the guarded stage lifecycle while
+  preserving its current refresh/retune compatibility contract.
 
 ### M0: ignition detection
 
@@ -79,6 +88,10 @@ closed. A report or comment is not evidence that a run completed. Statuses mean:
   1.276, or 1.338 weeks and identify the exact code/data/artifact behind it.
 - [ ] Preserve one canonical M1 result table including fold seasons, coordinate
   system, manual-label version, ensemble scale, and artifact hash.
+- [ ] Because the coded `k_ref=25` and `slope_weight=8` values sit at the lower
+  edges of the default grid, run a pre-holdout controlled extension (for
+  example `k_ref=20`, `slope_weight=4`) on identical folds, or preserve a
+  defensible boundary-acceptance decision.
 - [ ] Re-measure M1 after legitimately releasing 2025-26; do not call a fit
   including 2025-26 a holdout evaluation.
 

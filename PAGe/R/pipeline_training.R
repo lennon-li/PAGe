@@ -155,6 +155,13 @@ m1_make_params <- function(k_ref = 25L,
 
 #' Return the default M1 alignment tuning grid
 #'
+#' Crosses \code{k_ref = c(25, 30, 40, 50)} with
+#' \code{slope_weight = c(8, 12, 16, 20, 30)}. If a complete governed tuning
+#' run selects \code{k_ref = 25} or \code{slope_weight = 8}, the value is at a
+#' lower grid boundary. Retain the original candidates and consider one
+#' adjacent valid extension (for example, \code{k_ref = 20} or
+#' \code{slope_weight = 4}) in the next pre-holdout development round.
+#'
 #' @return A tibble with 20 rows (4 k_ref x 5 slope_weight combinations).
 #' @export
 default_m1_grid <- function() {
@@ -172,7 +179,7 @@ default_m1_grid <- function() {
 #' Return the default M2 forecast tuning grid
 #'
 #' Delegates to \code{plan_m2_grid()} to return the compact initial grid. The
-#' deployed v16 incumbent is always included, with one-factor neighbors and
+#' coded v16 incumbent is always included, with one-factor neighbors and
 #' per-row provenance instead of an explosive Cartesian product.
 #'
 #' @return A data frame with M2 parameters, stable specification IDs, and
@@ -274,6 +281,9 @@ build_m0 <- function(allD,
 #' @param flag_args List of ignition-flagging parameters.
 #' @param n_cores Integer. Parallel cores (default: all minus 1).
 #' @param verbose Logical. Print progress.
+#' @param selection Optional governed \code{page_season_selection}. When
+#'   supplied, only its training seasons are used and the returned object is a
+#'   \code{page_m0_tuning}.
 #'
 #' @return A list with \code{best_params}, \code{tuning} (full
 #'   \code{loso_M0v2()} output), \code{aligned}, \code{seasons_used},
@@ -288,7 +298,14 @@ tune_m0 <- function(allD,
                     manual_labels = .default_manual_labels(),
                     flag_args = .default_flag_args(),
                     n_cores = parallel::detectCores() - 1L,
-                    verbose = TRUE) {
+                    verbose = TRUE,
+                    selection = NULL) {
+  governed <- !is.null(selection)
+  if (governed) {
+    allD <- .selected_training_data(allD, selection)
+    loso_seasons <- selection$training_seasons
+    exclude <- character(0)
+  }
   m0_built <- build_m0(allD,
     exclude = exclude,
     manual_labels = manual_labels, flag_args = flag_args
@@ -301,8 +318,12 @@ tune_m0 <- function(allD,
   all_seas <- sort(unique(aligned$season))
   test_seas <- .select_loso_seasons(all_seas, loso_seasons)
   extra_drop <- setdiff(all_seas, test_seas)
-  # "2015-16" always dropped (ignition outlier)
-  drop_all <- intersect(unique(c("2015-16", extra_drop)), all_seas)
+  # Preserve the historical compatibility exclusion unless an explicit
+  # governed selection is supplied.
+  drop_all <- intersect(
+    unique(c(if (!governed) "2015-16", extra_drop)),
+    all_seas
+  )
 
   tune_args_use <- list(
     miss_penalty = 0, lambda = 20, kappa = 0,
@@ -335,7 +356,7 @@ tune_m0 <- function(allD,
     verbose       = verbose
   )
 
-  list(
+  out <- list(
     best_params   = tuning$best_params,
     tuning        = tuning,
     aligned       = aligned,
@@ -343,6 +364,12 @@ tune_m0 <- function(allD,
     manual_labels = manual_labels,
     flag_args     = flag_args
   )
+  if (governed) {
+    out$selection <- selection
+    out$data_id <- .stage_training_data_id(allD)
+    class(out) <- c("page_m0_tuning", "list")
+  }
+  out
 }
 
 
@@ -448,6 +475,13 @@ build_m1 <- function(allD,
 #' @param checkpoint_dir Character. Directory for resumable checkpoints.
 #'   Uses a temp directory if \code{NULL}.
 #' @param verbose Logical. Print progress.
+#' @param selection Optional governed \code{page_season_selection}. When
+#'   supplied, \code{m0} must be frozen, only selected training seasons are
+#'   used, and the result is a \code{page_m1_tuning}.
+#' @param manual_labels Optional named ignition-week vector in the M0 week
+#'   coordinate system. Defaults to labels stored in \code{m0}. M1 tuning
+#'   applies its historical one-week coordinate offset after resolving this
+#'   value.
 #'
 #' @return Output of \code{tune_m1_alignment()} -- a list with per-spec MAE
 #'   scores and the best spec parameters.
@@ -455,15 +489,26 @@ build_m1 <- function(allD,
 #' @export
 tune_m1 <- function(allD,
                     m0,
-                    m1,
+                    m1 = NULL,
                     loso_seasons = "all",
                     grid = default_m1_grid(),
                     n_cores = parallel::detectCores() - 1L,
                     checkpoint_dir = NULL,
-                    verbose = TRUE) {
+                    verbose = TRUE,
+                    selection = NULL,
+                    manual_labels = NULL) {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
 
-  manual_labels <- m0$manual_labels %||% .default_manual_labels()
+  governed <- !is.null(selection)
+  if (governed) {
+    .require_frozen_stage(m0, "m0")
+    .check_selection_match(selection, m0$selection)
+    allD <- .selected_training_data(allD, selection)
+    loso_seasons <- selection$training_seasons
+  }
+  manual_labels <- manual_labels %||%
+    m0$manual_labels %||%
+    .default_manual_labels()
   m1_params <- m1$m1_params %||% .default_m1_params()
   params <- m0$best_params
   if (is.null(params)) {
@@ -472,11 +517,16 @@ tune_m1 <- function(allD,
 
   # loso_seasons controls test folds; non-selected seasons are excluded from
   # training too (acceptable trade-off for quick-demo mode).
-  perm_excl <- c("2011-12", "2020-21", "2021-22")
-  all_seas <- sort(setdiff(unique(allD$season), c(perm_excl, "2015-16")))
+  perm_excl <- if (governed) {
+    character(0)
+  } else {
+    c("2011-12", "2020-21", "2021-22")
+  }
+  m1_outlier <- if (governed) character(0) else "2015-16"
+  all_seas <- sort(setdiff(unique(allD$season), c(perm_excl, m1_outlier)))
   test_seas <- .select_loso_seasons(all_seas, loso_seasons)
   extra_excl <- setdiff(all_seas, test_seas)
-  exclude_all <- unique(c("2015-16", extra_excl))
+  exclude_all <- unique(c(m1_outlier, extra_excl))
 
   if (is.null(checkpoint_dir)) {
     checkpoint_dir <- file.path(tempdir(), "m1_tune_ckpt")
@@ -493,7 +543,7 @@ tune_m1 <- function(allD,
     ))
   }
 
-  tune_m1_alignment(
+  out <- tune_m1_alignment(
     allD                = allD,
     params              = params,
     grid                = grid,
@@ -514,12 +564,23 @@ tune_m1 <- function(allD,
     peak_weight_boost   = 3,
     peak_weight_decay   = 0.3
   )
+  out$manual_labels <- manual_labels_v7
+  if (governed) {
+    out$selection <- selection
+    out$data_id <- .stage_training_data_id(allD)
+    class(out) <- c("page_m1_tuning", "list")
+  }
+  out
 }
 
 
 # ============================================================
 # M2
 # ============================================================
+
+.m2_training_labels_for_fold <- function(manual_labels, test_season) {
+  manual_labels[setdiff(names(manual_labels), test_season)]
+}
 
 #' Build M2 forecast model via nested LOSO grid search
 #'
@@ -717,6 +778,10 @@ build_m2 <- function(allD,
               ),
               error = function(e) NULL
             )
+            manual_labels_train <- .m2_training_labels_for_fold(
+              manual_labels,
+              test_s
+            )
             eval_out <- tryCatch(
               nested_loso_m2_eval_frozen_bias(
                 allD = allD, fold = fc$fold, m2_fit = m2_fit,
@@ -726,7 +791,10 @@ build_m2 <- function(allD,
                   NULL
                 },
                 spec = spec, eval_window = 12L,
-                manual_labels = manual_labels, flag_args = flag_args_use, verbose = FALSE
+                bias_alpha = spec$bias_alpha,
+                manual_labels_train = manual_labels_train,
+                manual_labels_test = NULL,
+                flag_args = flag_args_use, verbose = FALSE
               ),
               error = function(e) NULL
             )
@@ -919,11 +987,18 @@ train_m2 <- function(allD,
 #' Assembles M0, M1, and M2 training outputs into the format returned by
 #' \code{load_prospective_kit()}, ready for use with \code{run_pipeline()},
 #' \code{run_m0()}, \code{run_m1()}, and \code{run_m2()}. Optionally saves
-#' reference and M2 bundles to disk.
+#' reference and M2 bundles to disk. Legacy stage outputs remain supported. If
+#' any input is a governed stage artifact, all three inputs must be frozen,
+#' share the same season selection, and carry a consistent upstream identity
+#' chain. The returned governed kit records the selection, stage artifact
+#' identities, and a deterministic governance identity.
 #'
-#' @param m0 Output of \code{tune_m0()}.
-#' @param m1 Output of \code{build_m1()}.
-#' @param m2_model Output of \code{train_m2()}.
+#' @param m0 Frozen \code{page_m0_fit} from \code{freeze_m0()}, or a legacy M0
+#'   output compatible with \code{tune_m0()}.
+#' @param m1 Frozen \code{page_m1_fit} from \code{freeze_m1()}, or a legacy
+#'   output from \code{build_m1()}.
+#' @param m2_model Frozen \code{page_m2_fit} from \code{freeze_m2()}, or a
+#'   legacy output from \code{train_m2()}.
 #' @param best_spec_id Character label for the best M2 spec (optional;
 #'   taken from \code{build_m2()$best_spec_id}).
 #' @param save_ref_path Character. If set, saves the reference bundle
@@ -931,7 +1006,9 @@ train_m2 <- function(allD,
 #' @param save_m2_path Character. If set, saves the M2 bundle
 #'   (\code{m2_production.rds} format) to this path.
 #'
-#' @return A kit list compatible with all \code{run_*()} functions.
+#' @return A kit list compatible with all \code{run_*()} functions. Governed
+#'   inputs add \code{season_selection}, \code{stage_artifact_ids}, and
+#'   \code{governance_id}.
 #'
 #' @export
 assemble_kit <- function(m0,
@@ -940,6 +1017,22 @@ assemble_kit <- function(m0,
                          best_spec_id = NULL,
                          save_ref_path = NULL,
                          save_m2_path = NULL) {
+  governed <- any(vapply(
+    list(m0, m1, m2_model),
+    function(x) inherits(x, c("page_m0_fit", "page_m1_fit", "page_m2_fit")),
+    logical(1)
+  ))
+  if (governed) {
+    .require_frozen_stage(m0, "m0")
+    .require_frozen_stage(m1, "m1")
+    .require_frozen_stage(m2_model, "m2")
+    .check_selection_match(m0$selection, m1$selection)
+    .check_selection_match(m0$selection, m2_model$selection)
+    .check_upstream_identity(m1, m0, "m0")
+    .check_upstream_identity(m2_model, m0, "m0")
+    .check_upstream_identity(m2_model, m1, "m1")
+  }
+
   manual_labels <- m0$manual_labels %||% .default_manual_labels()
   flag_args <- m0$flag_args %||% .default_flag_args()
   m1_params <- .canonical_m1_params(m1$m1_params)
@@ -978,7 +1071,7 @@ assemble_kit <- function(m0,
     message("[assemble_kit] Saved M2 bundle to: ", save_m2_path)
   }
 
-  list(
+  kit <- list(
     ref            = m1$ref,
     hyper          = m1$hyper,
     M1_PARAMS      = m1_params,
@@ -991,4 +1084,17 @@ assemble_kit <- function(m0,
     m1_train_preds = m2_model$m1_train_preds,
     template_df    = m1$ref$pred_df[, c("newWeek", "fit")]
   )
+  if (governed) {
+    kit$season_selection <- m0$selection
+    kit$stage_artifact_ids <- c(
+      m0 = m0$artifact_id,
+      m1 = m1$artifact_id,
+      m2 = m2_model$artifact_id
+    )
+    kit$governance_id <- .kit_governance_id(
+      kit$season_selection,
+      kit$stage_artifact_ids
+    )
+  }
+  kit
 }

@@ -14,7 +14,7 @@ load_promoted_kit(kit_path, deployment_manifest_path)
 manifest.}
 }
 \value{
-A kit validated by \code{\link[=validate_page_kit]{validate_page_kit()}} in frozen mode.
+A kit validated by [validate_page_kit()] in frozen mode.
 }
 \description{
 Loads a deployment kit only after its disclosure-safe promotion manifest,

@@ -35,12 +35,34 @@ post-ignition online season effect; weekly refitting is compatibility behavior.
 
 ## Training governance
 
-`train_pipeline(mode="refresh")` refits the locked specification.
-`mode="retune"` builds an adaptive grid from compatible prior results, keeps
+The guarded stage lifecycle is:
+
+```text
+validate_season_selection
+  -> tune_m0 -> validate_m0_tuning -> fit_m0 -> freeze_m0
+  -> tune_m1 -> validate_m1_tuning -> fit_m1 -> freeze_m1
+  -> tune_m2 -> validate_m2_tuning -> fit_m2 -> freeze_m2
+  -> assemble_kit -> validate_page_kit
+```
+
+Every downstream stage requires frozen, selection-matched upstream identities.
+
+`train_pipeline(mode="refresh")` remains a compatibility orchestrator that
+refits the locked specification. `mode="retune"` builds an adaptive grid from
+compatible prior results, keeps
 the incumbent and diverse finalists, adds neighbors, and expands reached
 boundaries. Minimum NLL is the default selection rule; one-standard-error and
 Pareto selection are explicit alternatives. Optional staged racing eliminates
 only clear losers and always evaluates survivors with full nested LOSO.
+`train_pipeline()` has not yet been refactored to compose the guarded
+lifecycle.
+
+After each tuning round, inspect whether the selected value is at a tested
+minimum or maximum. Normally expand a winning edge by one adjacent valid step,
+retain the winner/incumbent/local neighbors, and rerun the same complete folds.
+Do not explode every axis factorially. A boundary can be accepted when it is a
+documented null or hard constraint; otherwise report it as unresolved rather
+than claiming a bracketed optimum. All grid expansion precedes holdout review.
 
 The 2025-26 season is replayed as an unseen holdout. It may enter training for
 2026-27 only after promotion demonstrates at least 2% NLL improvement, no more

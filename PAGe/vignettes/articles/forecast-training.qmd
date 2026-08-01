@@ -20,22 +20,54 @@ the same issue week.
 ```{r}
 library(PAGe)
 
-spec <- stage2_make_spec(
-  delta = 0, Kr = 1, k_f = 4, k_e = 2,
-  alpha_state = 0.15, k_r = 0, k_de = 0, k_sp = 6,
-  bias_alpha = 0.05, bias_beta = 0
+m2_tuning <- tune_m2(
+  historical, selection, m0, m1,
+  grid = default_m2_grid()
 )
-m2 <- train_m2(historical, m0, m1, best_spec = spec)
+validate_m2_tuning(m2_tuning)
+draft_m2 <- fit_m2(
+  historical, selection, m0, m1,
+  config = m2_tuning$best_spec
+)
+m2 <- freeze_m2(draft_m2, tuning = m2_tuning)
 ```
 
-These are the coded v16 incumbent values, not proof of a deployed kit. Use
-walk-forward LOSO before proposing a different specification, then complete the
-governed holdout and promotion sequence.
+The default grid contains the coded v16 incumbent values
+(`delta=0`, `Kr=1`, `k_f=4`, `k_e=2`, `alpha_state=0.15`, `k_r=0`, `k_de=0`,
+`k_sp=6`, `bias_alpha=0.05`, and `bias_beta=0`), but their presence is not
+proof of a deployed kit. Use walk-forward LOSO before proposing a different
+specification, then complete the governed holdout and promotion sequence.
+
+Both `m0` and `m1` above must already be frozen governed artifacts with the
+same `selection`; M2 verifies their upstream identity link before tuning or
+fitting. `train_m2()` remains the legacy-compatible fitting implementation.
+
+## Grid expansion
+
+M2 grids grow quickly. Prefer `plan_m2_grid(previous_results, max_finalists,
+max_specs)`: it retains the coded incumbent and diverse finalists, adds nearest
+local neighbors, and proposes one valid adjacent step beyond winning
+boundaries.
+
+Treat basis sizes as integer complexity controls and expand one step at a time.
+Zero for optional terms such as `k_r` or `k_de` is a meaningful feature-off
+null, not a reason to propose negative values. Expand `alpha_state` locally
+inside its valid decay domain. Keep an unidentifiable runtime correction fixed
+rather than adding it to the search merely because it is configurable.
+
+Apply the declared minimum-NLL, one-standard-error, or Pareto rule only after
+all surviving candidates have complete comparable LOSO folds. A grid cap with
+a remaining boundary is an unresolved search, not proof of an optimum.
 
 Historical M2 training uses leave-one-season-out folds with fold-specific
 reference and M1 feature construction. M0 and M1 hyperparameters were selected
 before the M2 folds, so this is conditional M2 validation rather than fully
 nested selection of the entire pipeline.
+
+For each fold, the held-out season must also be absent from
+`manual_labels_train`, with `manual_labels_test = NULL`, so its ignition timing
+is detected prospectively. A checkpoint evaluated with the held-out manual
+label is leaked and must be recomputed.
 
 ## Frozen model and online correction
 

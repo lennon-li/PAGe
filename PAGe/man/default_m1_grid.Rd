@@ -10,5 +10,10 @@ default_m1_grid()
 A tibble with 20 rows (4 k_ref x 5 slope_weight combinations).
 }
 \description{
-Return the default M1 alignment tuning grid
+Crosses \code{k_ref = c(25, 30, 40, 50)} with
+\code{slope_weight = c(8, 12, 16, 20, 30)}. If a complete governed tuning
+run selects \code{k_ref = 25} or \code{slope_weight = 8}, the value is at a
+lower grid boundary. Retain the original candidates and consider one
+adjacent valid extension (for example, \code{k_ref = 20} or
+\code{slope_weight = 4}) in the next pre-holdout development round.
 }

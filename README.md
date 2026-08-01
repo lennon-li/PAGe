@@ -30,12 +30,55 @@ library(PAGe)
 allD <- load_flu_hist("/authorized/path/flu_history.csv") |>
   prepare_surveillance_data()
 
-# Uses the locked v16 production specification. The prospective holdout
-# 2025-26 is excluded from every fit by default.
+# Compatibility orchestrator: uses the coded locked v16 specification.
+# The prospective holdout 2025-26 is excluded from every fit by default.
 training <- train_pipeline(allD, mode = "refresh")
 kit <- training$kit
 saveRDS(kit, "page_kit.rds")
 ```
+
+## Guarded stage lifecycle
+
+Use the guarded API when training must stop at every stage boundary. First
+declare the season sets; then tune, validate, fit, and freeze M0 before M1 can
+start, and repeat the same lifecycle for M1 and M2.
+
+```r
+selection <- validate_season_selection(
+  allD,
+  training_seasons = development_seasons,
+  exclude_seasons = c("2011-12", "2015-16", "2020-21", "2021-22"),
+  holdout_seasons = "2025-26",
+  application_seasons = "2026-27"
+)
+
+m0_tuning <- tune_m0(allD, selection = selection)
+validate_m0_tuning(m0_tuning)
+m0 <- fit_m0(allD, selection, config = m0_tuning$best_params) |>
+  freeze_m0(tuning = m0_tuning)
+
+m1_tuning <- tune_m1(allD, m0 = m0, selection = selection)
+validate_m1_tuning(m1_tuning)
+approved_m1_config <- as.list(m1_tuning$best[1, , drop = FALSE])
+m1 <- fit_m1(allD, selection, m0, config = approved_m1_config) |>
+  freeze_m1(tuning = m1_tuning)
+
+m2_tuning <- tune_m2(allD, selection, m0, m1, grid = m2_grid)
+validate_m2_tuning(m2_tuning)
+m2 <- fit_m2(allD, selection, m0, m1, config = m2_tuning$best_spec) |>
+  freeze_m2(tuning = m2_tuning)
+
+kit <- assemble_kit(m0, m1, m2)
+validate_page_kit(kit)
+```
+
+A tuning object is evidence for selection, not a fitted stage. `freeze_*()`
+checks that the fit, tuning result, season selection, and upstream identities
+agree. If any governed component is passed to `assemble_kit()`, all three
+components must be governed and frozen.
+
+`train_pipeline()` remains the high-level compatibility orchestrator and has
+not yet been refactored to compose this lifecycle.
 
 ## Holdout replay and promotion
 
@@ -120,7 +163,11 @@ a tight grid cap.
 
 See the [pipeline overview](docs/pipeline_overview.qmd), the
 [governed deployment workflow](docs/deployment-workflow.qmd), and the
-[walkthrough](docs/pipeline_walkthrough.qmd).
+[walkthrough](docs/pipeline_walkthrough.qmd). The
+[stage API map](docs/stage-api-map.md) records the current implementation and
+remaining orchestration work. The
+[tuning playbook](docs/tuning-playbook.md) explains boundary diagnostics,
+controlled grid expansion, stage-specific parameter tips, and stopping rules.
 
 ## Coded production reference
 

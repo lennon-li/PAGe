@@ -100,22 +100,39 @@ test_that("refresh training uses a compatible prior best and skips tuning", {
   calls <- new.env(parent = emptyenv())
 
   local_mocked_bindings(
-    build_m0 = function(...) list(best_params = list(ok = TRUE)),
-    build_m1 = function(...) list(ref = list(), hyper = list()),
+    fit_m0 = function(data, selection, config, ...) {
+      calls$m0_config <- config
+      list(stage = "m0", status = "draft", config = config)
+    },
+    freeze_m0 = function(fit, ...) {
+      fit$status <- "frozen"
+      fit
+    },
+    fit_m1 = function(data, selection, m0, config, ...) {
+      calls$m1_config <- config
+      list(stage = "m1", status = "draft", config = config)
+    },
+    freeze_m1 = function(fit, ...) {
+      fit$status <- "frozen"
+      fit
+    },
+    fit_m2 = function(data, selection, m0, m1, config, ...) {
+      calls$best_spec <- config
+      list(stage = "m2", status = "draft", config = config, spec = config)
+    },
+    freeze_m2 = function(fit, ...) {
+      fit$status <- "frozen"
+      fit
+    },
     tune_m0 = function(...) stop("refresh must not tune M0"),
     tune_m1 = function(...) stop("refresh must not tune M1"),
     build_m2 = function(...) stop("refresh must not tune M2"),
-    train_m2 = function(allD, m0, m1, best_spec, exclude, verbose) {
-      calls$best_spec <- best_spec
-      calls$exclude <- exclude
-      list(spec = best_spec, fit = "fit")
-    },
     assemble_kit = function(...) list(ready = TRUE),
     .package = "PAGe"
   )
 
   result <- PAGe::train_pipeline(
-    workflow_surveillance("2025-26", 1L),
+    workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L)),
     mode = "refresh",
     previous_results = list(best_spec = prior_spec),
     n_cores = 1L,
@@ -127,7 +144,6 @@ test_that("refresh training uses a compatible prior best and skips tuning", {
   expect_null(result$grid)
   expect_true(result$kit$ready)
   expect_identical(calls$best_spec, prior_spec)
-  expect_true("2025-26" %in% calls$exclude)
   expect_false(result$holdout$released)
   expect_identical(result$holdout$status, "held_out")
 
@@ -145,7 +161,7 @@ test_that("refresh training uses a compatible prior best and skips tuning", {
   )
   expect_error(
     PAGe::train_pipeline(
-      workflow_surveillance("2025-26", 1L),
+      workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L)),
       mode = "refresh", previous_results = list(best_spec = prior_spec),
       promotion = failed, n_cores = 1L, verbose = FALSE
     ),
@@ -157,18 +173,34 @@ test_that("refresh falls back to locked v16 for an incompatible prior best", {
   calls <- new.env(parent = emptyenv())
 
   local_mocked_bindings(
-    build_m0 = function(...) list(best_params = list(ok = TRUE)),
-    build_m1 = function(...) list(ref = list(), hyper = list()),
-    train_m2 = function(allD, m0, m1, best_spec, exclude, verbose) {
-      calls$best_spec <- best_spec
-      list(spec = best_spec, fit = "fit")
+    fit_m0 = function(data, selection, config, ...) {
+      list(stage = "m0", status = "draft", config = config)
+    },
+    freeze_m0 = function(fit, ...) {
+      fit$status <- "frozen"
+      fit
+    },
+    fit_m1 = function(data, selection, m0, config, ...) {
+      list(stage = "m1", status = "draft", config = config)
+    },
+    freeze_m1 = function(fit, ...) {
+      fit$status <- "frozen"
+      fit
+    },
+    fit_m2 = function(data, selection, m0, m1, config, ...) {
+      calls$best_spec <- config
+      list(stage = "m2", status = "draft", config = config, spec = config)
+    },
+    freeze_m2 = function(fit, ...) {
+      fit$status <- "frozen"
+      fit
     },
     assemble_kit = function(...) list(ready = TRUE),
     .package = "PAGe"
   )
 
   PAGe::train_pipeline(
-    workflow_surveillance("2025-26", 1L),
+    workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L)),
     mode = "refresh",
     previous_results = list(best_spec = list(k_f = 99L)),
     n_cores = 1L,
@@ -182,48 +214,155 @@ test_that("refresh falls back to locked v16 for an incompatible prior best", {
 
 test_that("retune training runs all tuning stages and fits the winning M2 spec", {
   calls <- new.env(parent = emptyenv())
-  calls$build_m1 <- 0L
   winner <- PAGe:::.default_m2_spec()
   winner$k_f <- 5L
 
   local_mocked_bindings(
-    tune_m0 = function(allD, ...) {
-      calls$m0_seasons <- allD$season
-      list(best_params = list(ok = TRUE), tuning = list(stage = "m0"))
-    },
-    build_m1 = function(allD, m0, exclude, m1_params, ...) {
-      calls$build_m1 <- calls$build_m1 + 1L
-      calls$m1_seasons <- c(calls$m1_seasons, list(allD$season))
-      calls$m1_params <- m1_params
-      list(ref = list(), hyper = list(), m1_params = m1_params)
-    },
-    tune_m1 = function(allD, ...) {
-      calls$m1_tune_seasons <- allD$season
-      list(
-        best = data.frame(
-          k_ref = 30L, multi_temperature = 0.20,
-          align_rise_weight = 1, slope_window = 6L,
-          slope_weight = 12, mae_weibull = 1
+    tune_m0 = function(allD, ..., selection = NULL) {
+      calls$m0_seasons <- selection$training_seasons
+      structure(
+        list(
+          best_params = list(ok = TRUE),
+          tuning = list(folds = stats::setNames(
+            as.list(selection$training_seasons),
+            selection$training_seasons
+          )),
+          aligned = data.frame(),
+          seasons_used = selection$training_seasons,
+          manual_labels = c("2024-25" = 15L),
+          flag_args = list(),
+          selection = selection,
+          data_id = "x"
         ),
-        scores = data.frame(), grid = data.frame()
+        class = c("page_m0_tuning", "list")
       )
     },
-    build_m2 = function(allD, m0, m1, grid, holdout_season, ...) {
+    validate_m0_tuning = function(x, ...) invisible(x),
+    fit_m0 = function(data, selection, config, ...) {
+      structure(
+        list(
+          aligned = data.frame(),
+          seasons_used = selection$training_seasons,
+          best_params = config,
+          manual_labels = c("2024-25" = 15L),
+          flag_args = list(),
+          stage = "m0", status = "draft",
+          selection = selection, config = config,
+          upstream_ids = NULL, data_id = "x",
+          artifact_id = "m0_a"
+        ),
+        class = c("page_m0_fit", "list")
+      )
+    },
+    freeze_m0 = function(fit, tuning = NULL, ...) {
+      force(fit)
+      fit$status <- "frozen"
+      fit
+    },
+    tune_m1 = function(allD, m0, ..., selection = NULL) {
+      calls$m1_tune_seasons <- selection$training_seasons
+      structure(
+        list(
+          scores = data.frame(
+            spec_id = "s1", mae_weibull = 1,
+            n_seasons = length(selection$training_seasons)
+          ),
+          best = data.frame(
+            k_ref = 30L, multi_temperature = 0.20,
+            align_rise_weight = 1, slope_window = 6L,
+            slope_weight = 12, mae_weibull = 1
+          ),
+          selection = selection, data_id = "x"
+        ),
+        class = c("page_m1_tuning", "list")
+      )
+    },
+    validate_m1_tuning = function(x, ...) invisible(x),
+    fit_m1 = function(data, selection, m0, config, ...) {
+      calls$m1_params <- config
+      structure(
+        list(
+          ref = list(pred_df = data.frame(newWeek = 1:52, fit = 0)),
+          hyper = list(scale = 1),
+          aligned_train = data.frame(),
+          m1_params = config,
+          seasons_used = selection$training_seasons,
+          stage = "m1", status = "draft",
+          selection = selection, config = config,
+          upstream_ids = list(m0 = "m0_a"),
+          data_id = "x", artifact_id = "m1_a"
+        ),
+        class = c("page_m1_fit", "list")
+      )
+    },
+    freeze_m1 = function(fit, tuning = NULL, ...) {
+      force(fit)
+      fit$status <- "frozen"
+      fit
+    },
+    plan_m2_grid = function(...) {
+      grid <- data.frame(
+        delta = 0L, Kr = 1L, k_f = 5L, k_e = 2L,
+        alpha_state = 0.15, k_r = 0L, k_de = 0L, k_sp = 6L,
+        bias_alpha = 0.05, bias_beta = 0,
+        spec_id = "winner", provenance = "incumbent:v16",
+        stringsAsFactors = FALSE
+      )
       calls$m2_grid <- grid
-      calls$m2_seasons <- allD$season
-      calls$m2_holdout <- holdout_season
-      list(
-        best_spec = winner,
-        best_spec_id = "winner",
-        summary = data.frame(spec_id = "winner", bernoulli_nll = 0.4),
-        grid = grid
+      grid
+    },
+    tune_m2 = function(data, selection, m0, m1, grid, ...) {
+      calls$m2_seasons <- selection$training_seasons
+      structure(
+        list(
+          grid = grid,
+          best_spec_id = "winner",
+          best_spec = winner,
+          summary = data.frame(
+            spec_id = "winner", bernoulli_nll = 0.4,
+            n_seasons = length(selection$training_seasons)
+          ),
+          scores = do.call(rbind, lapply(selection$training_seasons, function(s) {
+            data.frame(spec_id = "winner", season = s, bernoulli_nll = 0.4)
+          })),
+          selection = selection, data_id = "x"
+        ),
+        class = c("page_m2_tuning", "list")
       )
     },
-    train_m2 = function(allD, m0, m1, best_spec, exclude, verbose) {
-      calls$best_spec <- best_spec
-      calls$seasons <- allD$season
-      calls$exclude <- exclude
-      list(spec = best_spec, fit = "fit")
+    validate_m2_tuning = function(x, ...) invisible(x),
+    select_m2_candidate = function(results, method = "min_nll") {
+      list(
+        method = method,
+        selected_spec_id = "winner",
+        selected_spec = winner,
+        selected = results$summary[1L, , drop = FALSE],
+        pareto_set = NULL, one_se_threshold = NULL,
+        candidates = results$summary
+      )
+    },
+    fit_m2 = function(data, selection, m0, m1, config, ...) {
+      calls$best_spec <- config
+      calls$seasons <- selection$training_seasons
+      structure(
+        list(
+          fit = structure(list(model = data.frame()), class = "gam"),
+          feature_ranges = list(),
+          m1_train_preds = data.frame(),
+          spec = config,
+          training_seasons = selection$training_seasons,
+          stage = "m2", status = "draft",
+          selection = selection, config = config,
+          upstream_ids = list(m0 = "m0_a", m1 = "m1_a"),
+          data_id = "x", artifact_id = "m2_a"
+        ),
+        class = c("page_m2_fit", "list")
+      )
+    },
+    freeze_m2 = function(fit, tuning = NULL, ...) {
+      force(fit)
+      fit$status <- "frozen"
+      fit
     },
     assemble_kit = function(...) list(ready = TRUE),
     .package = "PAGe"
@@ -256,17 +395,13 @@ test_that("retune training runs all tuning stages and fits the winning M2 spec",
   )
 
   expect_identical(result$mode, "retune")
-  expect_equal(calls$build_m1, 2L)
   expect_equal(calls$m1_params$k_ref, 30L)
   expect_equal(calls$m1_params$slope_weight, 12)
   expect_identical(calls$best_spec, winner)
-  expect_true("2025-26" %in% calls$m0_seasons)
-  expect_true(all(vapply(calls$m1_seasons, function(x) "2025-26" %in% x, logical(1))))
-  expect_true("2025-26" %in% calls$m1_tune_seasons)
-  expect_true("2025-26" %in% calls$m2_seasons)
-  expect_null(calls$m2_holdout)
-  expect_true("2025-26" %in% calls$seasons)
-  expect_false("2025-26" %in% calls$exclude)
+  expect_false("2025-26" %in% calls$m0_seasons)
+  expect_false("2025-26" %in% calls$m1_tune_seasons)
+  expect_false("2025-26" %in% calls$m2_seasons)
+  expect_false("2025-26" %in% calls$seasons)
   expect_true(result$holdout$released)
   expect_identical(result$holdout$status, "released")
   expect_identical(result$grid, calls$m2_grid)
@@ -281,32 +416,146 @@ test_that("retune keeps the prospective holdout out of every stage by default", 
   winner <- PAGe:::.default_m2_spec()
 
   local_mocked_bindings(
-    tune_m0 = function(allD, exclude, ...) {
-      seen$m0 <- allD$season
-      seen$m0_exclude <- exclude
-      list(best_params = list(ok = TRUE), tuning = list())
-    },
-    build_m1 = function(allD, ...) {
-      seen$m1 <- c(seen$m1, list(allD$season))
-      list(ref = list(), hyper = list(), m1_params = list())
-    },
-    tune_m1 = function(allD, ...) {
-      seen$m1_tune <- allD$season
-      list(best = data.frame(), scores = data.frame(), grid = data.frame())
-    },
-    build_m2 = function(allD, grid, holdout_season, ...) {
-      seen$m2 <- allD$season
-      seen$m2_holdout <- holdout_season
-      list(
-        best_spec = winner, best_spec_id = "winner",
-        summary = data.frame(spec_id = "winner", bernoulli_nll = .4),
-        grid = grid
+    tune_m0 = function(allD, ..., selection = NULL) {
+      seen$m0 <- selection$training_seasons
+      structure(
+        list(
+          best_params = list(ok = TRUE),
+          tuning = list(folds = stats::setNames(
+            as.list(selection$training_seasons),
+            selection$training_seasons
+          )),
+          aligned = data.frame(),
+          seasons_used = selection$training_seasons,
+          manual_labels = c("2024-25" = 15L),
+          flag_args = list(),
+          selection = selection, data_id = "x"
+        ),
+        class = c("page_m0_tuning", "list")
       )
     },
-    train_m2 = function(allD, best_spec, exclude, ...) {
-      seen$final <- allD$season
-      seen$final_exclude <- exclude
-      list(spec = best_spec, fit = "fit")
+    validate_m0_tuning = function(x, ...) invisible(x),
+    fit_m0 = function(data, selection, config, ...) {
+      structure(
+        list(
+          aligned = data.frame(),
+          seasons_used = selection$training_seasons,
+          best_params = config,
+          manual_labels = c("2024-25" = 15L),
+          flag_args = list(),
+          stage = "m0", status = "draft",
+          selection = selection, config = config,
+          upstream_ids = NULL, data_id = "x",
+          artifact_id = "m0_a"
+        ),
+        class = c("page_m0_fit", "list")
+      )
+    },
+    freeze_m0 = function(fit, tuning = NULL, ...) {
+      force(fit)
+      fit$status <- "frozen"
+      fit
+    },
+    tune_m1 = function(allD, m0, ..., selection = NULL) {
+      seen$m1_tune <- selection$training_seasons
+      structure(
+        list(
+          scores = data.frame(
+            spec_id = "s1", mae_weibull = 0.5,
+            n_seasons = length(selection$training_seasons)
+          ),
+          best = data.frame(
+            k_ref = 3L, multi_temperature = 0.25,
+            align_rise_weight = 1, slope_window = 6L,
+            slope_weight = 8, mae_weibull = 0.5
+          ),
+          selection = selection, data_id = "x"
+        ),
+        class = c("page_m1_tuning", "list")
+      )
+    },
+    validate_m1_tuning = function(x, ...) invisible(x),
+    fit_m1 = function(data, selection, m0, config, ...) {
+      structure(
+        list(
+          ref = list(pred_df = data.frame(newWeek = 1:52, fit = 0)),
+          hyper = list(scale = 1),
+          aligned_train = data.frame(),
+          m1_params = config,
+          seasons_used = selection$training_seasons,
+          stage = "m1", status = "draft",
+          selection = selection, config = config,
+          upstream_ids = list(m0 = "m0_a"),
+          data_id = "x", artifact_id = "m1_a"
+        ),
+        class = c("page_m1_fit", "list")
+      )
+    },
+    freeze_m1 = function(fit, tuning = NULL, ...) {
+      force(fit)
+      fit$status <- "frozen"
+      fit
+    },
+    plan_m2_grid = function(...) {
+      data.frame(
+        delta = 0L, Kr = 1L, k_f = 4L, k_e = 2L,
+        alpha_state = 0.15, k_r = 0L, k_de = 0L, k_sp = 6L,
+        bias_alpha = 0.05, bias_beta = 0,
+        spec_id = "sp1", provenance = "inc",
+        stringsAsFactors = FALSE
+      )
+    },
+    tune_m2 = function(data, selection, m0, m1, grid, ...) {
+      seen$m2 <- selection$training_seasons
+      structure(
+        list(
+          grid = grid,
+          best_spec_id = "sp1",
+          best_spec = winner,
+          summary = data.frame(
+            spec_id = "sp1", bernoulli_nll = 0.4,
+            n_seasons = length(selection$training_seasons)
+          ),
+          scores = do.call(rbind, lapply(selection$training_seasons, function(s) {
+            data.frame(spec_id = "sp1", season = s, bernoulli_nll = 0.4)
+          })),
+          selection = selection, data_id = "x"
+        ),
+        class = c("page_m2_tuning", "list")
+      )
+    },
+    validate_m2_tuning = function(x, ...) invisible(x),
+    select_m2_candidate = function(results, method = "min_nll") {
+      list(
+        method = method,
+        selected_spec_id = "sp1",
+        selected_spec = winner,
+        selected = results$summary[1L, , drop = FALSE],
+        pareto_set = NULL, one_se_threshold = NULL,
+        candidates = results$summary
+      )
+    },
+    fit_m2 = function(data, selection, m0, m1, config, ...) {
+      seen$final <- selection$training_seasons
+      structure(
+        list(
+          fit = structure(list(model = data.frame()), class = "gam"),
+          feature_ranges = list(),
+          m1_train_preds = data.frame(),
+          spec = config,
+          training_seasons = selection$training_seasons,
+          stage = "m2", status = "draft",
+          selection = selection, config = config,
+          upstream_ids = list(m0 = "m0_a", m1 = "m1_a"),
+          data_id = "x", artifact_id = "m2_a"
+        ),
+        class = c("page_m2_fit", "list")
+      )
+    },
+    freeze_m2 = function(fit, tuning = NULL, ...) {
+      force(fit)
+      fit$status <- "frozen"
+      fit
     },
     assemble_kit = function(...) list(ready = TRUE),
     .package = "PAGe"
@@ -320,13 +569,9 @@ test_that("retune keeps the prospective holdout out of every stage by default", 
   )
 
   expect_false("2025-26" %in% seen$m0)
-  expect_false(any(vapply(seen$m1, function(x) "2025-26" %in% x, logical(1))))
   expect_false("2025-26" %in% seen$m1_tune)
   expect_false("2025-26" %in% seen$m2)
   expect_false("2025-26" %in% seen$final)
-  expect_true("2025-26" %in% seen$m0_exclude)
-  expect_true("2025-26" %in% seen$final_exclude)
-  expect_identical(seen$m2_holdout, "2025-26")
   expect_false(result$holdout$released)
 })
 
@@ -529,5 +774,89 @@ test_that("malformed prior tuning objects fail clearly", {
   expect_error(
     PAGe::plan_m2_grid(list(summary = "bad", grid = data.frame())),
     "data frames"
+  )
+})
+
+test_that("refresh governed path produces frozen chain and governed kit", {
+  allD <- workflow_surveillance(c("2023-24", "2024-25", "2025-26"), c(1L, 1L, 1L))
+  calls <- new.env(parent = emptyenv())
+
+  local_mocked_bindings(
+    build_m0 = function(data, ...) {
+      calls$m0_seasons <- unique(as.character(data$season))
+      list(
+        aligned = data, seasons_used = calls$m0_seasons,
+        best_params = PAGe:::.default_m0_params(),
+        manual_labels = stats::setNames(
+          rep(20L, length(calls$m0_seasons)), calls$m0_seasons
+        ),
+        flag_args = list(p_thresh = 0.01)
+      )
+    },
+    build_m1 = function(data, m0, ...) {
+      calls$m1_seasons <- unique(as.character(data$season))
+      list(
+        ref = list(anchorWeek = 20L, pred_df = data.frame(newWeek = 1:52, fit = 0)),
+        hyper = list(scale = 1),
+        aligned_train = data,
+        m1_params = PAGe:::.default_m1_params(),
+        seasons_used = calls$m1_seasons
+      )
+    },
+    train_m2 = function(data, m0, m1, best_spec, ...) {
+      calls$m2_seasons <- unique(as.character(data$season))
+      calls$m2_spec <- best_spec
+      list(
+        fit = structure(list(model = data.frame(
+          logit_f_eff = 0, z_ema = 0, lead = factor("h1")
+        )), class = "gam"),
+        feature_ranges = list(),
+        m1_train_preds = data.frame(),
+        spec = best_spec,
+        training_seasons = calls$m2_seasons
+      )
+    },
+    tune_m0 = function(...) stop("refresh must not tune M0"),
+    tune_m1 = function(...) stop("refresh must not tune M1"),
+    build_m2 = function(...) stop("refresh must not tune M2"),
+    .package = "PAGe"
+  )
+
+  result <- PAGe::train_pipeline(
+    allD,
+    mode = "refresh",
+    prospective_holdout = "2025-26",
+    n_cores = 1L,
+    verbose = FALSE
+  )
+
+  expect_identical(result$mode, "refresh")
+  expect_null(result$tuning)
+  expect_false(result$holdout$released)
+  expect_false("2025-26" %in% calls$m0_seasons)
+  expect_false("2025-26" %in% calls$m1_seasons)
+  expect_false("2025-26" %in% calls$m2_seasons)
+  expect_true(is.list(result$kit))
+  expect_s3_class(result$kit$season_selection, "page_season_selection")
+  expect_named(result$kit$stage_artifact_ids, c("m0", "m1", "m2"))
+  expect_false("2025-26" %in% result$kit$season_selection$training_seasons)
+  expect_true("2025-26" %in% result$kit$season_selection$holdout_seasons)
+  expect_true(is.list(result$components$m0))
+  expect_false(inherits(result$components$m0, "page_m0_fit"))
+})
+
+test_that("refresh governed path rejects overlapping season sets", {
+  allD <- workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L))
+
+  expect_error(
+    PAGe::train_pipeline(
+      allD,
+      mode = "refresh",
+      exclude = "2024-25",
+      prospective_holdout = "2025-26",
+      n_cores = 1L,
+      verbose = FALSE
+    ),
+    "at least one trainable season"
   )
 })

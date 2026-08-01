@@ -16,8 +16,10 @@ execute:
 ::: {.callout-important title="Historical research record"}
 This article preserves source-level v15/v16 research and cache diagnostics; its
 chunks are disabled by default and it is not the operational production guide.
-The current supported workflow is
-[`train_pipeline()`](pipeline_walkthrough.html), followed by
+The current stage-controlled workflow is the guarded lifecycle in
+[`pipeline_walkthrough.qmd`](pipeline_walkthrough.qmd);
+`train_pipeline()` remains a high-level compatibility orchestrator. Release is
+followed by
 the governed sequence in
 [`deployment-workflow.qmd`](deployment-workflow.qmd). The coded v16 incumbent
 uses `alpha_state=0.15`, `k_sp=6`, `bias_alpha=0.05`, and `bias_beta=0`.
@@ -522,9 +524,19 @@ m2       <- nested_loso_m2_train(fold = fold, m1_train_preds = m1_train, spec = 
 eval_out <- nested_loso_m2_eval_frozen_bias(
   allD = allD, fold = fold, m2_fit = m2, m1_test_preds = m1_test,
   spec = spec, eval_window = 12L,
-  manual_labels = manual_labels, flag_args = flag_args
+  bias_alpha = spec$bias_alpha,
+  manual_labels_train = manual_labels[
+    setdiff(names(manual_labels), test_s)
+  ],
+  manual_labels_test = NULL,
+  flag_args = flag_args
 )
 ```
+
+The train/test label split is a validation invariant. The held-out season must
+not appear in `manual_labels_train`, and `manual_labels_test = NULL` forces
+prospective ignition detection. A Phase 2 checkpoint produced with the
+held-out label available during evaluation is leaked and must be recomputed.
 
 ### Full grid results
 

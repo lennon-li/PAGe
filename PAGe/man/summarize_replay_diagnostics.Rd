@@ -4,24 +4,20 @@
 \alias{summarize_replay_diagnostics}
 \title{Summarize aggregate replay diagnostics}
 \usage{
-summarize_replay_diagnostics(
-  predictions,
-  interval_level = 0.9,
-  eps = 1e-12
-)
+summarize_replay_diagnostics(predictions, interval_level = 0.9, eps = 1e-12)
 }
 \arguments{
-\item{predictions}{Prediction data frame containing \code{p_hat}, observed
-probability (\code{p_obs}, or \code{y_lead}/\code{N_lead}), and \code{lead}.}
+\item{predictions}{Prediction data frame containing `p_hat`, observed
+probability (`p_obs`, or `y_lead`/`N_lead`), and `lead`.}
 
-\item{interval_level}{Nominal central coverage for \code{p_lo}/\code{p_hi} intervals.}
+\item{interval_level}{Nominal central coverage for `p_lo`/`p_hi` intervals.}
 
 \item{eps}{Probability clipping value.}
 }
 \value{
-A list with one-row \code{overall} and aggregate \code{horizon} data frames.
-Calibration and interval metrics use \code{NA} plus a status when they cannot be
-estimated safely.
+A list with one-row `overall` and aggregate `horizon` data frames.
+  Calibration and interval metrics use `NA` plus a status when they cannot be
+  estimated safely.
 }
 \description{
 Computes disclosure-safe overall and by-horizon diagnostics from replay
