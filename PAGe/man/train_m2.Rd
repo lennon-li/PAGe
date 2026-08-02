@@ -21,8 +21,8 @@ train_m2(
 \item{m1}{Output of \code{build_m1()}. Provides \code{ref} and \code{hyper}.}
 
 \item{best_spec}{Stage-2 spec from \code{build_m2()$best_spec} or
-\code{stage2_make_spec()}. When \code{NULL}, uses the locked deployed v16
-specification for a production-data refresh without retuning.}
+\code{stage2_make_spec()}. When \code{NULL}, uses the current locked
+v16-corrected incumbent for a production-data refresh without retuning.}
 
 \item{exclude}{Character vector of seasons to exclude from training.
 Default excludes permanent invalid seasons and 2015-16. Note: 2025-26

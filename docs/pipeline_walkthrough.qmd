@@ -35,10 +35,13 @@ holdouts, and prospective application seasons explicitly:
 ```{r}
 selection <- validate_season_selection(
   allD,
-  training_seasons = development_seasons,
+  training_seasons = setdiff(
+    sort(unique(allD$season)),
+    c("2011-12", "2015-16", "2020-21", "2021-22", "2025-26")
+  ),
   exclude_seasons = c("2011-12", "2015-16", "2020-21", "2021-22"),
   holdout_seasons = "2025-26",
-  application_seasons = "2026-27"
+  application_seasons = character()
 )
 ```
 
@@ -62,11 +65,23 @@ m0 <- fit_m0(allD, selection, config = m0_tuning$best_params) |>
 # M1: alignment
 m1_tuning <- tune_m1(allD, m0 = m0, selection = selection)
 validate_m1_tuning(m1_tuning)
-approved_m1_config <- as.list(m1_tuning$best[1, , drop = FALSE])
-m1 <- fit_m1(allD, selection, m0, config = approved_m1_config) |>
+m1_best <- m1_tuning$best[1, , drop = FALSE]
+m1_config <- m1_make_params(
+  k_ref = m1_best$k_ref,
+  temperature = m1_best$multi_temperature,
+  rise_weight = m1_best$align_rise_weight,
+  slope_window = m1_best$slope_window,
+  slope_weight = m1_best$slope_weight
+)
+m1 <- fit_m1(allD, selection, m0, config = m1_config) |>
   freeze_m1(tuning = m1_tuning)
 
 # M2: forecast
+m2_grid <- if (exists("prior_m2_results", inherits = FALSE)) {
+  plan_m2_grid(prior_m2_results, max_finalists = 6L, max_specs = 64L)
+} else {
+  default_m2_grid()
+}
 m2_tuning <- tune_m2(allD, selection, m0, m1, grid = m2_grid)
 validate_m2_tuning(m2_tuning)
 m2 <- fit_m2(allD, selection, m0, m1, config = m2_tuning$best_spec) |>
@@ -97,7 +112,7 @@ must be recomputed rather than merely re-ranked.
 ## Compatibility refresh of the locked specification
 
 Use refresh when the model structure is already approved. It fits the coded
-locked v16 specification (`k_f=4`, `k_e=2`, `alpha_state=0.15`, `k_sp=6`, `k_r=0`,
+current v16-corrected specification (`k_f=4`, `k_e=2`, `alpha_state=0.20`, `k_sp=8`, `k_r=0`,
 `k_de=0`, `delta=0`, `Kr=1`, `bias_alpha=0.05`, `bias_beta=0`). The 2025-26
 season remains excluded as a prospective holdout by default.
 
@@ -188,6 +203,71 @@ stable specification identities. Stop expanding when the winner is bracketed,
 a boundary is a documented null/constraint, improvement is flat relative to
 fold uncertainty, or the declared computational cap is reached. Never alter
 the grid after viewing the prospective holdout.
+
+## Manual pre-holdout candidate cycle
+
+Use this compact sequence when testing a new cycle by hand. Keep `2025-26` in
+the holdout for every call. The current boundary cycle should reuse the
+already-frozen M0/M1 artifacts and begin at the M2 block below; only run the
+M0/M1 blocks when those stages are intentionally being retuned. If prior M2
+results are available, use the planner so already-scored specifications are
+retained by identity rather than rebuilt; otherwise start from
+`default_m2_grid()`.
+
+```{r}
+# M0: tune -> validate -> fit -> freeze
+m0_tuning <- tune_m0(
+  allD, selection = selection,
+  n_cores = parallel::detectCores(), verbose = TRUE
+)
+validate_m0_tuning(m0_tuning)
+m0 <- fit_m0(allD, selection, config = m0_tuning$best_params) |>
+  freeze_m0(tuning = m0_tuning)
+
+# M1: tune -> validate -> fit -> freeze
+m1_tuning <- tune_m1(
+  allD, m0 = m0, selection = selection,
+  grid = default_m1_grid(),
+  n_cores = parallel::detectCores(),
+  checkpoint_dir = "results/checkpoints/m1-cycle", verbose = TRUE
+)
+validate_m1_tuning(m1_tuning)
+m1_best <- m1_tuning$best[1, , drop = FALSE]
+m1_config <- m1_make_params(
+  k_ref = m1_best$k_ref,
+  temperature = m1_best$multi_temperature,
+  rise_weight = m1_best$align_rise_weight,
+  slope_window = m1_best$slope_window,
+  slope_weight = m1_best$slope_weight
+)
+m1 <- fit_m1(allD, selection, m0, config = m1_config) |>
+  freeze_m1(tuning = m1_tuning)
+
+# M2: plan -> tune -> validate -> fit -> freeze
+m2_grid <- if (exists("prior_m2_results", inherits = FALSE)) {
+  plan_m2_grid(prior_m2_results, max_finalists = 6L, max_specs = 64L)
+} else {
+  default_m2_grid()
+}
+m2_tuning <- tune_m2(
+  allD, selection, m0, m1, grid = m2_grid,
+  n_cores = parallel::detectCores(),
+  checkpoint_dir = "results/checkpoints/m2-cycle", verbose = TRUE
+)
+validate_m2_tuning(m2_tuning)
+m2 <- fit_m2(allD, selection, m0, m1, config = m2_tuning$best_spec) |>
+  freeze_m2(tuning = m2_tuning)
+
+# Assemble only after all three stages are frozen and matched.
+candidate <- assemble_kit(m0, m1, m2)
+validate_page_kit(candidate)
+saveRDS(candidate, "results/candidate_pre_holdout.rds")
+```
+
+The tuning objects are the evidence checkpoints; the frozen stage objects are
+the governed inputs to `assemble_kit()`; and `candidate` is the pre-holdout
+kit. It is not incumbent or deployable until the artifact-bound acceptance
+workflow compares it with the pre-holdout incumbent on the untouched holdout.
 
 The [tuning playbook](tuning-playbook.md) gives parameter-specific M0, M1, and
 M2 advice plus a boundary-report schema.

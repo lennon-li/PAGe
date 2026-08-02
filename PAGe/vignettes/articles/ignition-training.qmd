@@ -17,8 +17,11 @@ historical <- load_flu_hist("/authorized/path/flu_history.csv") |>
   prepare_surveillance_data()
 selection <- validate_season_selection(
   historical,
-  training_seasons = development_seasons,
-  exclude_seasons = excluded_seasons,
+  training_seasons = setdiff(
+    sort(unique(historical$season)),
+    c("2011-12", "2015-16", "2020-21", "2021-22", "2025-26")
+  ),
+  exclude_seasons = c("2011-12", "2015-16", "2020-21", "2021-22"),
   holdout_seasons = "2025-26"
 )
 

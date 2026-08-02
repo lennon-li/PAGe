@@ -90,8 +90,11 @@ verified canonical result. The ensemble operates on the logit scale and emits
 
 **M2 (Forecast)** implements a frozen-GAM deployment path with adaptive online
 bias correction. The high-level API defaults to frozen deployment; weekly refit
-is explicit compatibility/research behavior. The v16 parameterization remains
-the locked incumbent. A local boundary-only evaluation selected a
+is explicit compatibility/research behavior. The existing private
+`v16-corrected` frozen kit is now the working incumbent (`alpha_state=0.20`,
+`k_sp=8`, `bias_alpha=0.05`); its exact historical lineage is not fully
+reconstructible, so it is retained as a confidence baseline. A local
+boundary-only evaluation selected a
 `bias_alpha=0` candidate, but its frozen `2025-26` acceptance replay failed the
 locked NLL gate (`0.0000482` improvement versus `0.02` required); horizon and
 phase gates passed. The incumbent remains accepted, and no refit or promotion

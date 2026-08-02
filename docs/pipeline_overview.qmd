@@ -168,12 +168,13 @@ Historical M2 hyperparameter evaluation uses LOSO folds and fold-specific M1
 predictions. The recorded evaluation is conditional on globally selected M0
 and M1 choices, so it is not fully nested validation of the entire pipeline.
 
-**Locked v16 incumbent in code.** Historical notes record a private nested-LOSO
-result, but its artifact is absent; this overview does not repeat that
-unverified numeric claim:
+**Current working incumbent.** The existing frozen `v16-corrected` kit used in
+the 2025-26 acceptance replay is the working baseline. Its private artifact is
+outside version control, so this records the operational specification without
+claiming to recover the original research artifact:
 ```
-delta=0, Kr=1, k_f=4, k_e=2, k_n=0, k_r=0, k_de=0, k_sp=6
-alpha_state=0.15, bias_alpha=0.05, bias_beta=0, lambda_w=0, w_floor=0.05
+delta=0, Kr=1, k_f=4, k_e=2, k_n=0, k_r=0, k_de=0, k_sp=8
+alpha_state=0.20, bias_alpha=0.05, bias_beta=0, lambda_w=0, w_floor=0.05
 ```
 Mode: **frozen GAM** pre-trained on historical seasons + **Holt EMA bias
 correction** (level-only, `bias_alpha=0.05`, `bias_beta=0`) + an online season

@@ -48,7 +48,7 @@ and governed kit assembly checks the exact upstream identity chain.
 
 `train_pipeline(mode = "retune")` is the high-level compatibility orchestrator
 and now composes the guarded lifecycle. It may use compatible prior tuning
-results to build a bounded grid, retain the coded v16 incumbent, add local
+results to build a bounded grid, retain the current v16-corrected incumbent, add local
 neighbors, and expand a boundary reached by the previous winner. Whichever
 interface is used, freeze the selected candidate and record its training
 seasons before examining `2025-26`.

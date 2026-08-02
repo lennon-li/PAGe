@@ -30,7 +30,7 @@ routes its full evaluator through governed `tune_m2()`.
 | `prepare_surveillance_data()` | Canonicalizes surveillance input. | Retain as the data-entry contract. |
 | `validate_surveillance_data()` | Validates canonical surveillance data. | Retain. |
 | `simulate_flu_seasons()` | Produces public synthetic example/test data. | Supporting utility only; not a production stage API. Later make its output canonical. |
-| `train_pipeline()` | Runs M0/M1/M2 tuning or fixed refresh in one call. | Compatibility orchestration; later refactor to compose guarded stage calls. |
+| `train_pipeline()` | Runs M0/M1/M2 tuning or fixed refresh in one call. | Compatibility orchestrator that now composes the guarded lifecycle and preserves the legacy result shape. Use the explicit stage calls when each gate must be inspected manually. |
 | `assemble_kit()` | Combines M0/M1/M2 objects. | Accepts the legacy objects or an all-governed chain. If any input is governed, all three must be frozen, selection-matched, and identity-linked. |
 | `validate_page_kit()` | Validates runtime fields of a kit. | Also checks completeness and integrity of governance metadata when present. |
 | `new_result_manifest()` / `validate_result_manifest()` | Records disclosure-safe provenance. | Retain; versioned extension is needed before it carries all season-set identities. |

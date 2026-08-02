@@ -20,7 +20,7 @@
 .m2_locked_grid_row <- function() {
   data.frame(
     delta = 0L, Kr = 1L, k_f = 4L, k_e = 2L,
-    alpha_state = 0.15, k_r = 0L, k_de = 0L, k_sp = 6L,
+    alpha_state = 0.20, k_r = 0L, k_de = 0L, k_sp = 8L,
     bias_alpha = 0.05, bias_beta = 0
   )
 }
@@ -133,7 +133,7 @@
 .initial_m2_grid <- function(max_specs) {
   incumbent <- .m2_locked_grid_row()
   rows <- list(incumbent)
-  provenance <- "incumbent:v16"
+  provenance <- "incumbent:v16-corrected"
   changes <- list(
     delta = 1L, Kr = 2L, k_f = c(3L, 5L), k_e = c(0L, 3L),
     alpha_state = c(0.10, 0.20), k_r = 2L, k_de = 2L,
@@ -303,7 +303,7 @@
 #' Plan a bounded M2 tuning grid
 #'
 #' Creates a compact, explainable M2 grid. Without compatible prior tuning
-#' results, the plan contains the coded v16 incumbent and one-factor
+#' results, the plan contains the current v16-corrected incumbent and one-factor
 #' neighbors. With prior results, it retains v16, greedily retains diverse
 #' high-performing finalists, adds one-factor neighbors around the prior
 #' winner, and expands grid boundaries reached by that winner using the
@@ -355,7 +355,7 @@ plan_m2_grid <- function(previous_results = NULL,
   winner <- ranked[1L, .m2_parameter_names(), drop = FALSE]
   previous_grid <- attr(ranked, "previous_grid")
   rows <- list(.m2_locked_grid_row())
-  provenance <- "incumbent:v16"
+  provenance <- "incumbent:v16-corrected"
 
   for (i in seq_len(nrow(finalists))) {
     rows[[length(rows) + 1L]] <- finalists[i, .m2_parameter_names(), drop = FALSE]

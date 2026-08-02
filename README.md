@@ -46,10 +46,13 @@ start, and repeat the same lifecycle for M1 and M2.
 ```r
 selection <- validate_season_selection(
   allD,
-  training_seasons = development_seasons,
+  training_seasons = setdiff(
+    sort(unique(allD$season)),
+    c("2011-12", "2015-16", "2020-21", "2021-22", "2025-26")
+  ),
   exclude_seasons = c("2011-12", "2015-16", "2020-21", "2021-22"),
   holdout_seasons = "2025-26",
-  application_seasons = "2026-27"
+  application_seasons = character()
 )
 
 m0_tuning <- tune_m0(allD, selection = selection)
@@ -59,10 +62,18 @@ m0 <- fit_m0(allD, selection, config = m0_tuning$best_params) |>
 
 m1_tuning <- tune_m1(allD, m0 = m0, selection = selection)
 validate_m1_tuning(m1_tuning)
-approved_m1_config <- as.list(m1_tuning$best[1, , drop = FALSE])
-m1 <- fit_m1(allD, selection, m0, config = approved_m1_config) |>
+m1_best <- m1_tuning$best[1, , drop = FALSE]
+m1_config <- m1_make_params(
+  k_ref = m1_best$k_ref,
+  temperature = m1_best$multi_temperature,
+  rise_weight = m1_best$align_rise_weight,
+  slope_window = m1_best$slope_window,
+  slope_weight = m1_best$slope_weight
+)
+m1 <- fit_m1(allD, selection, m0, config = m1_config) |>
   freeze_m1(tuning = m1_tuning)
 
+m2_grid <- default_m2_grid()
 m2_tuning <- tune_m2(allD, selection, m0, m1, grid = m2_grid)
 validate_m2_tuning(m2_tuning)
 m2 <- fit_m2(allD, selection, m0, m1, config = m2_tuning$best_spec) |>
@@ -171,13 +182,14 @@ remaining orchestration work. The
 [tuning playbook](docs/tuning-playbook.md) explains boundary diagnostics,
 controlled grid expansion, stage-specific parameter tips, and stopping rules.
 
-## Coded production reference
+## Current production reference
 
-The locked v16 incumbent in code is `k_f = 4`, `k_e = 2`,
-`alpha_state = 0.15`, `k_sp = 6`, `k_r = 0`, `k_de = 0`, `delta = 0`,
-`Kr = 1`, `bias_alpha = 0.05`, and `bias_beta = 0`. Historical notes record a
-nested-LOSO Bernoulli NLL of 0.4175, but the corresponding private artifact is
-absent, so this repository does not verify that value or establish a promoted
-deployment.
+The working incumbent is the existing frozen `v16-corrected` kit used as the
+comparator in the 2025-26 acceptance replay. Its recorded specification is
+`k_f = 4`, `k_e = 2`, `alpha_state = 0.20`, `k_sp = 8`, `k_r = 0`,
+`k_de = 0`, `delta = 0`, `Kr = 1`, `bias_alpha = 0.05`, and `bias_beta = 0`.
+The private artifact is retained outside version control; its exact historical
+lineage is not fully reconstructible, so this is a confidence baseline rather
+than a claim that the original v16 research artifact has been recovered.
 
 PAGe is released under the MIT License.

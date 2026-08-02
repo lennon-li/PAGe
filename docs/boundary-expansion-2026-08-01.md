@@ -39,8 +39,9 @@ future bounded pre-holdout run; they are not promoted configurations.
 ## Acceptance outcome
 
 The boundary-only run froze the `bias_alpha = 0` candidate against the cached
-M1 incumbent (`k_ref = 25`) and replayed it against the incumbent
-`bias_alpha = 0.05` kit on `2025-26`. The candidate's overall Bernoulli NLL was
+M1 incumbent (`k_ref = 25`) and replayed it against the existing
+`v16-corrected` incumbent (`alpha_state = 0.20`, `k_sp = 8`,
+`bias_alpha = 0.05`) on `2025-26`. The candidate's overall Bernoulli NLL was
 `0.3153721` versus `0.3153873`, an improvement of `0.0000482`; the locked gate
 requires at least `0.02`, so the decision was **FAIL**. Horizon and phase MAE
 gates passed. The decision bundle, row-level replays, aggregate metrics, and

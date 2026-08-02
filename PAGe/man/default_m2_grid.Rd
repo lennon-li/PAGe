@@ -12,6 +12,6 @@ A data frame with M2 parameters, stable specification IDs, and
 }
 \description{
 Delegates to \code{plan_m2_grid()} to return the compact initial grid. The
-coded v16 incumbent is always included, with one-factor neighbors and
+current v16-corrected incumbent is always included, with one-factor neighbors and
 per-row provenance instead of an explosive Cartesian product.
 }

@@ -10,6 +10,15 @@ failed the locked NLL gate, while horizon and phase gates passed. Its ignored
 private/audit evidence is under `results/user-test/` and `results/audit/`.
 No post-promotion refit or registry promotion occurred.
 
+The working incumbent is the existing private `v16-corrected` frozen kit used
+by that replay (`alpha_state = 0.20`, `k_sp = 8`, `bias_alpha = 0.05`). The
+pre-holdout comparator is the ignored `dev_kit.rds` under the corresponding
+`results/user-test/v16-corrected-20260730T034430Z/artifacts/` run; do not use
+that run's `final_kit.rds`, which includes `2025-26`. The artifact remains
+outside version control; the repository records the specification and
+provenance caveat rather than claiming to reconstruct the original research
+artifact.
+
 ## Operational workflow
 
 | Entry point or family | Status | Use and safe replacement |

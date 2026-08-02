@@ -20,9 +20,14 @@ the same issue week.
 ```{r}
 library(PAGe)
 
+m2_grid <- if (exists("prior_m2_results", inherits = FALSE)) {
+  plan_m2_grid(prior_m2_results, max_finalists = 6L, max_specs = 64L)
+} else {
+  default_m2_grid()
+}
 m2_tuning <- tune_m2(
   historical, selection, m0, m1,
-  grid = default_m2_grid()
+  grid = m2_grid
 )
 validate_m2_tuning(m2_tuning)
 draft_m2 <- fit_m2(
@@ -32,9 +37,18 @@ draft_m2 <- fit_m2(
 m2 <- freeze_m2(draft_m2, tuning = m2_tuning)
 ```
 
-The default grid contains the coded v16 incumbent values
-(`delta=0`, `Kr=1`, `k_f=4`, `k_e=2`, `alpha_state=0.15`, `k_r=0`, `k_de=0`,
-`k_sp=6`, `bias_alpha=0.05`, and `bias_beta=0`), but their presence is not
+After `validate_m2_tuning()` passes, `m2` is the frozen M2 candidate stage. The
+full candidate is assembled only after frozen M0 and M1 are available:
+
+```{r}
+candidate <- assemble_kit(m0, m1, m2)
+validate_page_kit(candidate)
+saveRDS(candidate, "results/candidate_pre_holdout.rds")
+```
+
+The default grid contains the current v16-corrected incumbent values
+(`delta=0`, `Kr=1`, `k_f=4`, `k_e=2`, `alpha_state=0.20`, `k_r=0`, `k_de=0`,
+`k_sp=8`, `bias_alpha=0.05`, and `bias_beta=0`), but their presence is not
 proof of a deployed kit. Use walk-forward LOSO before proposing a different
 specification, then complete the governed holdout and promotion sequence.
 

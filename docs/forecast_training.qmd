@@ -21,8 +21,9 @@ The current stage-controlled workflow is the guarded lifecycle in
 `train_pipeline()` remains a high-level compatibility orchestrator. Release is
 followed by
 the governed sequence in
-[`deployment-workflow.qmd`](deployment-workflow.qmd). The coded v16 incumbent
-uses `alpha_state=0.15`, `k_sp=6`, `bias_alpha=0.05`, and `bias_beta=0`.
+[`deployment-workflow.qmd`](deployment-workflow.qmd). The current working
+v16-corrected incumbent uses `alpha_state=0.20`, `k_sp=8`,
+`bias_alpha=0.05`, and `bias_beta=0`.
 Historical notes record nested-LOSO Bernoulli NLL 0.4175, but the private
 artifact is absent, so the metric and any real deployment remain unverified.
 Retired v15 and v15-postfix results below are historical comparisons only.
@@ -567,19 +568,20 @@ cat("Best:", prod_results$best_spec_id,
 best_spec_nested <- prod_results$best_spec
 ```
 
-**Coded v16 incumbent:** `k_f=4, k_e=2, alpha_state=0.15, k_r=0,
-k_de=0, k_sp=6, bias_alpha=0.05, bias_beta=0` with `delta=0, Kr=1,
-lambda_w=0`. Historical notes report NLL 0.4175, but the source artifact is
-absent and no immutable promoted deployment is preserved here.
+**Current working incumbent (`v16-corrected`):** `k_f=4, k_e=2,
+alpha_state=0.20, k_r=0, k_de=0, k_sp=8, bias_alpha=0.05, bias_beta=0`
+with `delta=0, Kr=1, lambda_w=0`. The private frozen artifact was used in the
+2025-26 acceptance replay but is outside version control; its exact historical
+lineage is not fully reconstructible.
 
 For parity with the validated v16 implementation, online season-RE estimation
 uses the first lead level (`h1`). This is a locked compatibility limitation,
 not a horizon-general API: changing it requires separate prospective
 validation and promotion.
 
-The coded incumbent uses three effective smooth covariates: template position
-(`s(logit_f_eff, k=4)`), EMA state (`s(z_ema, k=2)`, alpha=0.15), and
-alignment uncertainty (`s(logit_spread, k=6`). The amplitude-residual and
+The working incumbent uses three effective smooth covariates: template position
+(`s(logit_f_eff, k=4)`), EMA state (`s(z_ema, k=2)`, alpha=0.20), and
+alignment uncertainty (`s(logit_spread, k=8)`). The amplitude-residual and
 rate-of-change smooths are off. The canonical correction rule is level-only
 (`bias_beta=0`), with base `bias_alpha=0.05` and high `bias_alpha=0.7` after
 two same-sign transitions (the third consecutive same-sign residual). The

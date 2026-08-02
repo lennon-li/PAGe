@@ -44,7 +44,7 @@
 .default_m2_spec <- function() {
   stage2_make_spec(
     delta = 0L, Kr = 1L, T = "S", k_f = 4L, k_e = 2L,
-    alpha_state = 0.15, k_r = 0L, k_de = 0L, k_sp = 6L,
+    alpha_state = 0.20, k_r = 0L, k_de = 0L, k_sp = 8L,
     k_n = 0L, k_w = 0L, k_s = 0L, lambda_w = 0, w_floor = 0.05,
     bias_alpha = 0.05, bias_beta = 0
   )
@@ -179,7 +179,7 @@ default_m1_grid <- function() {
 #' Return the default M2 forecast tuning grid
 #'
 #' Delegates to \code{plan_m2_grid()} to return the compact initial grid. The
-#' coded v16 incumbent is always included, with one-factor neighbors and
+#' current v16-corrected incumbent is always included, with one-factor neighbors and
 #' per-row provenance instead of an explosive Cartesian product.
 #'
 #' @return A data frame with M2 parameters, stable specification IDs, and
@@ -876,8 +876,8 @@ build_m2 <- function(allD,
 #' @param m0 Output of \code{tune_m0()}. Must include \code{best_params}.
 #' @param m1 Output of \code{build_m1()}. Provides \code{ref} and \code{hyper}.
 #' @param best_spec Stage-2 spec from \code{build_m2()$best_spec} or
-#'   \code{stage2_make_spec()}. When \code{NULL}, uses the locked deployed v16
-#'   specification for a production-data refresh without retuning.
+#'   \code{stage2_make_spec()}. When \code{NULL}, uses the current locked
+#'   v16-corrected incumbent for a production-data refresh without retuning.
 #' @param exclude Character vector of seasons to exclude from training.
 #'   Default excludes permanent invalid seasons and 2015-16. Note: 2025-26
 #'   is kept (production training uses the current season).

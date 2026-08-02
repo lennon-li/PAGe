@@ -39,10 +39,13 @@ allow each stage to proceed only after its tuning gate and freeze gate pass:
 ```r
 selection <- validate_season_selection(
   allD,
-  training_seasons = development_seasons,
-  exclude_seasons = excluded_seasons,
+  training_seasons = setdiff(
+    sort(unique(allD$season)),
+    c("2011-12", "2015-16", "2020-21", "2021-22", "2025-26")
+  ),
+  exclude_seasons = c("2011-12", "2015-16", "2020-21", "2021-22"),
   holdout_seasons = "2025-26",
-  application_seasons = "2026-27"
+  application_seasons = character()
 )
 
 m0_tuning <- tune_m0(allD, selection = selection)
@@ -52,11 +55,19 @@ m0 <- fit_m0(allD, selection, m0_tuning$best_params) |>
 
 m1_tuning <- tune_m1(allD, m0 = m0, selection = selection)
 validate_m1_tuning(m1_tuning)
-approved_m1_config <- as.list(m1_tuning$best[1, , drop = FALSE])
-m1 <- fit_m1(allD, selection, m0, approved_m1_config) |>
+m1_best <- m1_tuning$best[1, , drop = FALSE]
+m1_config <- m1_make_params(
+  k_ref = m1_best$k_ref,
+  temperature = m1_best$multi_temperature,
+  rise_weight = m1_best$align_rise_weight,
+  slope_window = m1_best$slope_window,
+  slope_weight = m1_best$slope_weight
+)
+m1 <- fit_m1(allD, selection, m0, m1_config) |>
   freeze_m1(m1_tuning)
 
-m2_tuning <- tune_m2(allD, selection, m0, m1, m2_grid)
+m2_grid <- default_m2_grid()
+m2_tuning <- tune_m2(allD, selection, m0, m1, grid = m2_grid)
 validate_m2_tuning(m2_tuning)
 m2 <- fit_m2(allD, selection, m0, m1, m2_tuning$best_spec) |>
   freeze_m2(m2_tuning)
@@ -121,12 +132,13 @@ neighbors, and rerun identical complete folds. Zero-valued optional M2 terms
 may be legitimate feature-off boundaries. Record accepted constraints and
 finish every expansion before viewing the prospective holdout.
 
-The coded v16 reference specification is `k_f = 4`, `k_e = 2`,
-`alpha_state = 0.15`, `k_sp = 6`, `k_r = 0`, `k_de = 0`, `delta = 0`,
-`Kr = 1`, `bias_alpha = 0.05`, and `bias_beta = 0` (recorded nested-LOSO
-Bernoulli NLL 0.4175). The corresponding private artifact is absent, so the
-repository does not independently verify that value or establish a promoted
-deployment.
+The working incumbent is the existing frozen `v16-corrected` kit used in the
+2025-26 acceptance replay: `k_f = 4`, `k_e = 2`, `alpha_state = 0.20`,
+`k_sp = 8`, `k_r = 0`, `k_de = 0`, `delta = 0`, `Kr = 1`,
+`bias_alpha = 0.05`, and `bias_beta = 0`. Its private artifact is outside
+version control, and its exact historical lineage is not fully reconstructible;
+it is retained as a confidence baseline rather than presented as a recovered
+research artifact.
 
 See `vignette("intro", package = "PAGe")`, the
 [pipeline overview](https://lennon-li.github.io/PAGe/articles/pipeline-overview.html),

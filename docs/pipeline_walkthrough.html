@@ -3082,13 +3082,19 @@ vertical-align: -.125em;
 <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
   <nav id="TOC" role="doc-toc" class="toc-active">
     <h2 id="toc-title">Table of contents</h2>
-   
+
   <ul>
   <li><a href="#prepare-authorized-surveillance-data" id="toc-prepare-authorized-surveillance-data" class="nav-link active" data-scroll-target="#prepare-authorized-surveillance-data"><span class="header-section-number">1</span> Prepare authorized surveillance data</a></li>
-  <li><a href="#refresh-the-locked-production-kit" id="toc-refresh-the-locked-production-kit" class="nav-link" data-scroll-target="#refresh-the-locked-production-kit"><span class="header-section-number">2</span> Refresh the locked production kit</a></li>
-  <li><a href="#replay-the-holdout-and-apply-promotion-gates" id="toc-replay-the-holdout-and-apply-promotion-gates" class="nav-link" data-scroll-target="#replay-the-holdout-and-apply-promotion-gates"><span class="header-section-number">3</span> Replay the holdout and apply promotion gates</a></li>
-  <li><a href="#retune-when-model-selection-is-required" id="toc-retune-when-model-selection-is-required" class="nav-link" data-scroll-target="#retune-when-model-selection-is-required"><span class="header-section-number">4</span> Retune when model selection is required</a></li>
-  <li><a href="#produce-a-frozen-prospective-forecast" id="toc-produce-a-frozen-prospective-forecast" class="nav-link" data-scroll-target="#produce-a-frozen-prospective-forecast"><span class="header-section-number">5</span> Produce a frozen prospective forecast</a></li>
+  <li><a href="#declare-the-governed-season-sets" id="toc-declare-the-governed-season-sets" class="nav-link" data-scroll-target="#declare-the-governed-season-sets"><span class="header-section-number">2</span> Declare the governed season sets</a></li>
+  <li><a href="#train-and-freeze-each-stage" id="toc-train-and-freeze-each-stage" class="nav-link" data-scroll-target="#train-and-freeze-each-stage"><span class="header-section-number">3</span> Train and freeze each stage</a></li>
+  <li><a href="#compatibility-refresh-of-the-locked-specification" id="toc-compatibility-refresh-of-the-locked-specification" class="nav-link" data-scroll-target="#compatibility-refresh-of-the-locked-specification"><span class="header-section-number">4</span> Compatibility refresh of the locked specification</a></li>
+  <li><a href="#replay-the-holdout-and-apply-promotion-gates" id="toc-replay-the-holdout-and-apply-promotion-gates" class="nav-link" data-scroll-target="#replay-the-holdout-and-apply-promotion-gates"><span class="header-section-number">5</span> Replay the holdout and apply promotion gates</a></li>
+  <li><a href="#retune-when-model-selection-is-required" id="toc-retune-when-model-selection-is-required" class="nav-link" data-scroll-target="#retune-when-model-selection-is-required"><span class="header-section-number">6</span> Retune when model selection is required</a>
+  <ul class="collapse">
+  <li><a href="#diagnose-and-expand-the-grid" id="toc-diagnose-and-expand-the-grid" class="nav-link" data-scroll-target="#diagnose-and-expand-the-grid"><span class="header-section-number">6.1</span> Diagnose and expand the grid</a></li>
+  </ul></li>
+  <li><a href="#manual-pre-holdout-candidate-cycle" id="toc-manual-pre-holdout-candidate-cycle" class="nav-link" data-scroll-target="#manual-pre-holdout-candidate-cycle"><span class="header-section-number">7</span> Manual pre-holdout candidate cycle</a></li>
+  <li><a href="#produce-a-frozen-prospective-forecast" id="toc-produce-a-frozen-prospective-forecast" class="nav-link" data-scroll-target="#produce-a-frozen-prospective-forecast"><span class="header-section-number">8</span> Produce a frozen prospective forecast</a></li>
   </ul>
 </nav>
 </div>
@@ -3103,11 +3109,11 @@ vertical-align: -.125em;
 
 <div class="quarto-title-meta">
 
-    
-  
-    
+
+
+
   </div>
-  
+
 
 
 </header>
@@ -3124,49 +3130,172 @@ vertical-align: -.125em;
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">prepare_surveillance_data</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
-<section id="refresh-the-locked-production-kit" class="level2" data-number="2">
-<h2 data-number="2" class="anchored" data-anchor-id="refresh-the-locked-production-kit"><span class="header-section-number">2</span> Refresh the locked production kit</h2>
-<p>Use refresh when the model structure is already approved. It fits the deployed v16 specification (<code>k_f=4</code>, <code>k_e=2</code>, <code>alpha_state=0.15</code>, <code>k_sp=6</code>, <code>k_r=0</code>, <code>k_de=0</code>, <code>delta=0</code>, <code>Kr=1</code>, <code>bias_alpha=0.05</code>, <code>bias_beta=0</code>). The 2025-26 season remains excluded as a prospective holdout by default.</p>
+<section id="declare-the-governed-season-sets" class="level2" data-number="2">
+<h2 data-number="2" class="anchored" data-anchor-id="declare-the-governed-season-sets"><span class="header-section-number">2</span> Declare the governed season sets</h2>
+<p>The guarded stage API never infers training membership from the rows that happen to be present. Declare training, permanent exclusions, untouched holdouts, and prospective application seasons explicitly:</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>training <span class="ot">&lt;-</span> <span class="fu">train_pipeline</span>(allD, <span class="at">mode =</span> <span class="st">&quot;refresh&quot;</span>)</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>kit <span class="ot">&lt;-</span> training<span class="sc">$</span>kit</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="fu">saveRDS</span>(kit, <span class="st">&quot;page_kit.rds&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>selection <span class="ot">&lt;-</span> <span class="fu">validate_season_selection</span>(</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  allD,</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">training_seasons =</span> <span class="fu">setdiff</span>(</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">sort</span>(<span class="fu">unique</span>(allD<span class="sc">$</span>season)),</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">c</span>(<span class="st">&quot;2011-12&quot;</span>, <span class="st">&quot;2015-16&quot;</span>, <span class="st">&quot;2020-21&quot;</span>, <span class="st">&quot;2021-22&quot;</span>, <span class="st">&quot;2025-26&quot;</span>)</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  ),</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">exclude_seasons =</span> <span class="fu">c</span>(<span class="st">&quot;2011-12&quot;</span>, <span class="st">&quot;2015-16&quot;</span>, <span class="st">&quot;2020-21&quot;</span>, <span class="st">&quot;2021-22&quot;</span>),</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">holdout_seasons =</span> <span class="st">&quot;2025-26&quot;</span>,</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">application_seasons =</span> <span class="fu">character</span>()</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
+<p>The four sets must be mutually disjoint and every identifier must exist in the canonical data. <code>season_selection(x)</code> retrieves the recorded selection from a governed tuning result, stage artifact, or assembled kit.</p>
 </section>
-<section id="replay-the-holdout-and-apply-promotion-gates" class="level2" data-number="3">
-<h2 data-number="3" class="anchored" data-anchor-id="replay-the-holdout-and-apply-promotion-gates"><span class="header-section-number">3</span> Replay the holdout and apply promotion gates</h2>
-<p>Both candidate and incumbent kits must have been trained without 2025-26.</p>
+<section id="train-and-freeze-each-stage" class="level2" data-number="3">
+<h2 data-number="3" class="anchored" data-anchor-id="train-and-freeze-each-stage"><span class="header-section-number">3</span> Train and freeze each stage</h2>
+<p>Each stage has separate tuning, tuning-validation, fitting, and freezing operations. A downstream stage accepts only frozen upstream artifacts with the same season selection and expected artifact identities.</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>candidate <span class="ot">&lt;-</span> <span class="fu">replay_season_holdout</span>(kit, allD, <span class="at">season =</span> <span class="st">&quot;2025-26&quot;</span>)</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>incumbent <span class="ot">&lt;-</span> <span class="fu">replay_season_holdout</span>(incumbent_kit, allD, <span class="at">season =</span> <span class="st">&quot;2025-26&quot;</span>)</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>promotion <span class="ot">&lt;-</span> <span class="fu">check_promotion</span>(candidate<span class="sc">$</span>metrics, incumbent<span class="sc">$</span>metrics)</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="co"># A passing report releases 2025-26 into the refresh for 2026-27.</span></span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>next_training <span class="ot">&lt;-</span> <span class="fu">train_pipeline</span>(allD, <span class="at">mode =</span> <span class="st">&quot;refresh&quot;</span>, <span class="at">promotion =</span> promotion)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># M0: ignition</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>m0_tuning <span class="ot">&lt;-</span> <span class="fu">tune_m0</span>(allD, <span class="at">selection =</span> selection)</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="fu">validate_m0_tuning</span>(m0_tuning)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>m0 <span class="ot">&lt;-</span> <span class="fu">fit_m0</span>(allD, selection, <span class="at">config =</span> m0_tuning<span class="sc">$</span>best_params) <span class="sc">|&gt;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">freeze_m0</span>(<span class="at">tuning =</span> m0_tuning)</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="co"># M1: alignment</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>m1_tuning <span class="ot">&lt;-</span> <span class="fu">tune_m1</span>(allD, <span class="at">m0 =</span> m0, <span class="at">selection =</span> selection)</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="fu">validate_m1_tuning</span>(m1_tuning)</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>m1_best <span class="ot">&lt;-</span> m1_tuning<span class="sc">$</span>best[<span class="dv">1</span>, , drop <span class="ot">=</span> <span class="cn">FALSE</span>]</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>m1_config <span class="ot">&lt;-</span> <span class="fu">m1_make_params</span>(</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">k_ref =</span> m1_best<span class="sc">$</span>k_ref,</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">temperature =</span> m1_best<span class="sc">$</span>multi_temperature,</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>  <span class="at">rise_weight =</span> m1_best<span class="sc">$</span>align_rise_weight,</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>  <span class="at">slope_window =</span> m1_best<span class="sc">$</span>slope_window,</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>  <span class="at">slope_weight =</span> m1_best<span class="sc">$</span>slope_weight</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>m1 <span class="ot">&lt;-</span> <span class="fu">fit_m1</span>(allD, selection, m0, <span class="at">config =</span> m1_config) <span class="sc">|&gt;</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">freeze_m1</span>(<span class="at">tuning =</span> m1_tuning)</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a><span class="co"># M2: forecast</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>m2_grid <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">exists</span>(<span class="st">&quot;prior_m2_results&quot;</span>, <span class="at">inherits =</span> <span class="cn">FALSE</span>)) {</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>  <span class="fu">plan_m2_grid</span>(prior_m2_results, <span class="at">max_finalists =</span> <span class="dv">6</span>L, <span class="at">max_specs =</span> <span class="dv">64</span>L)</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>} <span class="cf">else</span> {</span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">default_m2_grid</span>()</span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>m2_tuning <span class="ot">&lt;-</span> <span class="fu">tune_m2</span>(allD, selection, m0, m1, <span class="at">grid =</span> m2_grid)</span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a><span class="fu">validate_m2_tuning</span>(m2_tuning)</span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>m2 <span class="ot">&lt;-</span> <span class="fu">fit_m2</span>(allD, selection, m0, m1, <span class="at">config =</span> m2_tuning<span class="sc">$</span>best_spec) <span class="sc">|&gt;</span></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>  <span class="fu">freeze_m2</span>(<span class="at">tuning =</span> m2_tuning)</span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>kit <span class="ot">&lt;-</span> <span class="fu">assemble_kit</span>(m0, m1, m2)</span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a><span class="fu">validate_page_kit</span>(kit)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<p>Promotion requires at least 2% Bernoulli-NLL improvement, at most 5% MAE degradation at any horizon, and at most 10% MAE degradation in any phase. A failed or malformed report keeps the holdout excluded. The versioned report schema validates the locked thresholds and internal gate consistency; it does not provide cryptographic proof of who created the report.</p>
+<p>The example uses the validated one-row <code>m1_tuning$best</code> selection as the fixed M1 configuration. A tuning result is not itself a fitted stage, and a draft fit is not a deployment input. <code>assemble_kit()</code> fails if a governed chain contains a draft stage, mismatched season selection, or broken upstream identity.</p>
+<p><code>tune_m1()</code> normally inherits M0’s manual labels and records the shifted M1 label vector in its result. To reproduce a historical M1 search that used a different target-label vector, pass that vector explicitly with <code>manual_labels=</code> in the unshifted M0 coordinate system. This override changes the M1 tuning target only; it should not silently replace the labels used to fit M0 or the production reference.</p>
+<p>M2 tuning constructs labels separately for every LOSO fold. The held-out season is excluded from <code>manual_labels_train</code>, while <code>manual_labels_test</code> is <code>NULL</code>, so held-out ignition timing is detected prospectively. Any checkpoint created with the held-out label supplied to the evaluation fold is leaked and must be recomputed rather than merely re-ranked.</p>
 </section>
-<section id="retune-when-model-selection-is-required" class="level2" data-number="4">
-<h2 data-number="4" class="anchored" data-anchor-id="retune-when-model-selection-is-required"><span class="header-section-number">4</span> Retune when model selection is required</h2>
+<section id="compatibility-refresh-of-the-locked-specification" class="level2" data-number="4">
+<h2 data-number="4" class="anchored" data-anchor-id="compatibility-refresh-of-the-locked-specification"><span class="header-section-number">4</span> Compatibility refresh of the locked specification</h2>
+<p>Use refresh when the model structure is already approved. It fits the coded current v16-corrected specification (<code>k_f=4</code>, <code>k_e=2</code>, <code>alpha_state=0.20</code>, <code>k_sp=8</code>, <code>k_r=0</code>, <code>k_de=0</code>, <code>delta=0</code>, <code>Kr=1</code>, <code>bias_alpha=0.05</code>, <code>bias_beta=0</code>). The 2025-26 season remains excluded as a prospective holdout by default.</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>retuned <span class="ot">&lt;-</span> <span class="fu">train_pipeline</span>(</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  allD,</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">mode =</span> <span class="st">&quot;retune&quot;</span>,</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">previous_results =</span> prior_m2_results,</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">selection_method =</span> <span class="st">&quot;min_nll&quot;</span>, <span class="co"># alternatives: &quot;one_se&quot;, &quot;pareto&quot;</span></span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">racing =</span> <span class="cn">FALSE</span>,</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">checkpoint_dir =</span> <span class="st">&quot;results/checkpoints&quot;</span></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>training <span class="ot">&lt;-</span> <span class="fu">train_pipeline</span>(allD, <span class="at">mode =</span> <span class="st">&quot;refresh&quot;</span>)</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>kit <span class="ot">&lt;-</span> training<span class="sc">$</span>kit</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="fu">saveRDS</span>(kit, <span class="st">&quot;page_kit.rds&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p><code>train_pipeline()</code> is the high-level compatibility orchestrator and composes the guarded stage lifecycle above for both refresh and retune. Use the explicit calls when a workflow needs to inspect or gate each stage independently.</p>
+</section>
+<section id="replay-the-holdout-and-apply-promotion-gates" class="level2" data-number="5">
+<h2 data-number="5" class="anchored" data-anchor-id="replay-the-holdout-and-apply-promotion-gates"><span class="header-section-number">5</span> Replay the holdout and apply promotion gates</h2>
+<p>Both candidate and incumbent kits must have been trained without 2025-26. Governed evaluation runs through <code>scripts/acceptance/replay_2025_26.R</code>, which saves the private replay bundle and disclosure-safe manifest before returning a promotion decision. Do not pass a bare <code>check_promotion()</code> report to <code>train_pipeline()</code>; it has no artifact provenance and cannot release the holdout.</p>
+<p>After a passing acceptance run, use <code>season2526/run_retrain_venkata.R</code> with the saved decision bundle, manifest, authorized data, candidate kit, and incumbent kit. That script verifies every bound SHA-256 hash, constructs short-lived verified promotion evidence, and performs the fixed post-promotion refresh.</p>
+<p>Promotion requires at least 2% Bernoulli-NLL improvement, at most 5% MAE degradation at any horizon, and at most 10% MAE degradation in any phase. A failed or malformed report keeps the holdout excluded. The versioned report schema validates the locked thresholds and internal gate consistency. The retained artifacts and their verified hashes—not the forgeable R class—are the production safety boundary.</p>
+</section>
+<section id="retune-when-model-selection-is-required" class="level2" data-number="6">
+<h2 data-number="6" class="anchored" data-anchor-id="retune-when-model-selection-is-required"><span class="header-section-number">6</span> Retune when model selection is required</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>retuned <span class="ot">&lt;-</span> <span class="fu">train_pipeline</span>(</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  allD,</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">mode =</span> <span class="st">&quot;retune&quot;</span>,</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">previous_results =</span> prior_m2_results,</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">selection_method =</span> <span class="st">&quot;min_nll&quot;</span>, <span class="co"># alternatives: &quot;one_se&quot;, &quot;pareto&quot;</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">racing =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">checkpoint_dir =</span> <span class="st">&quot;results/checkpoints&quot;</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>The adaptive grid retains the v16 incumbent, uses compatible prior results, keeps diverse finalists, adds local neighbors, and expands reached boundaries. Optional <code>racing=TRUE</code> requires a user-supplied partial-fold evaluator. Racing only removes clear losers; every survivor receives full nested-LOSO evaluation before selection.</p>
-</section>
-<section id="produce-a-frozen-prospective-forecast" class="level2" data-number="5">
-<h2 data-number="5" class="anchored" data-anchor-id="produce-a-frozen-prospective-forecast"><span class="header-section-number">5</span> Produce a frozen prospective forecast</h2>
+<section id="diagnose-and-expand-the-grid" class="level3" data-number="6.1">
+<h3 data-number="6.1" class="anchored" data-anchor-id="diagnose-and-expand-the-grid"><span class="header-section-number">6.1</span> Diagnose and expand the grid</h3>
+<p>A selected value should normally have tested values on both sides. If the winner is at a lower or upper edge, retain the existing candidates and add one valid value beyond that edge using the adjacent observed spacing. Then rerun the same complete folds and selection rule. Prefer one-factor local neighbors before adding targeted interactions; do not expand every axis into an unbounded Cartesian grid.</p>
+<p>A boundary can be legitimate when it is a null or hard constraint. For example, an M2 smooth dimension of zero means that feature is off and should not be expanded to an invalid negative value. Record whether each boundary is expanded, accepted as a constraint/null, or left unresolved because the predeclared grid cap was reached.</p>
+<p>For the default M1 grid, a selected <code>k_ref=25</code> or <code>slope_weight=8</code> is on the lower edge. If that selection survives the complete governed run, adjacent spacing suggests testing <code>k_ref=20</code> and <code>slope_weight=4</code> in the next pre-holdout development round while retaining the original candidates.</p>
+<p>For M2, prefer:</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>kit <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">&quot;page_kit.rds&quot;</span>)</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>current <span class="ot">&lt;-</span> <span class="fu">prepare_surveillance_data</span>(current_csv, <span class="at">season =</span> <span class="st">&quot;2026-27&quot;</span>)</span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>forecast <span class="ot">&lt;-</span> <span class="fu">run_pipeline</span>(kit, current, <span class="at">mode =</span> <span class="st">&quot;frozen&quot;</span>)</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_forecast</span>(forecast, <span class="at">history =</span> allD)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>next_grid <span class="ot">&lt;-</span> <span class="fu">plan_m2_grid</span>(</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">previous_results =</span> prior_m2_results,</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">max_finalists =</span> <span class="dv">6</span>L,</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">max_specs =</span> <span class="dv">64</span>L</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>The planner retains the coded incumbent and prior finalists, adds nearest local neighbors, expands valid winning boundaries by one observed step, and preserves stable specification identities. Stop expanding when the winner is bracketed, a boundary is a documented null/constraint, improvement is flat relative to fold uncertainty, or the declared computational cap is reached. Never alter the grid after viewing the prospective holdout.</p>
+</section>
+</section>
+<section id="manual-pre-holdout-candidate-cycle" class="level2" data-number="7">
+<h2 data-number="7" class="anchored" data-anchor-id="manual-pre-holdout-candidate-cycle"><span class="header-section-number">7</span> Manual pre-holdout candidate cycle</h2>
+<p>Use this compact sequence when testing a new cycle by hand. Keep <code>2025-26</code> in the holdout for every call. The current boundary cycle should reuse the already-frozen M0/M1 artifacts and begin at the M2 block below; only run the M0/M1 blocks when those stages are intentionally being retuned. If prior M2 results are available, use the planner so already-scored specifications are retained by identity rather than rebuilt; otherwise start from <code>default_m2_grid()</code>.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># M0: tune -&gt; validate -&gt; fit -&gt; freeze</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>m0_tuning <span class="ot">&lt;-</span> <span class="fu">tune_m0</span>(</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  allD, <span class="at">selection =</span> selection,</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_cores =</span> parallel<span class="sc">::</span><span class="fu">detectCores</span>(), <span class="at">verbose =</span> <span class="cn">TRUE</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="fu">validate_m0_tuning</span>(m0_tuning)</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>m0 <span class="ot">&lt;-</span> <span class="fu">fit_m0</span>(allD, selection, <span class="at">config =</span> m0_tuning<span class="sc">$</span>best_params) <span class="sc">|&gt;</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">freeze_m0</span>(<span class="at">tuning =</span> m0_tuning)</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="co"># M1: tune -&gt; validate -&gt; fit -&gt; freeze</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>m1_tuning <span class="ot">&lt;-</span> <span class="fu">tune_m1</span>(</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>  allD, <span class="at">m0 =</span> m0, <span class="at">selection =</span> selection,</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">grid =</span> <span class="fu">default_m1_grid</span>(),</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_cores =</span> parallel<span class="sc">::</span><span class="fu">detectCores</span>(),</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>  <span class="at">checkpoint_dir =</span> <span class="st">&quot;results/checkpoints/m1-cycle&quot;</span>, <span class="at">verbose =</span> <span class="cn">TRUE</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a><span class="fu">validate_m1_tuning</span>(m1_tuning)</span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>m1_best <span class="ot">&lt;-</span> m1_tuning<span class="sc">$</span>best[<span class="dv">1</span>, , drop <span class="ot">=</span> <span class="cn">FALSE</span>]</span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>m1_config <span class="ot">&lt;-</span> <span class="fu">m1_make_params</span>(</span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>  <span class="at">k_ref =</span> m1_best<span class="sc">$</span>k_ref,</span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>  <span class="at">temperature =</span> m1_best<span class="sc">$</span>multi_temperature,</span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>  <span class="at">rise_weight =</span> m1_best<span class="sc">$</span>align_rise_weight,</span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>  <span class="at">slope_window =</span> m1_best<span class="sc">$</span>slope_window,</span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>  <span class="at">slope_weight =</span> m1_best<span class="sc">$</span>slope_weight</span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>m1 <span class="ot">&lt;-</span> <span class="fu">fit_m1</span>(allD, selection, m0, <span class="at">config =</span> m1_config) <span class="sc">|&gt;</span></span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>  <span class="fu">freeze_m1</span>(<span class="at">tuning =</span> m1_tuning)</span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a><span class="co"># M2: plan -&gt; tune -&gt; validate -&gt; fit -&gt; freeze</span></span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a>m2_grid <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">exists</span>(<span class="st">&quot;prior_m2_results&quot;</span>, <span class="at">inherits =</span> <span class="cn">FALSE</span>)) {</span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a>  <span class="fu">plan_m2_grid</span>(prior_m2_results, <span class="at">max_finalists =</span> <span class="dv">6</span>L, <span class="at">max_specs =</span> <span class="dv">64</span>L)</span>
+<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a>} <span class="cf">else</span> {</span>
+<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>  <span class="fu">default_m2_grid</span>()</span>
+<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a>m2_tuning <span class="ot">&lt;-</span> <span class="fu">tune_m2</span>(</span>
+<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>  allD, selection, m0, m1, <span class="at">grid =</span> m2_grid,</span>
+<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_cores =</span> parallel<span class="sc">::</span><span class="fu">detectCores</span>(),</span>
+<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a>  <span class="at">checkpoint_dir =</span> <span class="st">&quot;results/checkpoints/m2-cycle&quot;</span>, <span class="at">verbose =</span> <span class="cn">TRUE</span></span>
+<span id="cb7-39"><a href="#cb7-39" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-40"><a href="#cb7-40" aria-hidden="true" tabindex="-1"></a><span class="fu">validate_m2_tuning</span>(m2_tuning)</span>
+<span id="cb7-41"><a href="#cb7-41" aria-hidden="true" tabindex="-1"></a>m2 <span class="ot">&lt;-</span> <span class="fu">fit_m2</span>(allD, selection, m0, m1, <span class="at">config =</span> m2_tuning<span class="sc">$</span>best_spec) <span class="sc">|&gt;</span></span>
+<span id="cb7-42"><a href="#cb7-42" aria-hidden="true" tabindex="-1"></a>  <span class="fu">freeze_m2</span>(<span class="at">tuning =</span> m2_tuning)</span>
+<span id="cb7-43"><a href="#cb7-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-44"><a href="#cb7-44" aria-hidden="true" tabindex="-1"></a><span class="co"># Assemble only after all three stages are frozen and matched.</span></span>
+<span id="cb7-45"><a href="#cb7-45" aria-hidden="true" tabindex="-1"></a>candidate <span class="ot">&lt;-</span> <span class="fu">assemble_kit</span>(m0, m1, m2)</span>
+<span id="cb7-46"><a href="#cb7-46" aria-hidden="true" tabindex="-1"></a><span class="fu">validate_page_kit</span>(candidate)</span>
+<span id="cb7-47"><a href="#cb7-47" aria-hidden="true" tabindex="-1"></a><span class="fu">saveRDS</span>(candidate, <span class="st">&quot;results/candidate_pre_holdout.rds&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>The tuning objects are the evidence checkpoints; the frozen stage objects are the governed inputs to <code>assemble_kit()</code>; and <code>candidate</code> is the pre-holdout kit. It is not incumbent or deployable until the artifact-bound acceptance workflow compares it with the pre-holdout incumbent on the untouched holdout.</p>
+<p>The <a href="tuning-playbook.md">tuning playbook</a> gives parameter-specific M0, M1, and M2 advice plus a boundary-report schema.</p>
+</section>
+<section id="produce-a-frozen-prospective-forecast" class="level2" data-number="8">
+<h2 data-number="8" class="anchored" data-anchor-id="produce-a-frozen-prospective-forecast"><span class="header-section-number">8</span> Produce a frozen prospective forecast</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>kit <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">&quot;page_kit.rds&quot;</span>)</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>current <span class="ot">&lt;-</span> <span class="fu">prepare_surveillance_data</span>(current_csv, <span class="at">season =</span> <span class="st">&quot;2026-27&quot;</span>)</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>forecast <span class="ot">&lt;-</span> <span class="fu">run_pipeline</span>(kit, current, <span class="at">mode =</span> <span class="st">&quot;frozen&quot;</span>)</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_forecast</span>(forecast, <span class="at">history =</span> allD)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>Frozen-GAM deployment is the default validated path. Archive the input snapshot, issue date, kit version, manual overrides, and returned M0/M1/M2 state for reproducibility. Weekly refitting is available only as an explicit legacy compatibility option.</p>
 </section>
@@ -3408,7 +3537,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
             if (note !== null) {
               const html = processXRef(id, note);
               instance.setContent(html);
-            } 
+            }
           }).finally(() => {
             instance.enable();
             instance.show();

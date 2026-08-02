@@ -26,8 +26,8 @@ contemporaneously available alignment covariates.
 
 ## Coded incumbent configuration
 
-The coded v16 incumbent uses `k_f=4`, `k_e=2`,
-`alpha_state=0.15`, `k_sp=6`, `k_r=0`, `k_de=0`, `delta=0`, `Kr=1`,
+The current v16-corrected incumbent uses `k_f=4`, `k_e=2`,
+`alpha_state=0.20`, `k_sp=8`, `k_r=0`, `k_de=0`, `delta=0`, `Kr=1`,
 `bias_alpha=0.05`, and `bias_beta=0`. Historical notes record a private
 nested-LOSO result, but its source artifact is absent and no immutable promoted
 kit is preserved here. The frozen path updates the Holt correction and
@@ -54,8 +54,9 @@ the incumbent and diverse finalists, adds neighbors, and expands reached
 boundaries. Minimum NLL is the default selection rule; one-standard-error and
 Pareto selection are explicit alternatives. Optional staged racing eliminates
 only clear losers and always evaluates survivors with full nested LOSO.
-`train_pipeline()` has not yet been refactored to compose the guarded
-lifecycle.
+`train_pipeline()` now composes the guarded lifecycle for both refresh and
+retune while preserving its compatibility result shape. Use the explicit stage
+calls when a manual cycle must stop and be inspected at each gate.
 
 After each tuning round, inspect whether the selected value is at a tested
 minimum or maximum. Normally expand a winning edge by one adjacent valid step,

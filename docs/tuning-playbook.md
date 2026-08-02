@@ -162,7 +162,7 @@ next_grid <- plan_m2_grid(
 )
 ```
 
-`plan_m2_grid()` retains the coded v16 incumbent and diverse prior finalists.
+`plan_m2_grid()` retains the current v16-corrected incumbent and diverse prior finalists.
 For each prior winning boundary, it proposes one valid value beyond the edge
 using adjacent observed spacing, adds nearest local neighbors, deduplicates
 canonical specification identities, and respects `max_specs`.

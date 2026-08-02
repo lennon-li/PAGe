@@ -1,4 +1,4 @@
-test_that("the initial M2 plan is bounded, deterministic, and contains v16", {
+test_that("the initial M2 plan is bounded, deterministic, and contains the current incumbent", {
   first <- PAGe::plan_m2_grid(max_specs = 24L)
   second <- PAGe::plan_m2_grid(max_specs = 24L)
 
@@ -11,7 +11,7 @@ test_that("the initial M2 plan is bounded, deterministic, and contains v16", {
   incumbent <- subset(
     first,
     delta == 0L & Kr == 1L & k_f == 4L & k_e == 2L &
-      alpha_state == 0.15 & k_r == 0L & k_de == 0L & k_sp == 6L &
+      alpha_state == 0.20 & k_r == 0L & k_de == 0L & k_sp == 8L &
       bias_alpha == 0.05 & bias_beta == 0
   )
   expect_equal(nrow(incumbent), 1L)
@@ -209,7 +209,7 @@ test_that("refresh falls back to locked v16 for an incompatible prior best", {
   )
 
   expect_equal(calls$best_spec$k_f, 4L)
-  expect_equal(calls$best_spec$alpha_state, 0.15)
+  expect_equal(calls$best_spec$alpha_state, 0.20)
   expect_equal(calls$best_spec$bias_alpha, 0.05)
 })
 
