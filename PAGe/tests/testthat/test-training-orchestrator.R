@@ -6,6 +6,7 @@ test_that("the initial M2 plan is bounded, deterministic, and contains v16", {
   expect_lte(nrow(first), 24L)
   expect_false(anyDuplicated(first$spec_id) > 0L)
   expect_true(all(nzchar(first$provenance)))
+  expect_true(any(first$k_e == 0L))
 
   incumbent <- subset(
     first,
@@ -47,7 +48,7 @@ test_that("the adaptive M2 plan retains diverse finalists and expands boundaries
   expect_false(anyDuplicated(planned$spec_id) > 0L)
   expect_true(all(planned$delta >= 0L))
   expect_true(all(planned$Kr >= 1L))
-  expect_true(all(planned$k_f >= 2L & planned$k_e >= 2L))
+  expect_true(all(planned$k_f >= 2L & (planned$k_e == 0L | planned$k_e >= 2L)))
   expect_true(all(planned$alpha_state >= 0 & planned$alpha_state <= 1))
   expect_true(all(planned$bias_alpha >= 0 & planned$bias_alpha <= 1))
   expect_true(all(planned$bias_beta >= 0 & planned$bias_beta <= 1))

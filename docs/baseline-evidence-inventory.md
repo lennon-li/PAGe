@@ -1,10 +1,11 @@
 # PAGe baseline evidence inventory
 
-**Recorded:** 2026-07-29
+**Recorded:** 2026-08-01
 **Repository commit:** `a3efbe4` (`agent/page-governance-audit`)
 **Purpose:** Stage 0 baseline for the API-first reproduction plan. This record
-does not certify a private-data run, a 2025-26 validation, a promotion, or a
-post-validation refresh.
+does not certify a promotion or post-validation refresh. A later local frozen
+acceptance replay is recorded in the status map and boundary expansion record;
+it failed the NLL gate and therefore did not authorize either operation.
 
 ## Evidence boundaries
 
@@ -122,6 +123,7 @@ contract.
 | README historical M2 NLL `0.4175` | unverified | a rounded/possibly different historical claim; no supporting local private artifact is available |
 | M1 Weibull peak MAE values `1.338` and `1.275` | unverified/conflicting | do not select or change an M1 specification from these values |
 | 2025-26 peak testing volume `39,290` and `logN` `10.58` | unverified historical documentation claim | raw snapshot is absent locally |
+| Boundary-expansion acceptance replay | verified local evidence, failed gate | `bias_alpha=0` improved NLL by `0.0000482` versus the `0.02` threshold; horizon and phase gates passed; no refit or promotion |
 
 Numbers embedded in legacy scripts are configuration or historical-research
 annotations unless a future immutable artifact, manifest, and reproducible

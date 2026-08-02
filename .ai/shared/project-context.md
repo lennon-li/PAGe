@@ -81,12 +81,14 @@ verified canonical result. The ensemble operates on the logit scale and emits
 
 **M2 (Forecast)** implements a frozen-GAM deployment path with adaptive online
 bias correction. The high-level API defaults to frozen deployment; weekly refit
-is explicit compatibility/research behavior. The v16 parameterization is coded
-as the locked incumbent, but recorded M2 NLL values and saved-artifact names
-remain unverified because the private artifacts are absent. Do not present the
-current historical M2 LOSO as fully nested validation: it is conditional on
-globally selected M0/M1 choices. Untouched 2025-26 is the intended confirmatory
-evaluation, and no replay or post-promotion refit is verified by this repository.
+is explicit compatibility/research behavior. The v16 parameterization remains
+the locked incumbent. A local boundary-only evaluation selected a
+`bias_alpha=0` candidate, but its frozen `2025-26` acceptance replay failed the
+locked NLL gate (`0.0000482` improvement versus `0.02` required); horizon and
+phase gates passed. The incumbent remains accepted, and no refit or promotion
+occurred. Do not present the historical M2 LOSO as fully nested validation: it
+is conditional on globally selected M0/M1 choices. Further tuning against this
+holdout is prohibited; any search must begin a new pre-holdout cycle.
 
 See `docs/workflow-status.md` for the status of legacy scripts, rendered HTML,
 and the safe production entry points.

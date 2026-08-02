@@ -7,13 +7,13 @@
 default_m1_grid()
 }
 \value{
-A tibble with 20 rows (4 k_ref x 5 slope_weight combinations).
+A tibble with 25 rows (5 k_ref x 5 slope_weight combinations).
 }
 \description{
-Crosses \code{k_ref = c(25, 30, 40, 50)} with
-\code{slope_weight = c(8, 12, 16, 20, 30)}. If a complete governed tuning
-run selects \code{k_ref = 25} or \code{slope_weight = 8}, the value is at a
-lower grid boundary. Retain the original candidates and consider one
-adjacent valid extension (for example, \code{k_ref = 20} or
-\code{slope_weight = 4}) in the next pre-holdout development round.
+Crosses \code{k_ref = c(20, 25, 30, 40, 50)} with
+\code{slope_weight = c(8, 12, 16, 20, 30)}. The additional \code{k_ref = 20}
+value is a planned pre-holdout extension for the existing lower-edge
+\code{k_ref = 25} result; it does not alter or rerun the historical grid.
+A lower-edge \code{slope_weight = 8} result would require a separate,
+explicitly approved \code{slope_weight = 4} extension.
 }

@@ -81,9 +81,9 @@
     grid[[nm]] <- as.integer(round(grid[[nm]]))
   }
   if (any(grid$delta < 0L) || any(grid$Kr < 1L) ||
-    any(grid$k_f < 2L) || any(grid$k_e < 2L) ||
+    any(grid$k_f < 2L) || any(grid$k_e < 0L) || any(grid$k_e == 1L) ||
     any(grid$k_r < 0L) || any(grid$k_de < 0L) || any(grid$k_sp < 0L)) {
-    stop("M2 grid integer parameters are outside their supported bounds.")
+    stop("M2 grid integer parameters are outside their supported bounds; k_e must be 0 (drop) or >= 2.")
   }
   for (nm in c("alpha_state", "bias_alpha", "bias_beta")) {
     if (any(grid[[nm]] < 0 | grid[[nm]] > 1)) {
@@ -135,7 +135,7 @@
   rows <- list(incumbent)
   provenance <- "incumbent:v16"
   changes <- list(
-    delta = 1L, Kr = 2L, k_f = c(3L, 5L), k_e = 3L,
+    delta = 1L, Kr = 2L, k_f = c(3L, 5L), k_e = c(0L, 3L),
     alpha_state = c(0.10, 0.20), k_r = 2L, k_de = 2L,
     k_sp = c(4L, 8L), bias_alpha = c(0, 0.10), bias_beta = 0.05
   )
@@ -311,7 +311,9 @@
 #'
 #' Boundary expansion proposes only new configurations that pass the M2 grid
 #' validity contract. A meaningful null boundary, such as an optional smooth
-#' set to zero, need not be expanded past its valid domain. If
+#' set to zero, need not be expanded past its valid domain. The EMA smooth
+#' specifically supports \code{k_e = 0} (drop) or \code{k_e >= 2}; \code{k_e = 1}
+#' is invalid. If
 #' \code{max_specs} truncates a search with a remaining boundary, report that
 #' boundary as unresolved rather than as a bracketed optimum. Grid expansion
 #' is a pre-holdout development activity.
@@ -376,6 +378,12 @@ plan_m2_grid <- function(previous_results = NULL,
         default_steps[[nm]]
       }
       boundary_values <- c(boundary_values, current - step)
+      # k_e = 1 is not a valid mgcv basis size. When the smallest tested
+      # smooth is k_e = 2, the only valid lower comparison is the explicit
+      # drop/null model k_e = 0.
+      if (nm == "k_e" && current == 2L) {
+        boundary_values <- c(boundary_values, 0L)
+      }
     }
     if (current == max(observed)) {
       step <- if (length(observed) > 1L) {
@@ -390,7 +398,12 @@ plan_m2_grid <- function(previous_results = NULL,
       candidate[[nm]] <- value
       if (.m2_candidate_is_valid(candidate) && !value %in% observed) {
         rows[[length(rows) + 1L]] <- candidate
-        provenance <- c(provenance, paste0("boundary:", nm))
+        label <- if (nm == "k_e" && value == 0L) {
+          "boundary:k_e:drop"
+        } else {
+          paste0("boundary:", nm)
+        }
+        provenance <- c(provenance, label)
       }
     }
 

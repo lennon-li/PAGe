@@ -33,7 +33,9 @@ spacing adjacent to each reached boundary.
 \details{
 Boundary expansion proposes only new configurations that pass the M2 grid
 validity contract. A meaningful null boundary, such as an optional smooth
-set to zero, need not be expanded past its valid domain. If
+set to zero, need not be expanded past its valid domain. The EMA smooth
+specifically supports \code{k_e = 0} (drop) or \code{k_e >= 2}; \code{k_e = 1}
+is invalid. If
 \code{max_specs} truncates a search with a remaining boundary, report that
 boundary as unresolved rather than as a bracketed optimum. Grid expansion
 is a pre-holdout development activity.

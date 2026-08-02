@@ -77,8 +77,9 @@ checks that the fit, tuning result, season selection, and upstream identities
 agree. If any governed component is passed to `assemble_kit()`, all three
 components must be governed and frozen.
 
-`train_pipeline()` remains the high-level compatibility orchestrator and has
-not yet been refactored to compose this lifecycle.
+`train_pipeline()` remains the high-level compatibility orchestrator and now
+composes the guarded lifecycle for refresh and retune while preserving its
+compatibility result shape.
 
 ## Holdout replay and promotion
 
@@ -97,9 +98,10 @@ development cycle; it is not a continuation of the accepted refresh.
 
 See the [governed deployment workflow](docs/deployment-workflow.qmd) for the
 operator commands, private versus disclosure-safe output locations,
-`--preflight-only` checks, and no-overwrite rules. This repository does not
-preserve evidence that a real `2025-26` acceptance, refresh, or promotion
-completed.
+`--preflight-only` checks, and no-overwrite rules. This local checkout contains
+an ignored acceptance evidence run (`boundary-expansion-20260801T150000Z`) whose
+candidate failed the locked NLL gate. No refresh or promotion was performed;
+the incumbent remains accepted.
 
 The bounded public smoke command exercises the same artifact-governance chain
 using synthetic fixtures and temporary outputs:

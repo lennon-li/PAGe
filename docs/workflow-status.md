@@ -1,12 +1,14 @@
 # PAGe workflow status map
 
 Last reconciled: 2026-08-01. This map makes the discoverable entry points
-explicit without deleting historical research. Status describes intended use,
-not evidence that a private-data run completed. In particular, reported
-historical M2 LOSO is conditional on globally selected M0/M1 settings; it is
-not fully nested validation. Untouched 2025-26 is the intended confirmatory
-evaluation. No completed replay, acceptance decision, post-promotion refit, or
-registry promotion is preserved in this repository.
+explicit without deleting historical research. Status describes intended use
+and separately identifies local private-data evidence. Reported historical M2
+LOSO remains conditional on globally selected M0/M1 settings; it is not fully
+nested validation. A local frozen acceptance replay was completed for
+`2025-26` under run ID `boundary-expansion-20260801T150000Z`; the candidate
+failed the locked NLL gate, while horizon and phase gates passed. Its ignored
+private/audit evidence is under `results/user-test/` and `results/audit/`.
+No post-promotion refit or registry promotion occurred.
 
 ## Operational workflow
 
@@ -23,7 +25,7 @@ The canonical `build_m2()` path enforces fold-specific label isolation:
 `manual_labels_test = NULL`. Checkpoints made with a held-out label available
 to evaluation are not valid prospective evidence and must be recomputed.
 | Frozen runtime: `run_pipeline(..., mode = "frozen")` and `run_prospective_pipeline(..., mode = "frozen")` | canonical | Canonical deployment behavior: a pre-trained/frozen kit with online updates. |
-| `scripts/acceptance/replay_2025_26.R` | canonical | Manual, opt-in confirmatory replay and decision-evidence entry point. It requires authorized data plus candidate and incumbent kits, verifies both excluded `2025-26`, and writes private replay/bundle files separately from aggregate audit evidence. Canonical kit identity is strict by default; only a legacy incumbent may use the explicit compatibility option. Reusing a run ID fails. Its execution and any real-data output are unverified. |
+| `scripts/acceptance/replay_2025_26.R` | canonical | Manual, opt-in confirmatory replay and decision-evidence entry point. It requires authorized data plus candidate and incumbent kits, verifies both excluded `2025-26`, and writes private replay/bundle files separately from aggregate audit evidence. Canonical kit identity is strict by default; only a legacy incumbent may use the explicit compatibility option. The local boundary-expansion replay completed with a failed NLL gate; evidence is preserved but does not authorize refit or promotion. |
 | `season2526/run_retrain_venkata.R` | canonical | Post-acceptance fixed-spec refresh only. It requires the passing decision bundle, its manifest, the exact candidate and incumbent kits, and authorized data, then constructs artifact-bound verified evidence. Use `--preflight-only` first. Private model output and disclosure-safe manifests are separate and never overwritten. No completed real-data refit is preserved here. |
 | `scripts/promotion/promote_post_refit.R` | canonical | Final immutable registration step. It validates the complete acceptance-to-refit hash chain and kit identities, supports `--preflight-only`, writes a private promoted kit and separate disclosure-safe deployment manifest, and refuses destination collisions. No completed promotion is preserved here. |
 | `load_promoted_kit()` | canonical | Verified deployment loader. It requires explicit immutable kit and deployment-manifest paths, checks their SHA-256/spec/training-season binding, and has no mutable `current` discovery path. |

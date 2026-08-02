@@ -113,8 +113,14 @@ summary counts, and allowable detection windows.
 
 ## M1: alignment tuning
 
-The default grid crosses `k_ref = 25, 30, 40, 50` with
+The planned development grid crosses `k_ref = 20, 25, 30, 40, 50` with
 `slope_weight = 8, 12, 16, 20, 30`, while other M1 values are fixed.
+
+The `k_ref = 20` level is a strategic extension of the existing artifact
+because the fresh M1 winner was `k_ref = 25` at the lower edge. It is a plan
+for the next pre-holdout run, not a new result. The fresh slope-weight winner
+was interior (`12`), so do not add `slope_weight = 4` unless a later complete
+run again selects `8`.
 
 - `k_ref` controls reference-curve flexibility. If `25` remains the lower-edge
   winner, a one-step extension using the adjacent spacing is `20`; if `50`
@@ -138,12 +144,10 @@ The default grid crosses `k_ref = 25, 30, 40, 50` with
 - Inspect per-season alignment and peak errors. An overall improvement driven
   by one season is weak evidence for added complexity.
 
-The coded M1 values `k_ref = 25` and `slope_weight = 8` sit at the lower edges
-of the default grid. In a new pre-holdout development cycle, a governed search
-that selects those values should retain the original 20 candidates and add
-controlled lower neighbors such as `k_ref = 20` and `slope_weight = 4`,
-subject to the same folds and validators. This is a grid-design recommendation,
-not a verified model-selection claim.
+The historical `slope_weight = 8` result remains a conflicting artifact rather
+than the current fresh selection; it is therefore recorded but not expanded in
+the planned grid below. This distinction prevents an unverified historical
+boundary from silently changing the next search.
 
 ## M2: forecast tuning
 
@@ -162,12 +166,18 @@ next_grid <- plan_m2_grid(
 For each prior winning boundary, it proposes one valid value beyond the edge
 using adjacent observed spacing, adds nearest local neighbors, deduplicates
 canonical specification identities, and respects `max_specs`.
+The no-history initial plan includes `k_e = 0` alongside positive EMA-basis
+neighbors, so the drop/null comparison is available even before prior results
+are supplied.
 
 - Treat `k_f`, `k_e`, and optional smooth basis dimensions as small integer
   complexity controls. Increase one step at a time and inspect effective
   degrees of freedom, convergence, and fold stability.
-- For optional dimensions such as `k_r` or `k_de`, `0` means the smooth is off.
-  It is a valid null boundary; never extrapolate to negative basis sizes.
+- For optional dimensions such as `k_r`, `k_de`, and `k_sp`, `0` means the
+  smooth is off. For the EMA smooth, `k_e = 0` is the explicit drop/null
+  comparison and `k_e = 1` is invalid; the supported smooth sizes are `0` or
+  at least `2`. Never extrapolate to negative basis sizes or accept `k_e = 2`
+  as a bracketed optimum without testing the drop candidate.
 - Expand `alpha_state` locally inside its valid decay domain. The planner uses
   `0.05` as its default step when prior spacing is unavailable.
 - Do not tune a deployment-time correction parameter merely because it is
@@ -199,3 +209,26 @@ Stop the search when at least one of these documented conditions holds:
 
 Grid expansion is model development, not confirmation. Once the candidate is
 frozen and the holdout is opened, the grid is closed.
+
+## Existing-artifact boundary decisions (2026-08-01)
+
+The corrected user-test artifact was inspected without rerunning its 1,484-row
+M2 grid or any M1 grid. The recorded fresh selections and controlled next
+comparisons are:
+
+| Stage/axis | Recorded selection | Edge | Planned comparison | Decision |
+|---|---:|---|---:|---|
+| M1 `k_ref` | 25 | lower | 20 | expand once |
+| M1 `slope_weight` | 12 | interior | — | no expansion |
+| M2 `k_e` | 2 | lower non-null edge | 0 | explicit EMA-smooth drop |
+| M2 `k_sp` | 8 | upper | 10 | expand once |
+| M2 `bias_alpha` | 0.05 | lower | 0 | explicit correction-off null |
+
+The `k_e = 0` and `bias_alpha = 0` rows are null comparisons, not claims that
+the corresponding positive-parameter optima are bracketed. The boundary-only
+pre-holdout run selected `bias_alpha = 0` as the M2 candidate; `k_ref = 20`
+did not improve M1, and the `k_e = 0` and `k_sp = 10` candidates did not
+improve M2. A subsequent frozen `2025-26` replay failed the NLL promotion gate
+(`0.000048` improvement versus the required `0.02`), although horizon and
+phase gates passed. The incumbent is retained. Do not retune against this
+holdout result; any further search is a new pre-holdout development cycle.

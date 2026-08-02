@@ -11,9 +11,10 @@ execute:
 
 This page defines the operator workflow for moving a PAGe candidate from an
 untouched prospective holdout to a deployable frozen kit. It describes the
-required artifacts and checks; it does not establish that any real-data
-acceptance, refresh, or promotion has run. No such completed run is preserved
-in this repository.
+required artifacts and checks. A local frozen acceptance replay has now been
+completed for run ID `boundary-expansion-20260801T150000Z`; its candidate
+failed the locked NLL gate, so no refit or promotion followed. The private and
+disclosure-safe evidence is ignored by Git under `results/`.
 
 ## Four-phase chain
 
