@@ -1,0 +1,36 @@
+# Suppress R CMD check notes for NSE / data.table column-name bindings.
+# These names appear as unquoted column references inside data.table [ ] calls
+# and pipe expressions and are not true undefined-global references.
+utils::globalVariables(c(
+  ".", ".derivative", ".env", ".gw", ".lower_ci", ".neg_fit",
+  ".upper_ci", ".w", ".y_fit",
+  "Kb", "Kr",
+  "N", "N_lead", "N_now", "N_true",
+  "Public.health.unit", "Rdate", "Surveillance.period",
+  "Surveillance.week", "Total...of.tests", "Virus", "X..of.positive.tests",
+  "a", "abs_diff", "adj_diff", "anchorWeek",
+  "b", "bias_alpha", "bias_beta",
+  "cond_cls", "cond_inc", "cond_p", "cond_prev", "cond_sum", "cond_win",
+  "cum_N", "cum_y",
+  "delta", "delta_hat", "detectIgnition4", "detectIgnitionBySeason",
+  "dp",
+  "end_week", "eta", "eval_week", "event",
+  "fit",
+  "hi_event",
+  "iWeek", "iWeek_hat", "iWeek_true", "iWeek_used", "ign_weekF",
+  "ignite_flag", "ignite_ok", "ignition", "inc",
+  "k_de", "k_e", "k_f", "k_n", "k_r", "k_s", "k_w", "kind",
+  "late", "late_over2", "lead_n", "lo_event",
+  "mae_weibull", "med_p", "miss", "mmwr_year",
+  "nW", "nW_true", "n_hit", "neg", "newWeek",
+  "over2",
+  "p", "p0", "p_cls_base_pop", "p_cls_fs_full", "p_cls_fs_pop",
+  "p_cls_p", "p_gamm", "p_hat", "p_hi", "p_lo", "p_now", "p_obs",
+  "p_sm", "p_sumK", "phase", "post_ign", "prev",
+  "ref_df", "rel_sd",
+  "sd_delta", "season", "season_h", "smoothed", "spec_id",
+  "startWeek", "start_week", "start_year",
+  "t_peak", "t_peak_median", "tau", "theD", "true_peak_weekF",
+  "w", "w_hi_train", "w_lo_train", "weekF", "weekS", "week_cut",
+  "y", "y_lead", "y_now", "y_true"
+))
