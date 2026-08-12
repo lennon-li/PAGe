@@ -493,6 +493,9 @@ freeze_m0 <- function(fit, tuning = NULL, ...) {
       call. = FALSE
     )
   }
+  # `tune_m0()` may retain a data.table grid.  Normalize before selecting
+  # multiple columns; data.table interprets `grid[axis_names]` as a join.
+  grid <- as.data.frame(grid)
   axis_names <- intersect(names(grid), names(selected))
   axis_names <- axis_names[vapply(
     grid[axis_names],
