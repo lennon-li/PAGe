@@ -387,7 +387,7 @@ test_that("retune training runs all tuning stages and fits the winning M2 spec",
   result <- PAGe::train_pipeline(
     training_data,
     mode = "retune",
-    promotion = evidence,
+    promotion = NULL,
     loso_seasons = "alternating",
     n_cores = 1L,
     verbose = FALSE,
@@ -403,8 +403,8 @@ test_that("retune training runs all tuning stages and fits the winning M2 spec",
   expect_false("2025-26" %in% calls$m1_tune_seasons)
   expect_false("2025-26" %in% calls$m2_seasons)
   expect_false("2025-26" %in% calls$seasons)
-  expect_true(result$holdout$released)
-  expect_identical(result$holdout$status, "released")
+  expect_false(result$holdout$released)
+  expect_identical(result$holdout$status, "held_out")
   expect_identical(result$grid, calls$m2_grid)
   expect_named(result$tuning, c("m0", "m1", "m2"))
   expect_identical(result$selection$method, "min_nll")
@@ -678,6 +678,46 @@ test_that("promotion evidence verifies every bound artifact hash", {
   expect_error(
     do.call(PAGe::verify_promotion_evidence, fixture$args),
     "candidate.*SHA-256"
+  )
+})
+
+test_that("promotion evidence requires the supplied saved decision bundle", {
+  allD <- workflow_surveillance("2025-26", 1L)
+  report <- PAGe::check_promotion(
+    list(overall = data.frame(bernoulli_nll = 0.48),
+         horizon = data.frame(lead = c("1", "2"), mae = c(0.103, 0.103)),
+         phase = data.frame(phase = c("early", "late"), mae = c(0.105, 0.105))),
+    list(overall = data.frame(bernoulli_nll = 0.50),
+         horizon = data.frame(lead = c("1", "2"), mae = c(0.10, 0.10)),
+         phase = data.frame(phase = c("early", "late"), mae = c(0.10, 0.10)))
+  )
+  fixture <- training_promotion_fixture(allD, report)
+  withr::defer(unlink(fixture$root, recursive = TRUE))
+  fixture$args$bundle$report$pass <- FALSE
+
+  expect_error(
+    do.call(PAGe::verify_promotion_evidence, fixture$args),
+    "does not match the saved decision bundle"
+  )
+})
+
+test_that("post-acceptance retuning is rejected", {
+  allD <- workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L))
+  report <- PAGe::check_promotion(
+    list(overall = data.frame(bernoulli_nll = 0.48),
+         horizon = data.frame(lead = c("1", "2"), mae = c(0.103, 0.103)),
+         phase = data.frame(phase = c("early", "late"), mae = c(0.105, 0.105))),
+    list(overall = data.frame(bernoulli_nll = 0.50),
+         horizon = data.frame(lead = c("1", "2"), mae = c(0.10, 0.10)),
+         phase = data.frame(phase = c("early", "late"), mae = c(0.10, 0.10)))
+  )
+  fixture <- training_promotion_fixture(allD, report)
+  withr::defer(unlink(fixture$root, recursive = TRUE))
+  evidence <- do.call(PAGe::verify_promotion_evidence, fixture$args)
+
+  expect_error(
+    PAGe::train_pipeline(allD, mode = "retune", promotion = evidence, verbose = FALSE),
+    "Post-acceptance retuning is not permitted"
   )
 })
 

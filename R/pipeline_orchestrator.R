@@ -585,6 +585,13 @@ train_pipeline <- function(
   allD <- prepare_surveillance_data(allD)
   if (!nrow(allD)) stop("`allD` must contain at least one surveillance row.")
   holdout <- .resolve_holdout_release(allD, prospective_holdout, promotion)
+  if (mode == "retune" && holdout$released) {
+    stop(
+      "Post-acceptance retuning is not permitted; use `mode = \"refresh\"` ",
+      "to refit the fixed accepted specification.",
+      call. = FALSE
+    )
+  }
   effective_exclude <- unique(c(
     exclude,
     if (holdout$present && !holdout$released) prospective_holdout else character(0)

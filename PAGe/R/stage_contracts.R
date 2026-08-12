@@ -156,13 +156,15 @@ season_selection.default <- function(x, ...) {
                                selection,
                                config,
                                upstream_ids = NULL,
-                               data_id = NULL) {
+                               data_id = NULL,
+                               payload) {
   payload <- list(
     stage = stage,
     selection = unclass(selection),
     config = config,
     upstream = upstream_ids,
-    data_id = data_id
+    data_id = data_id,
+    fitted_payload = payload
   )
   paste0(stage, "_", digest::digest(payload, algo = "sha256"))
 }
@@ -172,6 +174,7 @@ season_selection.default <- function(x, ...) {
                                      config,
                                      upstream_ids = NULL,
                                      data_id = NULL,
+                                     payload,
                                      status = "draft") {
   list(
     stage = stage,
@@ -181,7 +184,7 @@ season_selection.default <- function(x, ...) {
     upstream_ids = upstream_ids,
     data_id = data_id,
     artifact_id = .stage_artifact_id(
-      stage, selection, config, upstream_ids, data_id
+      stage, selection, config, upstream_ids, data_id, payload
     )
   )
 }
@@ -266,7 +269,8 @@ season_selection.default <- function(x, ...) {
     selection = selection,
     config = config,
     upstream_ids = upstream_ids,
-    data_id = data_id
+    data_id = data_id,
+    payload = payload
   )
   structure(
     c(payload, provenance),
@@ -291,7 +295,8 @@ season_selection.default <- function(x, ...) {
     )
   }
   expected_id <- .stage_artifact_id(
-    x$stage, x$selection, x$config, x$upstream_ids, x$data_id
+    x$stage, x$selection, x$config, x$upstream_ids, x$data_id,
+    .stage_fit_payload(x)
   )
   if (!identical(x$artifact_id, expected_id)) {
     stop(
@@ -351,6 +356,14 @@ season_selection.default <- function(x, ...) {
     )
   }
   invisible(fit)
+}
+
+.stage_fit_payload <- function(fit) {
+  reserved <- c(
+    "stage", "status", "selection", "config", "upstream_ids",
+    "data_id", "artifact_id"
+  )
+  fit[setdiff(names(fit), reserved)]
 }
 
 .selected_tuning_config <- function(tuning, stage) {
@@ -414,7 +427,8 @@ season_selection.default <- function(x, ...) {
   }
   fit$status <- "frozen"
   fit$artifact_id <- .stage_artifact_id(
-    stage, fit$selection, fit$config, fit$upstream_ids, fit$data_id
+    stage, fit$selection, fit$config, fit$upstream_ids, fit$data_id,
+    .stage_fit_payload(fit)
   )
   fit
 }

@@ -186,6 +186,13 @@ verify_promotion_evidence <- function(bundle,
   if (!is.character(paths) || anyNA(paths) || any(!nzchar(paths))) {
     .promotion_evidence_abort("all artifact paths must be non-empty strings.")
   }
+  saved_bundle <- .read_promotion_kit(bundle_path, "decision")
+  if (!identical(bundle, saved_bundle)) {
+    .promotion_evidence_abort(
+      "the supplied decision bundle does not match the saved decision bundle."
+    )
+  }
+  bundle <- saved_bundle
   actual_hashes <- vapply(paths, hash_file_sha256, character(1))
 
   expected_bundle_names <- c(

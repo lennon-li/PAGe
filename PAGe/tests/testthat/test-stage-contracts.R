@@ -716,6 +716,15 @@ test_that("frozen-stage guard detects artifact tampering", {
   )
 })
 
+test_that("frozen-stage guard detects fitted payload tampering", {
+  frozen <- make_frozen_m1()
+  frozen$ref$anchorWeek <- 21L
+  expect_error(
+    PAGe:::.require_frozen_stage(frozen, "m1"),
+    "identity|tamper|integrity"
+  )
+})
+
 # ============================================================
 # .require_frozen_stage guard
 # ============================================================
