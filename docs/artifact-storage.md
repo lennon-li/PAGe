@@ -20,6 +20,8 @@ directory.  Existing preserved material is organized as follows:
 - `bcc-pre-sync/` — five temporary BCC scripts preserved before the checkout
   fast-forward;
 - `2018/` — the active 2018–19 holdout cycle, including checkpoints and logs.
+- `bcc-2018-19/` — the completed BCC artifact set audited on 2026-08-12;
+  its metadata identifies a `2018-19` holdout (not a `2019-20` holdout).
 
 Asgard accesses this archive through the user-space mount
 `/home/yeli/PAGe-bcc-artifacts/`; the checkout-level `data/` and `results/`
