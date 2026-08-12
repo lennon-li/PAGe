@@ -90,10 +90,11 @@ selection <- PAGe::validate_season_selection(
 )
 m0_grid <- data.table::CJ(
   cls_thr = 0.26, use_cls = FALSE,
-  p_thr = c(0.001, 0.002, 0.003, 0.004, 0.005),
-  prev_thr = c(0.0005, 0.001, 0.002, 0.003),
+  p_thr = c(0, 0.00025, 0.0005, 0.001, 0.002, 0.003, 0.004, 0.005, 0.006),
+  prev_thr = c(0, 0.00025, 0.0005, 0.001, 0.002, 0.003),
   n_consec = 5L, L = 2L, eps = 0, K_sum = 5L,
-  p_sum_thr = c(0.045, 0.050, 0.055, 0.060), N_req = 4L,
+  p_sum_thr = c(0, 0.025, 0.035, 0.045, 0.050, 0.055, 0.060, 0.065),
+  N_req = 4L,
   w_min = 13L, w_max = 26L, K_dp = 3L, dp_thr = 0.01,
   sorted = FALSE
 )
