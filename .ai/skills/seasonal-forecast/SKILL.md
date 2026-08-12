@@ -21,6 +21,12 @@ Raw data (flu_testing_data.csv)
 
 Each stage is sequential within a week. M1 must run before M2 (M2 consumes M1 alignment covariates).
 
+> **Audit status (2026-07-28):** Private historical result artifacts are absent
+> from this repository. Numeric "gold" values below are historical reproduction
+> notes, not verified current results or deployment evidence. Use the governed
+> acceptance, fixed-refresh, and immutable-registry workflow in
+> `docs/deployment-workflow.qmd` for production decisions.
+
 ---
 
 ## Data Contract
@@ -40,11 +46,12 @@ allD <- read.csv("data/flu_testing_data.csv") |>
     p       = y / N
   )
 
-# Permanent exclusions (missing/unreliable data)
+# Pre-acceptance exclusions (missing/unreliable data plus prospective holdout)
 EXCLUDE_PERM <- c("2011-12", "2020-21", "2021-22", "2025-26")
 # M1 LOSO also excludes 2015-16 (ignition outlier)
 EXCLUDE_M1   <- c(EXCLUDE_PERM, "2015-16")
-# Production training keeps 2025-26 (11 seasons)
+# A fixed post-acceptance refresh may release 2025-26 after a passing,
+# hash-bound decision; these remain the non-holdout exclusions.
 EXCLUDE_PROD <- c("2011-12", "2015-16", "2020-21", "2021-22")
 ```
 
@@ -107,7 +114,7 @@ saveRDS(tuned, "data/stage1_tuning.rds")
 
 **Scoring:** Lexicographic — minimize `sum_abs` → `max_abs` → `n_miss`.
 
-**Gold standard params:** `cls_thr=0.26, p_thr=0.005, prev_thr=0.001, p_sum_thr=0.06, n_consec=5, L=2, K_sum=5, N_req=4, w_min=13, w_max=26`
+**Historical locked parameters:** `cls_thr=0.26, p_thr=0.005, prev_thr=0.001, p_sum_thr=0.06, n_consec=5, L=2, K_sum=5, N_req=4, w_min=13, w_max=26`
 
 **Output:** `tuned$best_params`, `tuned$compare` (per-season ignition week, error).
 
@@ -157,7 +164,9 @@ tune_v7 <- tune_m1_alignment(
 
 **Metric:** Weibull-weighted peak MAE — `w(t) = exp(-(0.1t)²)`.
 
-**Gold standard:** `k_ref=25, slope_weight=8.0` → MAE = **1.275 weeks** (interior on both axes after v7).
+**Coded locked values:** `k_ref=25, slope_weight=8.0`. Historical sources
+report conflicting MAE values, including 1.275, 1.276, and 1.338 weeks; none is
+verified here without its private artifact.
 
 **Checkpoint resumption:** Re-run the script; it reads from `checkpoint_dir` and skips completed specs.
 
@@ -200,28 +209,28 @@ grid_v15 <- tidyr::crossing(
 - **Phase 2** (`nested_loso_v15_phase2.rds`): Evaluate 480×10 = 4800 fits; resumable checkpoint
 - **Final** (`nested_loso_v15_production.rds`): Assembled results
 
-**Gold standard (v15):** `k_f=4, k_e=2, alpha_state=0.40, k_r=2, k_de=0, k_sp=0` → Bernoulli NLL = **0.406**
+**Historical v15 reproduction target (unverified here):** `k_f=4, k_e=2,
+alpha_state=0.40, k_r=2, k_de=0, k_sp=0`, with recorded Bernoulli NLL 0.406.
 
-> **Deployed production kit is v16, not v15.** `data/m2_production.rds` is now
-> `spec_version = "v16_fresh"` (`k_f=4, k_e=2, alpha_state=0.15, k_sp=6,
-> bias_alpha=0.05`), nested-LOSO Bernoulli NLL = **0.4175**
-> (`data/fresh_nested_loso_v16_postpeak.rds`), built by the `scripts/fresh_run/`
-> pipeline (`04e_m2_loso_v16.R` / `04f_m2_loso_v16_expand.R` →
-> `05b_m2_production_v16.R`). v16 adds post-peak handling (`k_sp=6`); its slightly
-> higher NLL vs the v15 gold is an accepted tradeoff, not a regression. The v15
-> grid/gold numbers below remain the reproduction targets for the **v15**
-> methodology this section documents, pending a full v16 rewrite.
+> **The coded incumbent is v16, not v15.** Its stored configuration is
+> `k_f=4, k_e=2, alpha_state=0.15, k_sp=6, bias_alpha=0.05`. Historical notes
+> cite NLL 0.4175 and private filenames, but those artifacts are absent and no
+> immutable promoted deployment is preserved here. The v15 numbers remain
+> historical reproduction targets only.
 
 **Key functions:**
 - `nested_loso_build_fold()` — reference curve + hyperparams per fold
 - `nested_loso_m2_train()` — fits GAM for one (fold, spec) combination
 - `nested_loso_m2_eval_frozen_bias()` — evaluates with frozen GAM + Holt EMA bias correction
 
-### Production Fit
+### Historical v15 Candidate Fit (Not Promotion)
 
 **Script:** `scripts/_rebuild_m2_production_v15.R`
 
-> **Known gotcha:** Line 31 hardcodes `readRDS('data/stage1_tuning.rds')`. If doing a fresh run, change this to your fresh M0 output path.
+This retired script is research-only. It requires `--research-only` plus a
+unique `--output=...` path, refuses input containing `2025-26`, refuses mutable
+or existing outputs, and writes a separate reference sidecar. It cannot create
+or replace a promoted kit.
 
 ```r
 joint_out <- train_stage2_joint(
@@ -231,52 +240,87 @@ joint_out <- train_stage2_joint(
 )
 gam_fit        <- joint_out$fit
 feature_ranges <- joint_out$feature_ranges  # z_ema, logit_f_eff ranges, dz_ema_sd
-
-saveRDS(list(
-  spec=best_spec_obj, fit=gam_fit, feature_ranges=feature_ranges,
-  m1_train_preds=m1_train_preds, training_seasons=train_seas,
-  spec_version="v15", best_spec_id=best_spec_id
-), "data/m2_production.rds")
 ```
 
-**Production kit schema:**
+For current work, fit candidates through `train_pipeline()`, preserve the
+acceptance decision, run the fixed-spec refresh, and promote with
+`scripts/promotion/promote_post_refit.R`.
+
+**Historical research-artifact schema:**
 ```r
-prod <- readRDS("data/m2_production.rds")
+prod <- readRDS("/secure/research/<unique-v15-artifact>.rds")
 prod$fit              # mgcv::bam() fitted GAM; EDF≈22
 prod$feature_ranges   # list(z_ema, logit_f_eff, dz_ema_sd) — clamping bounds
 prod$m1_train_preds   # data.frame (season, weekF, m1_p_hat, m1_logit_spread, ...)
 prod$spec             # stage2_make_spec object
-prod$training_seasons # character vector, 11 seasons
+prod$training_seasons # historical research training seasons
 ```
+
+Operational code must instead call `load_promoted_kit()` with the immutable
+registry path and verified deployment manifest.
+
+---
+
+## Current Retuning and Selection
+
+For new development, use `train_pipeline(mode = "retune")`. When compatible
+`previous_results` are supplied, `plan_m2_grid()` consolidates finite NLL by
+stable spec ID and falls back to finite fold scores when needed. Supplied IDs
+must be unique and exactly match their parameter-derived canonical IDs;
+Bernoulli NLL is preferred to `mean_nll`, and ranking ties use canonical ID.
+The planner retains the v16 incumbent and best prior spec, preserves diverse
+finalists, adds local neighbors, and expands a winning boundary using adjacent
+observed spacing. `max_m2_specs` remains a hard cap.
+
+The user must choose one explicit final full-LOSO rule:
+
+- `selection_method = "min_nll"`: lowest NLL, then complexity and spec ID.
+- `selection_method = "one_se"`: simplest candidate within one standard error
+  of the best NLL; requires finite fold scores.
+- `selection_method = "pareto"`: non-dominated on NLL, worst-horizon MAE, and
+  worst-phase MAE, then NLL, complexity, and spec ID.
+
+Retuning must finish before the untouched holdout is examined. Changing the
+model or grid after viewing holdout results starts a new development cycle; it
+is not the fixed post-acceptance refresh.
 
 ---
 
 ## Dynamic Post-Hoc Bias Correction (Holt EMA)
 
-The frozen GAM is corrected online each season via a Holt exponential moving average:
+The frozen GAM is corrected online each season via the canonical correction
+specification shared by runtime and frozen LOSO evaluation:
 
 ```
 bias_t = bias_alpha * (y_{t-1} - yhat_{t-1}) + (1 - bias_alpha) * bias_{t-1}
 ```
 
-- `bias_alpha = 0.4` (level adaptation; faster than 0.2 for short peak windows)
-- `bias_beta  = 0.0` (no trend component)
+- base `bias_alpha = 0.05`
+- high `bias_alpha = 0.7` after at least two consecutive same-sign residual
+  transitions (the third consecutive same-sign residual)
+- `bias_beta = 0.0` (no trend component)
 
 **This is a deployment-time correction, not a structural model parameter.** It is:
 - Applied week-by-week after the frozen GAM predicts
-- NOT part of the LOSO grid (NLL is flat across 0.1–0.4 → unidentifiable in LOSO)
-- Set heuristically: 0.4 chosen for faster peak correction in short seasons (e.g., 2025-26)
+- Resolved from the stored canonical specification in strict mode
+- Applied identically in frozen LOSO and runtime, including the adaptive
+  transition and post-peak override
+- Available with older values only through an explicit warning-producing
+  compatibility mode
 
-**Verification:** During prospective deployment, the `ema_bias` column in the walk-forward output should converge to a nonzero value and track the same sign as the raw residuals. Compare against gold `deploy_wf_cache.rds` by checking same-sign fraction ≥ 0.9.
+Historical cache comparisons are not current deployment evidence. Verify the
+registered kit and its manifest first, then inspect correction-state
+diagnostics from the governed run.
 
 ---
 
 ## Prospective Deployment
 
 ```r
-fresh_kit <- load_prospective_kit(
-  ref_path = "data/ref_production.rds",
-  m2_path  = "data/m2_production.rds"
+fresh_kit <- load_promoted_kit(
+  kit_path = "/secure/PAGe/deployment-registry/<deployment-id>/promoted_kit.rds",
+  deployment_manifest_path =
+    "results/deployment-audit/<deployment-id>/deployment_manifest.json"
 )
 
 # Snapshot live data before comparing
@@ -294,14 +338,17 @@ saveRDS(wf, "data/deploy_wf_cache.rds")
 
 ---
 
-## Evaluation Metrics
+## Historical Evaluation Targets
 
-| Stage | Metric | Target |
+The following values are retained for historical reproduction only. They must
+be reconciled to hashed private artifacts before use in a current result claim.
+
+| Stage | Metric | Recorded target |
 |-------|--------|--------|
 | M0 | Per-season ignition error (weeks) | 0 for all seasons |
 | M1 | Weibull-weighted peak MAE | ≤ 1.275 weeks |
 | M2 LOSO | Bernoulli NLL (v15 gold repro) | ≤ 0.406 |
-| M2 LOSO | Bernoulli NLL (v16 deployed) | ≈ 0.4175 |
+| M2 LOSO | Bernoulli NLL (v16 historical note) | ≈ 0.4175 |
 | M2 LOSO | cor(gold, fresh NLL) | ≥ 0.999 |
 | Prospective | Max forecast delta | < 0.005 |
 
@@ -355,7 +402,7 @@ Run in order. Steps 3 and 4 can overlap on separate machines if cores allow.
 
 ---
 
-## Known Fresh-Run FAIL Patterns (validated 2026-04-16)
+## Historical Fresh-Run FAIL Patterns (recorded 2026-04-16)
 
 When comparing fresh against gold, these FAILs are expected and explained — not regressions:
 
@@ -364,7 +411,7 @@ When comparing fresh against gold, these FAILs are expected and explained — no
 | M1 ref curve delta > 0.01 | 2025-26 data added to fresh ref (post-peak weeks shift ~0.03 logit) | Expected; passes if gold is also rebuilt with current data |
 | M1 LOSO MAE delta > 0.02 | Slope-similarity bug fix (2026-04-10): `t_obs → u_hat` in `align_multi_template` changed alignment scores | Not a regression; gold was pre-fix. Best spec is unchanged (s001) |
 | M2 spec_id / coef / NLL mismatch | Gold `nested_loso_v15_production.rds` is actually v14 (has `_ba/bb` suffix in spec IDs) | Strip `_ba[0-9.]+_bb[0-9.]+$` from gold spec IDs before joining |
-| Prospective forecast delta > 0.005 | Gold `deploy_wf_cache.rds` uses v14 GAM (bias_alpha=0.2); fresh uses v15 (bias_alpha=0.4) | Not comparable; verify fresh forecasts are internally reasonable instead |
+| Prospective forecast delta > 0.005 | Historical caches used different retired correction settings (`bias_alpha=0.2` versus `0.4`) | Not comparable and not current deployment evidence; use the governed registered-kit workflow instead |
 
 **Critical checks that must PASS even with gold version mismatch:**
 - M0 ignition delta = 0 (all seasons)

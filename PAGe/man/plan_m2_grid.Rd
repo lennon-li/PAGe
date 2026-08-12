@@ -8,8 +8,11 @@ plan_m2_grid(previous_results = NULL, max_finalists = 6L, max_specs = 64L)
 }
 \arguments{
 \item{previous_results}{Optional prior \code{build_m2()} result containing
-\code{summary} and \code{grid}; \code{scores} may supply a missing summary
-metric. Ranking uses \code{bernoulli_nll}, then \code{mean_nll}.}
+\code{summary} and \code{grid}. Grid specification IDs, when supplied,
+must match their canonical parameter identities. Duplicate finite summary
+metrics are averaged by specification; fold-level \code{scores} fill
+missing or non-finite summary metrics. Ranking uses
+\code{bernoulli_nll}, then \code{mean_nll}.}
 
 \item{max_finalists}{Maximum number of diverse prior finalists to retain.}
 
@@ -21,8 +24,19 @@ A data frame with M2 parameters, stable \code{spec_id}, and
 }
 \description{
 Creates a compact, explainable M2 grid. Without compatible prior tuning
-results, the plan contains the deployed v16 specification and one-factor
+results, the plan contains the current v16-corrected incumbent and one-factor
 neighbors. With prior results, it retains v16, greedily retains diverse
 high-performing finalists, adds one-factor neighbors around the prior
-winner, and expands grid boundaries reached by that winner.
+winner, and expands grid boundaries reached by that winner using the
+spacing adjacent to each reached boundary.
+}
+\details{
+Boundary expansion proposes only new configurations that pass the M2 grid
+validity contract. A meaningful null boundary, such as an optional smooth
+set to zero, need not be expanded past its valid domain. The EMA smooth
+specifically supports \code{k_e = 0} (drop) or \code{k_e >= 2}; \code{k_e = 1}
+is invalid. If
+\code{max_specs} truncates a search with a remaining boundary, report that
+boundary as unresolved rather than as a bracketed optimum. Grid expansion
+is a pre-holdout development activity.
 }

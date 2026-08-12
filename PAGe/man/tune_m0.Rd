@@ -12,7 +12,8 @@ tune_m0(
   manual_labels = .default_manual_labels(),
   flag_args = .default_flag_args(),
   n_cores = parallel::detectCores() - 1L,
-  verbose = TRUE
+  verbose = TRUE,
+  selection = NULL
 )
 }
 \arguments{
@@ -20,7 +21,7 @@ tune_m0(
 
 \item{loso_seasons}{Which seasons to evaluate as LOSO test folds.
 \code{"all"} (default) evaluates every season; \code{"alternating"}
-uses every other season (removes non-selected from training too —
+uses every other season (removes non-selected from training too --
 acceptable for quick demos). A character vector selects specific seasons.}
 
 \item{exclude}{Character vector of seasons to permanently exclude.}
@@ -34,6 +35,10 @@ acceptable for quick demos). A character vector selects specific seasons.}
 \item{n_cores}{Integer. Parallel cores (default: all minus 1).}
 
 \item{verbose}{Logical. Print progress.}
+
+\item{selection}{Optional governed \code{page_season_selection}. When
+supplied, only its training seasons are used and the returned object is a
+\code{page_m0_tuning}.}
 }
 \value{
 A list with \code{best_params}, \code{tuning} (full

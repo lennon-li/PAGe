@@ -44,7 +44,7 @@ A tibble with one row per \code{(use_ci, buffer_weeks)} combination
 \description{
 Evaluates combinations of \code{use_ci} and \code{buffer_weeks} for peak
 passage detection, using the \code{params_df} from \code{loso_walkforward()}.
-No LOSO rerun is required — tuning runs in seconds.
+No LOSO rerun is required -- tuning runs in seconds.
 }
 \details{
 For each grid point \code{(use_ci, buffer_weeks)}, the function simulates

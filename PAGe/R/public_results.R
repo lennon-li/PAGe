@@ -1,18 +1,51 @@
 #' Validate a PAGe deployment kit
 #'
-#' Checks the in-memory artifacts required by the prospective runtime. Frozen
-#' forecasting requires no historical-data files. Weekly refitting additionally
-#' requires historical aligned data and a template data frame.
+#' Checks the in-memory artifacts required by the prospective runtime. When
+#' governance metadata is present, it must be complete and its deterministic
+#' identity must match the recorded season selection and M0/M1/M2 artifact
+#' identities. Frozen forecasting requires no historical-data files. Weekly
+#' refitting additionally requires historical aligned data and a template data
+#' frame.
 #'
 #' @param kit A kit returned by \code{assemble_kit()} or
 #'   \code{load_prospective_kit()}.
 #' @param mode Runtime mode: \code{"frozen"} or \code{"weekly_refit"}.
 #'
-#' @return The validated kit.
+#' @return The validated kit, unchanged.
 #' @export
 validate_page_kit <- function(kit, mode = c("frozen", "weekly_refit")) {
   mode <- match.arg(mode)
   if (!is.list(kit)) stop("`kit` must be a list of trained PAGe artifacts.")
+
+  governance_fields <- c(
+    "season_selection", "stage_artifact_ids", "governance_id"
+  )
+  governed_present <- !vapply(
+    governance_fields,
+    function(name) is.null(kit[[name]]),
+    logical(1)
+  )
+  if (any(governed_present)) {
+    if (!all(governed_present)) {
+      stop("Governed PAGe kit has incomplete governance metadata.")
+    }
+    if (!inherits(kit$season_selection, "page_season_selection")) {
+      stop("Governed PAGe kit has an invalid season selection.")
+    }
+    if (!is.character(kit$stage_artifact_ids) ||
+      !identical(names(kit$stage_artifact_ids), c("m0", "m1", "m2")) ||
+      anyNA(kit$stage_artifact_ids) ||
+      any(!nzchar(kit$stage_artifact_ids))) {
+      stop("Governed PAGe kit has invalid stage artifact identities.")
+    }
+    expected_governance_id <- .kit_governance_id(
+      kit$season_selection,
+      kit$stage_artifact_ids
+    )
+    if (!identical(kit$governance_id, expected_governance_id)) {
+      stop("Governed PAGe kit identity integrity check failed.")
+    }
+  }
 
   required <- c(
     "m0_params", "ref", "hyper", "M1_PARAMS", "m2_production", "best_spec"

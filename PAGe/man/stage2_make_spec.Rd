@@ -27,7 +27,7 @@ stage2_make_spec(
   lambda_w = 0,
   w_floor = 0.05,
   anchorWeek = 20L,
-  bias_alpha = 0.2,
+  bias_alpha = 0.05,
   bias_beta = 0,
   K = NULL,
   pre_buffer = NULL

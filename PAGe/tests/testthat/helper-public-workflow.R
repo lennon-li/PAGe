@@ -27,7 +27,10 @@ workflow_kit <- function(current_season = NULL) {
     ),
     m0_params = list(p_thr = 0.005),
     m2_production = list(fit = fit),
-    best_spec = list(k_f = 4L, k_n = 0L, k_de = 0L, k_r = 0L, k_sp = 0L)
+    best_spec = list(
+      k_f = 4L, k_n = 0L, k_de = 0L, k_r = 0L, k_sp = 0L,
+      bias_alpha = 0.05, bias_beta = 0
+    )
   )
   if (!is.null(current_season)) kit$current_season <- current_season
   kit

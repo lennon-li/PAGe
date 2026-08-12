@@ -26,7 +26,7 @@ nested_loso_m2_train(
 }
 \value{
 Output of \code{train_stage2_joint()} (list with \code{fit},
-  \code{train_data}, …), or \code{NULL} if training fails.
+  \code{train_data}, ...), or \code{NULL} if training fails.
 }
 \description{
 Prepares aligned training data with prospective derivatives, then

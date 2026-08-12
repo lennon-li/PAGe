@@ -22,8 +22,33 @@ jobs:
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           working-directory: PAGe
-          extra-packages: any::rcmdcheck
+          extra-packages: |
+            any::rcmdcheck
+            local::.
           needs: check
+      - name: Governance workflow smoke tests
+        shell: Rscript {0}
+        run: |
+          testthat::test_dir(
+            file.path("PAGe", "tests", "testthat"),
+            filter = paste(
+              c(
+                "result-manifest",
+                "training-orchestrator",
+                "adaptive-m2-grid",
+                "acceptance-workflow",
+                "post-promotion-refit",
+                "gated-promotion-workflow",
+                "result-registry",
+                "canonical-correction-spec",
+                "public-synthetic-release-workflow"
+              ),
+              collapse = "|"
+            ),
+            reporter = "stop"
+          )
+      - name: Public synthetic release smoke
+        run: Rscript scripts/public/synthetic_release_workflow.R --smoke
       - uses: r-lib/actions/check-r-package@v2
         with:
           working-directory: PAGe

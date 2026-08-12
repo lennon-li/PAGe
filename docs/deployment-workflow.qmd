@@ -1,0 +1,244 @@
+---
+title: "Governed Acceptance, Refresh, and Deployment"
+format:
+  html:
+    self-contained: true
+    toc: true
+    toc-depth: 3
+execute:
+  eval: false
+---
+
+This page defines the operator workflow for moving a PAGe candidate from an
+untouched prospective holdout to a deployable frozen kit. It describes the
+required artifacts and checks. A local frozen acceptance replay has now been
+completed for run ID `boundary-expansion-20260801T150000Z`; its candidate
+failed the locked NLL gate, so no refit or promotion followed. The private and
+disclosure-safe evidence is ignored by Git under `results/`.
+
+## Four-phase chain
+
+| Phase | Input state | Required action | Output |
+|---|---|---|---|
+| 1. Frozen acceptance | Candidate and incumbent kits were both trained without `2025-26` | Replay both frozen kits on the same authorized `2025-26` observations and metric definitions | Candidate and incumbent replay results |
+| 2. Immutable decision evidence | Both replays are complete | Apply the locked `check_promotion()` gates and bind the decision to hashes of the data and both kits | Private decision bundle plus disclosure-safe audit evidence |
+| 3. Fixed-spec refresh | Phase 2 passed | Refit the accepted candidate configuration with `2025-26` released into training; do not search or select a new specification | Private refreshed training result plus disclosure-safe manifest |
+| 4. Registry and verified loading | The refresh and every preceding link validate | Copy the refreshed kit to an immutable registry entry and write its deployment manifest | Hash-bound promoted kit loaded only through `load_promoted_kit()` |
+
+Each arrow is one-way. Never replace an earlier artifact in place, and never
+infer a release from a bare `pass = TRUE` value. The hashes and manifests bind
+the exact data, candidate, incumbent, decision bundle, refreshed artifact, and
+promoted kit used in the chain.
+
+## Before the holdout: development and retuning
+
+Model search belongs before Phase 1. The preferred low-level path starts with
+`validate_season_selection()`, with `2025-26` in `holdout_seasons`, and then
+runs the guarded lifecycle in order:
+
+```text
+tune_m0 -> validate_m0_tuning -> fit_m0 -> freeze_m0
+tune_m1 -> validate_m1_tuning -> fit_m1 -> freeze_m1
+tune_m2 -> validate_m2_tuning -> fit_m2 -> freeze_m2
+assemble_kit -> validate_page_kit
+```
+
+M1 cannot consume a draft M0, M2 cannot consume a draft or mismatched M0/M1,
+and governed kit assembly checks the exact upstream identity chain.
+
+`train_pipeline(mode = "retune")` is the high-level compatibility orchestrator
+and now composes the guarded lifecycle. It may use compatible prior tuning
+results to build a bounded grid, retain the current v16-corrected incumbent, add local
+neighbors, and expand a boundary reached by the previous winner. Whichever
+interface is used, freeze the selected candidate and record its training
+seasons before examining `2025-26`.
+
+With `previous_results`, `plan_m2_grid()` consolidates finite NLL by stable
+specification identity and falls back to finite fold scores when the summary is
+missing. Prior IDs must be unique and exactly match their parameter-derived
+canonical IDs; Bernoulli NLL is preferred to `mean_nll`, and ties rank by the
+canonical ID. The planner retains the v16 incumbent and best prior
+specification, preserves diverse finalists, adds local neighbors, and expands
+a winning boundary using its adjacent observed spacing, subject to the explicit
+grid cap.
+
+Looking at holdout outcomes and then changing a grid, specification, feature,
+threshold, or correction rule starts a **new development cycle**. The resulting
+model is not validated by the decision made on the model that was previously
+frozen. Do not rerun the same `2025-26` data and describe the result as a new
+untouched confirmatory evaluation.
+
+Before freezing, inspect every tuned axis for a boundary winner. Expand a
+winning edge by one adjacent valid step while retaining the incumbent, winner,
+and local neighbors; or document why the edge is a meaningful null or hard
+constraint. A computational cap leaves an unresolved boundary and does not
+prove an optimum. The stage-specific procedure and stopping rules are in the
+[tuning playbook](tuning-playbook.md).
+
+This differs from the Phase 3 refresh. A post-acceptance refresh keeps the
+accepted M0, M1, M2, and runtime settings fixed and only refits them after the
+passing decision explicitly releases `2025-26` into the training seasons.
+
+The final full-LOSO selection rule is also an explicit user choice:
+
+| `selection_method` | Rule |
+|---|---|
+| `"min_nll"` | Lowest Bernoulli NLL, then complexity and specification ID |
+| `"one_se"` | Simplest candidate within one standard error of the best NLL; requires finite fold-level scores |
+| `"pareto"` | Non-dominated on NLL, worst-horizon MAE, and worst-phase MAE; final tie order is NLL, complexity, then specification ID |
+
+## Phase 1 and 2: frozen replay and decision evidence
+
+Use one authorized data snapshot and two pre-holdout kits:
+
+```{bash}
+Rscript scripts/acceptance/replay_2025_26.R \
+  --data=/secure/PAGe/authorized_surveillance.csv \
+  --candidate-kit=/secure/PAGe/candidate_pre_holdout.rds \
+  --incumbent-kit=/secure/PAGe/incumbent_pre_holdout.rds \
+  --private-output=/secure/PAGe/acceptance-private \
+  --audit-output=results/audit \
+  --season=2025-26 \
+  --run-id=<unique-acceptance-run-id>
+```
+
+The command rejects either kit when its recorded training seasons include
+`2025-26`. It replays both kits through the same frozen path and applies the
+canonical locked promotion thresholds.
+
+Canonical `m2_production` identity is required by default. When an incumbent
+has only the historical `m2` field, add
+`--kit-compatibility=legacy_m2`; this explicit compatibility mode warns and is
+also required in the refit and promotion commands. Conflicting canonical and
+legacy fields are always rejected.
+
+`--private-output/<run-id>/` contains row-level replay RDS files and
+`decision_bundle.rds`. Keep it in authorized private storage. The decision
+bundle records the run and holdout identity, the canonical gate report, and
+SHA-256 hashes for the authorized data and both kits.
+
+`--audit-output/<run-id>/` contains aggregate metric and diagnostic CSV files,
+`decision.md`, and the disclosure-safe `result_manifest.json`. The manifest
+also hashes the private decision bundle. Review the aggregate files before
+moving to Phase 3; disclosure-safe means row-level surveillance and replay
+objects are excluded, not that review can be skipped.
+
+Both run directories must be absent at start. Reusing a run ID fails rather
+than overwriting evidence. A failing gate still saves its evidence and then
+exits nonzero. The acceptance command has no training side effect.
+
+## Phase 3: fixed-spec refresh including 2025-26
+
+Validate the full Phase 2 binding without starting training:
+
+```{bash}
+Rscript season2526/run_retrain_venkata.R \
+  --data=/secure/PAGe/authorized_surveillance.csv \
+  --promotion-bundle=/secure/PAGe/acceptance-private/<run-id>/decision_bundle.rds \
+  --promotion-manifest=results/audit/<run-id>/result_manifest.json \
+  --candidate-kit=/secure/PAGe/candidate_pre_holdout.rds \
+  --incumbent-kit=/secure/PAGe/incumbent_pre_holdout.rds \
+  --output-dir=/secure/PAGe/refit-private \
+  --manifest-dir=results/post-promotion-manifests \
+  --preflight-only
+```
+
+Remove only `--preflight-only` to perform the refresh. The script verifies the
+decision and manifest schemas, locked thresholds, pass status, source hashes,
+candidate and incumbent training seasons, candidate specification identity,
+authorized-data hash, and the presence of `2025-26` in the authorized input.
+It constructs artifact-bound evidence with `verify_promotion_evidence()` and
+then calls `train_pipeline(mode = "refresh", promotion = evidence)` with the
+accepted candidate settings. A bare `check_promotion()` report cannot release
+the holdout.
+
+Before saving, the script requires the holdout status to be `released`,
+`2025-26` to appear in the refreshed training seasons, and the M0, M1, M2, and
+runtime configuration to match the accepted candidate. It does not retune.
+
+`--output-dir` is private and receives a hash-qualified
+`post_promotion_refit_*.rds`. `--manifest-dir` is separate and receives its
+disclosure-safe RDS and Markdown manifest. Existing artifact or manifest names
+cause failure; the script never overwrites them.
+
+## Phase 4: immutable promotion registry
+
+First validate the complete chain without copying a kit:
+
+```{bash}
+Rscript scripts/promotion/promote_post_refit.R \
+  --data=/secure/PAGe/authorized_surveillance.csv \
+  --acceptance-bundle=/secure/PAGe/acceptance-private/<run-id>/decision_bundle.rds \
+  --acceptance-manifest=results/audit/<run-id>/result_manifest.json \
+  --candidate-kit=/secure/PAGe/candidate_pre_holdout.rds \
+  --incumbent-kit=/secure/PAGe/incumbent_pre_holdout.rds \
+  --refit-artifact=/secure/PAGe/refit-private/post_promotion_refit_<hashes>.rds \
+  --refit-manifest=results/post-promotion-manifests/post_promotion_refit_<hashes>_manifest.rds \
+  --registry-dir=/secure/PAGe/deployment-registry \
+  --audit-dir=results/deployment-audit \
+  --deployment-id=<unique-deployment-id> \
+  --preflight-only
+```
+
+Remove only `--preflight-only` to register the kit. The command writes the
+private kit to
+`--registry-dir/<deployment-id>/promoted_kit.rds` and writes the
+disclosure-safe `deployment_manifest.json` and Markdown summary under
+`--audit-dir/<deployment-id>/`. It creates no mutable `current` alias. A
+collision at either destination fails before anything is replaced.
+`--deployment-id` may be omitted to generate an ID from the run time and refit
+manifest hash.
+
+Load a registered kit by passing both immutable paths:
+
+```{r}
+library(PAGe)
+
+kit <- load_promoted_kit(
+  kit_path = "/secure/PAGe/deployment-registry/<deployment-id>/promoted_kit.rds",
+  deployment_manifest_path =
+    "results/deployment-audit/<deployment-id>/deployment_manifest.json"
+)
+```
+
+`load_promoted_kit()` validates the disclosure-safe
+`promoted_deployment_kit` manifest, verifies the promoted-kit SHA-256, checks
+the recorded specification and training seasons against the kit, and then
+validates the kit schema. It has no default path and does not discover a
+mutable latest artifact.
+
+For lower-level tooling, `read_result_manifest(path)` reads and validates
+canonical JSON or RDS manifests. `write_result_manifest(manifest, path,
+overwrite = FALSE)` validates before and after writing and refuses an existing
+path by default.
+
+## Evidence and disclosure boundary
+
+| Location | Classification | Typical contents |
+|---|---|---|
+| Acceptance `--private-output` | Private | Row-level candidate/incumbent replays and decision bundle |
+| Acceptance `--audit-output` | Disclosure-safe | Aggregate metrics, diagnostics, decision summary, result manifest |
+| Refresh `--output-dir` | Private | Full refreshed training result and model objects |
+| Refresh `--manifest-dir` | Disclosure-safe | Training seasons, spec identity, row counts, and source hashes |
+| Promotion `--registry-dir` | Private | Immutable deployable kit |
+| Promotion `--audit-dir` | Disclosure-safe | Deployment manifest and summary |
+
+The repository intentionally does not contain the authorized surveillance
+snapshot or a completed instance of these private artifacts. A source document,
+example path, or successfully rendered page is not evidence that the governed
+workflow ran.
+
+## Public synthetic smoke
+
+The following bounded command exercises acceptance, fixed refresh, immutable
+promotion, manifest validation, and verified loading with synthetic fixtures:
+
+```{bash}
+Rscript scripts/public/synthetic_release_workflow.R --smoke
+```
+
+Temporary outputs are removed by default. Pass
+`--output-dir=<new-disclosure-safe-directory>` to inspect them; an existing
+destination is rejected. This smoke check tests workflow plumbing only. It does
+not fit or validate the real PAGe forecasting model and does not show that any
+private `2025-26` operation occurred.

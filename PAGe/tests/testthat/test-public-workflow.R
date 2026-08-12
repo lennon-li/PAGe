@@ -62,10 +62,32 @@ test_that("training validates before filtering and returns a stable class", {
   local_mocked_bindings(
     build_m0 = function(allD, ...) {
       calls$columns <- names(allD)
-      list(best_params = list(ok = TRUE))
+      list(
+        aligned = data.frame(),
+        seasons_used = unique(as.character(allD$season)),
+        best_params = list(ok = TRUE),
+        manual_labels = c("2024-25" = 15L),
+        flag_args = list()
+      )
     },
-    build_m1 = function(...) list(ref = list(), hyper = list()),
-    train_m2 = function(..., best_spec) list(spec = best_spec, fit = "fit"),
+    build_m1 = function(...) {
+      list(
+        ref = list(pred_df = data.frame(newWeek = 1:52, fit = 0)),
+        hyper = list(),
+        aligned_train = data.frame(),
+        m1_params = list(),
+        seasons_used = "2024-25"
+      )
+    },
+    train_m2 = function(..., best_spec) {
+      list(
+        fit = structure(list(model = data.frame()), class = "gam"),
+        feature_ranges = list(),
+        m1_train_preds = data.frame(),
+        spec = best_spec,
+        training_seasons = "2024-25"
+      )
+    },
     assemble_kit = function(...) list(ready = TRUE),
     .package = "PAGe"
   )

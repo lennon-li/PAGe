@@ -92,7 +92,7 @@ allD <- read.csv("../data/flu_testing_data.csv") %>%
 
 ```
 
-# Notations 
+## Notations
 
 Let $s = 1,\dots,S$ index influenza seasons and let $w$ denote the within-season flu-week number. For each season–week $(s,w)$, define:
 
@@ -150,7 +150,7 @@ $$
 
 In addition,  an R package **`PAGe`** that implements the framework, including retrospective estimation, training and prospective running functions are demostrated as along the way
 
-# Retrospective template estimation
+## Retrospective template estimation
 
 This section explains how to estimate ignition weeks and the common template curve from historical data, which are used as training labels for $M_0$ and covariates for $M_1$.
 
@@ -309,7 +309,7 @@ The estimated common curve $f(\cdot)$ serves as a **template** for forecasting: 
 
 
 
-# Prospective 2-stage model training
+## Prospective 2-stage model training
 
 ```{r}
 #| include: false
@@ -1061,7 +1061,7 @@ ggplotly(plot_stage2_joint_fit_by_season(
 :::
 
 
-# Prospective deployment and forecasting
+## Prospective deployment and forecasting
 
 Data from the 2025-26 season are used prospectively. Each week after ignition detection, we refit the $M_1$ GAM on all historical seasons **plus the current season's data observed so far**, using time-decay weights ($\lambda_w = 0.20$) that down-weight older observations. Season-specific terms ($b_s$, factor-smooth $S_3$) are excluded from predictions because 2025-26 is an unseen factor level in the base model; the correction comes through $z_\text{ema}$ and the updated weighted fit.
 
@@ -1339,7 +1339,7 @@ if (!is.na(iWeek_used) && exists("plots_wf") && length(plots_wf) > 0) {
 
 
 
-# Summary
+## Summary
 **Implementation map (functions / key objects).**
 
 - Retrospective smoothing + derivatives: `estimateDerivs()` produces `fit`, `d1`, `d2` on the `weekF` scale.

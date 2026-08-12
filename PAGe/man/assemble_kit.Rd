@@ -14,11 +14,14 @@ assemble_kit(
 )
 }
 \arguments{
-\item{m0}{Output of \code{tune_m0()}.}
+\item{m0}{Frozen \code{page_m0_fit} from \code{freeze_m0()}, or a legacy M0
+output compatible with \code{tune_m0()}.}
 
-\item{m1}{Output of \code{build_m1()}.}
+\item{m1}{Frozen \code{page_m1_fit} from \code{freeze_m1()}, or a legacy
+output from \code{build_m1()}.}
 
-\item{m2_model}{Output of \code{train_m2()}.}
+\item{m2_model}{Frozen \code{page_m2_fit} from \code{freeze_m2()}, or a
+legacy output from \code{train_m2()}.}
 
 \item{best_spec_id}{Character label for the best M2 spec (optional;
 taken from \code{build_m2()$best_spec_id}).}
@@ -30,11 +33,17 @@ taken from \code{build_m2()$best_spec_id}).}
 (\code{m2_production.rds} format) to this path.}
 }
 \value{
-A kit list compatible with all \code{run_*()} functions.
+A kit list compatible with all \code{run_*()} functions. Governed
+  inputs add \code{season_selection}, \code{stage_artifact_ids}, and
+  \code{governance_id}.
 }
 \description{
 Assembles M0, M1, and M2 training outputs into the format returned by
 \code{load_prospective_kit()}, ready for use with \code{run_pipeline()},
 \code{run_m0()}, \code{run_m1()}, and \code{run_m2()}. Optionally saves
-reference and M2 bundles to disk.
+reference and M2 bundles to disk. Legacy stage outputs remain supported. If
+any input is a governed stage artifact, all three inputs must be frozen,
+share the same season selection, and carry a consistent upstream identity
+chain. The returned governed kit records the selection, stage artifact
+identities, and a deterministic governance identity.
 }

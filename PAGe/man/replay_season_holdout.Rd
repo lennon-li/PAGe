@@ -9,6 +9,7 @@ replay_season_holdout(
   allD,
   season = "2025-26",
   runner = run_prospective_pipeline,
+  kit_compatibility = c("strict", "legacy_m2"),
   ...
 )
 }
@@ -21,6 +22,10 @@ replay_season_holdout(
 
 \item{runner}{Injectable prospective runner; defaults to
 run_prospective_pipeline() in frozen mode.}
+
+\item{kit_compatibility}{Identity mode. The default \code{"strict"} requires
+canonical \code{m2_production}; \code{"legacy_m2"} explicitly permits a
+legacy \code{m2} field with a warning.}
 
 \item{...}{Additional runner arguments.}
 }

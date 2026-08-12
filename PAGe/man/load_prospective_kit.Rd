@@ -8,7 +8,8 @@ load_prospective_kit(
   data_dir,
   ref_file = "ref_production.rds",
   m2_file = "m2_production.rds",
-  stage1_file = "stage1_tuning.rds"
+  stage1_file = "stage1_tuning.rds",
+  compatibility = c("strict", "locked_defaults", "legacy")
 )
 }
 \arguments{
@@ -17,16 +18,23 @@ load_prospective_kit(
 
 \item{ref_file}{Filename of the production reference cache (default
 \code{"ref_production.rds"}). Must contain \code{$ref}, \code{$hyper},
-and optionally \code{$M1_PARAMS}, \code{$flag_args},
+\code{$M1_PARAMS}, and optionally \code{$flag_args},
 \code{$manual_labels}, \code{$hist_data}.}
 
 \item{m2_file}{Filename of the production M2 model (default
 \code{"m2_production.rds"}). Must contain a fitted \code{bam}/\code{gam}
-object. Optionally also contains \code{$spec}, \code{$template_df}, and
+object and \code{$spec}. Optionally also contains \code{$template_df}, and
 \code{$m1_train_preds}.}
 
 \item{stage1_file}{Filename of the M0 ignition tuning results (default
 \code{"stage1_tuning.rds"}). Must contain \code{$best_params}.}
+
+\item{compatibility}{Compatibility policy. \code{"strict"} (default)
+requires the canonical saved \code{M1_PARAMS} and
+\code{m2_production$spec}. \code{"locked_defaults"} permits a missing
+\code{M1_PARAMS} by using the centralized locked defaults with a warning.
+\code{"legacy"} also enables deprecated artifact discovery and fallback
+behavior with warnings.}
 }
 \value{
 A named list with slots: \code{ref}, \code{hyper},

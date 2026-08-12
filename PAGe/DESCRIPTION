@@ -3,6 +3,8 @@ Type: Package
 Title: Phase-Aligned Gated Epidemic Forecasting
 Version: 0.2.0
 Authors@R: person("Lennon", "Li", email = "lennon.li@oahpp.ca", role = c("aut", "cre"))
+Author: Lennon Li [aut, cre]
+Maintainer: Lennon Li <lennon.li@oahpp.ca>
 URL: https://lennon-li.github.io/PAGe/, https://github.com/lennon-li/PAGe
 BugReports: https://github.com/lennon-li/PAGe/issues
 Description: Prospective one- and two-week-ahead forecasts of seasonal
@@ -16,6 +18,8 @@ Encoding: UTF-8
 LazyData: true
 Depends: R (>= 4.1.0)
 Imports:
+    digest,
+    jsonlite,
     tibble,
     data.table,
     stats,

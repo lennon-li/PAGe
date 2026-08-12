@@ -26,10 +26,93 @@ allD <- load_flu_hist("/authorized/path/flu_history.csv") |>
   prepare_surveillance_data()
 ```
 
-## Refresh the locked production kit
+## Declare the governed season sets
 
-Use refresh when the model structure is already approved. It fits the deployed
-v16 specification (`k_f=4`, `k_e=2`, `alpha_state=0.15`, `k_sp=6`, `k_r=0`,
+The guarded stage API never infers training membership from the rows that
+happen to be present. Declare training, permanent exclusions, untouched
+holdouts, and prospective application seasons explicitly:
+
+```{r}
+selection <- validate_season_selection(
+  allD,
+  training_seasons = setdiff(
+    sort(unique(allD$season)),
+    c("2011-12", "2015-16", "2020-21", "2021-22", "2025-26")
+  ),
+  exclude_seasons = c("2011-12", "2015-16", "2020-21", "2021-22"),
+  holdout_seasons = "2025-26",
+  application_seasons = character()
+)
+```
+
+The four sets must be mutually disjoint and every identifier must exist in the
+canonical data. `season_selection(x)` retrieves the recorded selection from a
+governed tuning result, stage artifact, or assembled kit.
+
+## Train and freeze each stage
+
+Each stage has separate tuning, tuning-validation, fitting, and freezing
+operations. A downstream stage accepts only frozen upstream artifacts with the
+same season selection and expected artifact identities.
+
+```{r}
+# M0: ignition
+m0_tuning <- tune_m0(allD, selection = selection)
+validate_m0_tuning(m0_tuning)
+m0 <- fit_m0(allD, selection, config = m0_tuning$best_params) |>
+  freeze_m0(tuning = m0_tuning)
+
+# M1: alignment
+m1_tuning <- tune_m1(allD, m0 = m0, selection = selection)
+validate_m1_tuning(m1_tuning)
+m1_best <- m1_tuning$best[1, , drop = FALSE]
+m1_config <- m1_make_params(
+  k_ref = m1_best$k_ref,
+  temperature = m1_best$multi_temperature,
+  rise_weight = m1_best$align_rise_weight,
+  slope_window = m1_best$slope_window,
+  slope_weight = m1_best$slope_weight
+)
+m1 <- fit_m1(allD, selection, m0, config = m1_config) |>
+  freeze_m1(tuning = m1_tuning)
+
+# M2: forecast
+m2_grid <- if (exists("prior_m2_results", inherits = FALSE)) {
+  plan_m2_grid(prior_m2_results, max_finalists = 6L, max_specs = 64L)
+} else {
+  default_m2_grid()
+}
+m2_tuning <- tune_m2(allD, selection, m0, m1, grid = m2_grid)
+validate_m2_tuning(m2_tuning)
+m2 <- fit_m2(allD, selection, m0, m1, config = m2_tuning$best_spec) |>
+  freeze_m2(tuning = m2_tuning)
+
+kit <- assemble_kit(m0, m1, m2)
+validate_page_kit(kit)
+```
+
+The example uses the validated one-row `m1_tuning$best` selection as the fixed
+M1 configuration. A tuning result is not itself a fitted stage, and a draft fit
+is not a deployment input. `assemble_kit()` fails if a governed chain contains
+a draft stage, mismatched season selection, or broken upstream identity.
+
+`tune_m1()` normally inherits M0's manual labels and records the shifted M1
+label vector in its result. To reproduce a historical M1 search that used a
+different target-label vector, pass that vector explicitly with
+`manual_labels=` in the unshifted M0 coordinate system. This override changes
+the M1 tuning target only; it should not silently replace the labels used to
+fit M0 or the production reference.
+
+M2 tuning constructs labels separately for every LOSO fold. The held-out
+season is excluded from `manual_labels_train`, while `manual_labels_test` is
+`NULL`, so held-out ignition timing is detected prospectively. Any checkpoint
+created with the held-out label supplied to the evaluation fold is leaked and
+must be recomputed rather than merely re-ranked.
+
+## Compatibility refresh of the locked specification
+
+Use refresh when the model structure is already approved. It fits the coded
+current v16-corrected specification (`k_f=4`, `k_e=2`, `alpha_state=0.20`, `k_sp=8`, `k_r=0`,
 `k_de=0`, `delta=0`, `Kr=1`, `bias_alpha=0.05`, `bias_beta=0`). The 2025-26
 season remains excluded as a prospective holdout by default.
 
@@ -39,24 +122,31 @@ kit <- training$kit
 saveRDS(kit, "page_kit.rds")
 ```
 
+`train_pipeline()` is the high-level compatibility orchestrator and composes
+the guarded stage lifecycle above for both refresh and retune. Use the explicit
+calls when a workflow needs to inspect or gate each stage independently.
+
 ## Replay the holdout and apply promotion gates
 
 Both candidate and incumbent kits must have been trained without 2025-26.
+Governed evaluation runs through `scripts/acceptance/replay_2025_26.R`, which
+saves the private replay bundle and disclosure-safe manifest before returning
+a promotion decision. Do not pass a bare `check_promotion()` report to
+`train_pipeline()`; it has no artifact provenance and cannot release the
+holdout.
 
-```{r}
-candidate <- replay_season_holdout(kit, allD, season = "2025-26")
-incumbent <- replay_season_holdout(incumbent_kit, allD, season = "2025-26")
-promotion <- check_promotion(candidate$metrics, incumbent$metrics)
-
-# A passing report releases 2025-26 into the refresh for 2026-27.
-next_training <- train_pipeline(allD, mode = "refresh", promotion = promotion)
-```
+After a passing acceptance run, use
+`season2526/run_retrain_venkata.R` with the saved decision bundle, manifest,
+authorized data, candidate kit, and incumbent kit. That script verifies every
+bound SHA-256 hash, constructs short-lived verified promotion evidence, and
+performs the fixed post-promotion refresh.
 
 Promotion requires at least 2% Bernoulli-NLL improvement, at most 5% MAE
 degradation at any horizon, and at most 10% MAE degradation in any phase. A
 failed or malformed report keeps the holdout excluded. The versioned report
-schema validates the locked thresholds and internal gate consistency; it does
-not provide cryptographic proof of who created the report.
+schema validates the locked thresholds and internal gate consistency. The
+retained artifacts and their verified hashes—not the forgeable R class—are the
+production safety boundary.
 
 ## Retune when model selection is required
 
@@ -76,6 +166,111 @@ keeps diverse finalists, adds local neighbors, and expands reached boundaries.
 Optional `racing=TRUE` requires a user-supplied partial-fold evaluator. Racing
 only removes clear losers; every survivor receives full nested-LOSO evaluation
 before selection.
+
+### Diagnose and expand the grid
+
+A selected value should normally have tested values on both sides. If the
+winner is at a lower or upper edge, retain the existing candidates and add one
+valid value beyond that edge using the adjacent observed spacing. Then rerun
+the same complete folds and selection rule. Prefer one-factor local neighbors
+before adding targeted interactions; do not expand every axis into an
+unbounded Cartesian grid.
+
+A boundary can be legitimate when it is a null or hard constraint. For
+example, an M2 smooth dimension of zero means that feature is off and should
+not be expanded to an invalid negative value. Record whether each boundary is
+expanded, accepted as a constraint/null, or left unresolved because the
+predeclared grid cap was reached.
+
+For the default M1 grid, a selected `k_ref=25` or `slope_weight=8` is on the
+lower edge. If that selection survives the complete governed run, adjacent
+spacing suggests testing `k_ref=20` and `slope_weight=4` in the next
+pre-holdout development round while retaining the original candidates.
+
+For M2, prefer:
+
+```{r}
+next_grid <- plan_m2_grid(
+  previous_results = prior_m2_results,
+  max_finalists = 6L,
+  max_specs = 64L
+)
+```
+
+The planner retains the coded incumbent and prior finalists, adds nearest local
+neighbors, expands valid winning boundaries by one observed step, and preserves
+stable specification identities. Stop expanding when the winner is bracketed,
+a boundary is a documented null/constraint, improvement is flat relative to
+fold uncertainty, or the declared computational cap is reached. Never alter
+the grid after viewing the prospective holdout.
+
+## Manual pre-holdout candidate cycle
+
+Use this compact sequence when testing a new cycle by hand. Keep `2025-26` in
+the holdout for every call. The current boundary cycle should reuse the
+already-frozen M0/M1 artifacts and begin at the M2 block below; only run the
+M0/M1 blocks when those stages are intentionally being retuned. If prior M2
+results are available, use the planner so already-scored specifications are
+retained by identity rather than rebuilt; otherwise start from
+`default_m2_grid()`.
+
+```{r}
+# M0: tune -> validate -> fit -> freeze
+m0_tuning <- tune_m0(
+  allD, selection = selection,
+  n_cores = parallel::detectCores(), verbose = TRUE
+)
+validate_m0_tuning(m0_tuning)
+m0 <- fit_m0(allD, selection, config = m0_tuning$best_params) |>
+  freeze_m0(tuning = m0_tuning)
+
+# M1: tune -> validate -> fit -> freeze
+m1_tuning <- tune_m1(
+  allD, m0 = m0, selection = selection,
+  grid = default_m1_grid(),
+  n_cores = parallel::detectCores(),
+  checkpoint_dir = "results/checkpoints/m1-cycle", verbose = TRUE
+)
+validate_m1_tuning(m1_tuning)
+m1_best <- m1_tuning$best[1, , drop = FALSE]
+m1_config <- m1_make_params(
+  k_ref = m1_best$k_ref,
+  temperature = m1_best$multi_temperature,
+  rise_weight = m1_best$align_rise_weight,
+  slope_window = m1_best$slope_window,
+  slope_weight = m1_best$slope_weight
+)
+m1 <- fit_m1(allD, selection, m0, config = m1_config) |>
+  freeze_m1(tuning = m1_tuning)
+
+# M2: plan -> tune -> validate -> fit -> freeze
+m2_grid <- if (exists("prior_m2_results", inherits = FALSE)) {
+  plan_m2_grid(prior_m2_results, max_finalists = 6L, max_specs = 64L)
+} else {
+  default_m2_grid()
+}
+m2_tuning <- tune_m2(
+  allD, selection, m0, m1, grid = m2_grid,
+  n_cores = parallel::detectCores(),
+  checkpoint_dir = "results/checkpoints/m2-cycle", verbose = TRUE
+)
+validate_m2_tuning(m2_tuning)
+m2 <- fit_m2(allD, selection, m0, m1, config = m2_tuning$best_spec) |>
+  freeze_m2(tuning = m2_tuning)
+
+# Assemble only after all three stages are frozen and matched.
+candidate <- assemble_kit(m0, m1, m2)
+validate_page_kit(candidate)
+saveRDS(candidate, "results/candidate_pre_holdout.rds")
+```
+
+The tuning objects are the evidence checkpoints; the frozen stage objects are
+the governed inputs to `assemble_kit()`; and `candidate` is the pre-holdout
+kit. It is not incumbent or deployable until the artifact-bound acceptance
+workflow compares it with the pre-holdout incumbent on the untouched holdout.
+
+The [tuning playbook](tuning-playbook.md) gives parameter-specific M0, M1, and
+M2 advice plus a boundary-report schema.
 
 ## Produce a frozen prospective forecast
 

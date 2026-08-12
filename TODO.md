@@ -1,14 +1,19 @@
 # PAGe Audit Inventory and TODO
 
-Last audited: 2026-07-27  
-Repository state audited: `e2fb85918cc1ff8a4f6288ab465f426f0823d913` (`master`)  
+Last reconciled: 2026-07-29
+Repository baseline: `ab3aeb6` (`master`) plus the current audit implementation
+patch
 Scope: package code, root/package mirrors, tests, scripts, reports, generated
 documentation, workflow configuration, and references to saved result artifacts.
 
 This is the authoritative reconciliation list until the conflicts below are
 closed. A report or comment is not evidence that a run completed. Statuses mean:
 
-- **Verified implemented**: implementation and relevant tests are committed.
+- **Verified implemented**: implementation and relevant tests are present and
+  have been executed against the current source tree.
+- **Implemented, execution unverified**: the governed code path and synthetic
+  tests exist, but the required private-data operation and evidence have not
+  been run or preserved here.
 - **Claimed result, unverified**: a numeric result is documented, but its source
   artifact and reproducible result summary are not committed.
 - **Incomplete**: required implementation, execution, or evidence is absent.
@@ -20,7 +25,8 @@ closed. A report or comment is not evidence that a run completed. Statuses mean:
 | Area | Status | Audit conclusion |
 |---|---|---|
 | Package structure and public API | Verified implemented | Installable package source exists under `PAGe/`; high-level training, forecasting, plotting, validation, and promotion APIs are present. |
-| Root/package R mirrors | Verified implemented | All 40 files in `R/` matched their counterparts in `PAGe/R/` byte-for-byte at the audited commit. |
+| Guarded M0/M1/M2 stage lifecycle | Verified implemented in code/tests | Explicit season selection, tune/validate/fit/freeze states, frozen upstream guards, stable stage identities, guarded kit assembly, tamper checks, and legacy compatibility are implemented. `train_pipeline()` integration remains open. |
+| Root/package R mirrors | Verified implemented | All 42 files in `R/` match their counterparts in `PAGe/R/` byte-for-byte in the current audit patch. |
 | Input data contract | Verified implemented | Explicit loading, normalization, validation, and synthetic-season generation are implemented and tested. Private surveillance observations are not committed. |
 | M0 ignition | Verified implemented in code | Build, tune, retrospective, and prospective runtime paths exist. Numerical production result still depends on ignored local artifacts. |
 | M1 alignment | Verified implemented in code | Reference fitting, multi-template alignment, LOSO tuning, peak calibration, and prospective runtime paths exist. The canonical reported MAE is inconsistent across docs. |
@@ -30,14 +36,14 @@ closed. A report or comment is not evidence that a run completed. Statuses mean:
 | Frozen deployment | Verified implemented | `run_pipeline()`/`run_prospective_pipeline()` default to frozen deployment; weekly refit is explicit compatibility behavior. |
 | 2025-26 holdout protection | Verified implemented in code/tests | `train_pipeline()` excludes 2025-26 by default and releases it only after a valid, passing, locked-threshold promotion report. |
 | 2025-26 unseen M2 replay | Implemented, execution unverified | Replay and leakage rejection exist; the repository does not preserve the completed real-data replay, metrics, or promotion report. |
-| 2025-26 final refit including season | Claimed, not verified | No committed artifact or summary proves a final production fit whose `training_seasons` includes 2025-26. The main retrain script actually excludes it by default. |
+| 2025-26 final refit including season | Implemented, execution unverified | The governed fixed-spec refit validates the passing acceptance bundle/manifest and asserts that 2025-26 is released and included before immutable save. No real refit artifact or summary is preserved here. |
 | v16 production specification | Implemented and consistently coded | High-level defaults use `k_f=4`, `k_e=2`, `alpha_state=0.15`, `k_sp=6`, `k_r=0`, `k_de=0`, `bias_alpha=0.05`, `bias_beta=0`. |
 | v16 NLL 0.4175 | Claimed result, unverified | Repeated in README/docs, but the named result artifact is ignored, absent, and inconsistently named. |
 | External/simple forecast baselines | Incomplete | Historical PAGe versions and internal ablations exist; LOCF, historical mean/median, unaligned forecast, and other prespecified external/simple baselines are not implemented as a canonical benchmark suite. |
 | Publication-ready evaluation | Incomplete | NLL, Brier, RMSE, MAE, horizon and phase machinery partly exists; locked tables, calibration, interval evaluation, uncertainty, baseline comparisons, and a preserved confirmatory chain remain incomplete. |
-| Reproducible public example | Partly implemented | Synthetic data generation exists, but there is no single executed public end-to-end reproduction of all manuscript tables and figures. Vignettes use `eval: false`. |
-| Automated tests | Tests committed; run not verified here | 14 `testthat` files plus a helper are present. R was unavailable in the audit environment, so the suite could not be executed locally. |
-| CI | Configured; latest result unverified | `R-CMD-check` and pkgdown workflows are committed. No combined status was returned for the audited commit. |
+| Reproducible public example | Partly implemented | Synthetic data generation, governance tests, and `scripts/public/synthetic_release_workflow.R --smoke` exist. No single public reproduction creates all manuscript tables and figures. |
+| Automated tests | Repository suite and source-package check verified locally | The repository test suite, including 74 guarded stage-contract expectations, passes against the clean preflight installation. The earlier source build, vignette rebuild, and `R CMD check --no-manual` completed with no errors or warnings (two inherited static-analysis/environment notes). On 2026-07-29, the default development library could not load `devtools` because installed `fs` 1.6.5 is below a transitive `>= 2.1.0` requirement; the clean preflight library remains usable. |
+| CI | Configured; execution pending | `R-CMD-check` now includes a bounded synthetic governance smoke step before the full package check; pkgdown remains separate. The updated workflow has not yet run on GitHub. |
 
 ## Verified implementation inventory
 
@@ -51,6 +57,14 @@ closed. A report or comment is not evidence that a run completed. Statuses mean:
 - [x] Public documentation, `NAMESPACE`, roxygen output, pkgdown configuration,
   package tests, and GitHub Actions configuration exist.
 - [x] `R/` and `PAGe/R/` are synchronized at the audited commit.
+- [x] `validate_season_selection()` records mutually disjoint training,
+  exclusion, holdout, and application seasons.
+- [x] M0, M1, and M2 expose independent tuning-validation, draft-fit, and
+  freeze gates; downstream stages verify frozen upstream identities.
+- [x] Governed `assemble_kit()` and `validate_page_kit()` preserve and verify
+  season selection plus M0/M1/M2 artifact identities.
+- [ ] Refactor `train_pipeline()` to compose the guarded stage lifecycle while
+  preserving its current refresh/retune compatibility contract.
 
 ### M0: ignition detection
 
@@ -74,6 +88,10 @@ closed. A report or comment is not evidence that a run completed. Statuses mean:
   1.276, or 1.338 weeks and identify the exact code/data/artifact behind it.
 - [ ] Preserve one canonical M1 result table including fold seasons, coordinate
   system, manual-label version, ensemble scale, and artifact hash.
+- [ ] Because the coded `k_ref=25` and `slope_weight=8` values sit at the lower
+  edges of the default grid, run a pre-holdout controlled extension (for
+  example `k_ref=20`, `slope_weight=4`) on identical folds, or preserve a
+  defensible boundary-acceptance decision.
 - [ ] Re-measure M1 after legitimately releasing 2025-26; do not call a fit
   including 2025-26 a holdout evaluation.
 
@@ -111,67 +129,80 @@ closed. A report or comment is not evidence that a run completed. Statuses mean:
   release 2025-26 after a missing, malformed, custom-threshold, or failed report.
 - [x] `scripts/acceptance/replay_2025_26.R` provides a manual acceptance entry
   point.
-- [ ] Make the acceptance script save the replay, candidate metrics, incumbent
+- [x] The acceptance script saves the replay, candidate metrics, incumbent
   metrics, canonical promotion report, and a compact provenance manifest.
+- [x] The fixed-spec refit and immutable promotion/registry entry points
+  validate the complete source-hash chain and refuse output collisions.
 - [ ] Run the real acceptance gate with both kits confirmed not to contain
   2025-26 in `training_seasons`.
 - [ ] Preserve the passing/failing result before any refit includes 2025-26.
-- [ ] Only after that result is frozen, refit the production model including
-  2025-26 and preserve proof in `training_seasons`.
+- [ ] If the preserved real decision passes, execute the fixed-spec refit,
+  verify 2025-26 in `training_seasons`, and register the resulting kit.
 
 ## Conflict ledger
 
-### C01 — `run_retrain_venkata.R` does not include 2025-26 in training
+### C01 — Post-acceptance refit inclusion
 
-The script loads and appends 2025-26, then calls:
+**Status: implementation resolved; private execution/evidence open.**
 
-```r
-train_pipeline(allD, mode = "retune")
-```
+`season2526/run_retrain_venkata.R` now requires the immutable acceptance
+decision bundle, its disclosure-safe manifest, the exact accepted candidate
+and incumbent kits, and authorized data. It runs
+`train_pipeline(mode = "refresh")` with artifact-bound verified promotion
+evidence and the accepted fixed configuration rather than retuning after
+viewing the holdout.
 
-The default is `prospective_holdout = "2025-26"` with no promotion report, so
-`train_pipeline()` removes 2025-26 from all tuning and final fitting. The output
-message and filename imply a completed inclusive retrain, but the code does the
-opposite.
+- [x] Require and validate a previously saved, passing canonical decision and
+  its source hashes.
+- [x] Reject bare promotion reports and pass evidence constructed by
+  `verify_promotion_evidence()` from the exact hash-bound artifacts.
+- [x] Assert `retuned$holdout$status == "released"`.
+- [x] Assert `"2025-26" %in% retuned$kit$m2_production$training_seasons`.
+- [x] Fail before saving if the release, inclusion, or fixed-spec assertions
+  are false.
+- [ ] Execute the private refit after a preserved real passing decision and
+  retain its disclosure-safe manifest.
 
-- [ ] Require a previously saved, passing canonical promotion report.
-- [ ] Pass it explicitly to `train_pipeline()`.
-- [ ] Assert `retuned$holdout$status == "released"`.
-- [ ] Assert `"2025-26" %in% retuned$kit$m2_production$training_seasons`.
-- [ ] Fail before saving if either assertion is false.
+### C02 — Governed refit source document
 
-### C02 — `reproduce_retrain.qmd` is not executable as described
+**Status: implementation resolved; private execution/evidence open.**
 
-- It claims an exact reproduction incorporating 2025-26.
-- It does not apply the tuned M1 parameters when rebuilding M1 for M2.
-- It calls `assemble_kit(m2_trained)`, but `assemble_kit()` requires M0, M1, and
-  M2 inputs.
-- It evaluates training seasons with a kit trained on them, while
-  `replay_season_holdout()` correctly rejects that leakage.
-- The note saying `train_pipeline(allD, mode="retune")` is equivalent is false
-  because the default holdout remains active.
+The QMD no longer claims an in-sample retrospective replay or an already
+completed inclusive retrain. It documents the one-way acceptance-to-refresh
+subsequence and leaves all private execution disabled.
 
-- [ ] Replace the document with a two-phase reproduction:
+- [x] Replace the document with a two-phase reproduction:
   1. untouched 2025-26 replay and frozen promotion decision;
   2. post-decision production refit including 2025-26.
-- [ ] Use the high-level API consistently or correctly propagate the tuned M0,
-  tuned M1 parameters, selected M2 spec, and full `assemble_kit()` inputs.
-- [ ] Use genuine outer holdout/LOSO kits for retrospective evaluation.
-- [ ] Turn execution on for the compact verification sections.
+- [x] Use the governed high-level refresh path and propagate the exact accepted
+  M0, M1, M2, and runtime settings.
+- [x] Remove the invalid in-sample retrospective-evaluation claim; Phase 1
+  requires genuine pre-holdout kits.
+- [x] Keep only compact disclosure-safe schema checks executable when rendered.
+- [ ] Render a fresh HTML snapshot only after source documentation and
+  authorized disclosure-safe evidence are ready.
 
 ### C03 — Completed runs are not auditable from the repository
+
+**Status: manifest/evidence infrastructure resolved; real result evidence
+open.**
 
 `data/`, `results/`, `*.rds`, and `*.csv` are ignored. That appropriately keeps
 private observations and large models out of Git, but it also removes every
 artifact needed to verify claimed results.
 
-- [ ] Keep private data and model objects ignored.
-- [ ] Commit small disclosure-safe summaries under `results/audit/` by adding a
+- [x] Keep private data and model objects ignored.
+- [x] Allow small disclosure-safe summaries under `results/audit/` through a
   narrow `.gitignore` exception for approved `.json`/`.csv`/`.md` manifests.
-- [ ] Record SHA-256 hashes for non-committed source artifacts.
-- [ ] Record code commit, run timestamp, R/package versions, input-data
+- [x] Implement SHA-256 binding for non-committed source artifacts.
+- [x] Implement the canonical schema for code commit, run timestamp, R/package
+  versions, input-data
   fingerprint, seasons, exclusions, row counts, spec ID, and training seasons.
-- [ ] Record fold-level metrics without disclosing row-level surveillance data.
+- [x] Reject row-level payloads from disclosure-safe manifests and write
+  aggregate acceptance metrics/diagnostics separately.
+- [ ] Execute the private workflows and preserve approved disclosure-safe
+  summaries, including the fold/season-level metrics needed for scientific
+  claims.
 
 ### C04 — v16 result identity is inconsistent
 
@@ -203,73 +234,94 @@ artifact needed to verify claimed results.
 
 ### C06 — Bias-correction parameters are described inconsistently
 
-- The v16 high-level spec uses `bias_alpha=0.05`.
-- Older skill/docs describe base `bias_alpha=0.4`.
-- Runtime may raise alpha to 0.7 after consecutive same-sign residuals.
-- Some low-level defaults remain 0.2 or 0.4 for compatibility.
+**Status: implementation resolved; canonical numerical re-evaluation open.**
 
-- [ ] Distinguish structural spec value, runtime adaptive rule, and legacy
+- The v16 high-level spec uses `bias_alpha=0.05`.
+- Historical notes/rendered docs describe base `bias_alpha=0.4`.
+- Runtime raises alpha to 0.7 after two same-sign transitions, meaning on the
+  third consecutive same-sign residual.
+- Historical research scripts retain explicit 0.2 or 0.4 settings, while
+  current package defaults use the canonical base alpha 0.05 and beta 0.
+
+- [x] Distinguish structural spec value, runtime adaptive rule, and legacy
   fallback values in one canonical specification.
-- [ ] Remove silent legacy fallback from the canonical production path or emit
-  a hard warning when required spec fields are absent.
-- [ ] Ensure LOSO evaluation uses exactly the same correction rule as the
-  deployed pipeline being claimed.
+- [x] Remove silent legacy fallback from the canonical production path: strict
+  mode errors, while explicitly requested compatibility modes warn.
+- [x] Ensure LOSO evaluation and frozen runtime use the same correction
+  resolver and adaptive transition rule.
+- [ ] Re-run the private canonical evaluation to establish results for exactly
+  the deployed correction rule.
 
 ### C07 — Production artifact naming and promotion are incomplete
 
-The v16 production script writes `data/fresh_m2_production.rds` and compares it
-with `data/m2_production.rds`; it does not perform a canonical promotion/copy
-step. Documentation nevertheless calls `data/m2_production.rds` the deployed
-v16 kit.
+**Status: implementation resolved; real promotion execution open.**
 
-- [ ] Add an explicit, gated promotion command that never overwrites the
+Legacy v16 builder scripts still use mutable local filenames, but they are
+classified as research-only. The canonical release path is now the gated,
+immutable registry workflow.
+
+- [x] Add an explicit, gated promotion command that never overwrites the
   incumbent before acceptance passes.
-- [ ] Save incumbent and candidate identities in the promotion manifest.
-- [ ] Make deployment load the promoted artifact by immutable ID or verified
+- [x] Save incumbent and candidate identities and the full upstream hash chain
+  in the promotion manifest.
+- [x] Make deployment load the promoted artifact by immutable ID and verified
   manifest, not by an ambiguous mutable filename alone.
+- [ ] Run the real promotion after a preserved passing acceptance/refit chain.
 
 ### C08 — Fresh prospective script contains kit-schema drift
 
-`load_prospective_kit()` returns `m2_production`, but
-`scripts/fresh_run/06_prospective.R` prints `fresh_kit$m2$spec_version`. The same
-script later creates `kit_kf5$m2`, although runtime uses `m2_production`.
+**Status: schema drift resolved; manual kit-smoke path implemented.**
 
-- [ ] Replace `$m2` references with `$m2_production`.
-- [ ] Add a smoke test that executes the fresh prospective entry point through
-  kit loading before any expensive replay.
+The audited script mixed `$m2` and `$m2_production`. It now uses the canonical
+`m2_production` schema and exposes a manual kit-only smoke flag that exits
+before live data or replay. No automated test currently invokes that script.
+
+- [x] Replace `$m2` references with `$m2_production`.
+- [x] Add a manual `--kit-smoke` entry point that exits after kit loading and
+  before any expensive replay.
+- [ ] Add an automated test or CI command that executes that kit-smoke path.
 
 ### C09 — Runtime fallback configuration is stale
 
-If `M1_PARAMS` is absent from a legacy reference cache,
-`load_prospective_kit()` falls back to `slope_weight=0.5`,
-`slope_window=4`, and `dynamic_temp=TRUE`. Current locked defaults are
-`slope_weight=8`, `slope_window=6`, and `dynamic_temp=FALSE`.
+**Status: resolved for the canonical path; compatibility modes remain
+explicit.**
 
-- [ ] Fail closed for a canonical kit missing `M1_PARAMS`, or use the single
-  centralized locked default with an explicit provenance warning.
-- [ ] Remove outdated v12 fallback-spec discovery from the canonical v16 load
+The audited loader silently substituted stale M1 and M2 fallbacks. Strict mode
+now rejects incomplete canonical artifacts; compatibility behavior is opt-in
+and warns.
+
+- [x] Fail closed for a canonical kit missing `M1_PARAMS`; the opt-in
+  `locked_defaults` mode uses the centralized locked default with an explicit
+  warning.
+- [x] Remove outdated v12 fallback-spec discovery from the canonical v16 load
   path.
 
 ### C10 — Data documentation conflicts with the repository
 
-Generated agent context says built-in data live at
-`PAGe/inst/extdata/flu_hist.csv`, but that file is absent. Package code and
-README correctly say surveillance observations are not distributed.
+**Status: resolved in canonical source and regenerated agent context.**
 
-- [ ] Update `.ai/shared/project-context.md`.
-- [ ] Regenerate `AGENTS.md` and `CLAUDE.md`; do not edit generated files
+Generated agent context now matches package code and README: authorized
+surveillance observations are not distributed.
+
+- [x] Update `.ai/shared/project-context.md`.
+- [x] Regenerate `AGENTS.md` and `CLAUDE.md`; do not edit generated files
   directly.
 
 ### C11 — Old and current workflows coexist without a retirement map
 
+**Status: status map and first retirement banner implemented; broader
+archival/render cleanup remains open.**
+
 Root `task.md`, v2-v18 tuning scripts, old weekly-refit documentation, current
 frozen deployment, v14/v15/v16 production builders, and generated HTML all
-remain discoverable. Some are useful research history, but their status is not
-machine-readable and they contradict current defaults.
+remain discoverable. The status map now classifies their intended use; selected
+source-level banners and archival/render cleanup remain.
 
-- [ ] Create `docs/workflow-status.md` listing each entry point as
+- [x] Create `docs/workflow-status.md` listing each entry point as
   `canonical`, `research-only`, `superseded`, or `broken`.
-- [ ] Put a clear banner on superseded QMDs and scripts.
+- [x] Put a clear historical/superseded banner on root `task.md`.
+- [ ] Add source-level banners to other high-risk superseded QMDs/scripts where
+  the status map alone is insufficient.
 - [ ] Move no files until references are mapped; then archive rather than
   silently delete research history.
 - [ ] Re-render HTML only after source QMD conflicts are resolved.
@@ -293,8 +345,13 @@ fold.
 
 ### P0 — Establish the auditable ground truth
 
-- [ ] Fix C01, C02, C03, C04, C05, C07, C08, C09, and C10.
-- [ ] Add a disclosure-safe result-manifest schema and validator.
+- [x] Implement the code-path remediations for C01, C02, C03, and C06-C10,
+  plus the C11 workflow map.
+- [ ] Resolve the scientific/artifact conflicts C04 and C05, execute the
+  private C03 evidence chain, and finish the remaining C11 archival/render
+  cleanup.
+- [x] Add a disclosure-safe result-manifest schema, validator, immutable
+  JSON/RDS I/O, and hash-verified promoted-kit loader.
 - [ ] Recover local Venkata artifacts, inspect rather than trust filenames, and
   inventory for each object:
   - object class and schema;
@@ -365,9 +422,13 @@ fold.
 
 ### P1 — Public reproducibility
 
-- [ ] Build one small synthetic dataset in the canonical raw input schema.
-- [ ] Add an executed end-to-end synthetic example covering train, replay,
-  promotion, refit, and forecast with a deliberately small grid.
+- [x] Build one small deterministic synthetic dataset in the canonical raw
+  input schema for the public governance smoke workflow.
+- [x] Add a bounded public synthetic release-chain smoke command covering
+  candidate/incumbent acceptance, fixed refresh, promotion, and verified load
+  without private data.
+- [ ] Extend the public reproduction to create all manuscript tables and
+  figures from a deliberately small, fully fitted grid.
 - [ ] Add a public-data replication if licensing and source stability permit.
 - [ ] Add a data dictionary and provenance template.
 - [ ] Add a frozen R dependency environment.
@@ -376,11 +437,13 @@ fold.
 
 ### P2 — Repository consolidation
 
-- [ ] Replace root `task.md` with an archive pointer or clearly mark it as a
-  historical M0 task after preserving its provenance.
+- [x] Clearly mark root `task.md` as a historical M0 task while preserving its
+  content and provenance.
+- [ ] Replace it with an archive pointer only after references are mapped.
 - [ ] Establish one canonical workflow entry point for refresh, retune,
   acceptance, promotion, and post-promotion refit.
-- [ ] Add manifest validation and entry-point smoke tests to CI.
+- [x] Add bounded manifest, holdout-release, acceptance, refit, promotion, and
+  registry smoke tests to CI. The first GitHub execution remains pending.
 - [ ] Add Windows and macOS package checks if cross-platform support is claimed.
 - [ ] Regenerate roxygen docs, vignettes, pkgdown, `AGENTS.md`, and `CLAUDE.md`
   after canonical sources are reconciled.
@@ -404,4 +467,3 @@ The audit is resolved only when all of the following are true:
 7. The public synthetic reproduction and the private real-data reproduction
    both run from a single documented command.
 8. Package tests and `R CMD check` pass on the canonical commit.
-

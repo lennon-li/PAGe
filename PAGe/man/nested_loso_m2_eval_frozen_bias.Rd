@@ -12,8 +12,9 @@ nested_loso_m2_eval_frozen_bias(
   spec,
   eval_window = 12L,
   horizons = c(1L, 2L),
-  bias_alpha = 0.2,
-  bias_beta = 0,
+  bias_alpha = NULL,
+  bias_beta = NULL,
+  correction_compatibility = c("strict", "legacy"),
   manual_labels = NULL,
   manual_labels_train = NULL,
   manual_labels_test = NULL,
@@ -39,11 +40,12 @@ columns \code{eval_weekF}, \code{target_weekF}, \code{h}, \code{m1_p_hat},
 
 \item{horizons}{Integer vector of forecast horizons (default \code{c(1L, 2L)}).}
 
-\item{bias_alpha}{Numeric; EMA smoothing for Holt bias level (default 0.2).}
+\item{bias_alpha, bias_beta}{Optional research overrides for the correction
+rates. By default, both values are resolved from \code{spec}.}
 
-\item{bias_beta}{Numeric; EMA smoothing for Holt bias trend (default 0).
-Both bias settings are explicit evaluator inputs; callers may take them
-from a tuning-grid specification.}
+\item{correction_compatibility}{Correction-spec policy. \code{"strict"}
+(default) requires finite \code{bias_alpha} and \code{bias_beta} values in
+\code{spec}; \code{"legacy"} enables deprecated fallbacks with a warning.}
 
 \item{manual_labels}{Optional named integer vector of manual ignition labels
 (deprecated; use \code{manual_labels_train} and \code{manual_labels_test}).}

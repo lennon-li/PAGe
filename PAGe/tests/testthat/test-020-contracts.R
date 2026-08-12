@@ -104,7 +104,7 @@ test_that("locked refresh defaults match the deployed production settings", {
     )],
     list(
       delta = 0L, Kr = 1L, T = "S", k_f = 4L, k_e = 2L,
-      alpha_state = 0.15, k_r = 0L, k_de = 0L, k_sp = 6L,
+      alpha_state = 0.20, k_r = 0L, k_de = 0L, k_sp = 8L,
       k_n = 0L, k_w = 0L, k_s = 0L, lambda_w = 0, w_floor = 0.05,
       bias_alpha = 0.05, bias_beta = 0
     )

@@ -44,10 +44,31 @@
 .default_m2_spec <- function() {
   stage2_make_spec(
     delta = 0L, Kr = 1L, T = "S", k_f = 4L, k_e = 2L,
-    alpha_state = 0.15, k_r = 0L, k_de = 0L, k_sp = 6L,
+    alpha_state = 0.20, k_r = 0L, k_de = 0L, k_sp = 8L,
     k_n = 0L, k_w = 0L, k_s = 0L, lambda_w = 0, w_floor = 0.05,
     bias_alpha = 0.05, bias_beta = 0
   )
+}
+
+.canonical_m1_params <- function(m1_params = NULL) {
+  defaults <- .default_m1_params()
+  if (is.null(m1_params)) {
+    return(defaults)
+  }
+  if (!is.list(m1_params) || is.null(names(m1_params))) {
+    stop("`m1$m1_params` must be a named list or NULL.", call. = FALSE)
+  }
+  supplied <- intersect(names(m1_params), names(defaults))
+  defaults[supplied] <- m1_params[supplied]
+  defaults
+}
+
+.m2_spec_identity <- function(spec, supplied = NULL) {
+  identity <- supplied %||% spec$spec_id %||% spec$best_spec_id
+  if (is.character(identity) && length(identity) == 1L && nzchar(identity)) {
+    return(identity)
+  }
+  paste0("spec_", digest::digest(spec, algo = "xxhash64"))
 }
 
 #' Construct an M1 alignment parameter list
@@ -87,16 +108,16 @@
 #' params_custom <- m1_make_params(slope_weight = 12, temperature = 0.15)
 #'
 #' @export
-m1_make_params <- function(k_ref             = 25L,
-                            ref_method        = "fs",
-                            temperature       = 0.25,
-                            rise_weight       = 1.0,
-                            trough_weight     = 0.1,
-                            peak_decay        = 0.3,
-                            slope_weight      = 8.0,
-                            slope_window      = 6L,
-                            dynamic_temp      = FALSE,
-                            dynamic_temp_pivot = 10L) {
+m1_make_params <- function(k_ref = 25L,
+                           ref_method = "fs",
+                           temperature = 0.25,
+                           rise_weight = 1.0,
+                           trough_weight = 0.1,
+                           peak_decay = 0.3,
+                           slope_weight = 8.0,
+                           slope_window = 6L,
+                           dynamic_temp = FALSE,
+                           dynamic_temp_pivot = 10L) {
   list(
     k_ref              = as.integer(k_ref),
     ref_method         = ref_method,
@@ -134,12 +155,19 @@ m1_make_params <- function(k_ref             = 25L,
 
 #' Return the default M1 alignment tuning grid
 #'
-#' @return A tibble with 20 rows (4 k_ref x 5 slope_weight combinations).
+#' Crosses \code{k_ref = c(20, 25, 30, 40, 50)} with
+#' \code{slope_weight = c(8, 12, 16, 20, 30)}. The additional \code{k_ref = 20}
+#' value is a planned pre-holdout extension for the existing lower-edge
+#' \code{k_ref = 25} result; it does not alter or rerun the historical grid.
+#' A lower-edge \code{slope_weight = 8} result would require a separate,
+#' explicitly approved \code{slope_weight = 4} extension.
+#'
+#' @return A tibble with 25 rows (5 k_ref x 5 slope_weight combinations).
 #' @export
 default_m1_grid <- function() {
   if (!requireNamespace("tidyr", quietly = TRUE)) stop("Need 'tidyr'.")
   tidyr::crossing(
-    k_ref             = c(25L, 30L, 40L, 50L),
+    k_ref             = c(20L, 25L, 30L, 40L, 50L),
     multi_temperature = 0.25,
     template_shift    = 0L,
     align_rise_weight = 1.0,
@@ -151,7 +179,7 @@ default_m1_grid <- function() {
 #' Return the default M2 forecast tuning grid
 #'
 #' Delegates to \code{plan_m2_grid()} to return the compact initial grid. The
-#' deployed v16 incumbent is always included, with one-factor neighbors and
+#' current v16-corrected incumbent is always included, with one-factor neighbors and
 #' per-row provenance instead of an explosive Cartesian product.
 #'
 #' @return A data frame with M2 parameters, stable specification IDs, and
@@ -163,9 +191,15 @@ default_m2_grid <- function() {
 
 # Internal season selector
 .select_loso_seasons <- function(available, loso_seasons) {
-  if (identical(loso_seasons, "all"))         return(available)
-  if (identical(loso_seasons, "alternating")) return(available[c(TRUE, FALSE)])
-  if (is.character(loso_seasons))             return(intersect(loso_seasons, available))
+  if (identical(loso_seasons, "all")) {
+    return(available)
+  }
+  if (identical(loso_seasons, "alternating")) {
+    return(available[c(TRUE, FALSE)])
+  }
+  if (is.character(loso_seasons)) {
+    return(intersect(loso_seasons, available))
+  }
   stop("loso_seasons must be 'all', 'alternating', or a character vector")
 }
 
@@ -197,24 +231,28 @@ default_m2_grid <- function() {
 #'
 #' @export
 build_m0 <- function(allD,
-                     exclude       = c("2011-12", "2015-16", "2020-21", "2021-22"),
+                     exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
                      manual_labels = .default_manual_labels(),
-                     flag_args     = .default_flag_args(),
-                     best_params   = .default_m0_params(),
-                     k_deriv       = 10L) {
+                     flag_args = .default_flag_args(),
+                     best_params = .default_m0_params(),
+                     k_deriv = 10L) {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
   if (!requireNamespace("purrr", quietly = TRUE)) stop("Need 'purrr'.")
 
-  dat <- if (length(exclude) > 0)
-    dplyr::filter(allD, !.data$season %in% exclude) else allD
+  dat <- if (length(exclude) > 0) {
+    dplyr::filter(allD, !.data$season %in% exclude)
+  } else {
+    allD
+  }
   seasons_used <- sort(unique(dat$season))
 
   res_deriv <- estimateDerivs(dat, k = as.integer(k_deriv))
   outs <- res_deriv$data |>
     dplyr::group_by(.data$season) |>
     dplyr::group_split(.keep = TRUE) |>
-    purrr::map(function(df)
-      do.call(flagIgnition, c(list(df = df, manual_labels = manual_labels), flag_args)))
+    purrr::map(function(df) {
+      do.call(flagIgnition, c(list(df = df, manual_labels = manual_labels), flag_args))
+    })
   aligned <- alignIgnition(outs)
 
   list(
@@ -243,6 +281,9 @@ build_m0 <- function(allD,
 #' @param flag_args List of ignition-flagging parameters.
 #' @param n_cores Integer. Parallel cores (default: all minus 1).
 #' @param verbose Logical. Print progress.
+#' @param selection Optional governed \code{page_season_selection}. When
+#'   supplied, only its training seasons are used and the returned object is a
+#'   \code{page_m0_tuning}.
 #'
 #' @return A list with \code{best_params}, \code{tuning} (full
 #'   \code{loso_M0v2()} output), \code{aligned}, \code{seasons_used},
@@ -251,26 +292,38 @@ build_m0 <- function(allD,
 #'
 #' @export
 tune_m0 <- function(allD,
-                    loso_seasons  = "all",
-                    exclude       = c("2011-12", "2015-16", "2020-21", "2021-22"),
-                    grid          = .default_m0_grid(),
+                    loso_seasons = "all",
+                    exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
+                    grid = .default_m0_grid(),
                     manual_labels = .default_manual_labels(),
-                    flag_args     = .default_flag_args(),
-                    n_cores       = parallel::detectCores() - 1L,
-                    verbose       = TRUE) {
-
-  m0_built <- build_m0(allD, exclude = exclude,
-                        manual_labels = manual_labels, flag_args = flag_args)
-  aligned  <- m0_built$aligned
+                    flag_args = .default_flag_args(),
+                    n_cores = parallel::detectCores() - 1L,
+                    verbose = TRUE,
+                    selection = NULL) {
+  governed <- !is.null(selection)
+  if (governed) {
+    allD <- .selected_training_data(allD, selection)
+    loso_seasons <- selection$training_seasons
+    exclude <- character(0)
+  }
+  m0_built <- build_m0(allD,
+    exclude = exclude,
+    manual_labels = manual_labels, flag_args = flag_args
+  )
+  aligned <- m0_built$aligned
 
   # loso_seasons controls which test folds are evaluated.
   # Non-selected seasons are passed as drop_seasons (also removes from training
   # -- acceptable trade-off for "alternating" quick-demo mode).
-  all_seas   <- sort(unique(aligned$season))
-  test_seas  <- .select_loso_seasons(all_seas, loso_seasons)
+  all_seas <- sort(unique(aligned$season))
+  test_seas <- .select_loso_seasons(all_seas, loso_seasons)
   extra_drop <- setdiff(all_seas, test_seas)
-  # "2015-16" always dropped (ignition outlier)
-  drop_all   <- intersect(unique(c("2015-16", extra_drop)), all_seas)
+  # Preserve the historical compatibility exclusion unless an explicit
+  # governed selection is supplied.
+  drop_all <- intersect(
+    unique(c(if (!governed) "2015-16", extra_drop)),
+    all_seas
+  )
 
   tune_args_use <- list(
     miss_penalty = 0, lambda = 20, kappa = 0,
@@ -285,9 +338,12 @@ tune_m0 <- function(allD,
     select = FALSE, verbose = FALSE
   )
 
-  if (verbose)
-    message(sprintf("[tune_m0] %d-spec grid | %d test folds | %d cores",
-                    nrow(as.data.frame(grid)), length(test_seas), n_cores))
+  if (verbose) {
+    message(sprintf(
+      "[tune_m0] %d-spec grid | %d test folds | %d cores",
+      nrow(as.data.frame(grid)), length(test_seas), n_cores
+    ))
+  }
 
   tuning <- loso_M0v2(
     dat           = aligned,
@@ -300,7 +356,7 @@ tune_m0 <- function(allD,
     verbose       = verbose
   )
 
-  list(
+  out <- list(
     best_params   = tuning$best_params,
     tuning        = tuning,
     aligned       = aligned,
@@ -308,6 +364,12 @@ tune_m0 <- function(allD,
     manual_labels = manual_labels,
     flag_args     = flag_args
   )
+  if (governed) {
+    out$selection <- selection
+    out$data_id <- .stage_training_data_id(allD)
+    class(out) <- c("page_m0_tuning", "list")
+  }
+  out
 }
 
 
@@ -341,35 +403,44 @@ tune_m0 <- function(allD,
 #' @export
 build_m1 <- function(allD,
                      m0,
-                     exclude        = c("2011-12", "2015-16", "2020-21", "2021-22"),
-                     exclude_live   = TRUE,
+                     exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
+                     exclude_live = TRUE,
                      min_live_weeks = 20L,
-                     m1_params      = .default_m1_params()) {
+                     m1_params = .default_m1_params()) {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
 
   manual_labels <- m0$manual_labels %||% .default_manual_labels()
-  flag_args     <- m0$flag_args     %||% .default_flag_args()
+  flag_args <- m0$flag_args %||% .default_flag_args()
 
-  dat <- if (length(exclude) > 0)
-    dplyr::filter(allD, !.data$season %in% exclude) else allD
+  dat <- if (length(exclude) > 0) {
+    dplyr::filter(allD, !.data$season %in% exclude)
+  } else {
+    allD
+  }
 
   if (exclude_live) {
-    week_counts <- tapply(dat$weekF, dat$season,
-                          function(x) length(unique(x[!is.na(x)])))
+    week_counts <- tapply(
+      dat$weekF, dat$season,
+      function(x) length(unique(x[!is.na(x)]))
+    )
     partial <- names(week_counts)[week_counts < as.integer(min_live_weeks)]
     if (length(partial) > 0) {
-      message(sprintf("[build_m1] Excluding partial seasons: %s",
-                      paste(partial, collapse = ", ")))
+      message(sprintf(
+        "[build_m1] Excluding partial seasons: %s",
+        paste(partial, collapse = ", ")
+      ))
       dat <- dplyr::filter(dat, !.data$season %in% partial)
     }
   }
 
-  seasons_used  <- sort(unique(dat$season))
-  aligned_train <- build_m0(dat, exclude = character(0),
-                             manual_labels = manual_labels,
-                             flag_args = flag_args)$aligned
+  seasons_used <- sort(unique(dat$season))
+  aligned_train <- build_m0(dat,
+    exclude = character(0),
+    manual_labels = manual_labels,
+    flag_args = flag_args
+  )$aligned
 
-  ref   <- estimateRef(
+  ref <- estimateRef(
     alignedD = aligned_train,
     exSeason = character(0),
     k        = as.integer(m1_params$k_ref %||% 25L),
@@ -404,6 +475,13 @@ build_m1 <- function(allD,
 #' @param checkpoint_dir Character. Directory for resumable checkpoints.
 #'   Uses a temp directory if \code{NULL}.
 #' @param verbose Logical. Print progress.
+#' @param selection Optional governed \code{page_season_selection}. When
+#'   supplied, \code{m0} must be frozen, only selected training seasons are
+#'   used, and the result is a \code{page_m1_tuning}.
+#' @param manual_labels Optional named ignition-week vector in the M0 week
+#'   coordinate system. Defaults to labels stored in \code{m0}. M1 tuning
+#'   applies its historical one-week coordinate offset after resolving this
+#'   value.
 #'
 #' @return Output of \code{tune_m1_alignment()} -- a list with per-spec MAE
 #'   scores and the best spec parameters.
@@ -411,40 +489,61 @@ build_m1 <- function(allD,
 #' @export
 tune_m1 <- function(allD,
                     m0,
-                    m1,
-                    loso_seasons   = "all",
-                    grid           = default_m1_grid(),
-                    n_cores        = parallel::detectCores() - 1L,
+                    m1 = NULL,
+                    loso_seasons = "all",
+                    grid = default_m1_grid(),
+                    n_cores = parallel::detectCores() - 1L,
                     checkpoint_dir = NULL,
-                    verbose        = TRUE) {
+                    verbose = TRUE,
+                    selection = NULL,
+                    manual_labels = NULL) {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
 
-  manual_labels <- m0$manual_labels %||% .default_manual_labels()
-  m1_params     <- m1$m1_params     %||% .default_m1_params()
-  params        <- m0$best_params
-  if (is.null(params))
+  governed <- !is.null(selection)
+  if (governed) {
+    .require_frozen_stage(m0, "m0")
+    .check_selection_match(selection, m0$selection)
+    allD <- .selected_training_data(allD, selection)
+    loso_seasons <- selection$training_seasons
+  }
+  manual_labels <- manual_labels %||%
+    m0$manual_labels %||%
+    .default_manual_labels()
+  m1_params <- m1$m1_params %||% .default_m1_params()
+  params <- m0$best_params
+  if (is.null(params)) {
     stop("tune_m1 requires m0 from tune_m0() (needs best_params).")
+  }
 
   # loso_seasons controls test folds; non-selected seasons are excluded from
   # training too (acceptable trade-off for quick-demo mode).
-  perm_excl  <- c("2011-12", "2020-21", "2021-22")
-  all_seas   <- sort(setdiff(unique(allD$season), c(perm_excl, "2015-16")))
-  test_seas  <- .select_loso_seasons(all_seas, loso_seasons)
+  perm_excl <- if (governed) {
+    character(0)
+  } else {
+    c("2011-12", "2020-21", "2021-22")
+  }
+  m1_outlier <- if (governed) character(0) else "2015-16"
+  all_seas <- sort(setdiff(unique(allD$season), c(perm_excl, m1_outlier)))
+  test_seas <- .select_loso_seasons(all_seas, loso_seasons)
   extra_excl <- setdiff(all_seas, test_seas)
-  exclude_all <- unique(c("2015-16", extra_excl))
+  exclude_all <- unique(c(m1_outlier, extra_excl))
 
-  if (is.null(checkpoint_dir))
+  if (is.null(checkpoint_dir)) {
     checkpoint_dir <- file.path(tempdir(), "m1_tune_ckpt")
+  }
   dir.create(checkpoint_dir, recursive = TRUE, showWarnings = FALSE)
 
   # M1 tuning uses -1L offset on manual_labels (matches _extended_tune_m1_v7.R)
   manual_labels_v7 <- manual_labels - 1L
 
-  if (verbose)
-    message(sprintf("[tune_m1] %d-spec grid | %d test folds | %d cores",
-                    nrow(as.data.frame(grid)), length(test_seas), n_cores))
+  if (verbose) {
+    message(sprintf(
+      "[tune_m1] %d-spec grid | %d test folds | %d cores",
+      nrow(as.data.frame(grid)), length(test_seas), n_cores
+    ))
+  }
 
-  tune_m1_alignment(
+  out <- tune_m1_alignment(
     allD                = allD,
     params              = params,
     grid                = grid,
@@ -460,17 +559,104 @@ tune_m1 <- function(allD,
     k_deriv             = 20L,
     buffer_weeks        = 5L,
     curvature_ratio     = 1.0,
-    align_peak_decay    = m1_params$peak_decay    %||% 0.3,
+    align_peak_decay    = m1_params$peak_decay %||% 0.3,
     align_trough_weight = m1_params$trough_weight %||% 0.1,
     peak_weight_boost   = 3,
     peak_weight_decay   = 0.3
   )
+  out$manual_labels <- manual_labels_v7
+  if (governed) {
+    out$selection <- selection
+    out$data_id <- .stage_training_data_id(allD)
+    class(out) <- c("page_m1_tuning", "list")
+  }
+  out
 }
 
 
 # ============================================================
 # M2
 # ============================================================
+
+.m2_training_labels_for_fold <- function(manual_labels, test_season) {
+  manual_labels[setdiff(names(manual_labels), test_season)]
+}
+
+.m2_checkpoint_schema <- function() "page_m2_phase2_checkpoint"
+
+.m2_checkpoint_version <- function() 1L
+
+.m2_checkpoint_identity <- function(allD, test_seasons, grid, m0, m1) {
+  upstream_identity <- function(stage, artifact, fields) {
+    artifact_id <- artifact$artifact_id
+    if (is.character(artifact_id) && length(artifact_id) == 1L &&
+      !is.na(artifact_id) && nzchar(artifact_id)) {
+      return(list(stage = stage, artifact_id = artifact_id))
+    }
+    list(
+      stage = stage,
+      legacy_payload = artifact[intersect(fields, names(artifact))]
+    )
+  }
+
+  digest::digest(
+    list(
+      schema = .m2_checkpoint_schema(),
+      version = .m2_checkpoint_version(),
+      data_id = .stage_training_data_id(allD),
+      test_seasons = as.character(test_seasons),
+      grid = as.data.frame(grid),
+      m0 = upstream_identity(
+        "m0", m0,
+        c("best_params", "manual_labels", "flag_args")
+      ),
+      m1 = upstream_identity(
+        "m1", m1,
+        c("m1_params", "ref", "hyper")
+      ),
+      evaluation = list(
+        training_method = "REML",
+        eval_window = 12L,
+        correction = "frozen_bias"
+      )
+    ),
+    algo = "sha256"
+  )
+}
+
+.read_m2_checkpoint <- function(path, identity) {
+  checkpoint <- tryCatch(readRDS(path), error = function(error) NULL)
+  expected_names <- c("schema", "version", "identity", "results")
+  if (!is.list(checkpoint) ||
+    !identical(names(checkpoint), expected_names) ||
+    !identical(checkpoint$schema, .m2_checkpoint_schema()) ||
+    !identical(checkpoint$version, .m2_checkpoint_version()) ||
+    !identical(checkpoint$identity, identity) ||
+    !is.list(checkpoint$results)) {
+    return(NULL)
+  }
+  checkpoint$results
+}
+
+.write_m2_checkpoint <- function(path, identity, results) {
+  checkpoint <- list(
+    schema = .m2_checkpoint_schema(),
+    version = .m2_checkpoint_version(),
+    identity = identity,
+    results = results
+  )
+  temporary <- tempfile(".page-m2-checkpoint-", tmpdir = dirname(path))
+  on.exit(unlink(temporary), add = TRUE)
+  saveRDS(checkpoint, temporary)
+  if (!file.copy(temporary, path, overwrite = TRUE)) {
+    stop("Could not update M2 checkpoint: `", path, "`.")
+  }
+  restored <- .read_m2_checkpoint(path, identity)
+  if (is.null(restored) || !identical(restored, results)) {
+    stop("M2 checkpoint verification failed after writing: `", path, "`.")
+  }
+  invisible(path)
+}
 
 #' Build M2 forecast model via nested LOSO grid search
 #'
@@ -506,48 +692,53 @@ tune_m1 <- function(allD,
 build_m2 <- function(allD,
                      m0,
                      m1,
-                     loso_seasons   = "alternating",
-                     exclude_seas   = "2015-16",
+                     loso_seasons = "alternating",
+                     exclude_seas = "2015-16",
                      holdout_season = "2025-26",
-                     grid           = default_m2_grid(),
-                     bias_alpha     = 0.4,
-                     bias_beta      = 0,
-                     n_cores        = parallel::detectCores() - 1L,
+                     grid = default_m2_grid(),
+                     bias_alpha = 0.05,
+                     bias_beta = 0,
+                     n_cores = parallel::detectCores() - 1L,
                      checkpoint_dir = NULL,
-                     verbose        = TRUE) {
-  if (!requireNamespace("dplyr",  quietly = TRUE)) stop("Need 'dplyr'.")
-  if (!requireNamespace("purrr",  quietly = TRUE)) stop("Need 'purrr'.")
-  if (!requireNamespace("furrr",  quietly = TRUE)) stop("Need 'furrr'.")
+                     verbose = TRUE) {
+  if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
+  if (!requireNamespace("purrr", quietly = TRUE)) stop("Need 'purrr'.")
+  if (!requireNamespace("furrr", quietly = TRUE)) stop("Need 'furrr'.")
   if (!requireNamespace("future", quietly = TRUE)) stop("Need 'future'.")
   if (!requireNamespace("tibble", quietly = TRUE)) stop("Need 'tibble'.")
 
   manual_labels <- m0$manual_labels %||% .default_manual_labels()
-  flag_args_use <- m0$flag_args     %||% .default_flag_args()
-  m1_params     <- m1$m1_params     %||% .default_m1_params()
-  params        <- m0$best_params
-  ref           <- m1$ref
-  hyper         <- m1$hyper
+  flag_args_use <- m0$flag_args %||% .default_flag_args()
+  m1_params <- m1$m1_params %||% .default_m1_params()
+  params <- m0$best_params
+  ref <- m1$ref
+  hyper <- m1$hyper
   if (is.null(params)) stop("build_m2 requires m0 from tune_m0() (needs best_params).")
-  if (is.null(ref))    stop("build_m2 requires m1 from build_m1() (needs ref).")
+  if (is.null(ref)) stop("build_m2 requires m1 from build_m1() (needs ref).")
 
   converted <- .m2_specs_from_grid(
-    grid, bias_alpha = bias_alpha, bias_beta = bias_beta
+    grid,
+    bias_alpha = bias_alpha, bias_beta = bias_beta
   )
   grid_df <- converted$grid
   specs_list <- converted$specs
   spec_ids <- grid_df$spec_id
   perm_excl <- c("2011-12", "2020-21", "2021-22")
   exclude_all <- unique(c(exclude_seas, holdout_season, perm_excl))
-  all_seas  <- sort(setdiff(unique(allD$season), exclude_all))
+  all_seas <- sort(setdiff(unique(allD$season), exclude_all))
   test_seasons <- .select_loso_seasons(all_seas, loso_seasons)
 
-  if (verbose)
-    message(sprintf("[build_m2] %d specs | %d folds | loso=%s | %d cores",
-                    nrow(grid_df), length(test_seasons), loso_seasons, n_cores))
+  if (verbose) {
+    message(sprintf(
+      "[build_m2] %d specs | %d folds | loso=%s | %d cores",
+      nrow(grid_df), length(test_seasons), loso_seasons, n_cores
+    ))
+  }
 
   # ---- Phase 1: M1 cache per test fold ----
-  if (verbose)
+  if (verbose) {
     message("[build_m2] Phase 1: M1 cache for ", length(test_seasons), " folds...")
+  }
   future::plan(future::multisession, workers = as.integer(max(1L, n_cores)))
 
   m1_cache <- list()
@@ -555,46 +746,55 @@ build_m2 <- function(allD,
     if (verbose) message(sprintf("  [%s] build_fold + M1...", test_s))
     fold <- tryCatch(
       nested_loso_build_fold(
-        allD            = allD, test_season    = test_s,
+        allD = allD, test_season = test_s,
         exclude_seasons = exclude_all,
-        k_ref           = as.integer(m1_params$k_ref %||% 25L),
-        ref_method      = m1_params$ref_method %||% "fs",
-        manual_labels   = manual_labels, verbose = FALSE
+        k_ref = as.integer(m1_params$k_ref %||% 25L),
+        ref_method = m1_params$ref_method %||% "fs",
+        manual_labels = manual_labels, verbose = FALSE
       ),
-      error = function(e) { message("  ERROR fold: ", conditionMessage(e)); NULL }
+      error = function(e) {
+        message("  ERROR fold: ", conditionMessage(e))
+        NULL
+      }
     )
     if (is.null(fold)) next
 
     m1_train <- tryCatch(
       m1_walkforward_multi(
-        allD               = allD, ref = fold$ref, hyper = fold$hyper, params = params,
-        seasons            = fold$train_seasons,
-        temperature        = m1_params$temperature   %||% 0.25,
-        rise_weight        = m1_params$rise_weight   %||% 1.0,
-        trough_weight      = m1_params$trough_weight %||% 0.1,
-        peak_decay         = m1_params$peak_decay    %||% 0.3,
-        slope_weight       = m1_params$slope_weight  %||% 8.0,
-        slope_window       = m1_params$slope_window  %||% 6L,
-        dynamic_temp       = isTRUE(m1_params$dynamic_temp),
+        allD = allD, ref = fold$ref, hyper = fold$hyper, params = params,
+        seasons = fold$train_seasons,
+        temperature = m1_params$temperature %||% 0.25,
+        rise_weight = m1_params$rise_weight %||% 1.0,
+        trough_weight = m1_params$trough_weight %||% 0.1,
+        peak_decay = m1_params$peak_decay %||% 0.3,
+        slope_weight = m1_params$slope_weight %||% 8.0,
+        slope_window = m1_params$slope_window %||% 6L,
+        dynamic_temp = isTRUE(m1_params$dynamic_temp),
         dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L,
         parallel = TRUE, verbose = FALSE
       ),
-      error = function(e) { message("  ERROR m1_train: ", conditionMessage(e)); NULL }
+      error = function(e) {
+        message("  ERROR m1_train: ", conditionMessage(e))
+        NULL
+      }
     )
     m1_test <- tryCatch(
       m1_walkforward_predictions(
-        seasonD            = allD[allD$season == test_s, ],
+        seasonD = allD[allD$season == test_s, ],
         ref = fold$ref, hyper = fold$hyper, params = params,
-        temperature        = m1_params$temperature   %||% 0.25,
-        rise_weight        = m1_params$rise_weight   %||% 1.0,
-        trough_weight      = m1_params$trough_weight %||% 0.1,
-        peak_decay         = m1_params$peak_decay    %||% 0.3,
-        slope_weight       = m1_params$slope_weight  %||% 8.0,
-        slope_window       = m1_params$slope_window  %||% 6L,
-        dynamic_temp       = isTRUE(m1_params$dynamic_temp),
+        temperature = m1_params$temperature %||% 0.25,
+        rise_weight = m1_params$rise_weight %||% 1.0,
+        trough_weight = m1_params$trough_weight %||% 0.1,
+        peak_decay = m1_params$peak_decay %||% 0.3,
+        slope_weight = m1_params$slope_weight %||% 8.0,
+        slope_window = m1_params$slope_window %||% 6L,
+        dynamic_temp = isTRUE(m1_params$dynamic_temp),
         dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L
       ),
-      error = function(e) { message("  ERROR m1_test: ", conditionMessage(e)); NULL }
+      error = function(e) {
+        message("  ERROR m1_test: ", conditionMessage(e))
+        NULL
+      }
     )
     m1_cache[[test_s]] <- list(fold = fold, m1_train = m1_train, m1_test = m1_test)
   }
@@ -604,22 +804,42 @@ build_m2 <- function(allD,
   if (verbose) message("[build_m2] Phase 2: ", length(spec_ids), " specs...")
 
   cv_results <- list()
-  todo_ids   <- spec_ids
+  todo_ids <- spec_ids
 
   if (!is.null(checkpoint_dir)) {
     dir.create(checkpoint_dir, recursive = TRUE, showWarnings = FALSE)
     ckpt_file <- file.path(checkpoint_dir, "build_m2_phase2.rds")
+    ckpt_identity <- .m2_checkpoint_identity(
+      allD = allD,
+      test_seasons = test_seasons,
+      grid = grid_df,
+      m0 = m0,
+      m1 = m1
+    )
     if (file.exists(ckpt_file)) {
-      cv_results <- readRDS(ckpt_file)
-      todo_ids   <- setdiff(spec_ids, names(cv_results))
-      if (verbose)
-        message(sprintf("[build_m2] Resuming: %d done, %d remaining",
-                        length(cv_results), length(todo_ids)))
+      restored <- .read_m2_checkpoint(ckpt_file, ckpt_identity)
+      if (is.null(restored)) {
+        if (verbose) {
+          message(
+            "[build_m2] Ignoring checkpoint whose identity does not match ",
+            "the current data, stages, grid, folds, and evaluation settings."
+          )
+        }
+      } else {
+        cv_results <- restored
+        todo_ids <- setdiff(spec_ids, names(cv_results))
+      }
+      if (verbose && !is.null(restored)) {
+        message(sprintf(
+          "[build_m2] Resuming: %d done, %d remaining",
+          length(cv_results), length(todo_ids)
+        ))
+      }
     }
   }
 
   if (length(todo_ids) > 0) {
-    n_workers    <- as.integer(max(1L, n_cores))
+    n_workers <- as.integer(max(1L, n_cores))
     todo_batches <- split(todo_ids, ceiling(seq_along(todo_ids) / n_workers))
     future::plan(future::multisession, workers = n_workers)
 
@@ -631,9 +851,9 @@ build_m2 <- function(allD,
       batch_res <- furrr::future_map(
         stats::setNames(batch, batch),
         function(spec_id) {
-          spec        <- specs_list[[spec_id]]
+          spec <- specs_list[[spec_id]]
           fold_scores <- vector("list", length(test_seasons))
-          fold_preds  <- vector("list", length(test_seasons))
+          fold_preds <- vector("list", length(test_seasons))
           names(fold_scores) <- names(fold_preds) <- test_seasons
 
           for (test_s in test_seasons) {
@@ -641,21 +861,33 @@ build_m2 <- function(allD,
             if (is.null(fc)) next
             m2_fit <- tryCatch(
               nested_loso_m2_train(
-                fold           = fc$fold,
-                m1_train_preds = if (!is.null(fc$m1_train) && nrow(fc$m1_train) > 0)
-                  fc$m1_train else NULL,
+                fold = fc$fold,
+                m1_train_preds = if (!is.null(fc$m1_train) && nrow(fc$m1_train) > 0) {
+                  fc$m1_train
+                } else {
+                  NULL
+                },
                 spec = spec, method = "REML", verbose = FALSE
               ),
               error = function(e) NULL
             )
+            manual_labels_train <- .m2_training_labels_for_fold(
+              manual_labels,
+              test_s
+            )
             eval_out <- tryCatch(
               nested_loso_m2_eval_frozen_bias(
-                allD          = allD, fold = fc$fold, m2_fit = m2_fit,
-                m1_test_preds = if (!is.null(fc$m1_test) && nrow(fc$m1_test) > 0)
-                  fc$m1_test else NULL,
-                spec          = spec, eval_window = 12L,
-                bias_alpha    = spec$bias_alpha, bias_beta = spec$bias_beta,
-                manual_labels = manual_labels, flag_args = flag_args_use, verbose = FALSE
+                allD = allD, fold = fc$fold, m2_fit = m2_fit,
+                m1_test_preds = if (!is.null(fc$m1_test) && nrow(fc$m1_test) > 0) {
+                  fc$m1_test
+                } else {
+                  NULL
+                },
+                spec = spec, eval_window = 12L,
+                bias_alpha = spec$bias_alpha,
+                manual_labels_train = manual_labels_train,
+                manual_labels_test = NULL,
+                flag_args = flag_args_use, verbose = FALSE
               ),
               error = function(e) NULL
             )
@@ -667,7 +899,7 @@ build_m2 <- function(allD,
               fold_preds[[test_s]] <- tibble::tibble()
             } else {
               fold_scores[[test_s]] <- eval_out$scores
-              fold_preds[[test_s]]  <- eval_out$predictions
+              fold_preds[[test_s]] <- eval_out$predictions
             }
           }
           list(scores = dplyr::bind_rows(fold_scores), predictions = dplyr::bind_rows(fold_preds))
@@ -675,40 +907,47 @@ build_m2 <- function(allD,
         .options = furrr::furrr_options(seed = TRUE)
       )
       cv_results <- c(cv_results, batch_res)
-      if (!is.null(checkpoint_dir)) saveRDS(cv_results, ckpt_file)
+      if (!is.null(checkpoint_dir)) {
+        .write_m2_checkpoint(ckpt_file, ckpt_identity, cv_results)
+      }
 
       elapsed <- round(proc.time()[["elapsed"]] - t0)
       if (verbose) {
-        batch_nlls <- sapply(batch_res, function(r)
-          round(mean(r$scores$bernoulli_nll, na.rm = TRUE), 4))
-        cat(sprintf(" %ds | NLL %.4f\u2013%.4f\n", elapsed,
-                    min(batch_nlls, na.rm = TRUE), max(batch_nlls, na.rm = TRUE)))
+        batch_nlls <- sapply(batch_res, function(r) {
+          round(mean(r$scores$bernoulli_nll, na.rm = TRUE), 4)
+        })
+        cat(sprintf(
+          " %ds | NLL %.4f\u2013%.4f\n", elapsed,
+          min(batch_nlls, na.rm = TRUE), max(batch_nlls, na.rm = TRUE)
+        ))
       }
     }
     future::plan(future::sequential)
   }
 
   # Assemble results
-  cv_all     <- cv_results[spec_ids]
+  cv_all <- cv_results[spec_ids]
   all_scores <- purrr::imap_dfr(cv_all, ~ dplyr::mutate(.x$scores, spec_id = .y))
   summary_df <- all_scores |>
     dplyr::group_by(.data$spec_id) |>
     dplyr::summarise(
       n_seasons     = dplyr::n(),
       bernoulli_nll = mean(.data$bernoulli_nll, na.rm = TRUE),
-      mean_nll      = mean(.data$mean_nll,      na.rm = TRUE),
-      brier         = mean(.data$brier,         na.rm = TRUE),
-      rmse_p        = mean(.data$rmse_p,        na.rm = TRUE),
+      mean_nll      = mean(.data$mean_nll, na.rm = TRUE),
+      brier         = mean(.data$brier, na.rm = TRUE),
+      rmse_p        = mean(.data$rmse_p, na.rm = TRUE),
       .groups       = "drop"
     ) |>
     dplyr::arrange(.data$bernoulli_nll)
 
-  best_id   <- summary_df$spec_id[1]
+  best_id <- summary_df$spec_id[1]
   best_spec <- specs_list[[best_id]]
 
   if (verbose) {
-    message(sprintf("[build_m2] Best spec: %s (NLL=%.4f)",
-                    best_id, summary_df$bernoulli_nll[1]))
+    message(sprintf(
+      "[build_m2] Best spec: %s (NLL=%.4f)",
+      best_id, summary_df$bernoulli_nll[1]
+    ))
     print(utils::head(summary_df[, c("spec_id", "bernoulli_nll")], 5))
   }
 
@@ -732,11 +971,12 @@ build_m2 <- function(allD,
 #' @param m0 Output of \code{tune_m0()}. Must include \code{best_params}.
 #' @param m1 Output of \code{build_m1()}. Provides \code{ref} and \code{hyper}.
 #' @param best_spec Stage-2 spec from \code{build_m2()$best_spec} or
-#'   \code{stage2_make_spec()}. When \code{NULL}, uses the locked deployed v16
-#'   specification for a production-data refresh without retuning.
+#'   \code{stage2_make_spec()}. When \code{NULL}, uses the current locked
+#'   v16-corrected incumbent for a production-data refresh without retuning.
 #' @param exclude Character vector of seasons to exclude from training.
 #'   Default excludes permanent invalid seasons and 2015-16. Note: 2025-26
 #'   is kept (production training uses the current season).
+#' @param n_cores Integer number of workers for M1 walk-forward predictions.
 #' @param verbose Logical. Print progress.
 #'
 #' @return A list with \code{fit} (GAM), \code{feature_ranges}, \code{m1_train_preds},
@@ -748,53 +988,57 @@ train_m2 <- function(allD,
                      m0,
                      m1,
                      best_spec = NULL,
-                     exclude  = c("2011-12", "2015-16", "2020-21", "2021-22"),
-                     verbose  = FALSE) {
-  if (!requireNamespace("dplyr",  quietly = TRUE)) stop("Need 'dplyr'.")
-  if (!requireNamespace("purrr",  quietly = TRUE)) stop("Need 'purrr'.")
+                     exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
+                     n_cores = parallel::detectCores() - 1L,
+                     verbose = FALSE) {
+  if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
+  if (!requireNamespace("purrr", quietly = TRUE)) stop("Need 'purrr'.")
   if (!requireNamespace("future", quietly = TRUE)) stop("Need 'future'.")
 
   if (is.null(best_spec)) best_spec <- .default_m2_spec()
 
   manual_labels <- m0$manual_labels %||% .default_manual_labels()
-  flag_args_use <- m0$flag_args     %||% .default_flag_args()
-  m1_params     <- m1$m1_params     %||% .default_m1_params()
-  params        <- m0$best_params
-  ref           <- m1$ref
-  hyper         <- m1$hyper
+  flag_args_use <- m0$flag_args %||% .default_flag_args()
+  m1_params <- .canonical_m1_params(m1$m1_params)
+  params <- m0$best_params
+  ref <- m1$ref
+  hyper <- m1$hyper
 
   if (is.null(params)) stop("train_m2 requires m0 from tune_m0() (needs best_params).")
-  if (is.null(ref))    stop("train_m2 requires m1 from build_m1() (needs ref).")
+  if (is.null(ref)) stop("train_m2 requires m1 from build_m1() (needs ref).")
 
-  allD_prod  <- if (length(exclude) > 0)
-    dplyr::filter(allD, !.data$season %in% exclude) else allD
+  allD_prod <- if (length(exclude) > 0) {
+    dplyr::filter(allD, !.data$season %in% exclude)
+  } else {
+    allD
+  }
   train_seas <- sort(unique(allD_prod$season))
 
   if (verbose) message(sprintf("[train_m2] %d training seasons", length(train_seas)))
 
   # Align production training data
-  res_deriv   <- estimateDerivs(allD_prod, k = 10L)
-  train_outs  <- res_deriv$data |>
+  res_deriv <- estimateDerivs(allD_prod, k = 10L)
+  train_outs <- res_deriv$data |>
     dplyr::group_by(.data$season) |>
     dplyr::group_split(.keep = TRUE) |>
-    purrr::map(function(df)
-      do.call(flagIgnition, c(list(df = df, manual_labels = manual_labels), flag_args_use)))
+    purrr::map(function(df) {
+      do.call(flagIgnition, c(list(df = df, manual_labels = manual_labels), flag_args_use))
+    })
   aligned_train <- alignIgnition(train_outs)
 
   # M1 walk-forward predictions for all training seasons
   if (verbose) message("[train_m2] M1 walk-forward predictions...")
-  future::plan(future::multisession,
-               workers = max(1L, parallel::detectCores() - 1L))
+  future::plan(future::multisession, workers = as.integer(max(1L, n_cores)))
   m1_train_preds <- m1_walkforward_multi(
-    allD               = allD, ref = ref, hyper = hyper, params = params,
-    seasons            = train_seas,
-    temperature        = m1_params$temperature   %||% 0.25,
-    rise_weight        = m1_params$rise_weight   %||% 1.0,
-    trough_weight      = m1_params$trough_weight %||% 0.1,
-    peak_decay         = m1_params$peak_decay    %||% 0.3,
-    slope_weight       = m1_params$slope_weight  %||% 8.0,
-    slope_window       = m1_params$slope_window  %||% 6L,
-    dynamic_temp       = isTRUE(m1_params$dynamic_temp),
+    allD = allD, ref = ref, hyper = hyper, params = params,
+    seasons = train_seas,
+    temperature = m1_params$temperature %||% 0.25,
+    rise_weight = m1_params$rise_weight %||% 1.0,
+    trough_weight = m1_params$trough_weight %||% 0.1,
+    peak_decay = m1_params$peak_decay %||% 0.3,
+    slope_weight = m1_params$slope_weight %||% 8.0,
+    slope_window = m1_params$slope_window %||% 6L,
+    dynamic_temp = isTRUE(m1_params$dynamic_temp),
     dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L,
     parallel = TRUE, verbose = verbose
   )
@@ -811,9 +1055,12 @@ train_m2 <- function(allD,
     verbose     = verbose
   )
 
-  if (verbose)
-    message(sprintf("[train_m2] GAM EDF = %.2f | %d training seasons",
-                    round(sum(joint_out$fit$edf), 2), length(train_seas)))
+  if (verbose) {
+    message(sprintf(
+      "[train_m2] GAM EDF = %.2f | %d training seasons",
+      round(sum(joint_out$fit$edf), 2), length(train_seas)
+    ))
+  }
 
   list(
     fit              = joint_out$fit,
@@ -835,11 +1082,18 @@ train_m2 <- function(allD,
 #' Assembles M0, M1, and M2 training outputs into the format returned by
 #' \code{load_prospective_kit()}, ready for use with \code{run_pipeline()},
 #' \code{run_m0()}, \code{run_m1()}, and \code{run_m2()}. Optionally saves
-#' reference and M2 bundles to disk.
+#' reference and M2 bundles to disk. Legacy stage outputs remain supported. If
+#' any input is a governed stage artifact, all three inputs must be frozen,
+#' share the same season selection, and carry a consistent upstream identity
+#' chain. The returned governed kit records the selection, stage artifact
+#' identities, and a deterministic governance identity.
 #'
-#' @param m0 Output of \code{tune_m0()}.
-#' @param m1 Output of \code{build_m1()}.
-#' @param m2_model Output of \code{train_m2()}.
+#' @param m0 Frozen \code{page_m0_fit} from \code{freeze_m0()}, or a legacy M0
+#'   output compatible with \code{tune_m0()}.
+#' @param m1 Frozen \code{page_m1_fit} from \code{freeze_m1()}, or a legacy
+#'   output from \code{build_m1()}.
+#' @param m2_model Frozen \code{page_m2_fit} from \code{freeze_m2()}, or a
+#'   legacy output from \code{train_m2()}.
 #' @param best_spec_id Character label for the best M2 spec (optional;
 #'   taken from \code{build_m2()$best_spec_id}).
 #' @param save_ref_path Character. If set, saves the reference bundle
@@ -847,18 +1101,41 @@ train_m2 <- function(allD,
 #' @param save_m2_path Character. If set, saves the M2 bundle
 #'   (\code{m2_production.rds} format) to this path.
 #'
-#' @return A kit list compatible with all \code{run_*()} functions.
+#' @return A kit list compatible with all \code{run_*()} functions. Governed
+#'   inputs add \code{season_selection}, \code{stage_artifact_ids}, and
+#'   \code{governance_id}.
 #'
 #' @export
 assemble_kit <- function(m0,
                          m1,
                          m2_model,
-                         best_spec_id  = NULL,
+                         best_spec_id = NULL,
                          save_ref_path = NULL,
-                         save_m2_path  = NULL) {
+                         save_m2_path = NULL) {
+  governed <- any(vapply(
+    list(m0, m1, m2_model),
+    function(x) inherits(x, c("page_m0_fit", "page_m1_fit", "page_m2_fit")),
+    logical(1)
+  ))
+  if (governed) {
+    .require_frozen_stage(m0, "m0")
+    .require_frozen_stage(m1, "m1")
+    .require_frozen_stage(m2_model, "m2")
+    .check_selection_match(m0$selection, m1$selection)
+    .check_selection_match(m0$selection, m2_model$selection)
+    .check_upstream_identity(m1, m0, "m0")
+    .check_upstream_identity(m2_model, m0, "m0")
+    .check_upstream_identity(m2_model, m1, "m1")
+  }
+
   manual_labels <- m0$manual_labels %||% .default_manual_labels()
-  flag_args     <- m0$flag_args     %||% .default_flag_args()
-  m1_params     <- m1$m1_params     %||% .default_m1_params()
+  flag_args <- m0$flag_args %||% .default_flag_args()
+  m1_params <- .canonical_m1_params(m1$m1_params)
+  correction_spec <- .resolve_correction_spec(m2_model$spec)
+  spec_identity <- .m2_spec_identity(
+    m2_model$spec,
+    best_spec_id %||% m2_model$best_spec_id %||% m2_model$spec_id
+  )
 
   ref_bundle <- list(
     ref           = m1$ref,
@@ -876,7 +1153,8 @@ assemble_kit <- function(m0,
     m1_train_preds   = m2_model$m1_train_preds,
     training_seasons = m2_model$training_seasons,
     spec_version     = m2_model$spec_version %||% "assembled",
-    best_spec_id     = best_spec_id %||% ""
+    best_spec_id     = spec_identity,
+    correction_spec  = correction_spec
   )
 
   if (!is.null(save_ref_path)) {
@@ -888,23 +1166,10 @@ assemble_kit <- function(m0,
     message("[assemble_kit] Saved M2 bundle to: ", save_m2_path)
   }
 
-  # M1_PARAMS slot in kit matches load_prospective_kit() fallback structure
-  M1_PARAMS_kit <- list(
-    k_ref              = m1_params$k_ref              %||% 25L,
-    temperature        = m1_params$temperature        %||% 0.25,
-    rise_weight        = m1_params$rise_weight        %||% 1.0,
-    trough_weight      = m1_params$trough_weight      %||% 0.1,
-    peak_decay         = m1_params$peak_decay         %||% 0.3,
-    slope_weight       = m1_params$slope_weight       %||% 0.5,
-    slope_window       = m1_params$slope_window       %||% 4L,
-    dynamic_temp       = m1_params$dynamic_temp       %||% FALSE,
-    dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L
-  )
-
-  list(
+  kit <- list(
     ref            = m1$ref,
     hyper          = m1$hyper,
-    M1_PARAMS      = M1_PARAMS_kit,
+    M1_PARAMS      = m1_params,
     m0_params      = m0$best_params,
     m2_production  = m2_bundle,
     best_spec      = m2_model$spec,
@@ -914,4 +1179,17 @@ assemble_kit <- function(m0,
     m1_train_preds = m2_model$m1_train_preds,
     template_df    = m1$ref$pred_df[, c("newWeek", "fit")]
   )
+  if (governed) {
+    kit$season_selection <- m0$selection
+    kit$stage_artifact_ids <- c(
+      m0 = m0$artifact_id,
+      m1 = m1$artifact_id,
+      m2 = m2_model$artifact_id
+    )
+    kit$governance_id <- .kit_governance_id(
+      kit$season_selection,
+      kit$stage_artifact_ids
+    )
+  }
+  kit
 }

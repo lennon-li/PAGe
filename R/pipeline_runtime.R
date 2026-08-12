@@ -11,14 +11,20 @@
 #'   \code{normalizePath(..., mustWork = TRUE)}).
 #' @param ref_file Filename of the production reference cache (default
 #'   \code{"ref_production.rds"}). Must contain \code{$ref}, \code{$hyper},
-#'   and optionally \code{$M1_PARAMS}, \code{$flag_args},
+#'   \code{$M1_PARAMS}, and optionally \code{$flag_args},
 #'   \code{$manual_labels}, \code{$hist_data}.
 #' @param m2_file Filename of the production M2 model (default
 #'   \code{"m2_production.rds"}). Must contain a fitted \code{bam}/\code{gam}
-#'   object. Optionally also contains \code{$spec}, \code{$template_df}, and
+#'   object and \code{$spec}. Optionally also contains \code{$template_df}, and
 #'   \code{$m1_train_preds}.
 #' @param stage1_file Filename of the M0 ignition tuning results (default
 #'   \code{"stage1_tuning.rds"}). Must contain \code{$best_params}.
+#' @param compatibility Compatibility policy. \code{"strict"} (default)
+#'   requires the canonical saved \code{M1_PARAMS} and
+#'   \code{m2_production$spec}. \code{"locked_defaults"} permits a missing
+#'   \code{M1_PARAMS} by using the centralized locked defaults with a warning.
+#'   \code{"legacy"} also enables deprecated artifact discovery and fallback
+#'   behavior with warnings.
 #'
 #' @return A named list with slots: \code{ref}, \code{hyper},
 #'   \code{M1_PARAMS}, \code{m0_params}, \code{m2_production},
@@ -26,64 +32,112 @@
 #'   \code{hist_data}, \code{m1_train_preds}, and \code{template_df}.
 #' @export
 load_prospective_kit <- function(data_dir,
-                                 ref_file    = "ref_production.rds",
-                                 m2_file     = "m2_production.rds",
-                                 stage1_file = "stage1_tuning.rds") {
+                                 ref_file = "ref_production.rds",
+                                 m2_file = "m2_production.rds",
+                                 stage1_file = "stage1_tuning.rds",
+                                 compatibility = c("strict", "locked_defaults", "legacy")) {
   `%||%` <- function(x, y) if (is.null(x)) y else x
+  compatibility <- match.arg(compatibility)
   data_dir <- normalizePath(data_dir, mustWork = TRUE)
 
   # ---- Reference curve + hyperparams ----
   ref_path <- file.path(data_dir, ref_file)
-  if (!file.exists(ref_path))
-    stop("ref_production.rds not found at: ", ref_path,
-         "\nRun estimateRef.html or forecast_training.html first.")
+  if (!file.exists(ref_path)) {
+    stop(
+      "ref_production.rds not found at: ", ref_path,
+      "\nRun estimateRef.html or forecast_training.html first."
+    )
+  }
   ref_cache <- readRDS(ref_path)
-  ref   <- ref_cache$ref
+  ref <- ref_cache$ref
   hyper <- ref_cache$hyper
 
-  # M1_PARAMS: stored alongside ref at training time (fallback to tuned defaults)
-  M1_PARAMS <- ref_cache$M1_PARAMS %||% list(
-    k_ref              = 25L,
-    temperature        = 0.25,
-    rise_weight        = 1.0,
-    trough_weight      = 0.1,
-    peak_decay         = 0.3,
-    slope_weight       = 0.5,
-    slope_window       = 4L,
-    dynamic_temp       = TRUE,
-    dynamic_temp_pivot = 10L
-  )
+  M1_PARAMS <- ref_cache$M1_PARAMS
+  if (is.null(M1_PARAMS)) {
+    if (identical(compatibility, "strict")) {
+      stop(
+        "Canonical ref cache is missing M1_PARAMS. Rebuild the production kit, ",
+        "or set compatibility = \"locked_defaults\" to use centralized locked M1 defaults."
+      )
+    }
+    if (identical(compatibility, "locked_defaults")) {
+      warning(
+        "Canonical ref cache is missing M1_PARAMS; using centralized locked M1 defaults.",
+        call. = FALSE
+      )
+      locked_defaults <- if (exists(".default_m1_params", mode = "function", inherits = TRUE)) {
+        .default_m1_params
+      } else {
+        utils::getFromNamespace(".default_m1_params", "PAGe")
+      }
+      M1_PARAMS <- locked_defaults()
+    } else {
+      warning(
+        "Legacy compatibility: ref cache is missing M1_PARAMS; using deprecated M1 defaults.",
+        call. = FALSE
+      )
+      M1_PARAMS <- list(
+        k_ref = 25L, temperature = 0.25, rise_weight = 1.0,
+        trough_weight = 0.1, peak_decay = 0.3, slope_weight = 0.5,
+        slope_window = 4L, dynamic_temp = TRUE, dynamic_temp_pivot = 10L
+      )
+    }
+  }
 
   # ---- M2 production model ----
   m2_path <- file.path(data_dir, m2_file)
-  if (!file.exists(m2_path))
-    stop("m2_production.rds not found at: ", m2_path,
-         "\nRun forecast_training.html first.")
+  if (!file.exists(m2_path)) {
+    stop(
+      "m2_production.rds not found at: ", m2_path,
+      "\nRun forecast_training.html first."
+    )
+  }
   m2_production <- readRDS(m2_path)
 
-  # best_spec: prefer stored in m2_production, else scan nested LOSO files (v12 > v11 > older)
-  best_spec <- m2_production$spec %||% {
-    gs <- NULL
-    for (fn in c("nested_loso_v12_production.rds",
-                 "nested_loso_v11_production.rds",
-                 "nested_loso_combined_production.rds",
-                 "nested_loso_v10_production.rds",
-                 "nested_loso_v9_production.rds")) {
-      p <- file.path(data_dir, fn)
-      if (file.exists(p)) { gs <- readRDS(p); break }
+  best_spec <- m2_production$spec
+  if (is.null(best_spec)) {
+    if (!identical(compatibility, "legacy")) {
+      stop(
+        "Canonical M2 artifact is missing m2_production$spec. Rebuild the production kit, ",
+        "or set compatibility = \"legacy\" to enable deprecated artifact discovery."
+      )
     }
-    # Confirmed best spec from v12 LOSO (NLL=33.49, k_de=0 won ablation)
-    if (!is.null(gs)) gs$best_spec else
-      stage2_make_spec(delta = 0L, Kr = 1L, k_f = 3L, k_e = 2L,
-                       alpha_state = 0.2, k_r = 2L, k_de = 0L,
-                       k_n = 0L, k_w = 0L, k_s = 0L,
-                       lambda_w = 0, w_floor = 0.05)
+    warning(
+      "Legacy compatibility: m2_production$spec is missing; searching deprecated nested LOSO artifacts.",
+      call. = FALSE
+    )
+    # Deprecated compatibility path only (v12 > v11 > older).
+    gs <- NULL
+    for (fn in c(
+      "nested_loso_v12_production.rds",
+      "nested_loso_v11_production.rds",
+      "nested_loso_combined_production.rds",
+      "nested_loso_v10_production.rds",
+      "nested_loso_v9_production.rds"
+    )) {
+      p <- file.path(data_dir, fn)
+      if (file.exists(p)) {
+        gs <- readRDS(p)
+        break
+      }
+    }
+    best_spec <- if (!is.null(gs)) {
+      gs$best_spec
+    } else {
+      stage2_make_spec(
+        delta = 0L, Kr = 1L, k_f = 3L, k_e = 2L,
+        alpha_state = 0.2, k_r = 2L, k_de = 0L,
+        k_n = 0L, k_w = 0L, k_s = 0L,
+        lambda_w = 0, w_floor = 0.05
+      )
+    }
   }
 
   # ---- M0 ignition params ----
   s1_path <- file.path(data_dir, stage1_file)
-  if (!file.exists(s1_path))
+  if (!file.exists(s1_path)) {
     stop("stage1_tuning.rds not found at: ", s1_path)
+  }
   m0_params <- readRDS(s1_path)$best_params
 
   # ---- Static pipeline constants (prefer stored versions) ----
@@ -112,10 +166,11 @@ load_prospective_kit <- function(data_dir,
 
   # template_df: prefer stored in m2_production, fall back to ref$pred_df
   template_df <- m2_production$template_df %||% {
-    if (!is.null(ref$pred_df) && all(c("newWeek", "fit") %in% names(ref$pred_df)))
+    if (!is.null(ref$pred_df) && all(c("newWeek", "fit") %in% names(ref$pred_df))) {
       ref$pred_df[, c("newWeek", "fit")]
-    else
+    } else {
       NULL
+    }
   }
 
   list(
@@ -165,9 +220,9 @@ load_prospective_kit <- function(data_dir,
 #'
 #' @export
 run_m0_detection <- function(kit,
-                              current_data,
-                              manual_ign_week = NA_integer_,
-                              verbose         = TRUE) {
+                             current_data,
+                             manual_ign_week = NA_integer_,
+                             verbose = TRUE) {
   params <- kit$m0_params
 
   ign_out <- run_ignition_weekly(
@@ -183,16 +238,22 @@ run_m0_detection <- function(kit,
     mode          = "replace"
   )
   if (ign_resolved$overridden) {
-    if (verbose) message(sprintf(
-      "Manual ignition override: M0 estimated week %s, overriding to week %d.",
-      ifelse(is.na(ign_resolved$est), "NA", as.character(ign_resolved$est)),
-      ign_resolved$final
-    ))
+    if (verbose) {
+      message(sprintf(
+        "Manual ignition override: M0 estimated week %s, overriding to week %d.",
+        ifelse(is.na(ign_resolved$est), "NA", as.character(ign_resolved$est)),
+        ign_resolved$final
+      ))
+    }
     ign_out$iWeek_hat_locked <- ign_resolved$final
-    ign_out$ign_week_locked  <- ign_resolved$final
+    ign_out$ign_week_locked <- ign_resolved$final
   } else if (!is.na(ign_resolved$final)) {
-    if (verbose) message(sprintf("M0 ignition: week %d (automatic).",
-                                 ign_resolved$final))
+    if (verbose) {
+      message(sprintf(
+        "M0 ignition: week %d (automatic).",
+        ign_resolved$final
+      ))
+    }
   } else {
     if (verbose) message("M0: no ignition detected yet.")
   }
@@ -234,18 +295,18 @@ run_m0_detection <- function(kit,
 #'
 #' @export
 run_m1_alignment <- function(kit,
-                              current_data,
-                              m0_result,
-                              walk_start = 5L,
-                              verbose    = TRUE) {
-  if (!requireNamespace("dplyr",  quietly = TRUE)) stop("Please install dplyr.")
+                             current_data,
+                             m0_result,
+                             walk_start = 5L,
+                             verbose = TRUE) {
+  if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   if (!requireNamespace("tibble", quietly = TRUE)) stop("Please install tibble.")
   `%||%` <- function(x, y) if (is.null(x)) y else x
 
-  ref       <- kit$ref
-  hyper     <- kit$hyper
+  ref <- kit$ref
+  hyper <- kit$hyper
   M1_PARAMS <- kit$M1_PARAMS
-  ign_out   <- m0_result$ign_out
+  ign_out <- m0_result$ign_out
 
   walk_end <- max(current_data$weekF, na.rm = TRUE)
   actual_walk_start <- if (!is.na(m0_result$iWeek_locked)) {
@@ -289,7 +350,8 @@ run_m1_alignment <- function(kit,
   })
 
   params_df <- dplyr::bind_rows(lapply(per_week, function(pw) {
-    ew <- pw$ew; ap <- pw$ap
+    ew <- pw$ew
+    ap <- pw$ap
     if (is.null(ap) || ap$state == "pre_ignition") {
       return(tibble::tibble(
         eval_week = ew, state = "pre_ignition",
@@ -315,7 +377,9 @@ run_m1_alignment <- function(kit,
   }))
 
   m1_curves <- dplyr::bind_rows(lapply(per_week, function(pw) {
-    if (is.null(pw$ap) || pw$ap$state == "pre_ignition") return(NULL)
+    if (is.null(pw$ap) || pw$ap$state == "pre_ignition") {
+      return(NULL)
+    }
     pw$ap$forecast_df |> dplyr::mutate(eval_week = pw$ew)
   }))
 
@@ -358,25 +422,26 @@ run_m1_alignment <- function(kit,
 #'
 #' @export
 run_m2_forecast <- function(kit,
-                             current_data,
-                             m1_result,
-                             mode    = c("frozen", "weekly_refit"),
-                             verbose = TRUE) {
+                            current_data,
+                            m1_result,
+                            mode = c("frozen", "weekly_refit"),
+                            verbose = TRUE) {
   mode <- match.arg(mode)
-  if (!requireNamespace("dplyr",  quietly = TRUE)) stop("Please install dplyr.")
+  if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   if (!requireNamespace("tibble", quietly = TRUE)) stop("Please install tibble.")
   `%||%` <- function(x, y) if (is.null(x)) y else x
 
-  ref           <- kit$ref
+  ref <- kit$ref
   m2_production <- kit$m2_production
-  best_spec     <- kit$best_spec
-  m2_fit        <- m2_production$fit
+  best_spec <- kit$best_spec
+  m2_fit <- m2_production$fit
+  correction <- .resolve_correction_spec(best_spec)
 
   ex_terms <- best_spec$exclude_newseason
   if (is.null(ex_terms)) ex_terms <- stage2_exclude_newseason(best_spec)
   # Season RE handling is delegated to m2_predict_one() via include_season_re.
   # ex_terms here should NOT include "s(season)"; m2_predict_one adds it when needed.
-  anchorWeek     <- ref$anchorWeek
+  anchorWeek <- ref$anchorWeek
   logN_train_max <- if ("logN_now" %in% names(m2_fit$model)) {
     max(m2_fit$model$logN_now, na.rm = TRUE)
   } else {
@@ -384,9 +449,9 @@ run_m2_forecast <- function(kit,
   }
   # Use feature_ranges attached at training time (LOSO/deployment parity).
   # Fall back to deriving from the model for kits built before this change.
-  fr               <- m2_production$feature_ranges
-  lfe_train_range  <- if (!is.null(fr$logit_f_eff)) fr$logit_f_eff else range(m2_fit$model$logit_f_eff, na.rm = TRUE)
-  z_ema_hist_range <- if (!is.null(fr$z_ema))       fr$z_ema       else range(m2_fit$model$z_ema,       na.rm = TRUE)
+  fr <- m2_production$feature_ranges
+  lfe_train_range <- if (!is.null(fr$logit_f_eff)) fr$logit_f_eff else range(m2_fit$model$logit_f_eff, na.rm = TRUE)
+  z_ema_hist_range <- if (!is.null(fr$z_ema)) fr$z_ema else range(m2_fit$model$z_ema, na.rm = TRUE)
 
   # Frozen-fit soft cap (used when mode=="frozen" or as fallback)
   soft_cap_frozen <- make_soft_cap_fn(m2_fit)
@@ -394,31 +459,28 @@ run_m2_forecast <- function(kit,
 
   if (verbose) {
     cat(sprintf("run_m2_forecast: mode=%s, logN_max=%.2f\n", mode, logN_train_max))
-    if (mode == "weekly_refit" && is.null(kit$hist_data))
+    if (mode == "weekly_refit" && is.null(kit$hist_data)) {
       message("[run_m2_forecast] hist_data not found in kit; falling back to frozen fit")
+    }
   }
 
   # --- Holt trend-augmented bias correction tracker ---
   # Per-horizon level + trend of logit-scale residuals from prior predictions.
   # Correction applied = level + h * trend  (h=1 or 2).
-  bias_alpha      <- as.numeric(best_spec$bias_alpha %||% 0.2)
-  bias_alpha_high <- 0.7   # alpha after at least 2 same-sign residuals
-  bias_beta       <- as.numeric(best_spec$bias_beta  %||% 0.0)
-  bias_level      <- list(h1 = 0, h2 = 0)
-  bias_trend      <- list(h1 = 0, h2 = 0)
-  # Adaptive alpha state: track sign-run per horizon to detect "not catching up"
-  prev_resid_pos  <- list(h1 = NA, h2 = NA)   # TRUE = last resid was positive
-  consec_ss       <- list(h1 = 0L, h2 = 0L)   # consecutive same-sign count
-  re_hat         <- 0          # online season RE estimate (R2)
-  prev_z_ema     <- NA_real_
+  bias_state <- list(
+    h1 = .new_bias_correction_state(),
+    h2 = .new_bias_correction_state()
+  )
+  re_hat <- 0 # online season RE estimate (R2)
+  prev_z_ema <- NA_real_
   peak_passed_prev <- FALSE
-  pred_log       <- list()
+  pred_log <- list()
 
   m2_rows <- list()
 
   for (pw in m1_result$per_week) {
-    ew           <- pw$ew
-    ap           <- pw$ap
+    ew <- pw$ew
+    ap <- pw$ap
     season_to_ew <- pw$season_to_ew
 
     if (is.null(ap) || ap$state == "pre_ignition") next
@@ -426,12 +488,12 @@ run_m2_forecast <- function(kit,
     # Reset bias on first post-peak transition so rising-phase upward drift
     # does not inflate post-peak predictions.
     if (isTRUE(ap$peak_passed) && !peak_passed_prev) {
-      bias_level       <- list(h1 = 0, h2 = 0)
-      bias_trend       <- list(h1 = 0, h2 = 0)
-      re_hat           <- 0
-      prev_z_ema       <- NA_real_
-      prev_resid_pos   <- list(h1 = NA, h2 = NA)
-      consec_ss        <- list(h1 = 0L, h2 = 0L)
+      bias_state <- list(
+        h1 = .new_bias_correction_state(),
+        h2 = .new_bias_correction_state()
+      )
+      re_hat <- 0
+      prev_z_ema <- NA_real_
       peak_passed_prev <- TRUE
     }
 
@@ -445,34 +507,17 @@ run_m2_forecast <- function(kit,
           # B1 fix: use raw (uncorrected) logit error so the EMA level
           # asymptotes to the true bias B, not B/2.
           # pl$m2_eta_raw is the GAM linear predictor BEFORE bias addition.
-          err      <- logit_obs - pl$m2_eta_raw
-          hkey     <- paste0("h", pl$h)
-          lev_prev <- bias_level[[hkey]]
-          trn_prev <- bias_trend[[hkey]]
-          # Adaptive alpha: boost after at least 2 consecutive same-sign
-          # raw errors (model "not catching up" per user intent).
-          cur_pos <- err > 0
-          if (!is.na(prev_resid_pos[[hkey]]) && cur_pos == prev_resid_pos[[hkey]]) {
-            consec_ss[[hkey]] <- consec_ss[[hkey]] + 1L
-          } else {
-            consec_ss[[hkey]] <- 0L
-          }
-          prev_resid_pos[[hkey]] <- cur_pos
-          alpha_t <- if (consec_ss[[hkey]] >= 2L) bias_alpha_high else bias_alpha
-          # Holt level update: level tracks the running bias estimate.
-          # lev_new = (lev+trn) + alpha*(err - (lev+trn))
-          # At steady state (trn=0, beta=0): lev* = err = B. (B1 fixed)
-          lev_new <- (lev_prev + trn_prev) + alpha_t * (err - (lev_prev + trn_prev))
-          trn_new <- trn_prev + bias_beta * (lev_new - lev_prev - trn_prev)
-          bias_level[[hkey]] <- lev_new
-          bias_trend[[hkey]] <- trn_new
+          err <- logit_obs - pl$m2_eta_raw
+          hkey <- paste0("h", pl$h)
+          update <- .update_bias_correction(bias_state[[hkey]], err, correction)
+          bias_state[[hkey]] <- update$state
         }
       }
     }
 
     iWeek_hat <- ap$iWeek_hat
-    fdf       <- ap$forecast_df
-    horizons  <- c(1L, 2L)
+    fdf <- ap$forecast_df
+    horizons <- c(1L, 2L)
 
     # --- Select fit and soft cap for this eval week ---
     use_refit <- mode == "weekly_refit" && !is.null(kit$hist_data)
@@ -483,11 +528,12 @@ run_m2_forecast <- function(kit,
       cur_m1 <- dplyr::bind_rows(lapply(horizons, function(h) {
         nw <- as.numeric(cur_weeks) - iWeek_hat + anchorWeek
         tibble::tibble(
-          season     = "current",
+          season = "current",
           eval_weekF = as.integer(cur_weeks),
-          h          = as.integer(h),
-          m1_p_hat   = stats::approx(fdf$newWeek, fdf$p_hat,
-                                     xout = nw, rule = 2)$y
+          h = as.integer(h),
+          m1_p_hat = stats::approx(fdf$newWeek, fdf$p_hat,
+            xout = nw, rule = 2
+          )$y
         )
       }))
       m1_combined <- dplyr::bind_rows(kit$m1_train_preds, cur_m1)
@@ -504,17 +550,20 @@ run_m2_forecast <- function(kit,
           verbose      = FALSE
         ),
         error = function(e) {
-          if (verbose)
-            message("[run_m2_forecast] weekly refit failed at ew=", ew,
-                    ": ", conditionMessage(e), "; using frozen fit")
+          if (verbose) {
+            message(
+              "[run_m2_forecast] weekly refit failed at ew=", ew,
+              ": ", conditionMessage(e), "; using frozen fit"
+            )
+          }
           NULL
         }
       )
       refit_ok <- !is.null(refit_out)
-      fit_ew   <- if (refit_ok) refit_out$fit else m2_fit
+      fit_ew <- if (refit_ok) refit_out$fit else m2_fit
     } else {
       refit_ok <- FALSE
-      fit_ew   <- m2_fit
+      fit_ew <- m2_fit
     }
     soft_cap_ew <- make_soft_cap_fn(fit_ew)
     lev_lead_ew <- levels(fit_ew$model$lead) %||% lev_lead_frozen
@@ -526,20 +575,25 @@ run_m2_forecast <- function(kit,
         p_now = y / pmax(N, 1L),
         z_now = qlogis(pmin(pmax(p_now, 1e-6), 1 - 1e-6))
       )
-    alpha_s   <- as.numeric(best_spec$alpha_state %||% 0.25)
-    z_vec_ew  <- obs_to_ew_base$z_now
-    z_ema_ew  <- as.numeric(stats::filter(
-      alpha_s * z_vec_ew, filter = 1 - alpha_s,
+    alpha_s <- as.numeric(best_spec$alpha_state %||% 0.25)
+    z_vec_ew <- obs_to_ew_base$z_now
+    z_ema_ew <- as.numeric(stats::filter(
+      alpha_s * z_vec_ew,
+      filter = 1 - alpha_s,
       method = "recursive", init = z_vec_ew[1]
     ))
     # Clamp z_ema to historical training range (prevents extrapolation for
     # seasons with extreme pre-ignition EMA from very low test volumes)
-    z_ema_now  <- pmin(z_ema_hist_range[2L],
-                       pmax(z_ema_hist_range[1L], utils::tail(z_ema_ew, 1)))
-    logN_now   <- min(log(max(obs_to_ew_base$N[obs_to_ew_base$weekF == ew], 1)),
-                      logN_train_max)
+    z_ema_now <- pmin(
+      z_ema_hist_range[2L],
+      pmax(z_ema_hist_range[1L], utils::tail(z_ema_ew, 1))
+    )
+    logN_now <- min(
+      log(max(obs_to_ew_base$N[obs_to_ew_base$weekF == ew], 1)),
+      logN_train_max
+    )
     # B2 fix: divide dz_ema by training SD (parity with prep_stage2_joint).
-    dz_sd      <- fr$dz_ema_sd %||% 1
+    dz_sd <- fr$dz_ema_sd %||% 1
     dz_ema_now <- if (is.na(prev_z_ema)) 0 else (z_ema_now - prev_z_ema) / dz_sd
     prev_z_ema <- z_ema_now
 
@@ -547,29 +601,40 @@ run_m2_forecast <- function(kit,
     # Pre-ignition obs (weekF < iWeek_hat) are outside GAM training domain and
     # create a spuriously negative RE when early-season positivity is low.
     obs_post_ign <- dplyr::filter(obs_to_ew_base, weekF >= iWeek_hat)
-    re_hat <- estimate_season_re_online(fit = fit_ew,
-                                        obs_df = if (nrow(obs_post_ign) > 0L)
-                                          obs_post_ign else obs_to_ew_base,
-                                        ex_terms = ex_terms)
+    re_hat <- estimate_season_re_online(
+      fit = fit_ew,
+      obs_df = if (nrow(obs_post_ign) > 0L) {
+        obs_post_ign
+      } else {
+        obs_to_ew_base
+      },
+      ex_terms = ex_terms
+    )
 
     ew_result <- dplyr::bind_rows(lapply(horizons, function(h) {
-      target_weekF   <- ew + h
+      target_weekF <- ew + h
       target_newWeek <- as.numeric(target_weekF - iWeek_hat + anchorWeek)
 
-      m1_p      <- stats::approx(fdf$newWeek, fdf$p_hat, xout = target_newWeek, rule = 2)$y
-      m1_lo     <- stats::approx(fdf$newWeek, fdf$p_lo,  xout = target_newWeek, rule = 2)$y
-      m1_hi     <- stats::approx(fdf$newWeek, fdf$p_hi,  xout = target_newWeek, rule = 2)$y
-      m1_spread <- if ("logit_spread" %in% names(fdf))
+      m1_p <- stats::approx(fdf$newWeek, fdf$p_hat, xout = target_newWeek, rule = 2)$y
+      m1_lo <- stats::approx(fdf$newWeek, fdf$p_lo, xout = target_newWeek, rule = 2)$y
+      m1_hi <- stats::approx(fdf$newWeek, fdf$p_hi, xout = target_newWeek, rule = 2)$y
+      m1_spread <- if ("logit_spread" %in% names(fdf)) {
         stats::approx(fdf$newWeek, fdf$logit_spread, xout = target_newWeek, rule = 2)$y
-      else 0
+      } else {
+        0
+      }
 
-      logit_f_eff <- pmin(lfe_train_range[2L],
-                        pmax(lfe_train_range[1L],
-                             qlogis(pmin(pmax(m1_p, 1e-6), 1 - 1e-6))))
+      logit_f_eff <- pmin(
+        lfe_train_range[2L],
+        pmax(
+          lfe_train_range[1L],
+          qlogis(pmin(pmax(m1_p, 1e-6), 1 - 1e-6))
+        )
+      )
 
       # Holt correction: level + h * trend; plus online season RE
       hkey_bl <- paste0("h", h)
-      bl <- bias_level[[hkey_bl]] + h * bias_trend[[hkey_bl]] + re_hat
+      bl <- bias_state[[hkey_bl]]$level + h * bias_state[[hkey_bl]]$trend + re_hat
 
       pr <- m2_predict_one(
         fit               = fit_ew,
@@ -602,8 +667,8 @@ run_m2_forecast <- function(kit,
       # z_ema decays slowly (alpha=0.15) so the GAM overpredicts for 3-4 weeks
       # after peak; k_de=0 means there is no descent-rate term to counter this.
       # M2 is still computed internally above so the bias corrector keeps running.
-      if (isTRUE(ap$peak_passed)) {
-        pr$m2_p  <- m1_p
+      if (identical(correction$post_peak_action, "use_m1") && isTRUE(ap$peak_passed)) {
+        pr$m2_p <- m1_p
         pr$m2_lo <- m1_lo
         pr$m2_hi <- m1_hi
       }
@@ -613,14 +678,14 @@ run_m2_forecast <- function(kit,
       # Used by B1 fix: raw error = logit_obs - m2_eta_raw.
       pred_log[[length(pred_log) + 1L]] <<- list(
         target_weekF = target_weekF, m2_p = pr$m2_p,
-        m2_eta_raw   = qlogis(pmin(pmax(pr$m2_p, 1e-6), 1 - 1e-6)) - bl,
-        h            = h
+        m2_eta_raw = qlogis(pmin(pmax(pr$m2_p, 1e-6), 1 - 1e-6)) - bl,
+        h = h
       )
 
       tibble::tibble(
         eval_week = ew, h = h, target_weekF = target_weekF,
         m1_p = m1_p, m1_lo = m1_lo, m1_hi = m1_hi,
-        m2_p  = pr$m2_p,
+        m2_p = pr$m2_p,
         m2_lo = pr$m2_lo,
         m2_hi = pr$m2_hi
       )
@@ -731,11 +796,11 @@ run_m2_forecast <- function(kit,
 #' @export
 run_prospective_pipeline <- function(kit,
                                      current_data,
-                                     walk_start      = 5L,
+                                     walk_start = 5L,
                                      manual_ign_week = NA_integer_,
-                                     mode            = c("frozen", "weekly_refit"),
-                                     season          = NULL,
-                                     verbose         = TRUE) {
+                                     mode = c("frozen", "weekly_refit"),
+                                     season = NULL,
+                                     verbose = TRUE) {
   mode <- match.arg(mode)
   kit <- validate_page_kit(kit, mode = mode)
   assigned_season <- .resolve_runtime_season(kit, current_data, season)
@@ -744,11 +809,14 @@ run_prospective_pipeline <- function(kit,
     stop("`current_data` must contain at least one surveillance row.")
   }
   m0 <- run_m0_detection(kit, current_data,
-                          manual_ign_week = manual_ign_week, verbose = verbose)
+    manual_ign_week = manual_ign_week, verbose = verbose
+  )
   m1 <- run_m1_alignment(kit, current_data,
-                          m0_result = m0, walk_start = walk_start, verbose = verbose)
+    m0_result = m0, walk_start = walk_start, verbose = verbose
+  )
   m2 <- run_m2_forecast(kit, current_data,
-                         m1_result = m1, mode = mode, verbose = verbose)
+    m1_result = m1, mode = mode, verbose = verbose
+  )
   plot_data <- .as_forecast_plot_data(m2$m2_preds, current_data)
   structure(list(
     params_df = m1$params_df,

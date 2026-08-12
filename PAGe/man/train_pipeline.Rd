@@ -25,9 +25,11 @@ train_pipeline(
   racing_evaluator = NULL,
   racing_stages = c(3L, 6L),
   racing_min_survivors = 3L,
-  manual_labels = .default_manual_labels(),
-  flag_args = .default_flag_args(),
-  m1_params = .default_m1_params()
+  manual_labels = NULL,
+  flag_args = NULL,
+  m1_params = NULL,
+  m0_params = NULL,
+  m2_spec_id = NULL
 )
 }
 \arguments{
@@ -44,11 +46,11 @@ tuning followed by production fitting.}
 until an explicit passing promotion report releases it. Defaults to
 2025-26; use NULL only when no prospective holdout exists.}
 
-\item{promotion}{Optional canonical report returned by
-\code{check_promotion()} with the locked 2 percent NLL, 5 percent horizon,
-and 10 percent phase thresholds. Schema validation checks structure and
-internal consistency, not cryptographic provenance. A malformed, custom-
-threshold, or failed report never releases the holdout.}
+\item{promotion}{Optional artifact-bound evidence returned by
+\code{verify_promotion_evidence()}. A bare \code{check_promotion()} report
+is not governed production evidence and cannot release the holdout. The R
+class is forgeable; verification of the retained bundle, manifest, data,
+candidate, and incumbent artifacts is the safety boundary.}
 
 \item{loso_seasons}{LOSO folds passed to all tuning stages.}
 
@@ -76,7 +78,16 @@ results only eliminate clear losers; surviving specs still run full LOSO.}
 
 \item{racing_stages, racing_min_survivors}{Racing schedule and survivor floor.}
 
-\item{manual_labels, flag_args, m1_params}{Locked component settings.}
+\item{manual_labels, flag_args, m1_params}{Optional component settings. For a
+released holdout, these are derived exclusively from verified promotion
+evidence and explicit overrides are rejected.}
+
+\item{m0_params}{Optional M0 parameters for refresh mode. Defaults to the
+deployed configuration when no holdout has been released. For a released
+holdout it is derived exclusively from verified promotion evidence.}
+
+\item{m2_spec_id}{Optional identity for an unreleased fixed refresh M2 spec;
+it is derived from promotion evidence after holdout acceptance.}
 }
 \value{
 A transparent list with \code{mode}, \code{components},

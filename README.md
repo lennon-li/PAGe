@@ -30,39 +30,108 @@ library(PAGe)
 allD <- load_flu_hist("/authorized/path/flu_history.csv") |>
   prepare_surveillance_data()
 
-# Uses the locked v16 production specification. The prospective holdout
-# 2025-26 is excluded from every fit by default.
+# Compatibility orchestrator: uses the coded locked v16 specification.
+# The prospective holdout 2025-26 is excluded from every fit by default.
 training <- train_pipeline(allD, mode = "refresh")
 kit <- training$kit
 saveRDS(kit, "page_kit.rds")
 ```
 
-## Holdout replay and promotion
+## Guarded stage lifecycle
 
-Replay 2025-26 with kits that did not train on it, then compare the candidate
-against the incumbent. Promotion requires at least 2% NLL improvement, while
-allowing no more than 5% degradation at any horizon and 10% in any phase.
+Use the guarded API when training must stop at every stage boundary. First
+declare the season sets; then tune, validate, fit, and freeze M0 before M1 can
+start, and repeat the same lifecycle for M1 and M2.
 
 ```r
-candidate <- replay_season_holdout(kit, allD, season = "2025-26")
-incumbent <- replay_season_holdout(incumbent_kit, allD, season = "2025-26")
-promotion <- check_promotion(candidate$metrics, incumbent$metrics)
-
-# A passing report releases 2025-26 into the refresh used for 2026-27.
-# Failed or malformed reports keep it excluded.
-# Use the full M2 tuning object retained from an earlier retune. A refresh
-# intentionally has training$tuning = NULL.
-next_training <- train_pipeline(
+selection <- validate_season_selection(
   allD,
-  mode = "refresh",
-  previous_results = prior_m2_results, # e.g. retuned$tuning$m2
-  promotion = promotion
+  training_seasons = setdiff(
+    sort(unique(allD$season)),
+    c("2011-12", "2015-16", "2020-21", "2021-22", "2025-26")
+  ),
+  exclude_seasons = c("2011-12", "2015-16", "2020-21", "2021-22"),
+  holdout_seasons = "2025-26",
+  application_seasons = character()
 )
+
+m0_tuning <- tune_m0(allD, selection = selection)
+validate_m0_tuning(m0_tuning)
+m0 <- fit_m0(allD, selection, config = m0_tuning$best_params) |>
+  freeze_m0(tuning = m0_tuning)
+
+m1_tuning <- tune_m1(allD, m0 = m0, selection = selection)
+validate_m1_tuning(m1_tuning)
+m1_best <- m1_tuning$best[1, , drop = FALSE]
+m1_config <- m1_make_params(
+  k_ref = m1_best$k_ref,
+  temperature = m1_best$multi_temperature,
+  rise_weight = m1_best$align_rise_weight,
+  slope_window = m1_best$slope_window,
+  slope_weight = m1_best$slope_weight
+)
+m1 <- fit_m1(allD, selection, m0, config = m1_config) |>
+  freeze_m1(tuning = m1_tuning)
+
+m2_grid <- default_m2_grid()
+m2_tuning <- tune_m2(allD, selection, m0, m1, grid = m2_grid)
+validate_m2_tuning(m2_tuning)
+m2 <- fit_m2(allD, selection, m0, m1, config = m2_tuning$best_spec) |>
+  freeze_m2(tuning = m2_tuning)
+
+kit <- assemble_kit(m0, m1, m2)
+validate_page_kit(kit)
 ```
+
+A tuning object is evidence for selection, not a fitted stage. `freeze_*()`
+checks that the fit, tuning result, season selection, and upstream identities
+agree. If any governed component is passed to `assemble_kit()`, all three
+components must be governed and frozen.
+
+`train_pipeline()` remains the high-level compatibility orchestrator and now
+composes the guarded lifecycle for refresh and retune while preserving its
+compatibility result shape.
+
+## Holdout replay and promotion
+
+Production release follows a four-phase, artifact-bound workflow:
+
+1. replay frozen candidate and incumbent kits that both exclude `2025-26`;
+2. preserve the locked gate decision and source hashes as immutable evidence;
+3. after a pass, refresh the accepted fixed specification with `2025-26`
+   included; and
+4. register the refreshed kit immutably and load it only with its verified
+   deployment manifest.
+
+Retuning belongs before the untouched holdout. Changing a grid, feature,
+threshold, or specification after viewing holdout results starts a new
+development cycle; it is not a continuation of the accepted refresh.
+
+See the [governed deployment workflow](docs/deployment-workflow.qmd) for the
+operator commands, private versus disclosure-safe output locations,
+`--preflight-only` checks, and no-overwrite rules. This local checkout contains
+an ignored acceptance evidence run (`boundary-expansion-20260801T150000Z`) whose
+candidate failed the locked NLL gate. No refresh or promotion was performed;
+the incumbent remains accepted.
+
+The bounded public smoke command exercises the same artifact-governance chain
+using synthetic fixtures and temporary outputs:
+
+```sh
+Rscript scripts/public/synthetic_release_workflow.R --smoke
+```
+
+It is disclosure-safe and suitable for CI. It does not fit or validate the
+real PAGe model, and it is not evidence that the private `2025-26` workflow ran.
 
 ## Frozen prospective forecasting
 
 ```r
+kit <- load_promoted_kit(
+  kit_path = "/secure/PAGe/deployment-registry/<deployment-id>/promoted_kit.rds",
+  deployment_manifest_path =
+    "results/deployment-audit/<deployment-id>/deployment_manifest.json"
+)
 current <- prepare_surveillance_data(current_csv, season = "2026-27")
 forecast <- run_pipeline(kit, current, mode = "frozen")
 plot_forecast(forecast, history = allD)
@@ -71,7 +140,7 @@ plot_forecast(forecast, history = allD)
 `mode = "frozen"` is the deployment default. Weekly refitting remains an
 explicit compatibility option, not the validated production path.
 
-## Full retuning
+## Pre-acceptance retuning
 
 ```r
 retuned <- train_pipeline(
@@ -87,15 +156,40 @@ Retuning creates a bounded grid from compatible prior results, retains the
 v16 incumbent and diverse finalists, adds local neighbors, and expands reached
 boundaries. Optional `racing = TRUE` requires a fold evaluator; it only removes
 clear losers, and all survivors still receive full nested-LOSO evaluation.
+When `previous_results` is supplied, the planner consolidates finite NLL by
+specification, falls back to finite fold scores where needed, rejects ambiguous
+identities by requiring unique IDs that exactly match the parameter-derived
+canonical IDs, and uses the spacing adjacent to the previous winner for
+boundary expansion. Bernoulli NLL is preferred to `mean_nll`; ranking ties use
+the canonical ID. The v16 incumbent and best prior specification survive even
+a tight grid cap.
 
-See the [pipeline overview](https://lennon-li.github.io/PAGe/articles/pipeline-overview.html)
-and [walkthrough](https://lennon-li.github.io/PAGe/articles/pipeline-walkthrough.html).
+`selection_method` is an explicit user choice:
 
-## Production reference
+- `"min_nll"` selects the lowest full-LOSO Bernoulli NLL, breaking ties by
+  complexity and specification ID.
+- `"one_se"` selects the simplest candidate within one standard error of the
+  best NLL; it requires finite fold-level scores.
+- `"pareto"` retains candidates not dominated jointly on NLL, worst-horizon
+  MAE, and worst-phase MAE, then selects by NLL, complexity, and specification
+  ID.
 
-The deployed v16 specification is `k_f = 4`, `k_e = 2`,
-`alpha_state = 0.15`, `k_sp = 6`, `k_r = 0`, `k_de = 0`, `delta = 0`,
-`Kr = 1`, `bias_alpha = 0.05`, and `bias_beta = 0`. Its recorded nested-LOSO
-Bernoulli NLL is 0.4175.
+See the [pipeline overview](docs/pipeline_overview.qmd), the
+[governed deployment workflow](docs/deployment-workflow.qmd), and the
+[walkthrough](docs/pipeline_walkthrough.qmd). The
+[stage API map](docs/stage-api-map.md) records the current implementation and
+remaining orchestration work. The
+[tuning playbook](docs/tuning-playbook.md) explains boundary diagnostics,
+controlled grid expansion, stage-specific parameter tips, and stopping rules.
+
+## Current production reference
+
+The working incumbent is the existing frozen `v16-corrected` kit used as the
+comparator in the 2025-26 acceptance replay. Its recorded specification is
+`k_f = 4`, `k_e = 2`, `alpha_state = 0.20`, `k_sp = 8`, `k_r = 0`,
+`k_de = 0`, `delta = 0`, `Kr = 1`, `bias_alpha = 0.05`, and `bias_beta = 0`.
+The private artifact is retained outside version control; its exact historical
+lineage is not fully reconstructible, so this is a confidence baseline rather
+than a claim that the original v16 research artifact has been recovered.
 
 PAGe is released under the MIT License.

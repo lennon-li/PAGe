@@ -1,5 +1,14 @@
 # Prospective Deployment Review
 
+> [!CAUTION]
+> **Historical review; major findings resolved or superseded.** This April 2026
+> note records the state of the code and documentation at that time. The
+> canonical path now uses frozen deployment, explicit compatibility modes,
+> historical-cache warnings, and the governed acceptance → fixed-spec refresh
+> → immutable registry workflow in `docs/deployment-workflow.qmd`. Do not use
+> this note as current runtime evidence or as an assessment of the untouched
+> 2025-26 holdout.
+
 Scope reviewed on 2026-04-04:
 
 - `docs/pipeline_overview.qmd`

@@ -51,28 +51,59 @@ alignment-derived covariates from M1.
   passing raw GAM objects around.
 - In Quarto docs, do not use body-level h1 headings; the YAML `title:` already
   provides the page h1.
-- Built-in historical data lives in `PAGe/inst/extdata/flu_hist.csv` and
-  `PAGe/ref_curve.RData`.
+- Historical surveillance observations are private and are not distributed with
+  the package. Supply an authorized CSV explicitly to `load_flu_hist(path)`,
+  or set `PAGE_FLU_HIST_FILE`; `prepare_surveillance_data()` then enforces the
+  canonical contract. `simulate_flu_seasons()` supplies synthetic example data.
+- A future package distribution may bundle `inst/extdata/flu_hist.csv`, but it
+  is absent from this repository and must not be assumed to exist. `ref_curve.RData`
+  is likewise not a portable public-data input contract.
+- Inspect every genuinely tuned axis for a boundary winner before freezing a
+  stage. Expand one adjacent valid step, or document a meaningful null/hard
+  constraint. Keep all expansion pre-holdout and follow
+  `docs/tuning-playbook.md`.
+- Supervise long-running local jobs with a detached, zero-token OS watchdog.
+  Do not keep a persistent AI goal/session alive for periodic polling, and do
+  not schedule recurring model wake-ups, unless the user explicitly approves
+  both the cadence and a token budget. The AI handles launch/preflight, resumes
+  on a detected exception, and performs one bounded terminal audit. Watchdogs
+  write compact machine-readable status; AI log reads must be bounded and must
+  exclude generated HTML and full warning streams. Follow
+  `docs/long-job-supervision.md`.
 
-## Current Status (2026-04-21)
+## Current Status (audited 2026-08-01)
 
-**M0 (Ignition)** and **M1 (Alignment)** are complete and tuned. M1 uses
-multi-template ensemble alignment with slope-similarity weighting:
-k_ref=25, temperature=0.25, slope_weight=8.0, slope_window=6, dynamic_temp=FALSE, ref_method="fs"
-(LOSO Weibull-weighted peak MAE = 1.275 weeks across 67-spec grid search, v5–v7; logit-scale ensemble).
-Ensemble operates on logit scale; outputs logit_spread (alignment uncertainty)
-propagated to M2.
+The package exposes guarded stage lifecycles for M0, M1, and M2. A governed
+workflow declares disjoint season sets with `validate_season_selection()`, then
+runs `tune_*() -> validate_*_tuning() -> fit_*() -> freeze_*()` in stage order.
+M1 requires a frozen matching M0; M2 requires the exact frozen M0/M1 identity
+chain; governed `assemble_kit()` rejects drafts and provenance mismatches.
+`train_pipeline()` composes these contracts for both refresh and retune modes,
+including explicit season selection and governed M2 racing full evaluation;
+its compatibility result shape is preserved through payload unwrapping.
 
-**M2 (Forecast)** is tuned through the `fresh_run` pipeline (v16). The deployed
-production kit at `data/m2_production.rds` is `spec_version = "v16_fresh"`
-(best_spec_id `d+0_Kr1_kf4_ke2_as0.15_kr0_kde0_ksp6_ba0.05_bb0`: k_f=4, k_e=2,
-alpha_state=0.15, k_sp=6, k_r=0, k_de=0, delta=0, Kr=1, bias_alpha=0.05,
-bias_beta=0, use_season_re=TRUE, template_mode="smooth"). Frozen GAM + adaptive
-Holt EMA bias correction (level-only β=0). Nested LOSO Bernoulli NLL = 0.4175
-(`data/fresh_nested_loso_v16_postpeak.rds`). Entry-point: `scripts/fresh_run/`
-(stage `04e_m2_loso_v16.R` / `04f_m2_loso_v16_expand.R`; kit built by
-`05b_m2_production_v16.R`). The earlier v15-postfix specs (k_f=6, NLL ~0.576) are
-superseded by this deployed kit.
+**M0 (Ignition)** and **M1 (Alignment)** are implemented and have historical
+tuning workflows. M1 uses multi-template alignment with slope-similarity
+weighting; the published historical peak-MAE values conflict and are not yet a
+verified canonical result. The ensemble operates on the logit scale and emits
+`logit_spread` (alignment uncertainty) for M2.
+
+**M2 (Forecast)** implements a frozen-GAM deployment path with adaptive online
+bias correction. The high-level API defaults to frozen deployment; weekly refit
+is explicit compatibility/research behavior. The existing private
+`v16-corrected` frozen kit is now the working incumbent (`alpha_state=0.20`,
+`k_sp=8`, `bias_alpha=0.05`); its exact historical lineage is not fully
+reconstructible, so it is retained as a confidence baseline. A local
+boundary-only evaluation selected a
+`bias_alpha=0` candidate, but its frozen `2025-26` acceptance replay failed the
+locked NLL gate (`0.0000482` improvement versus `0.02` required); horizon and
+phase gates passed. The incumbent remains accepted, and no refit or promotion
+occurred. Do not present the historical M2 LOSO as fully nested validation: it
+is conditional on globally selected M0/M1 choices. Further tuning against this
+holdout is prohibited; any search must begin a new pre-holdout cycle.
+
+See `docs/workflow-status.md` for the status of legacy scripts, rendered HTML,
+and the safe production entry points.
 
 Key data for M2 development:
 - `data/m1_alignment_tuning_combined.rds` — full M1 grid (67 specs, v5–v7)

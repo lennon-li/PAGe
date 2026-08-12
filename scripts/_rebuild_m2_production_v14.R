@@ -1,6 +1,31 @@
 #!/usr/bin/env Rscript
-# Rebuild m2_production.rds with v14 best spec (bias_alpha=0.2, alpha_state=0.40)
-cat("=== Rebuild m2_production.rds (v14 spec) ===\n")
+# RESEARCH-ONLY ARCHIVE: rebuild the historical v14 fit. This is not a
+# promotion path and must never replace the mutable production filename.
+cli_args <- commandArgs(trailingOnly = TRUE)
+output_arg <- grep("^--output=", cli_args, value = TRUE)
+if (!"--research-only" %in% cli_args || length(output_arg) != 1L) {
+  stop(
+    "Research-only archive. Re-run with --research-only and exactly one ",
+    "--output=/path/to/unique-v14-artifact.rds.",
+    call. = FALSE
+  )
+}
+OUTPUT_PATH <- sub("^--output=", "", output_arg)
+if (!grepl("[.]rds$", OUTPUT_PATH, ignore.case = TRUE) ||
+    !dir.exists(dirname(OUTPUT_PATH))) {
+  stop("`--output` must be a new .rds path in an existing directory.", call. = FALSE)
+}
+if (tolower(basename(OUTPUT_PATH)) %in%
+    c("m2_production.rds", "ref_production.rds") || identical(
+  normalizePath(OUTPUT_PATH, mustWork = FALSE),
+  normalizePath("data/m2_production.rds", mustWork = FALSE)
+) || file.exists(OUTPUT_PATH)) {
+  stop(
+    "Refusing mutable or existing output; choose a unique research artifact path.",
+    call. = FALSE
+  )
+}
+cat("=== Research-only v14 rebuild ===\n")
 
 suppressPackageStartupMessages({
   library(PAGe); library(dplyr); library(purrr); library(mgcv); library(MMWRweek)
@@ -19,6 +44,12 @@ allD <- read.csv('data/flu_testing_data.csv') |>
   dplyr::mutate(neg=N-y, date=as.Date(date),
                 nW_true=n_weeks_in_start_year(start_year),
                 weekF=((week-27L)%%nW_true)+1L, p=y/N)
+if ("2025-26" %in% as.character(allD$season)) {
+  stop(
+    "Historical v14 rebuild refuses data containing the 2025-26 holdout.",
+    call. = FALSE
+  )
+}
 
 params        <- readRDS('data/stage1_tuning.rds')$best_params
 manual_labels <- c('2012-13'=18L,'2013-14'=20L,'2014-15'=20L,'2015-16'=24L,
@@ -74,6 +105,6 @@ cat('logit_f_eff: [', paste(round(feature_ranges$logit_f_eff,2),collapse=', '), 
 saveRDS(list(spec=spec, fit=gam_fit, feature_ranges=feature_ranges,
              m1_train_preds=m1_train_preds, training_seasons=train_seas,
              spec_version='v14', best_spec_id='kf4_ke2_as0.40_kr2_ba0.2_bb0.0'),
-        'data/m2_production.rds')
-cat('Saved data/m2_production.rds\n')
+        OUTPUT_PATH)
+cat('Saved research artifact:', OUTPUT_PATH, '\n')
 cat('Done:', format(Sys.time()), '\n')

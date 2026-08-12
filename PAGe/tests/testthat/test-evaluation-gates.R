@@ -41,6 +41,32 @@ test_that("forecast metrics are deterministic and promotion gates are transparen
   expect_match(paste(identical_metrics$reasons, collapse = " "), "NLL")
 })
 
+test_that("aggregate replay diagnostics report intervals and fail safely without calibration", {
+  predictions <- make_metric_predictions()
+  predictions$p_lo <- pmax(.001, predictions$p_hat - .05)
+  predictions$p_hi <- pmin(.999, predictions$p_hat + .05)
+  diagnostics <- PAGe::summarize_replay_diagnostics(predictions)
+
+  expect_named(diagnostics, c("overall", "horizon"))
+  expect_true(all(c(
+    "brier_trial_weighted", "rmse_week_weighted", "bernoulli_nll_trial_weighted",
+    "bernoulli_nll_week_weighted", "calibration_intercept", "calibration_slope",
+    "calibration_status", "interval_coverage_trial_weighted", "interval_mean_width_trial_weighted",
+    "interval_score_trial_weighted", "interval_status"
+  ) %in% names(diagnostics$overall)))
+  expect_identical(diagnostics$overall$interval_status, "ok")
+  expect_true(is.finite(diagnostics$overall$interval_score_trial_weighted))
+  expect_true(all(diagnostics$horizon$interval_status == "ok"))
+
+  no_interval <- make_metric_predictions()
+  no_interval$p_hat <- .25
+  safe <- PAGe::summarize_replay_diagnostics(no_interval)
+  expect_identical(safe$overall$interval_status, "not_available")
+  expect_true(is.na(safe$overall$interval_coverage_trial_weighted))
+  expect_identical(safe$overall$calibration_status, "not_estimable")
+  expect_true(is.na(safe$overall$calibration_intercept))
+})
+
 test_that("M2 candidate selection supports min-NLL, one-SE, and Pareto", {
   grid <- data.frame(
     spec_id = c("simple", "middle", "complex"),
@@ -98,10 +124,10 @@ test_that("unseen replay rejects leakage and returns standardized metrics", {
   allD <- workflow_surveillance(
     c("2024-25", "2025-26", "2025-26"), c(1L, 1L, 2L)
   )
-  leaking <- list(m2 = list(training_seasons = c("2024-25", "2025-26")))
+  leaking <- list(m2_production = list(training_seasons = c("2024-25", "2025-26")))
   expect_error(PAGe::replay_season_holdout(leaking, allD), "leakage")
 
-  clean <- list(m2 = list(training_seasons = "2024-25"))
+  clean <- list(m2_production = list(training_seasons = "2024-25"))
   runner <- function(kit, current_data, mode, verbose) {
     expect_identical(mode, "frozen")
     list(predictions = make_metric_predictions())
@@ -111,6 +137,8 @@ test_that("unseen replay rejects leakage and returns standardized metrics", {
   expect_identical(replay$status, "unseen_replay_complete")
   expect_false(replay$eligible_for_refresh)
   expect_named(replay$metrics, c("overall", "horizon", "phase"))
+  expect_true(is.na(replay$ignition_week))
+  expect_identical(replay$ignition_status, "not_available")
 
   raw_runner <- function(kit, current_data, mode, verbose) {
     list(
@@ -127,4 +155,30 @@ test_that("unseen replay rejects leakage and returns standardized metrics", {
   raw_replay <- PAGe::replay_season_holdout(clean, raw_data, runner = raw_runner)
   expect_equal(raw_replay$predictions$p_obs, .2)
   expect_equal(raw_replay$predictions$t_since, 0)
+  expect_equal(raw_replay$ignition_week, 1)
+  expect_identical(raw_replay$ignition_status, "locked")
+})
+
+test_that("holdout replay rejects conflicting identity and gates legacy M2 explicitly", {
+  allD <- workflow_surveillance("2025-26", 1L)
+  canonical <- list(training_seasons = "2024-25")
+  conflicting <- list(
+    m2_production = canonical,
+    m2 = list(training_seasons = "2025-26")
+  )
+  expect_error(PAGe::replay_season_holdout(conflicting, allD), "conflicting")
+
+  runner <- function(...) list(predictions = make_metric_predictions())
+  expect_error(
+    PAGe::replay_season_holdout(list(m2 = canonical), allD, runner = runner),
+    "compatibility"
+  )
+  expect_warning(
+    replay <- PAGe::replay_season_holdout(
+      list(m2 = canonical), allD, runner = runner,
+      kit_compatibility = "legacy_m2"
+    ),
+    "legacy"
+  )
+  expect_identical(replay$status, "unseen_replay_complete")
 })
