@@ -20,8 +20,9 @@ canonical archive configured by `PAGE_ARTIFACT_ROOT` (on this run:
 
 ```bash
 PAGE_ARTIFACT_ROOT=/home/yeli/PAGe-bcc-artifacts/asgard-archive-20260812 \
+  PAGE_RUN_ID=2018-final \
   Rscript 2018/run_2018_cycle.R \
-  > /home/yeli/PAGe-bcc-artifacts/asgard-archive-20260812/2018/run.log 2>&1
+  > /home/yeli/PAGe-bcc-artifacts/asgard-archive-20260812/2018-final/run.log 2>&1
 ```
 
 The compact `status.tsv`, stage checkpoints, tuning objects, frozen candidate,

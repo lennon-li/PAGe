@@ -24,7 +24,8 @@ artifact_root <- Sys.getenv(
   "PAGE_ARTIFACT_ROOT",
   "/home/yeli/PAGe-bcc-artifacts/asgard-archive-20260812"
 )
-run_dir <- file.path(artifact_root, "2018")
+run_id <- Sys.getenv("PAGE_RUN_ID", "2018")
+run_dir <- file.path(artifact_root, run_id)
 artifact_dir <- file.path(run_dir, "artifacts")
 checkpoint_dir <- file.path(run_dir, "checkpoints")
 dir.create(artifact_dir, recursive = TRUE, showWarnings = FALSE)

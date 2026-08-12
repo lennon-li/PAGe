@@ -28,6 +28,18 @@ test_that("tune_m1 accepts an explicit historical label vector", {
   expect_identical(result$manual_labels, labels - 1L)
 })
 
+test_that("M1 weighted scoring ignores non-finite rows", {
+  scores <- data.frame(
+    error = c(1, 2, NA_real_, 3),
+    weight = c(1, NA_real_, 2, Inf)
+  )
+
+  expect_equal(PAGe:::.weighted_mae(scores, "weight"), 1)
+  expect_true(is.na(PAGe:::.weighted_mae(
+    data.frame(error = 1, weight = NA_real_), "weight"
+  )))
+})
+
 test_that("M2 fold training labels exclude the held-out season", {
   labels <- c(
     "2012-13" = 18L,
