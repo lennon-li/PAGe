@@ -44,3 +44,60 @@ test_that("M2 fold training labels exclude the held-out season", {
     labels
   )
 })
+
+test_that("M2 checkpoints resume only for the exact governed evaluation", {
+  data <- data.frame(
+    season = c("2023-24", "2024-25"),
+    weekF = c(1L, 1L),
+    y = c(1L, 2L),
+    N = c(100L, 100L)
+  )
+  grid <- data.frame(
+    delta = 0L, Kr = 1L, k_f = 4L, k_e = 2L,
+    alpha_state = 0.2, k_r = 0L, k_de = 0L, k_sp = 8L,
+    bias_alpha = 0.05, bias_beta = 0,
+    spec_id = "candidate", stringsAsFactors = FALSE
+  )
+  m0 <- list(
+    best_params = list(p_thr = 0.005),
+    manual_labels = c("2023-24" = 20L),
+    flag_args = list(p_thresh = 0.01)
+  )
+  m1 <- list(
+    m1_params = list(k_ref = 25L),
+    ref = list(anchorWeek = 20L),
+    hyper = list(scale = 1)
+  )
+  identity <- PAGe:::.m2_checkpoint_identity(
+    data, c("2023-24", "2024-25"), grid, m0, m1
+  )
+  results <- list(candidate = list(scores = data.frame(
+    season = c("2023-24", "2024-25"),
+    bernoulli_nll = c(0.4, 0.5)
+  )))
+  checkpoint <- tempfile(fileext = ".rds")
+
+  expect_identical(
+    PAGe:::.write_m2_checkpoint(checkpoint, identity, results),
+    checkpoint
+  )
+  expect_identical(PAGe:::.read_m2_checkpoint(checkpoint, identity), results)
+
+  changed_data <- data
+  changed_data$y[1L] <- changed_data$y[1L] + 1L
+  changed_data_identity <- PAGe:::.m2_checkpoint_identity(
+    changed_data, c("2023-24", "2024-25"), grid, m0, m1
+  )
+  expect_null(PAGe:::.read_m2_checkpoint(checkpoint, changed_data_identity))
+
+  changed_m0 <- m0
+  changed_m0$best_params$p_thr <- 0.01
+  changed_stage_identity <- PAGe:::.m2_checkpoint_identity(
+    data, c("2023-24", "2024-25"), grid, changed_m0, m1
+  )
+  expect_null(PAGe:::.read_m2_checkpoint(checkpoint, changed_stage_identity))
+
+  legacy_checkpoint <- tempfile(fileext = ".rds")
+  saveRDS(results, legacy_checkpoint)
+  expect_null(PAGe:::.read_m2_checkpoint(legacy_checkpoint, identity))
+})

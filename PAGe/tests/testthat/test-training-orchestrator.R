@@ -715,13 +715,19 @@ test_that("post-acceptance retuning is rejected", {
   withr::defer(unlink(fixture$root, recursive = TRUE))
   evidence <- do.call(PAGe::verify_promotion_evidence, fixture$args)
 
+  tampered_evidence <- evidence
+  tampered_evidence$candidate_config$best_spec$k_f <- 99L
+  expect_false(PAGe:::.is_verified_promotion_evidence(
+    tampered_evidence, allD = allD, holdout_season = "2025-26"
+  ))
+
   expect_error(
     PAGe::train_pipeline(allD, mode = "retune", promotion = evidence, verbose = FALSE),
     "Post-acceptance retuning is not permitted"
   )
 })
 
-test_that("post-acceptance refresh requires accepted M0 parameters", {
+test_that("post-acceptance refresh derives its configuration from promotion evidence", {
   allD <- workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L))
   report <- PAGe::check_promotion(
     list(overall = data.frame(bernoulli_nll = 0.48),
@@ -736,8 +742,18 @@ test_that("post-acceptance refresh requires accepted M0 parameters", {
   evidence <- do.call(PAGe::verify_promotion_evidence, fixture$args)
 
   expect_error(
-    PAGe::train_pipeline(allD, mode = "refresh", promotion = evidence, verbose = FALSE),
-    "requires the accepted candidate's `m0_params`"
+    PAGe::train_pipeline(
+      allD, mode = "refresh", promotion = evidence,
+      m0_params = list(p_thr = 1), verbose = FALSE
+    ),
+    "do not supply component overrides"
+  )
+  expect_error(
+    PAGe::train_pipeline(
+      allD, mode = "refresh", promotion = evidence,
+      exclude = "2024-25", verbose = FALSE
+    ),
+    "accepted candidate's training seasons"
   )
 })
 

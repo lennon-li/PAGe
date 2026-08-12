@@ -7,11 +7,24 @@ training_promotion_fixture <- function(allD, report) {
   )
   names(paths) <- c("data", "candidate", "incumbent", "bundle")
   saveRDS(allD, paths[["data"]])
+  candidate_spec <- list(
+    delta = 0L, Kr = 1L, k_f = 4L, k_e = 2L,
+    alpha_state = 0.20, k_r = 0L, k_de = 0L, k_sp = 8L,
+    bias_alpha = 0.05, bias_beta = 0
+  )
   saveRDS(
-    list(m2_production = list(
-      best_spec_id = "candidate",
-      training_seasons = "2024-25"
-    )),
+    list(
+      m0_params = list(p_thr = 0.005),
+      M1_PARAMS = PAGe:::.default_m1_params(),
+      best_spec = candidate_spec,
+      manual_labels = PAGe:::.default_manual_labels(),
+      flag_args = PAGe:::.default_flag_args(),
+      m2_production = list(
+        best_spec_id = "candidate",
+        spec = candidate_spec,
+        training_seasons = "2024-25"
+      )
+    ),
     paths[["candidate"]]
   )
   saveRDS(

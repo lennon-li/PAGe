@@ -2,6 +2,31 @@
 
 .promotion_evidence_schema_version <- function() 1L
 
+.promotion_candidate_config <- function(kit) {
+  m2 <- kit$m2_production
+  required <- c("m0_params", "M1_PARAMS", "best_spec", "manual_labels", "flag_args")
+  if (!is.list(kit) || !all(required %in% names(kit)) ||
+    !is.list(m2) || !is.list(m2$spec) ||
+    !identical(kit$best_spec, m2$spec)) {
+    .promotion_evidence_abort(
+      "the candidate kit does not contain a canonical refresh configuration."
+    )
+  }
+  spec_id <- .promotion_spec_identity(m2)
+  if (is.null(spec_id)) {
+    .promotion_evidence_abort("the candidate kit has no stable M2 spec identity.")
+  }
+  list(
+    m0_params = kit$m0_params,
+    m1_params = kit$M1_PARAMS,
+    best_spec = kit$best_spec,
+    best_spec_id = spec_id,
+    training_seasons = as.character(m2$training_seasons),
+    manual_labels = kit$manual_labels,
+    flag_args = kit$flag_args
+  )
+}
+
 .promotion_evidence_data_fingerprint <- function(allD) {
   digest::digest(prepare_surveillance_data(allD), algo = "sha256")
 }
@@ -99,7 +124,8 @@
 .is_verified_promotion_evidence <- function(evidence, allD = NULL, holdout_season = NULL) {
   expected_names <- c(
     "schema", "schema_version", "holdout_season", "report",
-    "source_artifact_hashes", "data_fingerprint"
+    "source_artifact_hashes", "data_fingerprint", "candidate_config",
+    "candidate_config_hash"
   )
   if (!inherits(evidence, "page_verified_promotion_evidence") ||
     !is.list(evidence) ||
@@ -119,7 +145,13 @@
       c("authorized_data", "candidate", "incumbent", "promotion_bundle")
     ) ||
     !all(vapply(evidence$source_artifact_hashes, .is_sha256, logical(1))) ||
-    !.is_sha256(evidence$data_fingerprint)) {
+    !.is_sha256(evidence$data_fingerprint) ||
+    !is.list(evidence$candidate_config) ||
+    !.is_sha256(evidence$candidate_config_hash) ||
+    !identical(
+      evidence$candidate_config_hash,
+      digest::digest(evidence$candidate_config, algo = "sha256")
+    )) {
     return(FALSE)
   }
   if (!is.null(holdout_season) &&
@@ -249,6 +281,9 @@ verify_promotion_evidence <- function(bundle,
     candidate_path, "candidate", holdout_season,
     compatibility = "strict"
   )
+  candidate_config <- .promotion_candidate_config(
+    .read_promotion_kit(candidate_path, "candidate")
+  )
   incumbent <- .verify_promotion_kit(
     incumbent_path, "incumbent", holdout_season,
     compatibility = kit_compatibility
@@ -285,7 +320,9 @@ verify_promotion_evidence <- function(bundle,
       holdout_season = holdout_season,
       report = bundle$report,
       source_artifact_hashes = actual_hashes,
-      data_fingerprint = .promotion_evidence_data_fingerprint(prepared_data)
+      data_fingerprint = .promotion_evidence_data_fingerprint(prepared_data),
+      candidate_config = candidate_config,
+      candidate_config_hash = digest::digest(candidate_config, algo = "sha256")
     ),
     class = c("page_verified_promotion_evidence", "list")
   )

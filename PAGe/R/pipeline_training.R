@@ -582,6 +582,82 @@ tune_m1 <- function(allD,
   manual_labels[setdiff(names(manual_labels), test_season)]
 }
 
+.m2_checkpoint_schema <- function() "page_m2_phase2_checkpoint"
+
+.m2_checkpoint_version <- function() 1L
+
+.m2_checkpoint_identity <- function(allD, test_seasons, grid, m0, m1) {
+  upstream_identity <- function(stage, artifact, fields) {
+    artifact_id <- artifact$artifact_id
+    if (is.character(artifact_id) && length(artifact_id) == 1L &&
+      !is.na(artifact_id) && nzchar(artifact_id)) {
+      return(list(stage = stage, artifact_id = artifact_id))
+    }
+    list(
+      stage = stage,
+      legacy_payload = artifact[intersect(fields, names(artifact))]
+    )
+  }
+
+  digest::digest(
+    list(
+      schema = .m2_checkpoint_schema(),
+      version = .m2_checkpoint_version(),
+      data_id = .stage_training_data_id(allD),
+      test_seasons = as.character(test_seasons),
+      grid = as.data.frame(grid),
+      m0 = upstream_identity(
+        "m0", m0,
+        c("best_params", "manual_labels", "flag_args")
+      ),
+      m1 = upstream_identity(
+        "m1", m1,
+        c("m1_params", "ref", "hyper")
+      ),
+      evaluation = list(
+        training_method = "REML",
+        eval_window = 12L,
+        correction = "frozen_bias"
+      )
+    ),
+    algo = "sha256"
+  )
+}
+
+.read_m2_checkpoint <- function(path, identity) {
+  checkpoint <- tryCatch(readRDS(path), error = function(error) NULL)
+  expected_names <- c("schema", "version", "identity", "results")
+  if (!is.list(checkpoint) ||
+    !identical(names(checkpoint), expected_names) ||
+    !identical(checkpoint$schema, .m2_checkpoint_schema()) ||
+    !identical(checkpoint$version, .m2_checkpoint_version()) ||
+    !identical(checkpoint$identity, identity) ||
+    !is.list(checkpoint$results)) {
+    return(NULL)
+  }
+  checkpoint$results
+}
+
+.write_m2_checkpoint <- function(path, identity, results) {
+  checkpoint <- list(
+    schema = .m2_checkpoint_schema(),
+    version = .m2_checkpoint_version(),
+    identity = identity,
+    results = results
+  )
+  temporary <- tempfile(".page-m2-checkpoint-", tmpdir = dirname(path))
+  on.exit(unlink(temporary), add = TRUE)
+  saveRDS(checkpoint, temporary)
+  if (!file.copy(temporary, path, overwrite = TRUE)) {
+    stop("Could not update M2 checkpoint: `", path, "`.")
+  }
+  restored <- .read_m2_checkpoint(path, identity)
+  if (is.null(restored) || !identical(restored, results)) {
+    stop("M2 checkpoint verification failed after writing: `", path, "`.")
+  }
+  invisible(path)
+}
+
 #' Build M2 forecast model via nested LOSO grid search
 #'
 #' Runs Phase 1 (M1 walk-forward cache per LOSO fold) and Phase 2 (frozen
@@ -733,10 +809,27 @@ build_m2 <- function(allD,
   if (!is.null(checkpoint_dir)) {
     dir.create(checkpoint_dir, recursive = TRUE, showWarnings = FALSE)
     ckpt_file <- file.path(checkpoint_dir, "build_m2_phase2.rds")
+    ckpt_identity <- .m2_checkpoint_identity(
+      allD = allD,
+      test_seasons = test_seasons,
+      grid = grid_df,
+      m0 = m0,
+      m1 = m1
+    )
     if (file.exists(ckpt_file)) {
-      cv_results <- readRDS(ckpt_file)
-      todo_ids <- setdiff(spec_ids, names(cv_results))
-      if (verbose) {
+      restored <- .read_m2_checkpoint(ckpt_file, ckpt_identity)
+      if (is.null(restored)) {
+        if (verbose) {
+          message(
+            "[build_m2] Ignoring checkpoint whose identity does not match ",
+            "the current data, stages, grid, folds, and evaluation settings."
+          )
+        }
+      } else {
+        cv_results <- restored
+        todo_ids <- setdiff(spec_ids, names(cv_results))
+      }
+      if (verbose && !is.null(restored)) {
         message(sprintf(
           "[build_m2] Resuming: %d done, %d remaining",
           length(cv_results), length(todo_ids)
@@ -814,7 +907,9 @@ build_m2 <- function(allD,
         .options = furrr::furrr_options(seed = TRUE)
       )
       cv_results <- c(cv_results, batch_res)
-      if (!is.null(checkpoint_dir)) saveRDS(cv_results, ckpt_file)
+      if (!is.null(checkpoint_dir)) {
+        .write_m2_checkpoint(ckpt_file, ckpt_identity, cv_results)
+      }
 
       elapsed <- round(proc.time()[["elapsed"]] - t0)
       if (verbose) {
@@ -881,6 +976,7 @@ build_m2 <- function(allD,
 #' @param exclude Character vector of seasons to exclude from training.
 #'   Default excludes permanent invalid seasons and 2015-16. Note: 2025-26
 #'   is kept (production training uses the current season).
+#' @param n_cores Integer number of workers for M1 walk-forward predictions.
 #' @param verbose Logical. Print progress.
 #'
 #' @return A list with \code{fit} (GAM), \code{feature_ranges}, \code{m1_train_preds},
@@ -893,6 +989,7 @@ train_m2 <- function(allD,
                      m1,
                      best_spec = NULL,
                      exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
+                     n_cores = parallel::detectCores() - 1L,
                      verbose = FALSE) {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
   if (!requireNamespace("purrr", quietly = TRUE)) stop("Need 'purrr'.")
@@ -931,9 +1028,7 @@ train_m2 <- function(allD,
 
   # M1 walk-forward predictions for all training seasons
   if (verbose) message("[train_m2] M1 walk-forward predictions...")
-  future::plan(future::multisession,
-    workers = max(1L, parallel::detectCores() - 1L)
-  )
+  future::plan(future::multisession, workers = as.integer(max(1L, n_cores)))
   m1_train_preds <- m1_walkforward_multi(
     allD = allD, ref = ref, hyper = hyper, params = params,
     seasons = train_seas,

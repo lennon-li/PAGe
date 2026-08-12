@@ -445,6 +445,19 @@ plan_m2_grid <- function(previous_results = NULL,
   spec
 }
 
+.selected_m2_tuning <- function(tuning, selection) {
+  if (!is.list(selection) || !is.character(selection$selected_spec_id) ||
+    length(selection$selected_spec_id) != 1L ||
+    !is.list(selection$selected_spec)) {
+    stop("M2 selection is missing a valid specification.", call. = FALSE)
+  }
+  selected <- tuning
+  selected$best_spec_id <- selection$selected_spec_id
+  selected$best_spec <- selection$selected_spec
+  validate_m2_tuning(selected)
+  selected
+}
+
 .m1_params_from_tuning <- function(base, tuning) {
   if (is.null(tuning$best) || nrow(tuning$best) == 0L) {
     return(base)
@@ -540,12 +553,14 @@ plan_m2_grid <- function(previous_results = NULL,
 #' @param racing_evaluator Callback returning partial fold-level scores. Partial
 #'   results only eliminate clear losers; surviving specs still run full LOSO.
 #' @param racing_stages,racing_min_survivors Racing schedule and survivor floor.
-#' @param manual_labels,flag_args,m1_params Locked component settings.
-#' @param m0_params Locked M0 parameters for refresh mode. Defaults to the
-#'   deployed M0 configuration when no holdout has been released. A
-#'   post-acceptance refresh must explicitly supply the accepted candidate's
-#'   parameters.
-#' @param m2_spec_id Optional explicit identity for the fixed refresh M2 spec.
+#' @param manual_labels,flag_args,m1_params Optional component settings. For a
+#'   released holdout, these are derived exclusively from verified promotion
+#'   evidence and explicit overrides are rejected.
+#' @param m0_params Optional M0 parameters for refresh mode. Defaults to the
+#'   deployed configuration when no holdout has been released. For a released
+#'   holdout it is derived exclusively from verified promotion evidence.
+#' @param m2_spec_id Optional identity for an unreleased fixed refresh M2 spec;
+#'   it is derived from promotion evidence after holdout acceptance.
 #'
 #' @return A transparent list with \code{mode}, \code{components},
 #'   \code{tuning} (NULL for refresh), \code{grid},
@@ -574,9 +589,9 @@ train_pipeline <- function(
   racing_evaluator = NULL,
   racing_stages = c(3L, 6L),
   racing_min_survivors = 3L,
-  manual_labels = .default_manual_labels(),
-  flag_args = .default_flag_args(),
-  m1_params = .default_m1_params(),
+  manual_labels = NULL,
+  flag_args = NULL,
+  m1_params = NULL,
   m0_params = NULL,
   m2_spec_id = NULL
 ) {
@@ -593,16 +608,33 @@ train_pipeline <- function(
       call. = FALSE
     )
   }
-  if (is.null(m0_params)) {
-    if (holdout$released) {
+  if (holdout$released) {
+    locked <- promotion$candidate_config
+    supplied <- list(
+      m0_params = m0_params, m1_params = m1_params,
+      manual_labels = manual_labels, flag_args = flag_args,
+      previous_results = previous_results, m2_spec_id = m2_spec_id
+    )
+    if (any(vapply(supplied, Negate(is.null), logical(1)))) {
       stop(
-        "A post-acceptance refresh requires the accepted candidate's ",
-        "`m0_params`.",
+        "A post-acceptance refresh derives its configuration from verified ",
+        "promotion evidence; do not supply component overrides.",
         call. = FALSE
       )
     }
+    m0_params <- locked$m0_params
+    m1_params <- locked$m1_params
+    manual_labels <- locked$manual_labels
+    flag_args <- locked$flag_args
+    previous_results <- list(best_spec = locked$best_spec)
+    m2_spec_id <- locked$best_spec_id
+  }
+  if (is.null(m0_params)) {
     m0_params <- .default_m0_params()
   }
+  if (is.null(m1_params)) m1_params <- .default_m1_params()
+  if (is.null(manual_labels)) manual_labels <- .default_manual_labels()
+  if (is.null(flag_args)) flag_args <- .default_flag_args()
   effective_exclude <- unique(c(
     exclude,
     if (holdout$present && !holdout$released) prospective_holdout else character(0)
@@ -615,6 +647,19 @@ train_pipeline <- function(
     holdout_seasons <- if (held_out) prospective_holdout else character(0)
     exclude_seasons <- intersect(exclude, data_seasons)
     training_seasons <- setdiff(data_seasons, c(exclude_seasons, holdout_seasons))
+    if (holdout$released) {
+      expected_training <- unique(c(
+        as.character(locked$training_seasons),
+        prospective_holdout
+      ))
+      if (!setequal(training_seasons, expected_training)) {
+        stop(
+          "A post-acceptance refresh must use the accepted candidate's ",
+          "training seasons plus the released holdout.",
+          call. = FALSE
+        )
+      }
+    }
     if (!length(training_seasons)) {
       stop("`allD` must contain at least one trainable season after exclusions.")
     }
@@ -637,6 +682,7 @@ train_pipeline <- function(
       allD, selection,
       m0 = m0, m1 = m1,
       config = best_spec,
+      n_cores = n_cores,
       verbose = verbose
     ))
     kit <- assemble_kit(
@@ -762,9 +808,10 @@ train_pipeline <- function(
       allD, selection,
       m0 = m0, m1 = m1,
       config = m2_selection$selected_spec,
+      n_cores = n_cores,
       verbose = verbose
     ),
-    tuning = m2_tuning
+    tuning = .selected_m2_tuning(m2_tuning, m2_selection)
   )
   kit <- assemble_kit(
     m0, m1, m2_model,

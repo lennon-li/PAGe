@@ -25,10 +25,10 @@ train_pipeline(
   racing_evaluator = NULL,
   racing_stages = c(3L, 6L),
   racing_min_survivors = 3L,
-  manual_labels = .default_manual_labels(),
-  flag_args = .default_flag_args(),
-  m1_params = .default_m1_params(),
-  m0_params = .default_m0_params(),
+  manual_labels = NULL,
+  flag_args = NULL,
+  m1_params = NULL,
+  m0_params = NULL,
   m2_spec_id = NULL
 )
 }
@@ -78,13 +78,16 @@ results only eliminate clear losers; surviving specs still run full LOSO.}
 
 \item{racing_stages, racing_min_survivors}{Racing schedule and survivor floor.}
 
-\item{manual_labels, flag_args, m1_params}{Locked component settings.}
+\item{manual_labels, flag_args, m1_params}{Optional component settings. For a
+released holdout, these are derived exclusively from verified promotion
+evidence and explicit overrides are rejected.}
 
-\item{m0_params}{Locked M0 parameters for refresh mode. Defaults to the
-deployed M0 configuration; supply the promoted candidate's parameters to
-reproduce its fixed component configuration after holdout acceptance.}
+\item{m0_params}{Optional M0 parameters for refresh mode. Defaults to the
+deployed configuration when no holdout has been released. For a released
+holdout it is derived exclusively from verified promotion evidence.}
 
-\item{m2_spec_id}{Optional explicit identity for the fixed refresh M2 spec.}
+\item{m2_spec_id}{Optional identity for an unreleased fixed refresh M2 spec;
+it is derived from promotion evidence after holdout acceptance.}
 }
 \value{
 A transparent list with \code{mode}, \code{components},

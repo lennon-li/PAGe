@@ -10,6 +10,7 @@ train_m2(
   m1,
   best_spec = NULL,
   exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
+  n_cores = parallel::detectCores() - 1L,
   verbose = FALSE
 )
 }
@@ -27,6 +28,8 @@ v16-corrected incumbent for a production-data refresh without retuning.}
 \item{exclude}{Character vector of seasons to exclude from training.
 Default excludes permanent invalid seasons and 2015-16. Note: 2025-26
 is kept (production training uses the current season).}
+
+\item{n_cores}{Integer number of workers for M1 walk-forward predictions.}
 
 \item{verbose}{Logical. Print progress.}
 }
