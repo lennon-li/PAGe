@@ -109,7 +109,7 @@ fn_source    = {}   # fn_name -> source file (base name)
 def_pattern = re.compile(r'^([a-zA-Z_][a-zA-Z0-9._]+)\s*<-\s*function')
 call_bodies  = {}   # fn_name -> raw body text
 
-r_files = [f for f in glob.glob("R/*.R")
+r_files = [f for f in glob.glob("PAGe/R/*.R")
            if os.path.basename(f) not in SKIP_FILES]
 
 # Map fn -> source file

@@ -2,9 +2,9 @@ setwd("C:/Users/lennon.li/Documents/claude/PAGe")
 library(dplyr)
 library(mgcv)
 load("data/data.RData")
-source("R/m0_training.R")
-source("R/m2_spec_grid.R")
-source("R/m2_training.R")
+source("PAGe/R/m0_training.R")
+source("PAGe/R/m2_spec_grid.R")
+source("PAGe/R/m2_training.R")
 
 alignedD_prosp <- add_prospective_derivs_link(alignedD, k=5L, eps=1e-6, min_obs=4L)
 

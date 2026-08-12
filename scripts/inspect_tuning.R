@@ -1,6 +1,6 @@
 setwd("C:/Users/lennon.li/Documents/claude/PAGe")
 load("data/data.RData")
-source("R/m0_training.R")
+source("PAGe/R/m0_training.R")
 
 tuned <- readRDS("data/stage1_tuning.rds")
 cat("Names in tuned:\n"); print(names(tuned))

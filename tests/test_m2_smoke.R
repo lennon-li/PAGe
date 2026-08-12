@@ -9,7 +9,7 @@ wd <- getwd()
 message("M2 smoke tests | working dir: ", wd)
 
 # Source all R files
-r_files <- list.files("R", pattern = "\\.R$", full.names = TRUE)
+r_files <- list.files("PAGe/R", pattern = "\\.R$", full.names = TRUE)
 for (f in r_files) source(f, local = FALSE)
 
 # ---------- helpers ----------

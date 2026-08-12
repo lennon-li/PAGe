@@ -177,6 +177,19 @@ test_that("v16 kits without an unused log-N feature remain valid", {
   ))
 })
 
+test_that("kits with a dropped EMA smooth remain valid", {
+  kit <- workflow_kit()
+  kit$best_spec$k_e <- 0L
+  kit$best_spec$k_r <- 2L
+  kit$m2_production$fit$model <- data.frame(
+    logit_f_eff = 0,
+    z_resid = 0,
+    lead = factor(c("h1", "h2"))
+  )
+
+  expect_no_error(PAGe::validate_page_kit(kit, mode = "frozen"))
+})
+
 test_that("forecast summaries and printing expose stable essentials", {
   forecast <- structure(list(
     pred_df = data.frame(

@@ -89,7 +89,14 @@ validate_page_kit <- function(kit, mode = c("frozen", "weekly_refit")) {
   if (!inherits(fit, "gam")) {
     stop("PAGe kit field `m2_production$fit` must be a fitted GAM/BAM object.")
   }
-  model_fields <- c("logit_f_eff", "z_ema", "lead")
+  # z_ema is always constructed by the runtime, but it is only retained in
+  # mgcv's model frame when the selected spec includes the direct EMA smooth.
+  # A dropped k_e term therefore must not make an otherwise valid kit fail
+  # validation merely because z_ema is not a formula predictor.
+  model_fields <- c(
+    "logit_f_eff", "lead",
+    if ((kit$best_spec$k_e %||% 0L) > 0L) "z_ema"
+  )
   conditional_fields <- c(
     if ((kit$best_spec$k_n %||% 0L) > 0L) "logN_now",
     if ((kit$best_spec$k_de %||% 0L) > 0L) "dz_ema",

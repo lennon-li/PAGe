@@ -9,7 +9,8 @@ freeze_m1(fit, tuning = NULL, ...)
 \arguments{
 \item{fit}{A \code{page_m1_fit}.}
 
-\item{tuning}{Optional \code{page_m1_tuning} to validate.}
+\item{tuning}{Optional \code{page_m1_tuning} to validate. Governed tuning
+is boundary-validated before freezing.}
 
 \item{...}{Reserved.}
 }

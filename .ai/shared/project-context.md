@@ -17,9 +17,9 @@ future seasons.
 
 ## Repository Layout
 
-- `PAGe/` is the installable package and source of truth for package code.
-- `R/` is a root-level mirror of `PAGe/R/` used for development
-  convenience. Keep mirrored files in sync when editing.
+- `PAGe/` is the installable package and the sole source of package code.
+- Package R source lives under `PAGe/R/`; do not add or restore a root-level
+  `R/` mirror.
 - `docs/` contains Quarto documentation. `pipeline_overview.qmd` is the main
   architecture reference.
 - `scripts/` contains pipeline entry points, tuning scripts, and diagnostics.
@@ -107,4 +107,4 @@ Key data for M2 development:
 ## Environment Notes
 
 Scripts in `scripts/` have hardcoded Windows paths — set `wd` to the repo root
-on your platform. Package code (`R/`, `PAGe/R/`) and QMDs use relative paths.
+on your platform. Package code (`PAGe/R/`) and QMDs use relative paths.

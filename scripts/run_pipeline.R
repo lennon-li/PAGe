@@ -9,7 +9,7 @@ run_pipeline <- function(inputs, out_dir) {
   
   alignedD <- get("alignedD", envir = inputs)
   
-  # ... call your existing functions (already sourced from R/)
+  # ... call your existing functions (already sourced from PAGe/R/)
   # out <- tune_stage2_loso_shift_template(dat = alignedD, ...)
   
   # Save artifacts

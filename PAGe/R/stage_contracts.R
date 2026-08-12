@@ -466,30 +466,122 @@ fit_m0 <- function(data, selection, config, ...) {
 
 #' Freeze an M0 draft artifact
 #'
-#' Promotes a draft M0 fit to immutable frozen status. When \code{tuning}
-#' is supplied, it is validated first via \code{validate_m0_tuning()}.
+#' Promotes a draft M0 fit to immutable frozen status. Governed tuning is
+#' boundary-validated before the fit can be frozen.
 #'
 #' @param fit A \code{page_m0_fit} in draft or frozen state.
-#' @param tuning Optional \code{page_m0_tuning} result to validate.
+#' @param tuning Optional \code{page_m0_tuning} result to validate. Governed
+#'   tuning must include its complete grid for boundary validation.
 #' @param ... Reserved.
 #'
 #' @return The \code{page_m0_fit} in \code{frozen} state.
 #' @export
 freeze_m0 <- function(fit, tuning = NULL, ...) {
+  if (inherits(tuning, "page_m0_tuning") && !is.null(tuning$selection)) {
+    tuning <- validate_m0_tuning(
+      tuning,
+      grid = tuning$grid, check_boundaries = TRUE
+    )
+  }
   .freeze_stage(fit, tuning, "m0")
+}
+
+.stage_boundary_report <- function(stage, grid, selected, null_axes = character()) {
+  if (!is.data.frame(grid) || !nrow(grid)) {
+    stop(
+      stage, " boundary validation requires the complete tuning `grid`.",
+      call. = FALSE
+    )
+  }
+  axis_names <- intersect(names(grid), names(selected))
+  axis_names <- axis_names[vapply(
+    grid[axis_names],
+    function(values) {
+      is.numeric(values) &&
+        length(unique(values[is.finite(values)])) >= 2L
+    },
+    logical(1)
+  )]
+  boundary_rows <- lapply(axis_names, function(parameter) {
+    tested <- sort(unique(grid[[parameter]][is.finite(grid[[parameter]])]))
+    chosen <- as.numeric(selected[[parameter]][1L])
+    edge <- if (!is.finite(chosen)) {
+      "unknown"
+    } else if (isTRUE(all.equal(chosen, tested[1L]))) {
+      "lower"
+    } else if (isTRUE(all.equal(chosen, tested[length(tested)]))) {
+      "upper"
+    } else {
+      "none"
+    }
+    is_null <- edge != "none" &&
+      parameter %in% null_axes &&
+      isTRUE(all.equal(chosen, 0))
+    data.frame(
+      stage = stage, parameter = parameter,
+      tested_min = tested[1L], tested_max = tested[length(tested)],
+      selected_value = chosen, boundary = edge,
+      decision = if (edge == "none") {
+        "stop_bracketed"
+      } else if (is_null) {
+        "accept_null_drop"
+      } else {
+        "expand_required"
+      },
+      reason = if (edge == "none") {
+        "selected value is bracketed"
+      } else if (is_null) {
+        "zero is the predeclared drop/null"
+      } else {
+        paste0("selected non-null ", stage, " axis is at a tested edge")
+      },
+      stringsAsFactors = FALSE
+    )
+  })
+  if (length(boundary_rows)) {
+    do.call(rbind, boundary_rows)
+  } else {
+    data.frame(
+      stage = character(0), parameter = character(0),
+      tested_min = numeric(0), tested_max = numeric(0),
+      selected_value = numeric(0), boundary = character(0),
+      decision = character(0), reason = character(0),
+      stringsAsFactors = FALSE
+    )
+  }
+}
+
+.enforce_stage_boundaries <- function(stage, report) {
+  unresolved <- report[report$decision == "expand_required", , drop = FALSE]
+  if (nrow(unresolved)) {
+    stop(
+      stage, " tuning has unresolved non-null boundary: ",
+      paste(unresolved$parameter, collapse = ", "),
+      ". Expand the ", stage,
+      " grid before freezing or starting the downstream stage.",
+      call. = FALSE
+    )
+  }
+  invisible(report)
 }
 
 #' Validate an M0 tuning result
 #'
 #' Rejects zero evaluable folds, non-finite selection metrics, missing
 #' selected configuration, or mismatched folds.
+#' Governed workflows can also require every genuinely tuned M0 axis to be
+#' bracketed or explicitly accepted as a null/drop choice.
 #'
 #' @param x A \code{page_m0_tuning} object.
+#' @param grid Complete M0 grid used for tuning when boundary checks are
+#'   enabled.
+#' @param check_boundaries Logical; require all varying numeric M0 axes to be
+#'   bracketed, except predeclared null/drop values.
 #' @param ... Reserved.
 #'
 #' @return \code{x}, invisibly, if valid.
 #' @export
-validate_m0_tuning <- function(x, ...) {
+validate_m0_tuning <- function(x, grid = NULL, check_boundaries = FALSE, ...) {
   if (!inherits(x, "page_m0_tuning")) {
     stop("`x` must be a `page_m0_tuning` object.", call. = FALSE)
   }
@@ -519,6 +611,14 @@ validate_m0_tuning <- function(x, ...) {
       !setequal(fold_seasons, x$selection$training_seasons)) {
       stop("M0 tuning fold/selection mismatch.", call. = FALSE)
     }
+  }
+  if (isTRUE(check_boundaries)) {
+    report <- .stage_boundary_report(
+      "M0", grid, best_params,
+      null_axes = c("p_thr", "prev_thr", "p_sum_thr")
+    )
+    x$boundary_report <- report
+    .enforce_stage_boundaries("M0", report)
   }
   invisible(x)
 }
@@ -567,12 +667,16 @@ fit_m1 <- function(data, selection, m0, config, ...) {
 #' Freeze an M1 draft artifact
 #'
 #' @param fit A \code{page_m1_fit}.
-#' @param tuning Optional \code{page_m1_tuning} to validate.
+#' @param tuning Optional \code{page_m1_tuning} to validate. Governed tuning
+#'   is boundary-validated before freezing.
 #' @param ... Reserved.
 #'
 #' @return The \code{page_m1_fit} in \code{frozen} state.
 #' @export
 freeze_m1 <- function(fit, tuning = NULL, ...) {
+  if (inherits(tuning, "page_m1_tuning") && !is.null(tuning$selection)) {
+    tuning <- validate_m1_tuning(tuning, check_boundaries = TRUE)
+  }
   .freeze_stage(fit, tuning, "m1")
 }
 
@@ -580,13 +684,18 @@ freeze_m1 <- function(fit, tuning = NULL, ...) {
 #'
 #' Rejects zero evaluable seasons, all-missing metrics, non-finite selected
 #' metric, missing selected configuration, or fold/selection mismatches.
+#' Governed workflows can also require every genuinely tuned M1 axis to be
+#' bracketed before the fit is frozen and passed downstream.
 #'
 #' @param x A \code{page_m1_tuning} object.
+#' @param check_boundaries Logical; require all varying numeric M1 axes in the
+#'   supplied grid to have an interior selected value. This is enabled by
+#'   \code{train_pipeline()} before M1 is frozen for M2.
 #' @param ... Reserved.
 #'
 #' @return \code{x}, invisibly, if valid.
 #' @export
-validate_m1_tuning <- function(x, ...) {
+validate_m1_tuning <- function(x, check_boundaries = FALSE, ...) {
   if (!inherits(x, "page_m1_tuning")) {
     stop("`x` must be a `page_m1_tuning` object.", call. = FALSE)
   }
@@ -623,6 +732,11 @@ validate_m1_tuning <- function(x, ...) {
         call. = FALSE
       )
     }
+  }
+  if (isTRUE(check_boundaries)) {
+    report <- .stage_boundary_report("M1", x$grid, best)
+    x$boundary_report <- report
+    .enforce_stage_boundaries("M1", report)
   }
   invisible(x)
 }

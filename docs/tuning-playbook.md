@@ -31,8 +31,12 @@ boundary winner as though the search bracketed it.
    grid-size cap.
 2. Run a coarse, scientifically plausible grid using identical walk-forward
    folds for every candidate. Save resumable checkpoints.
-3. Pass the stage tuning validator. Do not interpret a ranking with incomplete
-   folds, all-missing metrics, or a non-finite selected score.
+3. Pass the stage tuning validator. For governed M0 runs, supply the M0 grid
+   with `validate_m0_tuning(tuning, grid, check_boundaries = TRUE)`; for M1,
+   call `validate_m1_tuning(tuning, check_boundaries = TRUE)`. Unresolved
+   non-null edges then stop before the stage is frozen or the downstream stage
+   begins. Do not interpret a ranking with incomplete folds, all-missing
+   metrics, or a non-finite selected score.
 4. Inspect the full response profile, per-season scores, worst season, and
    early/late or phase-specific errors—not only the overall mean.
 5. For a winning boundary, add one valid level beyond that boundary using the
@@ -46,7 +50,8 @@ boundary winner as though the search bracketed it.
 8. Stop when the selected configuration is bracketed, or when a documented
    constraint/null value justifies the boundary, and performance is stable
    enough across folds for the intended decision.
-9. Fit and freeze the selected stage. Only then may the downstream stage begin.
+9. Fit and freeze the selected stage. Only then may the downstream stage begin;
+   the high-level retune API enforces this M1-to-M2 boundary automatically.
 10. Keep the prospective holdout untouched. Changing the grid after viewing it
     starts a new development cycle.
 

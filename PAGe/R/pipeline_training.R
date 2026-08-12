@@ -286,8 +286,8 @@ build_m0 <- function(allD,
 #'   \code{page_m0_tuning}.
 #'
 #' @return A list with \code{best_params}, \code{tuning} (full
-#'   \code{loso_M0v2()} output), \code{aligned}, \code{seasons_used},
-#'   \code{manual_labels}, and \code{flag_args}. Pass directly to
+#'   \code{loso_M0v2()} output), the complete \code{grid}, \code{aligned},
+#'   \code{seasons_used}, \code{manual_labels}, and \code{flag_args}. Pass directly to
 #'   \code{build_m1()}, \code{build_m2()}, and \code{train_m2()}.
 #'
 #' @export
@@ -359,6 +359,7 @@ tune_m0 <- function(allD,
   out <- list(
     best_params   = tuning$best_params,
     tuning        = tuning,
+    grid          = as.data.frame(grid),
     aligned       = aligned,
     seasons_used  = m0_built$seasons_used,
     manual_labels = manual_labels,

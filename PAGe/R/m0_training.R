@@ -601,7 +601,12 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
   DT[, n_hit := rowSums(cbind(cond_cls, cond_sum, cond_p, cond_prev, cond_inc), na.rm = FALSE)]
   DT[, ignite_ok := cond_win & (n_hit >= N_req)]
   
-  by_hat <- DT[ignite_ok %in% TRUE, .(iWeek_hat = min(get(week_col), na.rm = TRUE)), by = season_col]
+  ignition_rows <- DT[ignite_ok %in% TRUE]
+  by_hat <- if (nrow(ignition_rows) > 0L) {
+    ignition_rows[, .(iWeek_hat = min(get(week_col), na.rm = TRUE)), by = season_col]
+  } else {
+    DT[0, .(iWeek_hat = integer()), by = season_col]
+  }
   all_s  <- DT[, .(season = unique(get(season_col)))]
   data.table::setnames(all_s, "season", season_col)
   by_hat <- merge(all_s, by_hat, by = season_col, all.x = TRUE, sort = FALSE)

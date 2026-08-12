@@ -24,10 +24,10 @@ suppressPackageStartupMessages({
 })
 
 for (f in c(
-  "R/utils.R", "R/m0_retro.R", "R/flagIgnition.R",
-  "R/m1_reference.R", "R/m1_reference_helpers.R",
-  "R/m1_multi_template.R", "R/m1_loso.R", "R/m1_fit.R",
-  "R/align_forecast_pipeline_dilate.R"
+  "PAGe/R/utils.R", "PAGe/R/m0_retro.R", "PAGe/R/flagIgnition.R",
+  "PAGe/R/m1_reference.R", "PAGe/R/m1_reference_helpers.R",
+  "PAGe/R/m1_multi_template.R", "PAGe/R/m1_loso.R", "PAGe/R/m1_fit.R",
+  "PAGe/R/align_forecast_pipeline_dilate.R"
 )) source(f)
 
 n_cores <- max(1L, parallel::detectCores() - 1L)

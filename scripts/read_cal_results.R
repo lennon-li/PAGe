@@ -1,9 +1,9 @@
-source("R/utils.R")
-source("R/pipeline_runtime_helpers.R")
-source("R/m0_runtime.R")
-source("R/m2_runtime.R")
-source("R/pipeline_runtime.R")
-source("R/m1_runtime.R")
+source("PAGe/R/utils.R")
+source("PAGe/R/pipeline_runtime_helpers.R")
+source("PAGe/R/m0_runtime.R")
+source("PAGe/R/m2_runtime.R")
+source("PAGe/R/pipeline_runtime.R")
+source("PAGe/R/m1_runtime.R")
 
 library(dplyr)
 

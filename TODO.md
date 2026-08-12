@@ -26,7 +26,7 @@ closed. A report or comment is not evidence that a run completed. Statuses mean:
 |---|---|---|
 | Package structure and public API | Verified implemented | Installable package source exists under `PAGe/`; high-level training, forecasting, plotting, validation, and promotion APIs are present. |
 | Guarded M0/M1/M2 stage lifecycle | Verified implemented in code/tests | Explicit season selection, tune/validate/fit/freeze states, frozen upstream guards, stable stage identities, guarded kit assembly, tamper checks, and legacy compatibility are implemented. `train_pipeline()` integration remains open. |
-| Root/package R mirrors | Verified implemented | All 42 files in `R/` match their counterparts in `PAGe/R/` byte-for-byte in the current audit patch. |
+| Package source layout | Verified implemented | Package R source is consolidated under `PAGe/R/`; the retired root-level mirror is removed. |
 | Input data contract | Verified implemented | Explicit loading, normalization, validation, and synthetic-season generation are implemented and tested. Private surveillance observations are not committed. |
 | M0 ignition | Verified implemented in code | Build, tune, retrospective, and prospective runtime paths exist. Numerical production result still depends on ignored local artifacts. |
 | M1 alignment | Verified implemented in code | Reference fitting, multi-template alignment, LOSO tuning, peak calibration, and prospective runtime paths exist. The canonical reported MAE is inconsistent across docs. |
@@ -56,7 +56,7 @@ closed. A report or comment is not evidence that a run completed. Statuses mean:
 - [x] `simulate_flu_seasons()` provides deterministic synthetic data generation.
 - [x] Public documentation, `NAMESPACE`, roxygen output, pkgdown configuration,
   package tests, and GitHub Actions configuration exist.
-- [x] `R/` and `PAGe/R/` are synchronized at the audited commit.
+- [x] Package R source is consolidated under `PAGe/R/`.
 - [x] `validate_season_selection()` records mutually disjoint training,
   exclusion, holdout, and application seasons.
 - [x] M0, M1, and M2 expose independent tuning-validation, draft-fit, and

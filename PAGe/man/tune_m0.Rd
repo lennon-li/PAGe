@@ -42,8 +42,8 @@ supplied, only its training seasons are used and the returned object is a
 }
 \value{
 A list with \code{best_params}, \code{tuning} (full
-  \code{loso_M0v2()} output), \code{aligned}, \code{seasons_used},
-  \code{manual_labels}, and \code{flag_args}. Pass directly to
+  \code{loso_M0v2()} output), the complete \code{grid}, \code{aligned},
+  \code{seasons_used}, \code{manual_labels}, and \code{flag_args}. Pass directly to
   \code{build_m1()}, \code{build_m2()}, and \code{train_m2()}.
 }
 \description{
