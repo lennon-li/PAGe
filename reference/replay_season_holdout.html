@@ -52,6 +52,7 @@
 <span>  <span class="va">allD</span>,</span>
 <span>  season <span class="op">=</span> <span class="st">"2025-26"</span>,</span>
 <span>  runner <span class="op">=</span> <span class="va">run_prospective_pipeline</span>,</span>
+<span>  kit_compatibility <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"strict"</span>, <span class="st">"legacy_m2"</span><span class="op">)</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -75,6 +76,12 @@
 <dt id="arg-runner">runner<a class="anchor" aria-label="anchor" href="#arg-runner"></a></dt>
 <dd><p>Injectable prospective runner; defaults to
 run_prospective_pipeline() in frozen mode.</p></dd>
+
+
+<dt id="arg-kit-compatibility">kit_compatibility<a class="anchor" aria-label="anchor" href="#arg-kit-compatibility"></a></dt>
+<dd><p>Identity mode. The default <code>"strict"</code> requires
+canonical <code>m2_production</code>; <code>"legacy_m2"</code> explicitly permits a
+legacy <code>m2</code> field with a warning.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>

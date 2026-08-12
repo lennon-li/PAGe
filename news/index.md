@@ -2,6 +2,17 @@
 
 ## PAGe 0.2.0
 
+- Adds independently guarded M0, M1, and M2 lifecycles:
+  [`validate_season_selection()`](https://lennon-li.github.io/PAGe/reference/validate_season_selection.md),
+  stage tuning validators, `fit_*()`, and `freeze_*()`. Downstream
+  stages require frozen, selection-matched upstream artifacts with
+  stable identities.
+- Extends
+  [`assemble_kit()`](https://lennon-li.github.io/PAGe/reference/assemble_kit.md)
+  and
+  [`validate_page_kit()`](https://lennon-li.github.io/PAGe/reference/validate_page_kit.md)
+  with governed-stage provenance and tamper checks while retaining
+  legacy kit compatibility.
 - Introduces a coherent public workflow for surveillance-data
   validation, training, holdout replay, promotion, frozen-kit
   forecasting, and result summaries.

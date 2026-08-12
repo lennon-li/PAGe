@@ -30,7 +30,7 @@ fit_peak_calibration(
 
 - allD:
 
-  Raw data frame with columns `season`, `weekF`, `p`, `N` — used to
+  Raw data frame with columns `season`, `weekF`, `p`, `N` – used to
   determine the true peak week per season.
 
 - anchorWeek:

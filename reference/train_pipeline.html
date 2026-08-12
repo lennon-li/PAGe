@@ -80,9 +80,11 @@ winning M2 specification on all non-excluded seasons.</p>
 <span>  racing_evaluator <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  racing_stages <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">3L</span>, <span class="fl">6L</span><span class="op">)</span>,</span>
 <span>  racing_min_survivors <span class="op">=</span> <span class="fl">3L</span>,</span>
-<span>  manual_labels <span class="op">=</span> <span class="fu">.default_manual_labels</span><span class="op">(</span><span class="op">)</span>,</span>
-<span>  flag_args <span class="op">=</span> <span class="fu">.default_flag_args</span><span class="op">(</span><span class="op">)</span>,</span>
-<span>  m1_params <span class="op">=</span> <span class="fu">.default_m1_params</span><span class="op">(</span><span class="op">)</span></span>
+<span>  manual_labels <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  flag_args <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  m1_params <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  m0_params <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  m2_spec_id <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -114,11 +116,11 @@ until an explicit passing promotion report releases it. Defaults to
 
 
 <dt id="arg-promotion">promotion<a class="anchor" aria-label="anchor" href="#arg-promotion"></a></dt>
-<dd><p>Optional canonical report returned by
-<code><a href="check_promotion.html">check_promotion()</a></code> with the locked 2 percent NLL, 5 percent horizon,
-and 10 percent phase thresholds. Schema validation checks structure and
-internal consistency, not cryptographic provenance. A malformed, custom-
-threshold, or failed report never releases the holdout.</p></dd>
+<dd><p>Optional artifact-bound evidence returned by
+<code><a href="verify_promotion_evidence.html">verify_promotion_evidence()</a></code>. A bare <code><a href="check_promotion.html">check_promotion()</a></code> report
+is not governed production evidence and cannot release the holdout. The R
+class is forgeable; verification of the retained bundle, manifest, data,
+candidate, and incumbent artifacts is the safety boundary.</p></dd>
 
 
 <dt id="arg-loso-seasons">loso_seasons<a class="anchor" aria-label="anchor" href="#arg-loso-seasons"></a></dt>
@@ -170,7 +172,20 @@ results only eliminate clear losers; surviving specs still run full LOSO.</p></d
 
 
 <dt id="arg-manual-labels-flag-args-m-params">manual_labels, flag_args, m1_params<a class="anchor" aria-label="anchor" href="#arg-manual-labels-flag-args-m-params"></a></dt>
-<dd><p>Locked component settings.</p></dd>
+<dd><p>Optional component settings. For a
+released holdout, these are derived exclusively from verified promotion
+evidence and explicit overrides are rejected.</p></dd>
+
+
+<dt id="arg-m-params">m0_params<a class="anchor" aria-label="anchor" href="#arg-m-params"></a></dt>
+<dd><p>Optional M0 parameters for refresh mode. Defaults to the
+deployed configuration when no holdout has been released. For a released
+holdout it is derived exclusively from verified promotion evidence.</p></dd>
+
+
+<dt id="arg-m-spec-id">m2_spec_id<a class="anchor" aria-label="anchor" href="#arg-m-spec-id"></a></dt>
+<dd><p>Optional identity for an unreleased fixed refresh M2 spec;
+it is derived from promotion evidence after holdout acceptance.</p></dd>
 
 </dl></div>
     <div class="section level2">

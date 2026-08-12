@@ -42,7 +42,9 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.2.0" id="page-020">PAGe 0.2.0<a class="anchor" aria-label="anchor" href="#page-020"></a></h2>
-<ul><li>Introduces a coherent public workflow for surveillance-data validation, training, holdout replay, promotion, frozen-kit forecasting, and result summaries.</li>
+<ul><li>Adds independently guarded M0, M1, and M2 lifecycles: <code><a href="../reference/validate_season_selection.html">validate_season_selection()</a></code>, stage tuning validators, <code>fit_*()</code>, and <code>freeze_*()</code>. Downstream stages require frozen, selection-matched upstream artifacts with stable identities.</li>
+<li>Extends <code><a href="../reference/assemble_kit.html">assemble_kit()</a></code> and <code><a href="../reference/validate_page_kit.html">validate_page_kit()</a></code> with governed-stage provenance and tamper checks while retaining legacy kit compatibility.</li>
+<li>Introduces a coherent public workflow for surveillance-data validation, training, holdout replay, promotion, frozen-kit forecasting, and result summaries.</li>
 <li>Makes frozen-GAM deployment the default and keeps weekly refitting available only as an explicit compatibility option.</li>
 <li>Adds refresh and full-retune training modes with prior-informed adaptive M2 grids, minimum-NLL, one-standard-error, and Pareto selection, plus optional conservative candidate racing.</li>
 <li>Treats 2025-26 as an external holdout by default and requires explicit, threshold-based promotion before it may enter the next training cycle.</li>

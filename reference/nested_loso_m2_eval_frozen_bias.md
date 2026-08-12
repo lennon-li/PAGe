@@ -17,8 +17,9 @@ nested_loso_m2_eval_frozen_bias(
   spec,
   eval_window = 12L,
   horizons = c(1L, 2L),
-  bias_alpha = 0.2,
-  bias_beta = 0,
+  bias_alpha = NULL,
+  bias_beta = NULL,
+  correction_compatibility = c("strict", "legacy"),
   manual_labels = NULL,
   manual_labels_train = NULL,
   manual_labels_test = NULL,
@@ -65,15 +66,16 @@ nested_loso_m2_eval_frozen_bias(
 
   Integer vector of forecast horizons (default `c(1L, 2L)`).
 
-- bias_alpha:
+- bias_alpha, bias_beta:
 
-  Numeric; EMA smoothing for Holt bias level (default 0.2).
+  Optional research overrides for the correction rates. By default, both
+  values are resolved from `spec`.
 
-- bias_beta:
+- correction_compatibility:
 
-  Numeric; EMA smoothing for Holt bias trend (default 0). Both bias
-  settings are explicit evaluator inputs; callers may take them from a
-  tuning-grid specification.
+  Correction-spec policy. `"strict"` (default) requires finite
+  `bias_alpha` and `bias_beta` values in `spec`; `"legacy"` enables
+  deprecated fallbacks with a warning.
 
 - manual_labels:
 

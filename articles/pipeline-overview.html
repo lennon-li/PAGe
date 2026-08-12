@@ -73,16 +73,30 @@
 
 
 
-    <p>PAGe produces prospective one- and two-week-ahead forecasts of respiratory-virus positivity. Within each issue week, M0 detects ignition, M1 aligns the partial epidemic curve to historical templates, and M2 consumes the alignment state in a binomial GAM.</p>
+    <div>
+<blockquote>
+<p><strong>Caution</strong></p>
+<p>This article describes the coded pipeline and historical research results. It does not prove that a private-data acceptance run, fixed-spec refresh, or immutable promotion completed. Use <code>docs/deployment-workflow.qmd</code> in the repository for the governed release sequence.</p>
+</blockquote>
+</div>
+<p>PAGe produces prospective one- and two-week-ahead forecasts of respiratory-virus positivity. Within each issue week, M0 detects ignition, M1 aligns the partial epidemic curve to historical templates, and M2 consumes the alignment state in a binomial GAM.</p>
 <section class="level2"><h2 id="prospective-contract">Prospective contract<a class="anchor" aria-label="anchor" href="#prospective-contract"></a>
 </h2>
-<p>All validation is leave-one-season-out and walk-forward. A held-out season’s future observations cannot influence fitting, feature construction, selection, or tuning. M1 runs before M2 each week so M2 sees only contemporaneously available alignment covariates.</p>
-</section><section class="level2"><h2 id="production-configuration">Production configuration<a class="anchor" aria-label="anchor" href="#production-configuration"></a>
+<p>Historical M2 evaluation uses walk-forward LOSO folds with fold-specific M1 features. M0 and M1 hyperparameters were selected globally before that M2 evaluation, so the recorded analysis is conditional rather than fully nested over every modelling decision. M1 runs before M2 each week so M2 sees only contemporaneously available alignment covariates.</p>
+</section><section class="level2"><h2 id="coded-incumbent-configuration">Coded incumbent configuration<a class="anchor" aria-label="anchor" href="#coded-incumbent-configuration"></a>
 </h2>
-<p>The deployed <code>v16_fresh</code> M2 specification uses <code>k_f=4</code>, <code>k_e=2</code>, <code>alpha_state=0.15</code>, <code>k_sp=6</code>, <code>k_r=0</code>, <code>k_de=0</code>, <code>delta=0</code>, <code>Kr=1</code>, <code>bias_alpha=0.05</code>, and <code>bias_beta=0</code> (recorded nested-LOSO Bernoulli NLL 0.4175). Deployment freezes the GAM and updates only the level-only Holt bias correction and post-ignition online season effect. Weekly refitting is not the production default.</p>
+<p>The current v16-corrected incumbent uses <code>k_f=4</code>, <code>k_e=2</code>, <code>alpha_state=0.20</code>, <code>k_sp=8</code>, <code>k_r=0</code>, <code>k_de=0</code>, <code>delta=0</code>, <code>Kr=1</code>, <code>bias_alpha=0.05</code>, and <code>bias_beta=0</code>. Historical notes record a private nested-LOSO result, but its source artifact is absent and no immutable promoted kit is preserved here. The frozen path updates the Holt correction and post-ignition online season effect; weekly refitting is compatibility behavior.</p>
 </section><section class="level2"><h2 id="training-governance">Training governance<a class="anchor" aria-label="anchor" href="#training-governance"></a>
 </h2>
-<p><code>train_pipeline(mode="refresh")</code> refits the locked specification. <code>mode="retune"</code> builds an adaptive grid from compatible prior results, keeps the incumbent and diverse finalists, adds neighbors, and expands reached boundaries. Minimum NLL is the default selection rule; one-standard-error and Pareto selection are explicit alternatives. Optional staged racing eliminates only clear losers and always evaluates survivors with full nested LOSO.</p>
+<p>The guarded stage lifecycle is:</p>
+<pre class="text"><code>validate_season_selection
+  -&gt; tune_m0 -&gt; validate_m0_tuning -&gt; fit_m0 -&gt; freeze_m0
+  -&gt; tune_m1 -&gt; validate_m1_tuning -&gt; fit_m1 -&gt; freeze_m1
+  -&gt; tune_m2 -&gt; validate_m2_tuning -&gt; fit_m2 -&gt; freeze_m2
+  -&gt; assemble_kit -&gt; validate_page_kit</code></pre>
+<p>Every downstream stage requires frozen, selection-matched upstream identities.</p>
+<p><code>train_pipeline(mode="refresh")</code> remains a compatibility orchestrator that refits the locked specification. <code>mode="retune"</code> builds an adaptive grid from compatible prior results, keeps the incumbent and diverse finalists, adds neighbors, and expands reached boundaries. Minimum NLL is the default selection rule; one-standard-error and Pareto selection are explicit alternatives. Optional staged racing eliminates only clear losers and always evaluates survivors with full nested LOSO. <code><a href="../reference/train_pipeline.html">train_pipeline()</a></code> now composes the guarded lifecycle for both refresh and retune while preserving its compatibility result shape. Use the explicit stage calls when a manual cycle must stop and be inspected at each gate.</p>
+<p>After each tuning round, inspect whether the selected value is at a tested minimum or maximum. Normally expand a winning edge by one adjacent valid step, retain the winner/incumbent/local neighbors, and rerun the same complete folds. Do not explode every axis factorially. A boundary can be accepted when it is a documented null or hard constraint; otherwise report it as unresolved rather than claiming a bracketed optimum. All grid expansion precedes holdout review.</p>
 <p>The 2025-26 season is replayed as an unseen holdout. It may enter training for 2026-27 only after promotion demonstrates at least 2% NLL improvement, no more than 5% horizon-MAE degradation, and no more than 10% phase-MAE degradation.</p>
 </section><script id="quarto-html-after-body" type="application/javascript">
   window.document.addEventListener("DOMContentLoaded", function (event) {

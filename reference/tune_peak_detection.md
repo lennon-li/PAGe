@@ -3,7 +3,7 @@
 Evaluates combinations of `use_ci` and `buffer_weeks` for peak passage
 detection, using the `params_df` from
 [`loso_walkforward()`](https://lennon-li.github.io/PAGe/reference/loso_walkforward.md).
-No LOSO rerun is required — tuning runs in seconds.
+No LOSO rerun is required – tuning runs in seconds.
 
 ## Usage
 

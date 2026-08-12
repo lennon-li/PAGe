@@ -58,7 +58,8 @@ loso_M0v2(). The 36-spec grid matches the production tuning run."></head><body>
 <span>  manual_labels <span class="op">=</span> <span class="fu">.default_manual_labels</span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  flag_args <span class="op">=</span> <span class="fu">.default_flag_args</span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  n_cores <span class="op">=</span> <span class="fu">parallel</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/parallel/detectCores.html" class="external-link">detectCores</a></span><span class="op">(</span><span class="op">)</span> <span class="op">-</span> <span class="fl">1L</span>,</span>
-<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  selection <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -73,7 +74,7 @@ loso_M0v2(). The 36-spec grid matches the production tuning run."></head><body>
 <dt id="arg-loso-seasons">loso_seasons<a class="anchor" aria-label="anchor" href="#arg-loso-seasons"></a></dt>
 <dd><p>Which seasons to evaluate as LOSO test folds.
 <code>"all"</code> (default) evaluates every season; <code>"alternating"</code>
-uses every other season (removes non-selected from training too —
+uses every other season (removes non-selected from training too –
 acceptable for quick demos). A character vector selects specific seasons.</p></dd>
 
 
@@ -99,6 +100,12 @@ acceptable for quick demos). A character vector selects specific seasons.</p></d
 
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
 <dd><p>Logical. Print progress.</p></dd>
+
+
+<dt id="arg-selection">selection<a class="anchor" aria-label="anchor" href="#arg-selection"></a></dt>
+<dd><p>Optional governed <code>page_season_selection</code>. When
+supplied, only its training seasons are used and the returned object is a
+<code>page_m0_tuning</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">

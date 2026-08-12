@@ -15,7 +15,8 @@ tune_m0(
   manual_labels = .default_manual_labels(),
   flag_args = .default_flag_args(),
   n_cores = parallel::detectCores() - 1L,
-  verbose = TRUE
+  verbose = TRUE,
+  selection = NULL
 )
 ```
 
@@ -29,7 +30,7 @@ tune_m0(
 
   Which seasons to evaluate as LOSO test folds. `"all"` (default)
   evaluates every season; `"alternating"` uses every other season
-  (removes non-selected from training too — acceptable for quick demos).
+  (removes non-selected from training too – acceptable for quick demos).
   A character vector selects specific seasons.
 
 - exclude:
@@ -55,6 +56,12 @@ tune_m0(
 - verbose:
 
   Logical. Print progress.
+
+- selection:
+
+  Optional governed `page_season_selection`. When supplied, only its
+  training seasons are used and the returned object is a
+  `page_m0_tuning`.
 
 ## Value
 

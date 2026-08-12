@@ -28,10 +28,63 @@ library(PAGe)
 allD <- load_flu_hist("/authorized/path/flu_history.csv") |>
   prepare_surveillance_data()
 
-# Offline locked-spec refresh; 2025-26 remains a holdout by default.
+# High-level compatibility refresh; 2025-26 remains a holdout by default.
 training <- train_pipeline(allD, mode = "refresh")
 kit <- training$kit
 ```
+
+## Guarded stages
+
+For explicit stage-by-stage training, declare mutually disjoint season
+sets and allow each stage to proceed only after its tuning gate and
+freeze gate pass:
+
+``` r
+
+selection <- validate_season_selection(
+  allD,
+  training_seasons = setdiff(
+    sort(unique(allD$season)),
+    c("2011-12", "2015-16", "2020-21", "2021-22", "2025-26")
+  ),
+  exclude_seasons = c("2011-12", "2015-16", "2020-21", "2021-22"),
+  holdout_seasons = "2025-26",
+  application_seasons = character()
+)
+
+m0_tuning <- tune_m0(allD, selection = selection)
+validate_m0_tuning(m0_tuning)
+m0 <- fit_m0(allD, selection, m0_tuning$best_params) |>
+  freeze_m0(m0_tuning)
+
+m1_tuning <- tune_m1(allD, m0 = m0, selection = selection)
+validate_m1_tuning(m1_tuning)
+m1_best <- m1_tuning$best[1, , drop = FALSE]
+m1_config <- m1_make_params(
+  k_ref = m1_best$k_ref,
+  temperature = m1_best$multi_temperature,
+  rise_weight = m1_best$align_rise_weight,
+  slope_window = m1_best$slope_window,
+  slope_weight = m1_best$slope_weight
+)
+m1 <- fit_m1(allD, selection, m0, m1_config) |>
+  freeze_m1(m1_tuning)
+
+m2_grid <- default_m2_grid()
+m2_tuning <- tune_m2(allD, selection, m0, m1, grid = m2_grid)
+validate_m2_tuning(m2_tuning)
+m2 <- fit_m2(allD, selection, m0, m1, m2_tuning$best_spec) |>
+  freeze_m2(m2_tuning)
+
+kit <- assemble_kit(m0, m1, m2)
+validate_page_kit(kit)
+```
+
+Downstream stages reject draft, selection-mismatched, or
+identity-mismatched upstream artifacts. A governed kit records its
+season selection and the three stage identities.
+[`train_pipeline()`](https://lennon-li.github.io/PAGe/reference/train_pipeline.md)
+remains available as the high-level compatibility orchestrator.
 
 ## Holdout gate
 
@@ -40,14 +93,16 @@ kit <- training$kit
 candidate <- replay_season_holdout(kit, allD, season = "2025-26")
 incumbent <- replay_season_holdout(incumbent_kit, allD, season = "2025-26")
 promotion <- check_promotion(candidate$metrics, incumbent$metrics)
-
-# A passing report permits 2025-26 to enter the 2026-27 training refresh.
-next_training <- train_pipeline(allD, mode = "refresh", promotion = promotion)
 ```
 
 The default gates require 2% NLL improvement, no horizon MAE degradation
-over 5%, and no phase MAE degradation over 10%. A failed or malformed
-report keeps the holdout excluded.
+over 5%, and no phase MAE degradation over 10%. This in-memory report is
+diagnostic only: it has no artifact provenance and cannot release the
+holdout. A governed release uses `scripts/acceptance/replay_2025_26.R`,
+preserves its decision bundle and manifest, performs the fixed-spec
+refresh with `season2526/run_retrain_venkata.R`, and registers the
+refreshed kit using `scripts/promotion/promote_post_refit.R`. A failed
+or malformed report keeps the holdout excluded.
 
 ## Prospective run
 
@@ -80,10 +135,20 @@ reached boundaries. Optional conservative racing requires a
 user-supplied fold evaluator; surviving candidates always receive full
 nested-LOSO evaluation.
 
-The deployed v16 reference specification is `k_f = 4`, `k_e = 2`,
-`alpha_state = 0.15`, `k_sp = 6`, `k_r = 0`, `k_de = 0`, `delta = 0`,
-`Kr = 1`, `bias_alpha = 0.05`, and `bias_beta = 0` (recorded nested-LOSO
-Bernoulli NLL 0.4175).
+A selected tuning value should normally be bracketed by tested values.
+Expand a winning edge by one adjacent valid step, retain the incumbent
+and local neighbors, and rerun identical complete folds. Zero-valued
+optional M2 terms may be legitimate feature-off boundaries. Record
+accepted constraints and finish every expansion before viewing the
+prospective holdout.
+
+The working incumbent is the existing frozen `v16-corrected` kit used in
+the 2025-26 acceptance replay: `k_f = 4`, `k_e = 2`,
+`alpha_state = 0.20`, `k_sp = 8`, `k_r = 0`, `k_de = 0`, `delta = 0`,
+`Kr = 1`, `bias_alpha = 0.05`, and `bias_beta = 0`. Its private artifact
+is outside version control, and its exact historical lineage is not
+fully reconstructible; it is retained as a confidence baseline rather
+than presented as a recovered research artifact.
 
 See
 [`vignette("intro", package = "PAGe")`](https://lennon-li.github.io/PAGe/articles/intro.md),
@@ -217,6 +282,12 @@ Building blocks for advanced development and evaluation.
   : Estimate season random effect causally from accumulated observations
 - [`fitIgnition()`](https://lennon-li.github.io/PAGe/reference/fitIgnition.md)
   : Fit ignition classifier scores (Stage-1)
+- [`fit_m0()`](https://lennon-li.github.io/PAGe/reference/fit_m0.md) :
+  Fit an M0 ignition configuration (draft artifact)
+- [`fit_m1()`](https://lennon-li.github.io/PAGe/reference/fit_m1.md) :
+  Fit an M1 alignment configuration (draft artifact)
+- [`fit_m2()`](https://lennon-li.github.io/PAGe/reference/fit_m2.md) :
+  Fit an M2 forecast configuration (draft artifact)
 - [`fit_peak_calibration()`](https://lennon-li.github.io/PAGe/reference/fit_peak_calibration.md)
   : Fit peak calibration model from LOSO walk-forward results
 - [`flagIgnition()`](https://lennon-li.github.io/PAGe/reference/flagIgnition.md)
@@ -332,6 +403,12 @@ Compatibility helpers and implementation details.
   hyperparams can vary)
 - [`fitIgnition()`](https://lennon-li.github.io/PAGe/reference/fitIgnition.md)
   : Fit ignition classifier scores (Stage-1)
+- [`fit_m0()`](https://lennon-li.github.io/PAGe/reference/fit_m0.md) :
+  Fit an M0 ignition configuration (draft artifact)
+- [`fit_m1()`](https://lennon-li.github.io/PAGe/reference/fit_m1.md) :
+  Fit an M1 alignment configuration (draft artifact)
+- [`fit_m2()`](https://lennon-li.github.io/PAGe/reference/fit_m2.md) :
+  Fit an M2 forecast configuration (draft artifact)
 - [`fit_peak_calibration()`](https://lennon-li.github.io/PAGe/reference/fit_peak_calibration.md)
   : Fit peak calibration model from LOSO walk-forward results
 - [`flagIgnition()`](https://lennon-li.github.io/PAGe/reference/flagIgnition.md)
@@ -340,6 +417,12 @@ Compatibility helpers and implementation details.
   : Post-peak GAM forecast without further alignment
 - [`format_current_for_stage2()`](https://lennon-li.github.io/PAGe/reference/format_current_for_stage2.md)
   : Format current-season observations for Stage-2 refit
+- [`freeze_m0()`](https://lennon-li.github.io/PAGe/reference/freeze_m0.md)
+  : Freeze an M0 draft artifact
+- [`freeze_m1()`](https://lennon-li.github.io/PAGe/reference/freeze_m1.md)
+  : Freeze an M1 draft artifact
+- [`freeze_m2()`](https://lennon-li.github.io/PAGe/reference/freeze_m2.md)
+  : Freeze an M2 draft artifact
 - [`g_ref_safe()`](https://lennon-li.github.io/PAGe/reference/g_ref_safe.md)
   : Global shim: reference curve clamped to support
 - [`getCurrentD()`](https://lennon-li.github.io/PAGe/reference/getCurrentD.md)
@@ -350,12 +433,16 @@ Compatibility helpers and implementation details.
   : Extract a classifier GAM from various container objects
 - [`get_newWeek_from_week()`](https://lennon-li.github.io/PAGe/reference/get_newWeek_from_week.md)
   : Map surveillance week to newWeek index in a season
+- [`hash_file_sha256()`](https://lennon-li.github.io/PAGe/reference/hash_file_sha256.md)
+  : Compute a SHA-256 file fingerprint
 - [`inject_m1_into_snapshots()`](https://lennon-li.github.io/PAGe/reference/inject_m1_into_snapshots.md)
   : Replace logit_f_eff in M2 snapshots with M1's aligned prediction
 - [`learn_alignment_hyperparams()`](https://lennon-li.github.io/PAGe/reference/learn_alignment_hyperparams.md)
   : Learn tau/delta bounds and penalty from historical seasons
 - [`load_flu_hist()`](https://lennon-li.github.io/PAGe/reference/load_flu_hist.md)
   : Load historical influenza surveillance data
+- [`load_promoted_kit()`](https://lennon-li.github.io/PAGe/reference/load_promoted_kit.md)
+  : Load a promoted PAGe deployment kit
 - [`load_prospective_kit()`](https://lennon-li.github.io/PAGe/reference/load_prospective_kit.md)
   : Load pre-built model artifacts for prospective deployment
 - [`loso_walkforward()`](https://lennon-li.github.io/PAGe/reference/loso_walkforward.md)
@@ -404,6 +491,8 @@ Compatibility helpers and implementation details.
   : Refit M2 on all historical data with a chosen spec
 - [`nested_loso_run_fold()`](https://lennon-li.github.io/PAGe/reference/nested_loso_run_fold.md)
   : Run a complete nested LOSO fold
+- [`new_result_manifest()`](https://lennon-li.github.io/PAGe/reference/new_result_manifest.md)
+  : Construct a disclosure-safe result manifest
 - [`num_deriv()`](https://lennon-li.github.io/PAGe/reference/num_deriv.md)
   : Numerical central-difference derivative
 - [`peak_status_from_align()`](https://lennon-li.github.io/PAGe/reference/peak_status_from_align.md)
@@ -442,6 +531,8 @@ Compatibility helpers and implementation details.
   : Prepare surveillance data for PAGe
 - [`race_m2_candidates()`](https://lennon-li.github.io/PAGe/reference/race_m2_candidates.md)
   : Conservatively race M2 candidates before full nested LOSO
+- [`read_result_manifest()`](https://lennon-li.github.io/PAGe/reference/read_result_manifest.md)
+  : Read a PAGe result manifest
 - [`refit_stage2_weekly()`](https://lennon-li.github.io/PAGe/reference/refit_stage2_weekly.md)
   : Refit Stage-2 GAM with current-season data for weekly prospective
   forecasting
@@ -469,6 +560,8 @@ Compatibility helpers and implementation details.
   : Run the full M0 -\> M1 -\> M2 walk-forward pipeline for one season
 - [`score_params()`](https://lennon-li.github.io/PAGe/reference/score_params.md)
   : Score an ignition-threshold grid on historical seasons
+- [`season_selection()`](https://lennon-li.github.io/PAGe/reference/season_selection.md)
+  : Extract the season selection from a stage artifact
 - [`select_m2_candidate()`](https://lennon-li.github.io/PAGe/reference/select_m2_candidate.md)
   : Select an M2 candidate from full nested-LOSO results
 - [`simulate_flu_seasons()`](https://lennon-li.github.io/PAGe/reference/simulate_flu_seasons.md)
@@ -487,6 +580,8 @@ Compatibility helpers and implementation details.
   : Extract best Stage-2 spec from a tuning result
 - [`summarize_forecast_metrics()`](https://lennon-li.github.io/PAGe/reference/summarize_forecast_metrics.md)
   : Summarize prospective forecast metrics
+- [`summarize_replay_diagnostics()`](https://lennon-li.github.io/PAGe/reference/summarize_replay_diagnostics.md)
+  : Summarize aggregate replay diagnostics
 - [`train_m2()`](https://lennon-li.github.io/PAGe/reference/train_m2.md)
   : Fit the M2 production GAM on all training seasons
 - [`train_pipeline()`](https://lennon-li.github.io/PAGe/reference/train_pipeline.md)
@@ -503,13 +598,29 @@ Compatibility helpers and implementation details.
   Tune M1 alignment hyperparameters via LOSO grid search
 - [`tune_m1_alignment()`](https://lennon-li.github.io/PAGe/reference/tune_m1_alignment.md)
   : LOSO grid search over M1 alignment hyperparameters
+- [`tune_m2()`](https://lennon-li.github.io/PAGe/reference/tune_m2.md) :
+  Tune M2 with an explicit governed season selection
 - [`tune_peak_detection()`](https://lennon-li.github.io/PAGe/reference/tune_peak_detection.md)
   : Tune peak detection parameters using pre-computed walk-forward
   results
+- [`validate_m0_tuning()`](https://lennon-li.github.io/PAGe/reference/validate_m0_tuning.md)
+  : Validate an M0 tuning result
+- [`validate_m1_tuning()`](https://lennon-li.github.io/PAGe/reference/validate_m1_tuning.md)
+  : Validate an M1 tuning result
+- [`validate_m2_tuning()`](https://lennon-li.github.io/PAGe/reference/validate_m2_tuning.md)
+  : Validate an M2 tuning result
 - [`validate_page_kit()`](https://lennon-li.github.io/PAGe/reference/validate_page_kit.md)
   : Validate a PAGe deployment kit
+- [`validate_result_manifest()`](https://lennon-li.github.io/PAGe/reference/validate_result_manifest.md)
+  : Validate a disclosure-safe result manifest
+- [`validate_season_selection()`](https://lennon-li.github.io/PAGe/reference/validate_season_selection.md)
+  : Validate and normalize a season selection
 - [`validate_surveillance_data()`](https://lennon-li.github.io/PAGe/reference/validate_surveillance_data.md)
   : Validate canonical PAGe surveillance data
+- [`verify_promotion_evidence()`](https://lennon-li.github.io/PAGe/reference/verify_promotion_evidence.md)
+  : Verify Artifact-Bound Holdout Promotion Evidence
+- [`write_result_manifest()`](https://lennon-li.github.io/PAGe/reference/write_result_manifest.md)
+  : Write a PAGe result manifest
 
 # Articles
 

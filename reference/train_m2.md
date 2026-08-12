@@ -14,6 +14,7 @@ train_m2(
   m1,
   best_spec = NULL,
   exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
+  n_cores = parallel::detectCores() - 1L,
   verbose = FALSE
 )
 ```
@@ -40,7 +41,7 @@ train_m2(
 
   Stage-2 spec from `build_m2()$best_spec` or
   [`stage2_make_spec()`](https://lennon-li.github.io/PAGe/reference/stage2_make_spec.md).
-  When `NULL`, uses the locked deployed v16 specification for a
+  When `NULL`, uses the current locked v16-corrected incumbent for a
   production-data refresh without retuning.
 
 - exclude:
@@ -48,6 +49,10 @@ train_m2(
   Character vector of seasons to exclude from training. Default excludes
   permanent invalid seasons and 2015-16. Note: 2025-26 is kept
   (production training uses the current season).
+
+- n_cores:
+
+  Integer number of workers for M1 walk-forward predictions.
 
 - verbose:
 

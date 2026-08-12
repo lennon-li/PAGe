@@ -6,7 +6,7 @@ when `cal` is provided. Applies two corrections sequentially:
 
 1.  **Shrinkage (C):** pulls `t_peak` toward the historical prior mean,
     weighted by the ratio of prior variance to data variance (CI width).
-    Early-season wide CIs → heavy shrinkage.
+    Early-season wide CIs -\> heavy shrinkage.
 
 2.  **Bias correction (A):** subtracts the residual bias predicted by a
     GAM fitted on LOSO errors as a function of `t_since_ign`.

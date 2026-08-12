@@ -60,7 +60,8 @@ been completed beforehand and saved as RDS files.</p>
 <span>  <span class="va">data_dir</span>,</span>
 <span>  ref_file <span class="op">=</span> <span class="st">"ref_production.rds"</span>,</span>
 <span>  m2_file <span class="op">=</span> <span class="st">"m2_production.rds"</span>,</span>
-<span>  stage1_file <span class="op">=</span> <span class="st">"stage1_tuning.rds"</span></span>
+<span>  stage1_file <span class="op">=</span> <span class="st">"stage1_tuning.rds"</span>,</span>
+<span>  compatibility <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"strict"</span>, <span class="st">"locked_defaults"</span>, <span class="st">"legacy"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -76,20 +77,29 @@ been completed beforehand and saved as RDS files.</p>
 <dt id="arg-ref-file">ref_file<a class="anchor" aria-label="anchor" href="#arg-ref-file"></a></dt>
 <dd><p>Filename of the production reference cache (default
 <code>"ref_production.rds"</code>). Must contain <code>$ref</code>, <code>$hyper</code>,
-and optionally <code>$M1_PARAMS</code>, <code>$flag_args</code>,
+<code>$M1_PARAMS</code>, and optionally <code>$flag_args</code>,
 <code>$manual_labels</code>, <code>$hist_data</code>.</p></dd>
 
 
 <dt id="arg-m-file">m2_file<a class="anchor" aria-label="anchor" href="#arg-m-file"></a></dt>
 <dd><p>Filename of the production M2 model (default
 <code>"m2_production.rds"</code>). Must contain a fitted <code>bam</code>/<code>gam</code>
-object. Optionally also contains <code>$spec</code>, <code>$template_df</code>, and
+object and <code>$spec</code>. Optionally also contains <code>$template_df</code>, and
 <code>$m1_train_preds</code>.</p></dd>
 
 
 <dt id="arg-stage-file">stage1_file<a class="anchor" aria-label="anchor" href="#arg-stage-file"></a></dt>
 <dd><p>Filename of the M0 ignition tuning results (default
 <code>"stage1_tuning.rds"</code>). Must contain <code>$best_params</code>.</p></dd>
+
+
+<dt id="arg-compatibility">compatibility<a class="anchor" aria-label="anchor" href="#arg-compatibility"></a></dt>
+<dd><p>Compatibility policy. <code>"strict"</code> (default)
+requires the canonical saved <code>M1_PARAMS</code> and
+<code>m2_production$spec</code>. <code>"locked_defaults"</code> permits a missing
+<code>M1_PARAMS</code> by using the centralized locked defaults with a warning.
+<code>"legacy"</code> also enables deprecated artifact discovery and fallback
+behavior with warnings.</p></dd>
 
 </dl></div>
     <div class="section level2">

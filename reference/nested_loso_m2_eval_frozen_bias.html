@@ -64,8 +64,9 @@ correction is updated from out-of-sample residuals and extrapolated forward.</p>
 <span>  <span class="va">spec</span>,</span>
 <span>  eval_window <span class="op">=</span> <span class="fl">12L</span>,</span>
 <span>  horizons <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1L</span>, <span class="fl">2L</span><span class="op">)</span>,</span>
-<span>  bias_alpha <span class="op">=</span> <span class="fl">0.2</span>,</span>
-<span>  bias_beta <span class="op">=</span> <span class="fl">0</span>,</span>
+<span>  bias_alpha <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  bias_beta <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  correction_compatibility <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"strict"</span>, <span class="st">"legacy"</span><span class="op">)</span>,</span>
 <span>  manual_labels <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  manual_labels_train <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  manual_labels_test <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -109,14 +110,15 @@ columns <code>eval_weekF</code>, <code>target_weekF</code>, <code>h</code>, <cod
 <dd><p>Integer vector of forecast horizons (default <code>c(1L, 2L)</code>).</p></dd>
 
 
-<dt id="arg-bias-alpha">bias_alpha<a class="anchor" aria-label="anchor" href="#arg-bias-alpha"></a></dt>
-<dd><p>Numeric; EMA smoothing for Holt bias level (default 0.2).</p></dd>
+<dt id="arg-bias-alpha-bias-beta">bias_alpha, bias_beta<a class="anchor" aria-label="anchor" href="#arg-bias-alpha-bias-beta"></a></dt>
+<dd><p>Optional research overrides for the correction
+rates. By default, both values are resolved from <code>spec</code>.</p></dd>
 
 
-<dt id="arg-bias-beta">bias_beta<a class="anchor" aria-label="anchor" href="#arg-bias-beta"></a></dt>
-<dd><p>Numeric; EMA smoothing for Holt bias trend (default 0).
-Both bias settings are explicit evaluator inputs; callers may take them
-from a tuning-grid specification.</p></dd>
+<dt id="arg-correction-compatibility">correction_compatibility<a class="anchor" aria-label="anchor" href="#arg-correction-compatibility"></a></dt>
+<dd><p>Correction-spec policy. <code>"strict"</code>
+(default) requires finite <code>bias_alpha</code> and <code>bias_beta</code> values in
+<code>spec</code>; <code>"legacy"</code> enables deprecated fallbacks with a warning.</p></dd>
 
 
 <dt id="arg-manual-labels">manual_labels<a class="anchor" aria-label="anchor" href="#arg-manual-labels"></a></dt>

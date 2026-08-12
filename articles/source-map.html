@@ -74,6 +74,7 @@
 
 
     <p>The installable package under <code>PAGe/</code> is the source of truth. The repository’s root-level <code>R/</code> directory is a development mirror and must remain synchronized when implementation files are changed.</p>
+<p>For operational loading, use <code><a href="../reference/load_promoted_kit.html">load_promoted_kit()</a></code> with an immutable registry artifact and its deployment manifest. <code><a href="../reference/load_prospective_kit.html">load_prospective_kit()</a></code> is a strict component-level loader, not proof that acceptance or promotion occurred.</p>
 <table class="table caption-top">
 <colgroup>
 <col style="width: 33%">
@@ -122,20 +123,25 @@
 <td>Train, tune, evaluate, and run the forecast model</td>
 </tr>
 <tr class="even">
+<td>Stage contracts</td>
+<td><code>stage_contracts.R</code></td>
+<td>Validate season sets; create, validate, identify, and freeze governed M0/M1/M2 artifacts</td>
+</tr>
+<tr class="odd">
 <td>Orchestration</td>
 <td>
 <code>pipeline_training.R</code>, <code>pipeline_bridge.R</code>, <code>pipeline_runtime*.R</code>
 </td>
-<td>Build kits and coordinate sequential weekly execution</td>
+<td>Provide legacy-compatible builders, assemble governed or legacy kits, and coordinate sequential weekly execution</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>Diagnostics</td>
 <td>
 <code>plot.R</code>, <code>plotRes.R</code>, <code>plotSeasonCurves.R</code>
 </td>
 <td>Plot forecasts, fits, and detector behavior</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>Utilities</td>
 <td>
 <code>utils.R</code>, <code>simulate.R</code>, <code>checkSeasonLength.R</code>
@@ -144,7 +150,7 @@
 </tr>
 </tbody>
 </table>
-<p>The high-level public API follows five verbs: build, tune, train, assemble, and run. Lower-level functions remain documented for advanced diagnostics and method development, but operational code should prefer the high-level entry points shown in the <a href="pipeline-walkthrough.html">walkthrough</a>.</p>
+<p>The guarded training API follows the sequence validate selection, tune, validate tuning, fit, freeze, and assemble. Runtime follows M0, then M1, then M2. Legacy build/train verbs and <code><a href="../reference/train_pipeline.html">train_pipeline()</a></code> remain compatible while the high-level orchestrator is migrated. Operational code should use the explicit stage gates when it needs independent failure boundaries; see the <a href="pipeline-walkthrough.html">walkthrough</a>.</p>
 
 
 

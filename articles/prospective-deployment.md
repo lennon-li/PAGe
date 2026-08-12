@@ -1,5 +1,11 @@
 # Prospective deployment
 
+> **Important**
+>
+> Load only an immutable promoted kit whose deployment manifest verifies
+> its hash and upstream evidence. A mutable component filename is not a
+> deployment identity.
+
 Deployment is a stateful weekly process built around a frozen, versioned
 kit. Each run should use one immutable current-season snapshot and
 should persist both the forecast and its intermediate stage outputs.
@@ -10,7 +16,13 @@ should persist both the forecast and its intermediate stage outputs.
 
 library(PAGe)
 
-kit <- load_prospective_kit("m2_production.rds")
+kit <- load_promoted_kit(
+  kit_path =
+    "/secure/PAGe/deployment-registry/<deployment-id>/promoted_kit.rds",
+  deployment_manifest_path =
+    "results/deployment-audit/<deployment-id>/deployment_manifest.json"
+)
+validate_page_kit(kit)
 result <- run_prospective_pipeline(
   kit = kit,
   current_data = current_snapshot
@@ -46,4 +58,6 @@ and
 [`run_m2()`](https://lennon-li.github.io/PAGe/reference/run_m2_forecast.md))
 support diagnostics, while
 [`run_pipeline()`](https://lennon-li.github.io/PAGe/reference/run_prospective_pipeline.md)
-is the preferred high-level interface.
+is the preferred high-level interface. When a kit contains governed
+stage metadata, validation also checks the season selection, M0/M1/M2
+artifact identities, and deterministic governance identity.

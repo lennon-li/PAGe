@@ -56,6 +56,7 @@ from <code><a href="build_m2.html">build_m2()</a></code>. Runs M1 walk-forward p
 <span>  <span class="va">m1</span>,</span>
 <span>  best_spec <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  exclude <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"2011-12"</span>, <span class="st">"2015-16"</span>, <span class="st">"2020-21"</span>, <span class="st">"2021-22"</span><span class="op">)</span>,</span>
+<span>  n_cores <span class="op">=</span> <span class="fu">parallel</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/parallel/detectCores.html" class="external-link">detectCores</a></span><span class="op">(</span><span class="op">)</span> <span class="op">-</span> <span class="fl">1L</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -78,14 +79,18 @@ from <code><a href="build_m2.html">build_m2()</a></code>. Runs M1 walk-forward p
 
 <dt id="arg-best-spec">best_spec<a class="anchor" aria-label="anchor" href="#arg-best-spec"></a></dt>
 <dd><p>Stage-2 spec from <code>build_m2()$best_spec</code> or
-<code><a href="stage2_make_spec.html">stage2_make_spec()</a></code>. When <code>NULL</code>, uses the locked deployed v16
-specification for a production-data refresh without retuning.</p></dd>
+<code><a href="stage2_make_spec.html">stage2_make_spec()</a></code>. When <code>NULL</code>, uses the current locked
+v16-corrected incumbent for a production-data refresh without retuning.</p></dd>
 
 
 <dt id="arg-exclude">exclude<a class="anchor" aria-label="anchor" href="#arg-exclude"></a></dt>
 <dd><p>Character vector of seasons to exclude from training.
 Default excludes permanent invalid seasons and 2015-16. Note: 2025-26
 is kept (production training uses the current season).</p></dd>
+
+
+<dt id="arg-n-cores">n_cores<a class="anchor" aria-label="anchor" href="#arg-n-cores"></a></dt>
+<dd><p>Integer number of workers for M1 walk-forward predictions.</p></dd>
 
 
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>

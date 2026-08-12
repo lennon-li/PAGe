@@ -46,4 +46,4 @@ nested_loso_m2_train(
 
 Output of
 [`train_stage2_joint()`](https://lennon-li.github.io/PAGe/reference/train_stage2_joint.md)
-(list with `fit`, `train_data`, …), or `NULL` if training fails.
+(list with `fit`, `train_data`, ...), or `NULL` if training fails.

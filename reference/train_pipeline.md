@@ -31,9 +31,11 @@ train_pipeline(
   racing_evaluator = NULL,
   racing_stages = c(3L, 6L),
   racing_min_survivors = 3L,
-  manual_labels = .default_manual_labels(),
-  flag_args = .default_flag_args(),
-  m1_params = .default_m1_params()
+  manual_labels = NULL,
+  flag_args = NULL,
+  m1_params = NULL,
+  m0_params = NULL,
+  m2_spec_id = NULL
 )
 ```
 
@@ -64,12 +66,14 @@ train_pipeline(
 
 - promotion:
 
-  Optional canonical report returned by
+  Optional artifact-bound evidence returned by
+  [`verify_promotion_evidence()`](https://lennon-li.github.io/PAGe/reference/verify_promotion_evidence.md).
+  A bare
   [`check_promotion()`](https://lennon-li.github.io/PAGe/reference/check_promotion.md)
-  with the locked 2 percent NLL, 5 percent horizon, and 10 percent phase
-  thresholds. Schema validation checks structure and internal
-  consistency, not cryptographic provenance. A malformed, custom-
-  threshold, or failed report never releases the holdout.
+  report is not governed production evidence and cannot release the
+  holdout. The R class is forgeable; verification of the retained
+  bundle, manifest, data, candidate, and incumbent artifacts is the
+  safety boundary.
 
 - loso_seasons:
 
@@ -122,7 +126,20 @@ train_pipeline(
 
 - manual_labels, flag_args, m1_params:
 
-  Locked component settings.
+  Optional component settings. For a released holdout, these are derived
+  exclusively from verified promotion evidence and explicit overrides
+  are rejected.
+
+- m0_params:
+
+  Optional M0 parameters for refresh mode. Defaults to the deployed
+  configuration when no holdout has been released. For a released
+  holdout it is derived exclusively from verified promotion evidence.
+
+- m2_spec_id:
+
+  Optional identity for an unreleased fixed refresh M2 spec; it is
+  derived from promotion evidence after holdout acceptance.
 
 ## Value
 

@@ -10,9 +10,22 @@ while preserving the information boundary at every issue week.
 
 library(PAGe)
 
-historical <- load_flu_hist()
-tuning <- tune_m0(historical)
-m0 <- build_m0(historical, tuning = tuning)
+historical <- load_flu_hist("/authorized/path/flu_history.csv") |>
+  prepare_surveillance_data()
+selection <- validate_season_selection(
+  historical,
+  training_seasons = setdiff(
+    sort(unique(historical$season)),
+    c("2011-12", "2015-16", "2020-21", "2021-22", "2025-26")
+  ),
+  exclude_seasons = c("2011-12", "2015-16", "2020-21", "2021-22"),
+  holdout_seasons = "2025-26"
+)
+
+tuning <- tune_m0(historical, selection = selection)
+validate_m0_tuning(tuning)
+draft_m0 <- fit_m0(historical, selection, config = tuning$best_params)
+m0 <- freeze_m0(draft_m0, tuning = tuning)
 ```
 
 The tuning objective should be computed from held-out seasons. Manual
@@ -20,6 +33,26 @@ ignition labels may define the target used for evaluation, but they must
 not be exposed as features to the held-out detector. Report early and
 late detection errors separately; a mean error alone can hide
 operationally different failure modes.
+[`fit_m0()`](https://lennon-li.github.io/PAGe/reference/fit_m0.md)
+returns a draft; only
+[`freeze_m0()`](https://lennon-li.github.io/PAGe/reference/freeze_m0.md)
+produces an artifact that M1 may consume.
+[`build_m0()`](https://lennon-li.github.io/PAGe/reference/build_m0.md)
+remains available for legacy callers.
+
+## Grid expansion
+
+Check every genuinely tuned M0 axis after validation. If a probability
+threshold wins at an edge, add one adjacent probability step while
+keeping the value inside its valid domain. Keep `n_consec`, `K_sum`,
+`N_req`, `w_min`, and `w_max` integer-valued and preserve their logical
+and operational constraints. Rerun the same LOSO seasons and
+lexicographic score.
+
+Do not optimize only the mean error. Review maximum error, missed
+detections, and early versus late errors by season. A detection-window
+edge can be accepted only when it is an intentional operational
+constraint; otherwise the optimum has not been bracketed.
 
 ## Runtime checks
 

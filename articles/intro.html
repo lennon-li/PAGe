@@ -96,7 +96,7 @@ bias correction</li>
 <span><span class="va">allD</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_flu_hist.html">load_flu_hist</a></span><span class="op">(</span><span class="st">"/authorized/path/flu_history.csv"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/prepare_surveillance_data.html">prepare_surveillance_data</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Offline locked-spec refresh. The 2025-26 holdout is excluded by default.</span></span>
+<span><span class="co"># High-level compatibility refresh. The 2025-26 holdout is excluded by default.</span></span>
 <span><span class="va">training</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/train_pipeline.html">train_pipeline</a></span><span class="op">(</span><span class="va">allD</span>, mode <span class="op">=</span> <span class="st">"refresh"</span><span class="op">)</span></span>
 <span><span class="va">kit</span> <span class="op">&lt;-</span> <span class="va">training</span><span class="op">$</span><span class="va">kit</span></span></code></pre></div>
 <p>Use <code>mode = "retune"</code> for full M0/M1/M2 tuning. Its
@@ -104,26 +104,63 @@ adaptive M2 grid is informed by compatible prior results and supports
 <code>"min_nll"</code>, <code>"one_se"</code>, and <code>"pareto"</code>
 selection. Optional conservative racing only removes clear losers;
 finalists still receive full nested-LOSO evaluation.</p>
+<p>For explicit training gates, declare disjoint season sets and
+complete each stage before starting the next:</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">selection</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/validate_season_selection.html">validate_season_selection</a></span><span class="op">(</span></span>
+<span>  <span class="va">allD</span>,</span>
+<span>  training_seasons <span class="op">=</span> <span class="va">development_seasons</span>,</span>
+<span>  exclude_seasons <span class="op">=</span> <span class="va">excluded_seasons</span>,</span>
+<span>  holdout_seasons <span class="op">=</span> <span class="st">"2025-26"</span>,</span>
+<span>  application_seasons <span class="op">=</span> <span class="st">"2026-27"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">m0_tuning</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tune_m0.html">tune_m0</a></span><span class="op">(</span><span class="va">allD</span>, selection <span class="op">=</span> <span class="va">selection</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/validate_m0_tuning.html">validate_m0_tuning</a></span><span class="op">(</span><span class="va">m0_tuning</span><span class="op">)</span></span>
+<span><span class="va">m0</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_m0.html">fit_m0</a></span><span class="op">(</span><span class="va">allD</span>, <span class="va">selection</span>, <span class="va">m0_tuning</span><span class="op">$</span><span class="va">best_params</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/freeze_m0.html">freeze_m0</a></span><span class="op">(</span><span class="va">m0_tuning</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">m1_tuning</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tune_m1.html">tune_m1</a></span><span class="op">(</span><span class="va">allD</span>, m0 <span class="op">=</span> <span class="va">m0</span>, selection <span class="op">=</span> <span class="va">selection</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/validate_m1_tuning.html">validate_m1_tuning</a></span><span class="op">(</span><span class="va">m1_tuning</span><span class="op">)</span></span>
+<span><span class="va">m1_config</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">as.list</a></span><span class="op">(</span><span class="va">m1_tuning</span><span class="op">$</span><span class="va">best</span><span class="op">[</span><span class="fl">1</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="va">m1</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_m1.html">fit_m1</a></span><span class="op">(</span><span class="va">allD</span>, <span class="va">selection</span>, <span class="va">m0</span>, <span class="va">m1_config</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/freeze_m1.html">freeze_m1</a></span><span class="op">(</span><span class="va">m1_tuning</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">m2_tuning</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tune_m2.html">tune_m2</a></span><span class="op">(</span><span class="va">allD</span>, <span class="va">selection</span>, <span class="va">m0</span>, <span class="va">m1</span>, <span class="va">m2_grid</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/validate_m2_tuning.html">validate_m2_tuning</a></span><span class="op">(</span><span class="va">m2_tuning</span><span class="op">)</span></span>
+<span><span class="va">m2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_m2.html">fit_m2</a></span><span class="op">(</span><span class="va">allD</span>, <span class="va">selection</span>, <span class="va">m0</span>, <span class="va">m1</span>, <span class="va">m2_tuning</span><span class="op">$</span><span class="va">best_spec</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/freeze_m2.html">freeze_m2</a></span><span class="op">(</span><span class="va">m2_tuning</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">kit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/assemble_kit.html">assemble_kit</a></span><span class="op">(</span><span class="va">m0</span>, <span class="va">m1</span>, <span class="va">m2</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/validate_page_kit.html">validate_page_kit</a></span><span class="op">(</span><span class="va">kit</span><span class="op">)</span></span></code></pre></div>
+<p>A downstream stage rejects a draft or provenance-mismatched upstream
+artifact. <code><a href="../reference/train_pipeline.html">train_pipeline()</a></code> remains the high-level
+compatibility orchestrator and has not yet been refactored to compose
+these stage contracts.</p>
 </div>
 <div class="section level2">
 <h2 id="holdout-replay-and-promotion">Holdout replay and promotion<a class="anchor" aria-label="anchor" href="#holdout-replay-and-promotion"></a>
 </h2>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">candidate</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/replay_season_holdout.html">replay_season_holdout</a></span><span class="op">(</span><span class="va">kit</span>, <span class="va">allD</span>, season <span class="op">=</span> <span class="st">"2025-26"</span><span class="op">)</span></span>
 <span><span class="va">incumbent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/replay_season_holdout.html">replay_season_holdout</a></span><span class="op">(</span><span class="va">incumbent_kit</span>, <span class="va">allD</span>, season <span class="op">=</span> <span class="st">"2025-26"</span><span class="op">)</span></span>
-<span><span class="va">promotion</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/check_promotion.html">check_promotion</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">metrics</span>, <span class="va">incumbent</span><span class="op">$</span><span class="va">metrics</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Passing all gates permits inclusion in training for 2026-27.</span></span>
-<span><span class="va">next_training</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/train_pipeline.html">train_pipeline</a></span><span class="op">(</span><span class="va">allD</span>, mode <span class="op">=</span> <span class="st">"refresh"</span>, promotion <span class="op">=</span> <span class="va">promotion</span><span class="op">)</span></span></code></pre></div>
+<span><span class="va">promotion</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/check_promotion.html">check_promotion</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">metrics</span>, <span class="va">incumbent</span><span class="op">$</span><span class="va">metrics</span><span class="op">)</span></span></code></pre></div>
 <p>The default gates require 2% NLL improvement, at most 5% horizon-MAE
-degradation, and at most 10% phase-MAE degradation.</p>
+degradation, and at most 10% phase-MAE degradation. This in-memory
+comparison is diagnostic only. It has no artifact provenance and must
+not be passed to <code><a href="../reference/train_pipeline.html">train_pipeline()</a></code> to release the holdout. A
+governed release uses <code>scripts/acceptance/replay_2025_26.R</code>,
+preserves its decision bundle and manifest, performs the fixed-spec
+refresh with <code>season2526/run_retrain_venkata.R</code>, and
+registers the result immutably with
+<code>scripts/promotion/promote_post_refit.R</code>.</p>
 </div>
 <div class="section level2">
 <h2 id="weekly-forecasting">Weekly forecasting<a class="anchor" aria-label="anchor" href="#weekly-forecasting"></a>
 </h2>
 <p>Given <code>kit</code> and the current season’s observed weeks so
 far, produce a forecast with:</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">current</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/prepare_surveillance_data.html">prepare_surveillance_data</a></span><span class="op">(</span><span class="va">current_csv</span>, season <span class="op">=</span> <span class="st">"2026-27"</span><span class="op">)</span></span>
 <span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/run_prospective_pipeline.html">run_pipeline</a></span><span class="op">(</span><span class="va">kit</span>, <span class="va">current</span>, mode <span class="op">=</span> <span class="st">"frozen"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/plot_forecast.html">plot_forecast</a></span><span class="op">(</span><span class="va">res</span>, history <span class="op">=</span> <span class="va">allD</span><span class="op">)</span></span></code></pre></div>
@@ -136,16 +173,17 @@ option.</p>
 </h2>
 <ul>
 <li>
-<a href="pipeline-overview.html">Pipeline overview</a> –
+<a href="articles/pipeline-overview.html">Pipeline overview</a> –
 architecture and notation.</li>
 <li>
-<a href="pipeline-walkthrough.html">Pipeline walkthrough</a> – an
-end-to-end training and deployment walkthrough.</li>
+<a href="articles/pipeline-walkthrough.html">Pipeline
+walkthrough</a> – an end-to-end training and deployment
+walkthrough.</li>
 <li>
-<code><a href="../reference/build_m0.html">?build_m0</a></code>, <code><a href="../reference/build_m1.html">?build_m1</a></code>,
-<code><a href="../reference/build_m2.html">?build_m2</a></code>, <code><a href="../reference/assemble_kit.html">?assemble_kit</a></code>,
-<code><a href="../reference/run_prospective_pipeline.html">?run_pipeline</a></code> – reference pages for the high-level
-API.</li>
+<code>?stage_contracts</code>, <code><a href="../reference/tune_m0.html">?tune_m0</a></code>,
+<code><a href="../reference/tune_m1.html">?tune_m1</a></code>, <code><a href="../reference/assemble_kit.html">?assemble_kit</a></code>,
+<code><a href="../reference/run_prospective_pipeline.html">?run_pipeline</a></code> – reference pages for the guarded and
+high-level APIs.</li>
 </ul>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

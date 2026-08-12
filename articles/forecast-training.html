@@ -73,25 +73,54 @@
 
 
 
-    <p>M2 forecasts positivity one and two weeks ahead with a binomial GAM. Its covariates include current surveillance features and M1 outputs constructed at the same issue week.</p>
+    <div>
+<blockquote>
+<p><strong>Caution</strong></p>
+<p>This is a source-level training example, not verified production evidence. Private historical metrics and promoted artifacts are not distributed with the package. Complete acceptance, fixed-spec refresh, and immutable promotion before calling any fit a deployment.</p>
+</blockquote>
+</div>
+<p>M2 forecasts positivity one and two weeks ahead with a binomial GAM. Its covariates include current surveillance features and M1 outputs constructed at the same issue week.</p>
 <section class="level2"><h2 id="fit-and-specify">Fit and specify<a class="anchor" aria-label="anchor" href="#fit-and-specify"></a>
 </h2>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://lennon-li.github.io/PAGe/">PAGe</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">spec</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/stage2_make_spec.html">stage2_make_spec</a></span><span class="op">(</span></span>
-<span>  delta <span class="op">=</span> <span class="fl">0</span>, Kr <span class="op">=</span> <span class="fl">1</span>, k_f <span class="op">=</span> <span class="fl">4</span>, k_e <span class="op">=</span> <span class="fl">2</span>,</span>
-<span>  alpha_state <span class="op">=</span> <span class="fl">0.15</span>, k_r <span class="op">=</span> <span class="fl">0</span>, k_de <span class="op">=</span> <span class="fl">0</span>, k_sp <span class="op">=</span> <span class="fl">6</span>,</span>
-<span>  bias_alpha <span class="op">=</span> <span class="fl">0.05</span>, bias_beta <span class="op">=</span> <span class="fl">0</span></span>
+<span><span class="va">m2_grid</span> <span class="op">&lt;-</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/exists.html" class="external-link">exists</a></span><span class="op">(</span><span class="st">"prior_m2_results"</span>, inherits <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="../reference/plan_m2_grid.html">plan_m2_grid</a></span><span class="op">(</span><span class="va">prior_m2_results</span>, max_finalists <span class="op">=</span> <span class="fl">6L</span>, max_specs <span class="op">=</span> <span class="fl">64L</span><span class="op">)</span></span>
+<span><span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="../reference/default_m2_grid.html">default_m2_grid</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="va">m2_tuning</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tune_m2.html">tune_m2</a></span><span class="op">(</span></span>
+<span>  <span class="va">historical</span>, <span class="va">selection</span>, <span class="va">m0</span>, <span class="va">m1</span>,</span>
+<span>  grid <span class="op">=</span> <span class="va">m2_grid</span></span>
 <span><span class="op">)</span></span>
-<span><span class="va">m2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/train_m2.html">train_m2</a></span><span class="op">(</span><span class="va">historical</span>, <span class="va">m0</span>, <span class="va">m1</span>, best_spec <span class="op">=</span> <span class="va">spec</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="../reference/validate_m2_tuning.html">validate_m2_tuning</a></span><span class="op">(</span><span class="va">m2_tuning</span><span class="op">)</span></span>
+<span><span class="va">draft_m2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_m2.html">fit_m2</a></span><span class="op">(</span></span>
+<span>  <span class="va">historical</span>, <span class="va">selection</span>, <span class="va">m0</span>, <span class="va">m1</span>,</span>
+<span>  config <span class="op">=</span> <span class="va">m2_tuning</span><span class="op">$</span><span class="va">best_spec</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">m2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/freeze_m2.html">freeze_m2</a></span><span class="op">(</span><span class="va">draft_m2</span>, tuning <span class="op">=</span> <span class="va">m2_tuning</span><span class="op">)</span></span></code></pre></div>
 </div>
-<p>These are the deployed <code>v16_fresh</code> values. Use nested LOSO before promoting a different specification.</p>
-<p>Production training uses nested leave-one-season-out validation. For every outer held-out season, M0 and M1 tuning, feature construction, model selection, and calibration must be learned without that season’s future observations. The outer fold is used only for prospective scoring.</p>
+<p>After <code><a href="../reference/validate_m2_tuning.html">validate_m2_tuning()</a></code> passes, <code>m2</code> is the frozen M2 candidate stage. The full candidate is assembled only after frozen M0 and M1 are available:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">candidate</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/assemble_kit.html">assemble_kit</a></span><span class="op">(</span><span class="va">m0</span>, <span class="va">m1</span>, <span class="va">m2</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/validate_page_kit.html">validate_page_kit</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS</a></span><span class="op">(</span><span class="va">candidate</span>, <span class="st">"results/candidate_pre_holdout.rds"</span><span class="op">)</span></span></code></pre></div>
+</div>
+<p>The default grid contains the current v16-corrected incumbent values (<code>delta=0</code>, <code>Kr=1</code>, <code>k_f=4</code>, <code>k_e=2</code>, <code>alpha_state=0.20</code>, <code>k_r=0</code>, <code>k_de=0</code>, <code>k_sp=8</code>, <code>bias_alpha=0.05</code>, and <code>bias_beta=0</code>), but their presence is not proof of a deployed kit. Use walk-forward LOSO before proposing a different specification, then complete the governed holdout and promotion sequence.</p>
+<p>Both <code>m0</code> and <code>m1</code> above must already be frozen governed artifacts with the same <code>selection</code>; M2 verifies their upstream identity link before tuning or fitting. <code><a href="../reference/train_m2.html">train_m2()</a></code> remains the legacy-compatible fitting implementation.</p>
+</section><section class="level2"><h2 id="grid-expansion">Grid expansion<a class="anchor" aria-label="anchor" href="#grid-expansion"></a>
+</h2>
+<p>M2 grids grow quickly. Prefer <code>plan_m2_grid(previous_results, max_finalists, max_specs)</code>: it retains the coded incumbent and diverse finalists, adds nearest local neighbors, and proposes one valid adjacent step beyond winning boundaries.</p>
+<p>Treat basis sizes as integer complexity controls and expand one step at a time. Zero for optional terms such as <code>k_r</code> or <code>k_de</code> is a meaningful feature-off null, not a reason to propose negative values. Expand <code>alpha_state</code> locally inside its valid decay domain. Keep an unidentifiable runtime correction fixed rather than adding it to the search merely because it is configurable.</p>
+<p>Apply the declared minimum-NLL, one-standard-error, or Pareto rule only after all surviving candidates have complete comparable LOSO folds. A grid cap with a remaining boundary is an unresolved search, not proof of an optimum.</p>
+<p>Historical M2 training uses leave-one-season-out folds with fold-specific reference and M1 feature construction. M0 and M1 hyperparameters were selected before the M2 folds, so this is conditional M2 validation rather than fully nested selection of the entire pipeline.</p>
+<p>For each fold, the held-out season must also be absent from <code>manual_labels_train</code>, with <code>manual_labels_test = NULL</code>, so its ignition timing is detected prospectively. A checkpoint evaluated with the held-out manual label is leaked and must be recomputed.</p>
 </section><section class="level2"><h2 id="frozen-model-and-online-correction">Frozen model and online correction<a class="anchor" aria-label="anchor" href="#frozen-model-and-online-correction"></a>
 </h2>
-<p>The fitted GAM remains frozen during deployment. A level-only Holt EMA updates the forecast bias from errors observed so far in the active season, and the season-specific effect is estimated online from eligible post-ignition observations. Both updates must use errors whose targets are already observed at the issue date.</p>
+<p>The frozen runtime uses a level-only correction with base <code>bias_alpha=0.05</code>, <code>bias_beta=0</code>, and high <code>bias_alpha=0.7</code> after two same-sign transitions (the third consecutive same-sign residual). The season-specific effect is estimated online from eligible post-ignition observations. Both updates must use errors whose targets are already observed at the issue date.</p>
 <p>Use Bernoulli negative log likelihood as the primary probabilistic score and retain horizon-specific calibration and absolute-error summaries. Pooling only across all weeks can conceal poor performance near ignition or the seasonal peak.</p>
 </section><script id="quarto-html-after-body" type="application/javascript">
   window.document.addEventListener("DOMContentLoaded", function (event) {

@@ -20,7 +20,7 @@ library(PAGe)
 allD <- load_flu_hist("/authorized/path/flu_history.csv") |>
   prepare_surveillance_data()
 
-# Offline locked-spec refresh. The 2025-26 holdout is excluded by default.
+# High-level compatibility refresh. The 2025-26 holdout is excluded by default.
 training <- train_pipeline(allD, mode = "refresh")
 kit <- training$kit
 ```
@@ -31,6 +31,45 @@ informed by compatible prior results and supports `"min_nll"`,
 removes clear losers; finalists still receive full nested-LOSO
 evaluation.
 
+For explicit training gates, declare disjoint season sets and complete
+each stage before starting the next:
+
+``` r
+
+selection <- validate_season_selection(
+  allD,
+  training_seasons = development_seasons,
+  exclude_seasons = excluded_seasons,
+  holdout_seasons = "2025-26",
+  application_seasons = "2026-27"
+)
+
+m0_tuning <- tune_m0(allD, selection = selection)
+validate_m0_tuning(m0_tuning)
+m0 <- fit_m0(allD, selection, m0_tuning$best_params) |>
+  freeze_m0(m0_tuning)
+
+m1_tuning <- tune_m1(allD, m0 = m0, selection = selection)
+validate_m1_tuning(m1_tuning)
+m1_config <- as.list(m1_tuning$best[1, , drop = FALSE])
+m1 <- fit_m1(allD, selection, m0, m1_config) |>
+  freeze_m1(m1_tuning)
+
+m2_tuning <- tune_m2(allD, selection, m0, m1, m2_grid)
+validate_m2_tuning(m2_tuning)
+m2 <- fit_m2(allD, selection, m0, m1, m2_tuning$best_spec) |>
+  freeze_m2(m2_tuning)
+
+kit <- assemble_kit(m0, m1, m2)
+validate_page_kit(kit)
+```
+
+A downstream stage rejects a draft or provenance-mismatched upstream
+artifact.
+[`train_pipeline()`](https://lennon-li.github.io/PAGe/reference/train_pipeline.md)
+remains the high-level compatibility orchestrator and has not yet been
+refactored to compose these stage contracts.
+
 ## Holdout replay and promotion
 
 ``` r
@@ -38,13 +77,18 @@ evaluation.
 candidate <- replay_season_holdout(kit, allD, season = "2025-26")
 incumbent <- replay_season_holdout(incumbent_kit, allD, season = "2025-26")
 promotion <- check_promotion(candidate$metrics, incumbent$metrics)
-
-# Passing all gates permits inclusion in training for 2026-27.
-next_training <- train_pipeline(allD, mode = "refresh", promotion = promotion)
 ```
 
 The default gates require 2% NLL improvement, at most 5% horizon-MAE
-degradation, and at most 10% phase-MAE degradation.
+degradation, and at most 10% phase-MAE degradation. This in-memory
+comparison is diagnostic only. It has no artifact provenance and must
+not be passed to
+[`train_pipeline()`](https://lennon-li.github.io/PAGe/reference/train_pipeline.md)
+to release the holdout. A governed release uses
+`scripts/acceptance/replay_2025_26.R`, preserves its decision bundle and
+manifest, performs the fixed-spec refresh with
+`season2526/run_retrain_venkata.R`, and registers the result immutably
+with `scripts/promotion/promote_post_refit.R`.
 
 ## Weekly forecasting
 
@@ -64,14 +108,14 @@ refitting is retained only as an explicit compatibility option.
 ## Where to read more
 
 - [Pipeline
-  overview](https://lennon-li.github.io/PAGe/articles/pipeline-overview.md)
+  overview](https://lennon-li.github.io/PAGe/articles/articles/pipeline-overview.md)
   – architecture and notation.
 - [Pipeline
-  walkthrough](https://lennon-li.github.io/PAGe/articles/pipeline-walkthrough.md)
+  walkthrough](https://lennon-li.github.io/PAGe/articles/articles/pipeline-walkthrough.md)
   – an end-to-end training and deployment walkthrough.
-- [`?build_m0`](https://lennon-li.github.io/PAGe/reference/build_m0.md),
-  [`?build_m1`](https://lennon-li.github.io/PAGe/reference/build_m1.md),
-  [`?build_m2`](https://lennon-li.github.io/PAGe/reference/build_m2.md),
+- `?stage_contracts`,
+  [`?tune_m0`](https://lennon-li.github.io/PAGe/reference/tune_m0.md),
+  [`?tune_m1`](https://lennon-li.github.io/PAGe/reference/tune_m1.md),
   [`?assemble_kit`](https://lennon-li.github.io/PAGe/reference/assemble_kit.md),
   [`?run_pipeline`](https://lennon-li.github.io/PAGe/reference/run_prospective_pipeline.md)
-  – reference pages for the high-level API.
+  – reference pages for the guarded and high-level APIs.

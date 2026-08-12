@@ -73,8 +73,14 @@
 
 
 
-    <p>The examples are not executed during package builds because fitting and nested validation are long-running.</p>
-<section class="level2"><h2 id="prepare-data-and-refresh">Prepare data and refresh<a class="anchor" aria-label="anchor" href="#prepare-data-and-refresh"></a>
+    <div>
+<blockquote>
+<p><strong>Caution</strong></p>
+<p>The API snippets below illustrate model development only. An in-memory <code><a href="../reference/check_promotion.html">check_promotion()</a></code> result is not immutable release evidence. For a real release, use <code>docs/deployment-workflow.qmd</code> and preserve the acceptance, fixed-spec refresh, and deployment manifests before loading the promoted kit.</p>
+</blockquote>
+</div>
+<p>The examples are not executed during package builds because fitting and nested validation are long-running.</p>
+<section class="level2"><h2 id="prepare-data-and-declare-season-sets">Prepare data and declare season sets<a class="anchor" aria-label="anchor" href="#prepare-data-and-declare-season-sets"></a>
 </h2>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb1"><pre class="downlit sourceCode r">
@@ -82,23 +88,69 @@
 <span></span>
 <span><span class="va">historical</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_flu_hist.html">load_flu_hist</a></span><span class="op">(</span><span class="st">"/authorized/path/flu_history.csv"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/prepare_surveillance_data.html">prepare_surveillance_data</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">training</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/train_pipeline.html">train_pipeline</a></span><span class="op">(</span><span class="va">historical</span>, mode <span class="op">=</span> <span class="st">"refresh"</span><span class="op">)</span></span>
-<span><span class="va">kit</span> <span class="op">&lt;-</span> <span class="va">training</span><span class="op">$</span><span class="va">kit</span></span></code></pre></div>
+<span><span class="va">selection</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/validate_season_selection.html">validate_season_selection</a></span><span class="op">(</span></span>
+<span>  <span class="va">historical</span>,</span>
+<span>  training_seasons <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/sort.html" class="external-link">sort</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">historical</span><span class="op">$</span><span class="va">season</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"2011-12"</span>, <span class="st">"2015-16"</span>, <span class="st">"2020-21"</span>, <span class="st">"2021-22"</span>, <span class="st">"2025-26"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  exclude_seasons <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"2011-12"</span>, <span class="st">"2015-16"</span>, <span class="st">"2020-21"</span>, <span class="st">"2021-22"</span><span class="op">)</span>,</span>
+<span>  holdout_seasons <span class="op">=</span> <span class="st">"2025-26"</span>,</span>
+<span>  application_seasons <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="op">)</span></span></code></pre></div>
 </div>
-<p>PAGe does not bundle surveillance observations. The default prospective holdout is 2025-26, which remains outside every fit until promotion.</p>
-</section><section class="level2"><h2 id="replay-and-promote">Replay and promote<a class="anchor" aria-label="anchor" href="#replay-and-promote"></a>
+<p>PAGe does not bundle surveillance observations. The four season sets are explicit and disjoint; 2025-26 remains outside every development fit.</p>
+</section><section class="level2"><h2 id="guard-m0-m1-and-m2-independently">Guard M0, M1, and M2 independently<a class="anchor" aria-label="anchor" href="#guard-m0-m1-and-m2-independently"></a>
 </h2>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">candidate</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/replay_season_holdout.html">replay_season_holdout</a></span><span class="op">(</span><span class="va">kit</span>, <span class="va">historical</span>, season <span class="op">=</span> <span class="st">"2025-26"</span><span class="op">)</span></span>
-<span><span class="va">incumbent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/replay_season_holdout.html">replay_season_holdout</a></span><span class="op">(</span><span class="va">incumbent_kit</span>, <span class="va">historical</span>, season <span class="op">=</span> <span class="st">"2025-26"</span><span class="op">)</span></span>
-<span><span class="va">promotion</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/check_promotion.html">check_promotion</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">metrics</span>, <span class="va">incumbent</span><span class="op">$</span><span class="va">metrics</span><span class="op">)</span></span>
-<span><span class="va">next_training</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/train_pipeline.html">train_pipeline</a></span><span class="op">(</span><span class="va">historical</span>, mode <span class="op">=</span> <span class="st">"refresh"</span>, promotion <span class="op">=</span> <span class="va">promotion</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="va">m0_tuning</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tune_m0.html">tune_m0</a></span><span class="op">(</span><span class="va">historical</span>, selection <span class="op">=</span> <span class="va">selection</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/validate_m0_tuning.html">validate_m0_tuning</a></span><span class="op">(</span><span class="va">m0_tuning</span><span class="op">)</span></span>
+<span><span class="va">m0</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_m0.html">fit_m0</a></span><span class="op">(</span><span class="va">historical</span>, <span class="va">selection</span>, <span class="va">m0_tuning</span><span class="op">$</span><span class="va">best_params</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/freeze_m0.html">freeze_m0</a></span><span class="op">(</span><span class="va">m0_tuning</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">m1_tuning</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tune_m1.html">tune_m1</a></span><span class="op">(</span><span class="va">historical</span>, m0 <span class="op">=</span> <span class="va">m0</span>, selection <span class="op">=</span> <span class="va">selection</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/validate_m1_tuning.html">validate_m1_tuning</a></span><span class="op">(</span><span class="va">m1_tuning</span><span class="op">)</span></span>
+<span><span class="va">m1_best</span> <span class="op">&lt;-</span> <span class="va">m1_tuning</span><span class="op">$</span><span class="va">best</span><span class="op">[</span><span class="fl">1</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
+<span><span class="va">m1_config</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/m1_make_params.html">m1_make_params</a></span><span class="op">(</span></span>
+<span>  k_ref <span class="op">=</span> <span class="va">m1_best</span><span class="op">$</span><span class="va">k_ref</span>,</span>
+<span>  temperature <span class="op">=</span> <span class="va">m1_best</span><span class="op">$</span><span class="va">multi_temperature</span>,</span>
+<span>  rise_weight <span class="op">=</span> <span class="va">m1_best</span><span class="op">$</span><span class="va">align_rise_weight</span>,</span>
+<span>  slope_window <span class="op">=</span> <span class="va">m1_best</span><span class="op">$</span><span class="va">slope_window</span>,</span>
+<span>  slope_weight <span class="op">=</span> <span class="va">m1_best</span><span class="op">$</span><span class="va">slope_weight</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">m1</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_m1.html">fit_m1</a></span><span class="op">(</span><span class="va">historical</span>, <span class="va">selection</span>, <span class="va">m0</span>, <span class="va">m1_config</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/freeze_m1.html">freeze_m1</a></span><span class="op">(</span><span class="va">m1_tuning</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">m2_grid</span> <span class="op">&lt;-</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/exists.html" class="external-link">exists</a></span><span class="op">(</span><span class="st">"prior_m2_results"</span>, inherits <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="../reference/plan_m2_grid.html">plan_m2_grid</a></span><span class="op">(</span><span class="va">prior_m2_results</span>, max_finalists <span class="op">=</span> <span class="fl">6L</span>, max_specs <span class="op">=</span> <span class="fl">64L</span><span class="op">)</span></span>
+<span><span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="../reference/default_m2_grid.html">default_m2_grid</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="va">m2_tuning</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tune_m2.html">tune_m2</a></span><span class="op">(</span><span class="va">historical</span>, <span class="va">selection</span>, <span class="va">m0</span>, <span class="va">m1</span>, grid <span class="op">=</span> <span class="va">m2_grid</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/validate_m2_tuning.html">validate_m2_tuning</a></span><span class="op">(</span><span class="va">m2_tuning</span><span class="op">)</span></span>
+<span><span class="va">m2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_m2.html">fit_m2</a></span><span class="op">(</span><span class="va">historical</span>, <span class="va">selection</span>, <span class="va">m0</span>, <span class="va">m1</span>, <span class="va">m2_tuning</span><span class="op">$</span><span class="va">best_spec</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/freeze_m2.html">freeze_m2</a></span><span class="op">(</span><span class="va">m2_tuning</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">kit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/assemble_kit.html">assemble_kit</a></span><span class="op">(</span><span class="va">m0</span>, <span class="va">m1</span>, <span class="va">m2</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/validate_page_kit.html">validate_page_kit</a></span><span class="op">(</span><span class="va">kit</span><span class="op">)</span></span></code></pre></div>
 </div>
+<p>Tuning, fitting, and freezing are distinct states. M1 requires a frozen, selection-matched M0; M2 requires the exact frozen M0/M1 chain; governed kit assembly rejects drafts and identity mismatches.</p>
+<p>For a locked-spec compatibility refresh:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">training</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/train_pipeline.html">train_pipeline</a></span><span class="op">(</span><span class="va">historical</span>, mode <span class="op">=</span> <span class="st">"refresh"</span><span class="op">)</span></span>
+<span><span class="va">kit</span> <span class="op">&lt;-</span> <span class="va">training</span><span class="op">$</span><span class="va">kit</span></span></code></pre></div>
+</div>
+<p><code><a href="../reference/train_pipeline.html">train_pipeline()</a></code> now composes the guarded lifecycle above for both refresh and retune. Use the explicit calls when a manual cycle must stop and be inspected at each stage boundary.</p>
+</section><section class="level2"><h2 id="replay-and-promote">Replay and promote<a class="anchor" aria-label="anchor" href="#replay-and-promote"></a>
+</h2>
+<p>Governed holdout evaluation uses <code>scripts/acceptance/replay_2025_26.R</code>, not a bare in-memory <code><a href="../reference/check_promotion.html">check_promotion()</a></code> report. The acceptance script writes a private decision bundle and disclosure-safe manifest that bind the authorized data, candidate, and incumbent by SHA-256.</p>
+<p>After a passing decision, run <code>season2526/run_retrain_venkata.R</code> with those saved artifacts and both kit paths. It verifies the hashes before constructing the short-lived promotion evidence accepted by <code><a href="../reference/train_pipeline.html">train_pipeline()</a></code>. R classes can be forged, so the retained and verified artifacts are the production safety boundary.</p>
 </section><section class="level2"><h2 id="retune-and-select">Retune and select<a class="anchor" aria-label="anchor" href="#retune-and-select"></a>
 </h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode cell-code" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">retuned</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/train_pipeline.html">train_pipeline</a></span><span class="op">(</span></span>
 <span>  <span class="va">historical</span>,</span>
 <span>  mode <span class="op">=</span> <span class="st">"retune"</span>,</span>
@@ -108,11 +160,62 @@
 <span><span class="op">)</span></span></code></pre></div>
 </div>
 <p>The adaptive grid uses compatible prior results and expands around promising boundaries. Optional racing requires a callback and cannot replace final full nested-LOSO evaluation.</p>
+<section class="level3"><h3 id="tuning-tips">Tuning tips<a class="anchor" aria-label="anchor" href="#tuning-tips"></a>
+</h3>
+<p>A winning parameter should usually be bracketed by tested values. When it sits at a lower or upper grid edge, retain the current candidates and add one valid level beyond that edge using adjacent observed spacing. Rerun the same complete LOSO folds and selection rule. Start with one-factor local neighbors; add targeted interactions only when fold results suggest them.</p>
+<p>Boundary values can be legitimate. Zero may mean an optional M2 smooth is off, and probability, count, window, and basis-size parameters have hard valid domains. Record each boundary as expanded, accepted as a null/constraint, or unresolved at the computational cap.</p>
+<p>For the default M1 grid, lower-edge selections at <code>k_ref=25</code> and <code>slope_weight=8</code> suggest controlled next values of <code>20</code> and <code>4</code>, respectively, if they remain selected after complete validation. For M2, <code>plan_m2_grid(previous_results, max_finalists, max_specs)</code> retains the incumbent and finalists, adds local neighbors, and expands valid winning boundaries one adjacent step.</p>
+<p>Stop when material axes are bracketed, a boundary has a documented null/constraint interpretation, improvement is flat relative to fold uncertainty, or the predeclared cap is reached. Finish all expansion before opening the prospective holdout.</p>
+</section></section><section class="level2"><h2 id="manual-candidate-cycle">Manual candidate cycle<a class="anchor" aria-label="anchor" href="#manual-candidate-cycle"></a>
+</h2>
+<p>For a manual pre-holdout run, stop after each gate and save the resulting candidate only after all three stages are frozen. For the current boundary cycle, reuse the already-frozen M0/M1 artifacts and start at the M2 block; do not rerun a grid whose rows are already scored.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">m0_tuning</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tune_m0.html">tune_m0</a></span><span class="op">(</span><span class="va">historical</span>, selection <span class="op">=</span> <span class="va">selection</span>, verbose <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/validate_m0_tuning.html">validate_m0_tuning</a></span><span class="op">(</span><span class="va">m0_tuning</span><span class="op">)</span></span>
+<span><span class="va">m0</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_m0.html">fit_m0</a></span><span class="op">(</span><span class="va">historical</span>, <span class="va">selection</span>, <span class="va">m0_tuning</span><span class="op">$</span><span class="va">best_params</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/freeze_m0.html">freeze_m0</a></span><span class="op">(</span><span class="va">m0_tuning</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">m1_tuning</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tune_m1.html">tune_m1</a></span><span class="op">(</span><span class="va">historical</span>, <span class="va">m0</span>, selection <span class="op">=</span> <span class="va">selection</span>, verbose <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/validate_m1_tuning.html">validate_m1_tuning</a></span><span class="op">(</span><span class="va">m1_tuning</span><span class="op">)</span></span>
+<span><span class="va">m1_best</span> <span class="op">&lt;-</span> <span class="va">m1_tuning</span><span class="op">$</span><span class="va">best</span><span class="op">[</span><span class="fl">1</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
+<span><span class="va">m1_config</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/m1_make_params.html">m1_make_params</a></span><span class="op">(</span></span>
+<span>  k_ref <span class="op">=</span> <span class="va">m1_best</span><span class="op">$</span><span class="va">k_ref</span>,</span>
+<span>  temperature <span class="op">=</span> <span class="va">m1_best</span><span class="op">$</span><span class="va">multi_temperature</span>,</span>
+<span>  rise_weight <span class="op">=</span> <span class="va">m1_best</span><span class="op">$</span><span class="va">align_rise_weight</span>,</span>
+<span>  slope_window <span class="op">=</span> <span class="va">m1_best</span><span class="op">$</span><span class="va">slope_window</span>,</span>
+<span>  slope_weight <span class="op">=</span> <span class="va">m1_best</span><span class="op">$</span><span class="va">slope_weight</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">m1</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_m1.html">fit_m1</a></span><span class="op">(</span><span class="va">historical</span>, <span class="va">selection</span>, <span class="va">m0</span>, <span class="va">m1_config</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/freeze_m1.html">freeze_m1</a></span><span class="op">(</span><span class="va">m1_tuning</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">m2_grid</span> <span class="op">&lt;-</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/exists.html" class="external-link">exists</a></span><span class="op">(</span><span class="st">"prior_m2_results"</span>, inherits <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="../reference/plan_m2_grid.html">plan_m2_grid</a></span><span class="op">(</span><span class="va">prior_m2_results</span>, max_finalists <span class="op">=</span> <span class="fl">6L</span>, max_specs <span class="op">=</span> <span class="fl">64L</span><span class="op">)</span></span>
+<span><span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="../reference/default_m2_grid.html">default_m2_grid</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="va">m2_tuning</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/tune_m2.html">tune_m2</a></span><span class="op">(</span><span class="va">historical</span>, <span class="va">selection</span>, <span class="va">m0</span>, <span class="va">m1</span>, grid <span class="op">=</span> <span class="va">m2_grid</span>,</span>
+<span>                     verbose <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/validate_m2_tuning.html">validate_m2_tuning</a></span><span class="op">(</span><span class="va">m2_tuning</span><span class="op">)</span></span>
+<span><span class="va">m2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_m2.html">fit_m2</a></span><span class="op">(</span><span class="va">historical</span>, <span class="va">selection</span>, <span class="va">m0</span>, <span class="va">m1</span>, <span class="va">m2_tuning</span><span class="op">$</span><span class="va">best_spec</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/freeze_m2.html">freeze_m2</a></span><span class="op">(</span><span class="va">m2_tuning</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">candidate</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/assemble_kit.html">assemble_kit</a></span><span class="op">(</span><span class="va">m0</span>, <span class="va">m1</span>, <span class="va">m2</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/validate_page_kit.html">validate_page_kit</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS</a></span><span class="op">(</span><span class="va">candidate</span>, <span class="st">"results/candidate_pre_holdout.rds"</span><span class="op">)</span></span></code></pre></div>
+</div>
+<p>This candidate still excludes the untouched holdout and must be compared with the pre-holdout incumbent through the governed acceptance workflow.</p>
 </section><section class="level2"><h2 id="forecast">Forecast<a class="anchor" aria-label="anchor" href="#forecast"></a>
 </h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">current</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/prepare_surveillance_data.html">prepare_surveillance_data</a></span><span class="op">(</span><span class="va">current_csv</span>, season <span class="op">=</span> <span class="st">"2026-27"</span><span class="op">)</span></span>
+<div class="sourceCode cell-code" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">kit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_promoted_kit.html">load_promoted_kit</a></span><span class="op">(</span></span>
+<span>  kit_path <span class="op">=</span></span>
+<span>    <span class="st">"/secure/PAGe/deployment-registry/&lt;deployment-id&gt;/promoted_kit.rds"</span>,</span>
+<span>  deployment_manifest_path <span class="op">=</span></span>
+<span>    <span class="st">"results/deployment-audit/&lt;deployment-id&gt;/deployment_manifest.json"</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">current</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/prepare_surveillance_data.html">prepare_surveillance_data</a></span><span class="op">(</span><span class="va">current_csv</span>, season <span class="op">=</span> <span class="st">"2026-27"</span><span class="op">)</span></span>
 <span><span class="va">forecast</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/run_prospective_pipeline.html">run_pipeline</a></span><span class="op">(</span><span class="va">kit</span>, <span class="va">current</span>, mode <span class="op">=</span> <span class="st">"frozen"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/plot_forecast.html">plot_forecast</a></span><span class="op">(</span><span class="va">forecast</span>, history <span class="op">=</span> <span class="va">historical</span><span class="op">)</span></span></code></pre></div>
 </div>

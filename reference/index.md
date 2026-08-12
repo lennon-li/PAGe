@@ -123,6 +123,12 @@ Building blocks for advanced development and evaluation.
   : Estimate season random effect causally from accumulated observations
 - [`fitIgnition()`](https://lennon-li.github.io/PAGe/reference/fitIgnition.md)
   : Fit ignition classifier scores (Stage-1)
+- [`fit_m0()`](https://lennon-li.github.io/PAGe/reference/fit_m0.md) :
+  Fit an M0 ignition configuration (draft artifact)
+- [`fit_m1()`](https://lennon-li.github.io/PAGe/reference/fit_m1.md) :
+  Fit an M1 alignment configuration (draft artifact)
+- [`fit_m2()`](https://lennon-li.github.io/PAGe/reference/fit_m2.md) :
+  Fit an M2 forecast configuration (draft artifact)
 - [`fit_peak_calibration()`](https://lennon-li.github.io/PAGe/reference/fit_peak_calibration.md)
   : Fit peak calibration model from LOSO walk-forward results
 - [`flagIgnition()`](https://lennon-li.github.io/PAGe/reference/flagIgnition.md)
@@ -238,6 +244,12 @@ Compatibility helpers and implementation details.
   hyperparams can vary)
 - [`fitIgnition()`](https://lennon-li.github.io/PAGe/reference/fitIgnition.md)
   : Fit ignition classifier scores (Stage-1)
+- [`fit_m0()`](https://lennon-li.github.io/PAGe/reference/fit_m0.md) :
+  Fit an M0 ignition configuration (draft artifact)
+- [`fit_m1()`](https://lennon-li.github.io/PAGe/reference/fit_m1.md) :
+  Fit an M1 alignment configuration (draft artifact)
+- [`fit_m2()`](https://lennon-li.github.io/PAGe/reference/fit_m2.md) :
+  Fit an M2 forecast configuration (draft artifact)
 - [`fit_peak_calibration()`](https://lennon-li.github.io/PAGe/reference/fit_peak_calibration.md)
   : Fit peak calibration model from LOSO walk-forward results
 - [`flagIgnition()`](https://lennon-li.github.io/PAGe/reference/flagIgnition.md)
@@ -246,6 +258,12 @@ Compatibility helpers and implementation details.
   : Post-peak GAM forecast without further alignment
 - [`format_current_for_stage2()`](https://lennon-li.github.io/PAGe/reference/format_current_for_stage2.md)
   : Format current-season observations for Stage-2 refit
+- [`freeze_m0()`](https://lennon-li.github.io/PAGe/reference/freeze_m0.md)
+  : Freeze an M0 draft artifact
+- [`freeze_m1()`](https://lennon-li.github.io/PAGe/reference/freeze_m1.md)
+  : Freeze an M1 draft artifact
+- [`freeze_m2()`](https://lennon-li.github.io/PAGe/reference/freeze_m2.md)
+  : Freeze an M2 draft artifact
 - [`g_ref_safe()`](https://lennon-li.github.io/PAGe/reference/g_ref_safe.md)
   : Global shim: reference curve clamped to support
 - [`getCurrentD()`](https://lennon-li.github.io/PAGe/reference/getCurrentD.md)
@@ -256,12 +274,16 @@ Compatibility helpers and implementation details.
   : Extract a classifier GAM from various container objects
 - [`get_newWeek_from_week()`](https://lennon-li.github.io/PAGe/reference/get_newWeek_from_week.md)
   : Map surveillance week to newWeek index in a season
+- [`hash_file_sha256()`](https://lennon-li.github.io/PAGe/reference/hash_file_sha256.md)
+  : Compute a SHA-256 file fingerprint
 - [`inject_m1_into_snapshots()`](https://lennon-li.github.io/PAGe/reference/inject_m1_into_snapshots.md)
   : Replace logit_f_eff in M2 snapshots with M1's aligned prediction
 - [`learn_alignment_hyperparams()`](https://lennon-li.github.io/PAGe/reference/learn_alignment_hyperparams.md)
   : Learn tau/delta bounds and penalty from historical seasons
 - [`load_flu_hist()`](https://lennon-li.github.io/PAGe/reference/load_flu_hist.md)
   : Load historical influenza surveillance data
+- [`load_promoted_kit()`](https://lennon-li.github.io/PAGe/reference/load_promoted_kit.md)
+  : Load a promoted PAGe deployment kit
 - [`load_prospective_kit()`](https://lennon-li.github.io/PAGe/reference/load_prospective_kit.md)
   : Load pre-built model artifacts for prospective deployment
 - [`loso_walkforward()`](https://lennon-li.github.io/PAGe/reference/loso_walkforward.md)
@@ -310,6 +332,8 @@ Compatibility helpers and implementation details.
   : Refit M2 on all historical data with a chosen spec
 - [`nested_loso_run_fold()`](https://lennon-li.github.io/PAGe/reference/nested_loso_run_fold.md)
   : Run a complete nested LOSO fold
+- [`new_result_manifest()`](https://lennon-li.github.io/PAGe/reference/new_result_manifest.md)
+  : Construct a disclosure-safe result manifest
 - [`num_deriv()`](https://lennon-li.github.io/PAGe/reference/num_deriv.md)
   : Numerical central-difference derivative
 - [`peak_status_from_align()`](https://lennon-li.github.io/PAGe/reference/peak_status_from_align.md)
@@ -348,6 +372,8 @@ Compatibility helpers and implementation details.
   : Prepare surveillance data for PAGe
 - [`race_m2_candidates()`](https://lennon-li.github.io/PAGe/reference/race_m2_candidates.md)
   : Conservatively race M2 candidates before full nested LOSO
+- [`read_result_manifest()`](https://lennon-li.github.io/PAGe/reference/read_result_manifest.md)
+  : Read a PAGe result manifest
 - [`refit_stage2_weekly()`](https://lennon-li.github.io/PAGe/reference/refit_stage2_weekly.md)
   : Refit Stage-2 GAM with current-season data for weekly prospective
   forecasting
@@ -375,6 +401,8 @@ Compatibility helpers and implementation details.
   : Run the full M0 -\> M1 -\> M2 walk-forward pipeline for one season
 - [`score_params()`](https://lennon-li.github.io/PAGe/reference/score_params.md)
   : Score an ignition-threshold grid on historical seasons
+- [`season_selection()`](https://lennon-li.github.io/PAGe/reference/season_selection.md)
+  : Extract the season selection from a stage artifact
 - [`select_m2_candidate()`](https://lennon-li.github.io/PAGe/reference/select_m2_candidate.md)
   : Select an M2 candidate from full nested-LOSO results
 - [`simulate_flu_seasons()`](https://lennon-li.github.io/PAGe/reference/simulate_flu_seasons.md)
@@ -393,6 +421,8 @@ Compatibility helpers and implementation details.
   : Extract best Stage-2 spec from a tuning result
 - [`summarize_forecast_metrics()`](https://lennon-li.github.io/PAGe/reference/summarize_forecast_metrics.md)
   : Summarize prospective forecast metrics
+- [`summarize_replay_diagnostics()`](https://lennon-li.github.io/PAGe/reference/summarize_replay_diagnostics.md)
+  : Summarize aggregate replay diagnostics
 - [`train_m2()`](https://lennon-li.github.io/PAGe/reference/train_m2.md)
   : Fit the M2 production GAM on all training seasons
 - [`train_pipeline()`](https://lennon-li.github.io/PAGe/reference/train_pipeline.md)
@@ -409,10 +439,26 @@ Compatibility helpers and implementation details.
   Tune M1 alignment hyperparameters via LOSO grid search
 - [`tune_m1_alignment()`](https://lennon-li.github.io/PAGe/reference/tune_m1_alignment.md)
   : LOSO grid search over M1 alignment hyperparameters
+- [`tune_m2()`](https://lennon-li.github.io/PAGe/reference/tune_m2.md) :
+  Tune M2 with an explicit governed season selection
 - [`tune_peak_detection()`](https://lennon-li.github.io/PAGe/reference/tune_peak_detection.md)
   : Tune peak detection parameters using pre-computed walk-forward
   results
+- [`validate_m0_tuning()`](https://lennon-li.github.io/PAGe/reference/validate_m0_tuning.md)
+  : Validate an M0 tuning result
+- [`validate_m1_tuning()`](https://lennon-li.github.io/PAGe/reference/validate_m1_tuning.md)
+  : Validate an M1 tuning result
+- [`validate_m2_tuning()`](https://lennon-li.github.io/PAGe/reference/validate_m2_tuning.md)
+  : Validate an M2 tuning result
 - [`validate_page_kit()`](https://lennon-li.github.io/PAGe/reference/validate_page_kit.md)
   : Validate a PAGe deployment kit
+- [`validate_result_manifest()`](https://lennon-li.github.io/PAGe/reference/validate_result_manifest.md)
+  : Validate a disclosure-safe result manifest
+- [`validate_season_selection()`](https://lennon-li.github.io/PAGe/reference/validate_season_selection.md)
+  : Validate and normalize a season selection
 - [`validate_surveillance_data()`](https://lennon-li.github.io/PAGe/reference/validate_surveillance_data.md)
   : Validate canonical PAGe surveillance data
+- [`verify_promotion_evidence()`](https://lennon-li.github.io/PAGe/reference/verify_promotion_evidence.md)
+  : Verify Artifact-Bound Holdout Promotion Evidence
+- [`write_result_manifest()`](https://lennon-li.github.io/PAGe/reference/write_result_manifest.md)
+  : Write a PAGe result manifest

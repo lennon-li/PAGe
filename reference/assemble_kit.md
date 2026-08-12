@@ -8,7 +8,12 @@ ready for use with
 [`run_m1()`](https://lennon-li.github.io/PAGe/reference/run_m1_alignment.md),
 and
 [`run_m2()`](https://lennon-li.github.io/PAGe/reference/run_m2_forecast.md).
-Optionally saves reference and M2 bundles to disk.
+Optionally saves reference and M2 bundles to disk. Legacy stage outputs
+remain supported. If any input is a governed stage artifact, all three
+inputs must be frozen, share the same season selection, and carry a
+consistent upstream identity chain. The returned governed kit records
+the selection, stage artifact identities, and a deterministic governance
+identity.
 
 ## Usage
 
@@ -27,17 +32,23 @@ assemble_kit(
 
 - m0:
 
-  Output of
+  Frozen `page_m0_fit` from
+  [`freeze_m0()`](https://lennon-li.github.io/PAGe/reference/freeze_m0.md),
+  or a legacy M0 output compatible with
   [`tune_m0()`](https://lennon-li.github.io/PAGe/reference/tune_m0.md).
 
 - m1:
 
-  Output of
+  Frozen `page_m1_fit` from
+  [`freeze_m1()`](https://lennon-li.github.io/PAGe/reference/freeze_m1.md),
+  or a legacy output from
   [`build_m1()`](https://lennon-li.github.io/PAGe/reference/build_m1.md).
 
 - m2_model:
 
-  Output of
+  Frozen `page_m2_fit` from
+  [`freeze_m2()`](https://lennon-li.github.io/PAGe/reference/freeze_m2.md),
+  or a legacy output from
   [`train_m2()`](https://lennon-li.github.io/PAGe/reference/train_m2.md).
 
 - best_spec_id:
@@ -57,4 +68,5 @@ assemble_kit(
 
 ## Value
 
-A kit list compatible with all `run_*()` functions.
+A kit list compatible with all `run_*()` functions. Governed inputs add
+`season_selection`, `stage_artifact_ids`, and `governance_id`.

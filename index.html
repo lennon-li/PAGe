@@ -80,26 +80,67 @@
 <span><span class="va">allD</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/load_flu_hist.html">load_flu_hist</a></span><span class="op">(</span><span class="st">"/authorized/path/flu_history.csv"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/prepare_surveillance_data.html">prepare_surveillance_data</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Offline locked-spec refresh; 2025-26 remains a holdout by default.</span></span>
+<span><span class="co"># High-level compatibility refresh; 2025-26 remains a holdout by default.</span></span>
 <span><span class="va">training</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/train_pipeline.html">train_pipeline</a></span><span class="op">(</span><span class="va">allD</span>, mode <span class="op">=</span> <span class="st">"refresh"</span><span class="op">)</span></span>
 <span><span class="va">kit</span> <span class="op">&lt;-</span> <span class="va">training</span><span class="op">$</span><span class="va">kit</span></span></code></pre></div>
 </div>
 <div class="section level2">
+<h2 id="guarded-stages">Guarded stages<a class="anchor" aria-label="anchor" href="#guarded-stages"></a>
+</h2>
+<p>For explicit stage-by-stage training, declare mutually disjoint season sets and allow each stage to proceed only after its tuning gate and freeze gate pass:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">selection</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/validate_season_selection.html">validate_season_selection</a></span><span class="op">(</span></span>
+<span>  <span class="va">allD</span>,</span>
+<span>  training_seasons <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/sort.html" class="external-link">sort</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">allD</span><span class="op">$</span><span class="va">season</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"2011-12"</span>, <span class="st">"2015-16"</span>, <span class="st">"2020-21"</span>, <span class="st">"2021-22"</span>, <span class="st">"2025-26"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  exclude_seasons <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"2011-12"</span>, <span class="st">"2015-16"</span>, <span class="st">"2020-21"</span>, <span class="st">"2021-22"</span><span class="op">)</span>,</span>
+<span>  holdout_seasons <span class="op">=</span> <span class="st">"2025-26"</span>,</span>
+<span>  application_seasons <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">m0_tuning</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tune_m0.html">tune_m0</a></span><span class="op">(</span><span class="va">allD</span>, selection <span class="op">=</span> <span class="va">selection</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/validate_m0_tuning.html">validate_m0_tuning</a></span><span class="op">(</span><span class="va">m0_tuning</span><span class="op">)</span></span>
+<span><span class="va">m0</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_m0.html">fit_m0</a></span><span class="op">(</span><span class="va">allD</span>, <span class="va">selection</span>, <span class="va">m0_tuning</span><span class="op">$</span><span class="va">best_params</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/freeze_m0.html">freeze_m0</a></span><span class="op">(</span><span class="va">m0_tuning</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">m1_tuning</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tune_m1.html">tune_m1</a></span><span class="op">(</span><span class="va">allD</span>, m0 <span class="op">=</span> <span class="va">m0</span>, selection <span class="op">=</span> <span class="va">selection</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/validate_m1_tuning.html">validate_m1_tuning</a></span><span class="op">(</span><span class="va">m1_tuning</span><span class="op">)</span></span>
+<span><span class="va">m1_best</span> <span class="op">&lt;-</span> <span class="va">m1_tuning</span><span class="op">$</span><span class="va">best</span><span class="op">[</span><span class="fl">1</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
+<span><span class="va">m1_config</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/m1_make_params.html">m1_make_params</a></span><span class="op">(</span></span>
+<span>  k_ref <span class="op">=</span> <span class="va">m1_best</span><span class="op">$</span><span class="va">k_ref</span>,</span>
+<span>  temperature <span class="op">=</span> <span class="va">m1_best</span><span class="op">$</span><span class="va">multi_temperature</span>,</span>
+<span>  rise_weight <span class="op">=</span> <span class="va">m1_best</span><span class="op">$</span><span class="va">align_rise_weight</span>,</span>
+<span>  slope_window <span class="op">=</span> <span class="va">m1_best</span><span class="op">$</span><span class="va">slope_window</span>,</span>
+<span>  slope_weight <span class="op">=</span> <span class="va">m1_best</span><span class="op">$</span><span class="va">slope_weight</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">m1</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_m1.html">fit_m1</a></span><span class="op">(</span><span class="va">allD</span>, <span class="va">selection</span>, <span class="va">m0</span>, <span class="va">m1_config</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/freeze_m1.html">freeze_m1</a></span><span class="op">(</span><span class="va">m1_tuning</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">m2_grid</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/default_m2_grid.html">default_m2_grid</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">m2_tuning</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tune_m2.html">tune_m2</a></span><span class="op">(</span><span class="va">allD</span>, <span class="va">selection</span>, <span class="va">m0</span>, <span class="va">m1</span>, grid <span class="op">=</span> <span class="va">m2_grid</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/validate_m2_tuning.html">validate_m2_tuning</a></span><span class="op">(</span><span class="va">m2_tuning</span><span class="op">)</span></span>
+<span><span class="va">m2</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_m2.html">fit_m2</a></span><span class="op">(</span><span class="va">allD</span>, <span class="va">selection</span>, <span class="va">m0</span>, <span class="va">m1</span>, <span class="va">m2_tuning</span><span class="op">$</span><span class="va">best_spec</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/freeze_m2.html">freeze_m2</a></span><span class="op">(</span><span class="va">m2_tuning</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">kit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/assemble_kit.html">assemble_kit</a></span><span class="op">(</span><span class="va">m0</span>, <span class="va">m1</span>, <span class="va">m2</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/validate_page_kit.html">validate_page_kit</a></span><span class="op">(</span><span class="va">kit</span><span class="op">)</span></span></code></pre></div>
+<p>Downstream stages reject draft, selection-mismatched, or identity-mismatched upstream artifacts. A governed kit records its season selection and the three stage identities. <code><a href="reference/train_pipeline.html">train_pipeline()</a></code> remains available as the high-level compatibility orchestrator.</p>
+</div>
+<div class="section level2">
 <h2 id="holdout-gate">Holdout gate<a class="anchor" aria-label="anchor" href="#holdout-gate"></a>
 </h2>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">candidate</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/replay_season_holdout.html">replay_season_holdout</a></span><span class="op">(</span><span class="va">kit</span>, <span class="va">allD</span>, season <span class="op">=</span> <span class="st">"2025-26"</span><span class="op">)</span></span>
 <span><span class="va">incumbent</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/replay_season_holdout.html">replay_season_holdout</a></span><span class="op">(</span><span class="va">incumbent_kit</span>, <span class="va">allD</span>, season <span class="op">=</span> <span class="st">"2025-26"</span><span class="op">)</span></span>
-<span><span class="va">promotion</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/check_promotion.html">check_promotion</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">metrics</span>, <span class="va">incumbent</span><span class="op">$</span><span class="va">metrics</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># A passing report permits 2025-26 to enter the 2026-27 training refresh.</span></span>
-<span><span class="va">next_training</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/train_pipeline.html">train_pipeline</a></span><span class="op">(</span><span class="va">allD</span>, mode <span class="op">=</span> <span class="st">"refresh"</span>, promotion <span class="op">=</span> <span class="va">promotion</span><span class="op">)</span></span></code></pre></div>
-<p>The default gates require 2% NLL improvement, no horizon MAE degradation over 5%, and no phase MAE degradation over 10%. A failed or malformed report keeps the holdout excluded.</p>
+<span><span class="va">promotion</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/check_promotion.html">check_promotion</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">metrics</span>, <span class="va">incumbent</span><span class="op">$</span><span class="va">metrics</span><span class="op">)</span></span></code></pre></div>
+<p>The default gates require 2% NLL improvement, no horizon MAE degradation over 5%, and no phase MAE degradation over 10%. This in-memory report is diagnostic only: it has no artifact provenance and cannot release the holdout. A governed release uses <code>scripts/acceptance/replay_2025_26.R</code>, preserves its decision bundle and manifest, performs the fixed-spec refresh with <code>season2526/run_retrain_venkata.R</code>, and registers the refreshed kit using <code>scripts/promotion/promote_post_refit.R</code>. A failed or malformed report keeps the holdout excluded.</p>
 </div>
 <div class="section level2">
 <h2 id="prospective-run">Prospective run<a class="anchor" aria-label="anchor" href="#prospective-run"></a>
 </h2>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">current</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/prepare_surveillance_data.html">prepare_surveillance_data</a></span><span class="op">(</span><span class="va">current_csv</span>, season <span class="op">=</span> <span class="st">"2026-27"</span><span class="op">)</span></span>
 <span><span class="va">forecast</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/run_prospective_pipeline.html">run_pipeline</a></span><span class="op">(</span><span class="va">kit</span>, <span class="va">current</span>, mode <span class="op">=</span> <span class="st">"frozen"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/plot_forecast.html">plot_forecast</a></span><span class="op">(</span><span class="va">forecast</span>, history <span class="op">=</span> <span class="va">allD</span><span class="op">)</span></span></code></pre></div>
@@ -108,7 +149,7 @@
 <div class="section level2">
 <h2 id="retuning-options">Retuning options<a class="anchor" aria-label="anchor" href="#retuning-options"></a>
 </h2>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">retuned</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/train_pipeline.html">train_pipeline</a></span><span class="op">(</span></span>
 <span>  <span class="va">allD</span>,</span>
 <span>  mode <span class="op">=</span> <span class="st">"retune"</span>,</span>
@@ -117,7 +158,8 @@
 <span>  racing <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 <p>The adaptive grid uses compatible prior results, retains the v16 incumbent and diverse finalists, adds local neighbors, and expands reached boundaries. Optional conservative racing requires a user-supplied fold evaluator; surviving candidates always receive full nested-LOSO evaluation.</p>
-<p>The deployed v16 reference specification is <code>k_f = 4</code>, <code>k_e = 2</code>, <code>alpha_state = 0.15</code>, <code>k_sp = 6</code>, <code>k_r = 0</code>, <code>k_de = 0</code>, <code>delta = 0</code>, <code>Kr = 1</code>, <code>bias_alpha = 0.05</code>, and <code>bias_beta = 0</code> (recorded nested-LOSO Bernoulli NLL 0.4175).</p>
+<p>A selected tuning value should normally be bracketed by tested values. Expand a winning edge by one adjacent valid step, retain the incumbent and local neighbors, and rerun identical complete folds. Zero-valued optional M2 terms may be legitimate feature-off boundaries. Record accepted constraints and finish every expansion before viewing the prospective holdout.</p>
+<p>The working incumbent is the existing frozen <code>v16-corrected</code> kit used in the 2025-26 acceptance replay: <code>k_f = 4</code>, <code>k_e = 2</code>, <code>alpha_state = 0.20</code>, <code>k_sp = 8</code>, <code>k_r = 0</code>, <code>k_de = 0</code>, <code>delta = 0</code>, <code>Kr = 1</code>, <code>bias_alpha = 0.05</code>, and <code>bias_beta = 0</code>. Its private artifact is outside version control, and its exact historical lineage is not fully reconstructible; it is retained as a confidence baseline rather than presented as a recovered research artifact.</p>
 <p>See <code><a href="articles/intro.html">vignette("intro", package = "PAGe")</a></code>, the <a href="https://lennon-li.github.io/PAGe/articles/pipeline-overview.html">pipeline overview</a>, and the <a href="https://lennon-li.github.io/PAGe/articles/pipeline-walkthrough.html">walkthrough</a>.</p>
 </div>
 </div>
