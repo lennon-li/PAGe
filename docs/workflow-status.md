@@ -19,6 +19,11 @@ outside version control; the repository records the specification and
 provenance caveat rather than claiming to reconstruct the original research
 artifact.
 
+Large private run products for BCC are stored on the mounted NFS share
+`/mnt/nfsv4/Users/yeli/PAGe-artifacts/`; see
+[`artifact-storage.md`](artifact-storage.md). The package checkout remains
+source-only.
+
 ## Operational workflow
 
 | Entry point or family | Status | Use and safe replacement |
