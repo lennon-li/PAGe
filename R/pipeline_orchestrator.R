@@ -542,8 +542,9 @@ plan_m2_grid <- function(previous_results = NULL,
 #' @param racing_stages,racing_min_survivors Racing schedule and survivor floor.
 #' @param manual_labels,flag_args,m1_params Locked component settings.
 #' @param m0_params Locked M0 parameters for refresh mode. Defaults to the
-#'   deployed M0 configuration; supply the promoted candidate's parameters to
-#'   reproduce its fixed component configuration after holdout acceptance.
+#'   deployed M0 configuration when no holdout has been released. A
+#'   post-acceptance refresh must explicitly supply the accepted candidate's
+#'   parameters.
 #' @param m2_spec_id Optional explicit identity for the fixed refresh M2 spec.
 #'
 #' @return A transparent list with \code{mode}, \code{components},
@@ -576,7 +577,7 @@ train_pipeline <- function(
   manual_labels = .default_manual_labels(),
   flag_args = .default_flag_args(),
   m1_params = .default_m1_params(),
-  m0_params = .default_m0_params(),
+  m0_params = NULL,
   m2_spec_id = NULL
 ) {
   mode <- match.arg(mode)
@@ -591,6 +592,16 @@ train_pipeline <- function(
       "to refit the fixed accepted specification.",
       call. = FALSE
     )
+  }
+  if (is.null(m0_params)) {
+    if (holdout$released) {
+      stop(
+        "A post-acceptance refresh requires the accepted candidate's ",
+        "`m0_params`.",
+        call. = FALSE
+      )
+    }
+    m0_params <- .default_m0_params()
   }
   effective_exclude <- unique(c(
     exclude,

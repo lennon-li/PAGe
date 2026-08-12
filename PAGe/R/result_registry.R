@@ -169,6 +169,13 @@ load_promoted_kit <- function(kit_path, deployment_manifest_path) {
   if (!is.list(kit)) {
     stop("Promoted artifact does not contain a PAGe kit list.", call. = FALSE)
   }
+  if (!is.list(kit$m2_production$spec) ||
+    !identical(kit$best_spec, kit$m2_production$spec)) {
+    stop(
+      "Promoted kit `best_spec` must exactly match `m2_production$spec`.",
+      call. = FALSE
+    )
+  }
 
   kit_spec_id <- kit$m2_production$best_spec_id
   if (!is.character(kit_spec_id) || length(kit_spec_id) != 1L ||

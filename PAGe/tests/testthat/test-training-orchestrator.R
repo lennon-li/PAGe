@@ -721,6 +721,26 @@ test_that("post-acceptance retuning is rejected", {
   )
 })
 
+test_that("post-acceptance refresh requires accepted M0 parameters", {
+  allD <- workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L))
+  report <- PAGe::check_promotion(
+    list(overall = data.frame(bernoulli_nll = 0.48),
+         horizon = data.frame(lead = c("1", "2"), mae = c(0.103, 0.103)),
+         phase = data.frame(phase = c("early", "late"), mae = c(0.105, 0.105))),
+    list(overall = data.frame(bernoulli_nll = 0.50),
+         horizon = data.frame(lead = c("1", "2"), mae = c(0.10, 0.10)),
+         phase = data.frame(phase = c("early", "late"), mae = c(0.10, 0.10)))
+  )
+  fixture <- training_promotion_fixture(allD, report)
+  withr::defer(unlink(fixture$root, recursive = TRUE))
+  evidence <- do.call(PAGe::verify_promotion_evidence, fixture$args)
+
+  expect_error(
+    PAGe::train_pipeline(allD, mode = "refresh", promotion = evidence, verbose = FALSE),
+    "requires the accepted candidate's `m0_params`"
+  )
+})
+
 test_that("promotion evidence verifies kit identity and pre-holdout training", {
   allD <- workflow_surveillance("2025-26", 1L)
   report <- PAGe::check_promotion(

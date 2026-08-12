@@ -3,6 +3,7 @@ registry_test_kit <- function() {
     list(model = data.frame(logit_f_eff = 0, z_ema = 0, lead = 1L)),
     class = c("gam", "list")
   )
+  spec <- list(k_n = 0L, k_de = 0L, k_r = 0L, k_sp = 0L)
   list(
     m0_params = list(p_thresh = 0.005),
     ref = list(anchorWeek = 20),
@@ -20,9 +21,10 @@ registry_test_kit <- function() {
     m2_production = list(
       fit = fit,
       best_spec_id = "spec-promoted",
+      spec = spec,
       training_seasons = c("2024-25", "2025-26")
     ),
-    best_spec = list(k_n = 0L, k_de = 0L, k_r = 0L, k_sp = 0L)
+    best_spec = spec
   )
 }
 
@@ -196,6 +198,23 @@ test_that("promoted-kit loading enforces manifest and kit identity", {
   expect_error(
     PAGe::load_promoted_kit(kit_path, manifest_path),
     "training_seasons"
+  )
+})
+
+test_that("promoted-kit loading rejects a rehashed mismatched M2 spec", {
+  kit_path <- tempfile(fileext = ".rds")
+  manifest_path <- tempfile(fileext = ".rds")
+  kit <- registry_test_kit()
+  kit$best_spec$bias_alpha <- 1
+  saveRDS(kit, kit_path)
+  PAGe::write_result_manifest(
+    registry_test_manifest(kit_path),
+    manifest_path
+  )
+
+  expect_error(
+    PAGe::load_promoted_kit(kit_path, manifest_path),
+    "best_spec.*m2_production\\$spec"
   )
 })
 
