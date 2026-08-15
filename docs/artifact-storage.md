@@ -5,15 +5,14 @@ written to the checkout's root filesystem on BCC.  The designated private
 artifact location is:
 
 ```text
-host:  pho-rdpdl-23 (BCC)
-path:  /mnt/nfsv4/Users/yeli/PAGe-artifacts/asgard-archive-20260812/
-mount: NFS at /mnt/nfsv4/Users (not the local /dev/vda3 system disk)
+path:  a writable private NFS artifact share outside the checkout
+mount: configured per machine in the private runbook (never the system disk)
 ```
 
-The share is already mounted on BCC and is writable by `yeli`; no additional
-local disk is currently attached.  Keep package source and small test fixtures
-in `/home/yeli/repos/PAGe`, but place private run products under the artifact
-directory.  Existing preserved material is organized as follows:
+Keep package source and small test fixtures in the checkout, but place private
+run products under the configured artifact directory. The machine-specific
+host, account, and mount path are intentionally kept out of this repository.
+Existing preserved material is organized as follows:
 
 - `holdouts-and-docs/` — the 2022–2024 holdout bundles and related documents;
 - `data/` and `results/` — the former Asgard ignored artifact trees;

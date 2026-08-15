@@ -558,8 +558,10 @@ freeze_m0 <- function(fit, tuning = NULL, ...) {
       reason = if (edge == "none") {
         "selected value is bracketed"
       } else if (is_null) {
-        paste0("value ", .stage_number_label(null_value),
-               " is the predeclared drop/null")
+        paste0(
+          "value ", .stage_number_label(null_value),
+          " is the predeclared drop/null"
+        )
       } else {
         paste0("selected non-null ", stage, " axis is at a tested edge")
       },
@@ -590,7 +592,9 @@ freeze_m0 <- function(fit, tuning = NULL, ...) {
 #' is deliberately separate from the hard freeze gate so users can inspect a
 #' result, expand its grid, and resume tuning from the same checkpoint.
 #'
-#' @param x A stage tuning result, or a data frame containing the tuning grid.
+#' @param x A stage tuning result with a selected configuration and complete
+#'   tuning grid. A raw grid alone is not sufficient because boundary status
+#'   is defined relative to the selected configuration.
 #' @param stage One of `"M0"`, `"M1"`, or `"M2"`.
 #' @param grid Optional complete grid. When omitted, uses `x$grid`.
 #' @param warn Logical; emit a warning when a non-null edge requires expansion.
@@ -619,7 +623,8 @@ inspect_tuning_boundaries <- function(x,
   if (is.data.frame(selected)) selected <- selected[1L, , drop = FALSE]
   if (is.null(null_axes)) null_axes <- character(0)
   report <- .stage_boundary_report(
-    stage, grid, selected, null_axes = null_axes,
+    stage, grid, selected,
+    null_axes = null_axes,
     null_values = .stage_null_values(stage)
   )
   unresolved <- report[report$decision == "expand_required", , drop = FALSE]
@@ -655,23 +660,42 @@ inspect_tuning_boundaries <- function(x,
 
 .grid_adjacent_step <- function(values, edge, supplied = NULL) {
   values <- sort(unique(as.numeric(values)))
-  if (!is.null(supplied)) return(as.numeric(supplied))
-  if (length(values) < 2L) return(1)
-  if (edge == "lower") values[2L] - values[1L] else
+  if (!is.null(supplied)) {
+    return(as.numeric(supplied))
+  }
+  if (length(values) < 2L) {
+    return(1)
+  }
+  if (edge == "lower") {
+    values[2L] - values[1L]
+  } else {
     values[length(values)] - values[length(values) - 1L]
+  }
 }
 
 .valid_stage_expansion_value <- function(stage, parameter, value) {
-  if (!is.finite(value)) return(FALSE)
+  if (!is.finite(value)) {
+    return(FALSE)
+  }
   if (stage == "M0") {
-    if (parameter == "cls_thr") return(value >= 0 && value <= 1)
-    if (parameter %in% c("p_thr", "prev_thr", "p_sum_thr", "eps")) return(value >= 0)
-    if (parameter %in% c("n_consec", "L", "K_sum", "N_req", "w_min", "w_max")) return(value >= 1)
+    if (parameter == "cls_thr") {
+      return(value >= 0 && value <= 1)
+    }
+    if (parameter %in% c("p_thr", "prev_thr", "p_sum_thr", "eps")) {
+      return(value >= 0)
+    }
+    if (parameter %in% c("n_consec", "L", "K_sum", "N_req", "w_min", "w_max")) {
+      return(value >= 1)
+    }
     return(TRUE)
   }
   if (stage == "M1") {
-    if (parameter %in% c("k_ref", "slope_window")) return(value >= 2)
-    if (parameter %in% c("multi_temperature", "align_rise_weight", "slope_weight")) return(value >= 0)
+    if (parameter %in% c("k_ref", "slope_window")) {
+      return(value >= 2)
+    }
+    if (parameter %in% c("multi_temperature", "align_rise_weight", "slope_weight")) {
+      return(value >= 0)
+    }
   }
   TRUE
 }
@@ -692,7 +716,8 @@ inspect_tuning_boundaries <- function(x,
 #' checkpoints reuse completed specifications, while M0 reuses cached grid
 #' scores when the prior tuning object is supplied as `previous_results`.
 #'
-#' @param x A tuning result or a grid data frame.
+#' @param x A stage tuning result with a selected configuration and complete
+#'   tuning grid. A raw grid alone is not sufficient for M0 or M1 expansion.
 #' @param stage One of `"M0"`, `"M1"`, or `"M2"`.
 #' @param grid Optional grid override.
 #' @param steps Optional named numeric vector overriding adjacent spacing.
@@ -718,7 +743,9 @@ expand_tuning_grid <- function(x,
     )
     # The adaptive planner intentionally caps its own plan; expansion must
     # never discard already scored rows.
-    planned <- planned[setdiff(names(planned), "provenance")]
+    if (!"provenance" %in% names(grid) && "provenance" %in% names(planned)) {
+      grid$provenance <- "existing"
+    }
     all_names <- union(names(grid), names(planned))
     for (nm in setdiff(all_names, names(grid))) grid[[nm]] <- NA
     for (nm in setdiff(all_names, names(planned))) planned[[nm]] <- NA
@@ -747,6 +774,9 @@ expand_tuning_grid <- function(x,
         }
         row[[parameter]] <- value
         if ("spec_id" %in% names(row)) row$spec_id <- NA_character_
+        if ("provenance" %in% names(row)) {
+          row$provenance <- paste0("boundary:", parameter)
+        }
         row
       })
       grid <- rbind(grid, do.call(rbind, new_rows))
@@ -859,7 +889,8 @@ validate_m0_tuning <- function(x, grid = NULL, check_boundaries = FALSE, ...) {
   }
   if (isTRUE(check_boundaries)) {
     report <- inspect_tuning_boundaries(
-      x, stage = "M0", grid = grid, warn = TRUE,
+      x,
+      stage = "M0", grid = grid, warn = TRUE,
       null_axes = c("p_thr", "prev_thr", "p_sum_thr")
     )
     x$boundary_report <- report

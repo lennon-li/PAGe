@@ -5,7 +5,8 @@ execute:
 ---
 
 The installable package under `PAGe/` is the sole source of truth. Its R source
-lives under `PAGe/R/`; there is no separate root-level mirror.
+lives under `PAGe/R/`. A top-level `R/` directory remains as a legacy checkout
+mirror for historical scripts; do not edit it or add new package code there.
 
 For operational loading, use `load_promoted_kit()` with an immutable registry
 artifact and its deployment manifest. `load_prospective_kit()` is a strict
