@@ -62,9 +62,9 @@ validate_m0_tuning(m0_tuning)
 m0 <- fit_m0(allD, selection, config = m0_tuning$best_params) |>
   freeze_m0(tuning = m0_tuning)
 
-# M1: alignment
+# M1: alignment (boundary gate before freeze)
 m1_tuning <- tune_m1(allD, m0 = m0, selection = selection)
-validate_m1_tuning(m1_tuning)
+validate_m1_tuning(m1_tuning, check_boundaries = TRUE)
 m1_best <- m1_tuning$best[1, , drop = FALSE]
 m1_config <- m1_make_params(
   k_ref = m1_best$k_ref,
@@ -75,6 +75,9 @@ m1_config <- m1_make_params(
 )
 m1 <- fit_m1(allD, selection, m0, config = m1_config) |>
   freeze_m1(tuning = m1_tuning)
+
+# train_pipeline(mode = "retune") performs the M0 grid boundary gate before
+# this point and the M1 boundary gate before freezing M1 or starting M2.
 
 # M2: forecast
 m2_grid <- if (exists("prior_m2_results", inherits = FALSE)) {
@@ -224,14 +227,14 @@ validate_m0_tuning(m0_tuning)
 m0 <- fit_m0(allD, selection, config = m0_tuning$best_params) |>
   freeze_m0(tuning = m0_tuning)
 
-# M1: tune -> validate -> fit -> freeze
+# M1: tune -> validate (including boundaries) -> fit -> freeze
 m1_tuning <- tune_m1(
   allD, m0 = m0, selection = selection,
   grid = default_m1_grid(),
   n_cores = parallel::detectCores(),
   checkpoint_dir = "results/checkpoints/m1-cycle", verbose = TRUE
 )
-validate_m1_tuning(m1_tuning)
+validate_m1_tuning(m1_tuning, check_boundaries = TRUE)
 m1_best <- m1_tuning$best[1, , drop = FALSE]
 m1_config <- m1_make_params(
   k_ref = m1_best$k_ref,

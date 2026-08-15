@@ -15,10 +15,10 @@ Scope reviewed on 2026-04-04:
 - `docs/prospective_deployment.qmd`
 - `docs/forecast_training.qmd`
 - `docs/m1_m2_stacking.qmd`
-- `R/pipeline_runtime.R`
-- `R/pipeline_bridge.R`
-- `R/m2_training.R`
-- `R/m2_runtime.R`
+- `PAGe/R/pipeline_runtime.R`
+- `PAGe/R/pipeline_bridge.R`
+- `PAGe/R/m2_training.R`
+- `PAGe/R/m2_runtime.R`
 
 This note records the problems that still appear to hold after a fresh scan of
 the current pipeline code and Quarto docs, with emphasis on the 2025-26
@@ -52,10 +52,10 @@ References:
 - `docs/pipeline_overview.qmd:201`
 - `docs/prospective_deployment.qmd:136`
 - `docs/prospective_deployment.qmd:147`
-- `R/pipeline_runtime.R:300`
-- `R/pipeline_runtime.R:311`
-- `R/pipeline_runtime.R:403`
-- `R/m2_training.R:647`
+- `PAGe/R/pipeline_runtime.R:300`
+- `PAGe/R/pipeline_runtime.R:311`
+- `PAGe/R/pipeline_runtime.R:403`
+- `PAGe/R/m2_training.R:647`
 
 ### 2. The walk-forward cache can silently serve stale deployment results
 
@@ -96,11 +96,11 @@ deployment function, it is not reliable in its current form.
 
 References:
 
-- `R/pipeline_bridge.R:361`
-- `R/pipeline_bridge.R:393`
-- `R/pipeline_bridge.R:409`
-- `R/m2_runtime.R:74`
-- `R/m2_runtime.R:262`
+- `PAGe/R/pipeline_bridge.R:361`
+- `PAGe/R/pipeline_bridge.R:393`
+- `PAGe/R/pipeline_bridge.R:409`
+- `PAGe/R/m2_runtime.R:74`
+- `PAGe/R/m2_runtime.R:262`
 
 ### 4. The overview still overstates the deployment gating logic for `M_2`
 
@@ -118,7 +118,7 @@ documentation/runtime mismatch right now.
 References:
 
 - `docs/pipeline_overview.qmd:191`
-- `R/pipeline_runtime.R:341`
+- `PAGe/R/pipeline_runtime.R:341`
 
 ### 5. The deployment page describes the current-season `M_2` step as "The production GAM predicts", which matches the code but conflicts with the architecture writeup
 
@@ -142,7 +142,7 @@ References:
 - `docs/prospective_deployment.qmd:136`
 - `docs/pipeline_overview.qmd:175`
 - `docs/forecast_training.qmd:339`
-- `R/pipeline_runtime.R:311`
+- `PAGe/R/pipeline_runtime.R:311`
 
 ## What I rechecked that looks improved
 
@@ -165,8 +165,8 @@ References:
 
 - `docs/forecast_training.qmd:374`
 - `docs/m1_m2_stacking.qmd:176`
-- `R/pipeline_bridge.R:550`
-- `R/pipeline_bridge.R:603`
+- `PAGe/R/pipeline_bridge.R:550`
+- `PAGe/R/pipeline_bridge.R:603`
 
 ## Practical implication for the 2025-26 results
 
@@ -186,7 +186,7 @@ The highest-probability causes are:
 1. Decide which deployment behavior is actually intended:
    weekly `refit_stage2_weekly()` or frozen-fit prediction.
 2. Make `pipeline_overview.qmd`, `forecast_training.qmd`,
-   `prospective_deployment.qmd`, and `R/pipeline_runtime.R` agree on that
+   `prospective_deployment.qmd`, and `PAGe/R/pipeline_runtime.R` agree on that
    choice.
 3. Remove or invalidate `deploy_wf_cache.rds` based on season data, kit hash,
    or code version.

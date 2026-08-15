@@ -386,7 +386,7 @@ Week w arrives
 
 ## Key functions {#sec-functions}
 
-All new functions live in `R/pipeline_bridge.R`:
+All new functions live in `PAGe/R/pipeline_bridge.R`:
 
 | Function | Purpose |
 |---|---|
@@ -399,7 +399,7 @@ All new functions live in `R/pipeline_bridge.R`:
 | `nested_loso_m2_train(fold, m1_train_preds, spec)` | Train frozen GAM on LOSO training fold |
 | `nested_loso_m2_eval_frozen_bias(allD, fold, m2_fit, m1_test_preds, spec, ...)` | Evaluate with adaptive Holt bias + online RE on held-out season |
 
-Modified functions in `R/m2_training.R`:
+Modified functions in `PAGe/R/m2_training.R`:
 
 | Function | Change |
 |---|---|

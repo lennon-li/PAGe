@@ -4,10 +4,16 @@
 \alias{validate_m0_tuning}
 \title{Validate an M0 tuning result}
 \usage{
-validate_m0_tuning(x, ...)
+validate_m0_tuning(x, grid = NULL, check_boundaries = FALSE, ...)
 }
 \arguments{
 \item{x}{A \code{page_m0_tuning} object.}
+
+\item{grid}{Complete M0 grid used for tuning when boundary checks are
+enabled.}
+
+\item{check_boundaries}{Logical; require all varying numeric M0 axes to be
+bracketed, except predeclared null/drop values.}
 
 \item{...}{Reserved.}
 }
@@ -17,4 +23,6 @@ validate_m0_tuning(x, ...)
 \description{
 Rejects zero evaluable folds, non-finite selection metrics, missing
 selected configuration, or mismatched folds.
+Governed workflows can also require every genuinely tuned M0 axis to be
+bracketed or explicitly accepted as a null/drop choice.
 }

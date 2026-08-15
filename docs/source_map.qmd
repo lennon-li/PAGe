@@ -15,7 +15,9 @@ execute:
 ---
 
 ::: {.callout-note}
-This page is a source map for the root-level `R/` directory, which is mirrored into `PAGe/R/` for the installable package. It is meant to answer two questions quickly: which file owns a piece of the pipeline, and which functions live in that file.
+This page is a source map for the installable package's `PAGe/R/` directory. It
+is meant to answer two questions quickly: which file owns a piece of the
+pipeline, and which functions live in that file.
 :::
 
 ::: {.callout-caution}
@@ -91,7 +93,7 @@ file_meta <- data.frame(
   stringsAsFactors = FALSE
 )
 
-files <- sort(list.files("../R", pattern = "\\.[Rr]$", full.names = TRUE))
+files <- sort(list.files("../PAGe/R", pattern = "\\.[Rr]$", full.names = TRUE))
 
 extract_desc <- function(lines, i) {
   j <- i - 1
@@ -204,7 +206,7 @@ knitr::kable(
 ## Call graph
 
 The diagram below shows which active pipeline functions call which others,
-colour-coded by stage. **Solid boxes** are defined in `R/`; **ellipses** are
+colour-coded by stage. **Solid boxes** are defined in `PAGe/R/`; **ellipses** are
 referenced but not found in active source (package internals or implicit).
 Arrows point from caller → callee.
 
@@ -362,7 +364,7 @@ for (area in areas) {
     file_i <- area_rows$file[i]
     cat("### `", file_i, "`\n\n", sep = "")
     cat(area_rows$purpose[i], "\n\n")
-    cat("Mirror: `PAGe/R/", file_i, "`.\n\n", sep = "")
+    cat("Package source: `PAGe/R/", file_i, "`.\n\n", sep = "")
 
     funcs_i <- fun_inventory[fun_inventory$file == file_i, c("fun", "description"), drop = FALSE]
     if (!nrow(funcs_i)) {

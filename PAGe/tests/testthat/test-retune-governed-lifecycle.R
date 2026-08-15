@@ -73,6 +73,14 @@ fake_m1_tuning <- function(selection) {
         mae_weibull = 0.5,
         stringsAsFactors = FALSE
       ),
+      grid = data.frame(
+        k_ref = c(2L, 3L, 4L),
+        multi_temperature = 0.25,
+        align_rise_weight = 1,
+        slope_window = 6L,
+        slope_weight = c(4, 8, 12),
+        stringsAsFactors = FALSE
+      ),
       selection = selection,
       data_id = "fake_data_id"
     ),
@@ -164,6 +172,8 @@ test_that("retune calls governed lifecycle in M0 -> M1 -> M2 order", {
   allD <- synthetic_allD()
   sel <- fake_selection(allD)
   call_log <- character(0)
+  m0_boundary_checks <- logical(0)
+  m1_boundary_checks <- logical(0)
 
   local_mocked_bindings(
     prepare_surveillance_data = function(x, ...) x,
@@ -177,8 +187,9 @@ test_that("retune calls governed lifecycle in M0 -> M1 -> M2 order", {
       call_log <<- c(call_log, "tune_m0")
       fake_m0_tuning(selection)
     },
-    validate_m0_tuning = function(x, ...) {
+    validate_m0_tuning = function(x, grid = NULL, check_boundaries = FALSE, ...) {
       call_log <<- c(call_log, "validate_m0_tuning")
+      m0_boundary_checks <<- c(m0_boundary_checks, check_boundaries)
       invisible(x)
     },
     fit_m0 = function(data, selection, config, ...) {
@@ -195,8 +206,9 @@ test_that("retune calls governed lifecycle in M0 -> M1 -> M2 order", {
       call_log <<- c(call_log, "tune_m1")
       fake_m1_tuning(selection)
     },
-    validate_m1_tuning = function(x, ...) {
+    validate_m1_tuning = function(x, check_boundaries = FALSE, ...) {
       call_log <<- c(call_log, "validate_m1_tuning")
+      m1_boundary_checks <<- c(m1_boundary_checks, check_boundaries)
       invisible(x)
     },
     fit_m1 = function(data, selection, m0, config, ...) {
@@ -257,7 +269,8 @@ test_that("retune calls governed lifecycle in M0 -> M1 -> M2 order", {
   )
 
   result <- PAGe::train_pipeline(
-    allD, mode = "retune",
+    allD,
+    mode = "retune",
     exclude = character(0),
     prospective_holdout = "2025-26",
     n_cores = 1L, verbose = FALSE
@@ -283,6 +296,8 @@ test_that("retune calls governed lifecycle in M0 -> M1 -> M2 order", {
   expect_true(diff(m0_idx[1:2]) > 0L, info = "tune_m0 before validate_m0_tuning")
   expect_true(diff(m0_idx[2:3]) > 0L, info = "validate before fit_m0")
   expect_true(diff(m0_idx[3:4]) > 0L, info = "fit_m0 before freeze_m0")
+  expect_true(all(m0_boundary_checks), info = "M0 boundary gate is enabled")
+  expect_true(all(m1_boundary_checks), info = "M1 boundary gate is enabled")
 })
 
 test_that("retune excludes holdout season from training selection", {
@@ -356,7 +371,8 @@ test_that("retune excludes holdout season from training selection", {
   )
 
   result <- PAGe::train_pipeline(
-    allD, mode = "retune",
+    allD,
+    mode = "retune",
     exclude = character(0),
     prospective_holdout = "2025-26",
     n_cores = 1L, verbose = FALSE
@@ -447,7 +463,8 @@ test_that("retune racing=TRUE routes full_evaluator through governed tune_m2", {
   }
 
   result <- PAGe::train_pipeline(
-    allD, mode = "retune",
+    allD,
+    mode = "retune",
     exclude = character(0),
     prospective_holdout = "2025-26",
     n_cores = 1L, verbose = FALSE,
@@ -520,7 +537,8 @@ test_that("retune preserves page_training_result field shape", {
   )
 
   result <- PAGe::train_pipeline(
-    allD, mode = "retune",
+    allD,
+    mode = "retune",
     exclude = character(0),
     prospective_holdout = "2025-26",
     n_cores = 1L, verbose = FALSE

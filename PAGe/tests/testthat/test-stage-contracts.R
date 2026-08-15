@@ -20,14 +20,18 @@ make_canonical_data <- function(seasons = c("2017-18", "2018-19", "2019-20")) {
 }
 
 make_m0_config <- function() {
-  list(cls_thr = 0.2, p_thr = 0.01, prev_thr = 0.01, n_consec = 3L,
-       L = 2L, eps = 0, K_sum = 4L, p_sum_thr = 0.04, N_req = 3L,
-       w_min = 13L, w_max = 30L)
+  list(
+    cls_thr = 0.2, p_thr = 0.01, prev_thr = 0.01, n_consec = 3L,
+    L = 2L, eps = 0, K_sum = 4L, p_sum_thr = 0.04, N_req = 3L,
+    w_min = 13L, w_max = 30L
+  )
 }
 
 make_m1_config <- function() {
-  list(k_ref = 25L, ref_method = "fs", temperature = 0.25,
-       slope_weight = 8.0, slope_window = 6L)
+  list(
+    k_ref = 25L, ref_method = "fs", temperature = 0.25,
+    slope_weight = 8.0, slope_window = 6L
+  )
 }
 
 make_m2_config <- function() {
@@ -241,7 +245,8 @@ test_that("artifact identity is deterministic and stable", {
 
 test_that("artifact identity changes with different config", {
   sel <- validate_season_selection(
-    make_canonical_data(), training_seasons = c("2017-18", "2018-19")
+    make_canonical_data(),
+    training_seasons = c("2017-18", "2018-19")
   )
   cfg1 <- make_m0_config()
   cfg2 <- make_m0_config()
@@ -269,7 +274,8 @@ test_that("validate_m0_tuning accepts valid tuning", {
         "2018-19" = list(best_params = make_m0_config())
       ),
       selection = validate_season_selection(
-        make_canonical_data(), training_seasons = c("2017-18", "2018-19")
+        make_canonical_data(),
+        training_seasons = c("2017-18", "2018-19")
       )
     ),
     class = "page_m0_tuning"
@@ -307,6 +313,52 @@ test_that("validate_m0_tuning rejects missing selected config", {
     class = "page_m0_tuning"
   )
   expect_error(validate_m0_tuning(tuning), "best_params")
+})
+
+test_that("governed M0 validation accepts bracketed axes and null drops", {
+  tuning <- structure(
+    list(
+      best_params = list(p_thr = 0.005, prev_thr = 0, p_sum_thr = 0.055),
+      results = data.frame(score = 1),
+      folds = list("2017-18" = list()),
+      selection = NULL
+    ),
+    class = "page_m0_tuning"
+  )
+  grid <- data.frame(
+    p_thr = c(0.004, 0.005, 0.006),
+    prev_thr = c(0, 0.001, 0.002),
+    p_sum_thr = c(0.05, 0.055, 0.06)
+  )
+
+  checked <- validate_m0_tuning(
+    tuning,
+    grid = grid, check_boundaries = TRUE
+  )
+  expect_true(is.data.frame(checked$boundary_report))
+  expect_equal(
+    checked$boundary_report$decision,
+    c("stop_bracketed", "accept_null_drop", "stop_bracketed")
+  )
+})
+
+test_that("governed M0 validation rejects unresolved non-null boundaries", {
+  tuning <- structure(
+    list(
+      best_params = list(p_thr = 0.004),
+      results = data.frame(score = 1),
+      folds = list("2017-18" = list())
+    ),
+    class = "page_m0_tuning"
+  )
+  expect_error(
+    validate_m0_tuning(
+      tuning,
+      grid = data.frame(p_thr = c(0.004, 0.005)),
+      check_boundaries = TRUE
+    ),
+    "M0.*boundary.*p_thr"
+  )
 })
 
 # ============================================================
@@ -356,7 +408,8 @@ test_that("validate_m1_tuning rejects missing selected config", {
 
 test_that("validate_m1_tuning rejects fold/selection mismatch", {
   sel <- validate_season_selection(
-    make_canonical_data(), training_seasons = c("2017-18", "2018-19")
+    make_canonical_data(),
+    training_seasons = c("2017-18", "2018-19")
   )
   tuning <- structure(
     list(
@@ -367,6 +420,59 @@ test_that("validate_m1_tuning rejects fold/selection mismatch", {
     class = "page_m1_tuning"
   )
   expect_error(validate_m1_tuning(tuning), "fold|mismatch|seasons")
+})
+
+test_that("governed M1 validation rejects unresolved non-null boundaries", {
+  tuning <- structure(
+    list(
+      scores = data.frame(
+        spec_id = "s1", mae_weibull = 1,
+        stringsAsFactors = FALSE
+      ),
+      best = data.frame(
+        k_ref = 20L, slope_weight = 8,
+        mae_weibull = 1,
+        stringsAsFactors = FALSE
+      ),
+      grid = data.frame(
+        k_ref = c(20L, 30L),
+        slope_weight = c(8, 12),
+        stringsAsFactors = FALSE
+      )
+    ),
+    class = c("page_m1_tuning", "list")
+  )
+
+  expect_error(
+    validate_m1_tuning(tuning, check_boundaries = TRUE),
+    "boundary.*k_ref|k_ref.*boundary"
+  )
+})
+
+test_that("governed M1 validation permits bracketed tuned axes", {
+  tuning <- structure(
+    list(
+      scores = data.frame(
+        spec_id = "s1", mae_weibull = 1,
+        stringsAsFactors = FALSE
+      ),
+      best = data.frame(
+        k_ref = 25L, slope_weight = 12,
+        mae_weibull = 1,
+        stringsAsFactors = FALSE
+      ),
+      grid = data.frame(
+        k_ref = c(20L, 25L, 30L),
+        slope_weight = c(8, 12, 16),
+        stringsAsFactors = FALSE
+      )
+    ),
+    class = c("page_m1_tuning", "list")
+  )
+
+  checked <- validate_m1_tuning(tuning, check_boundaries = TRUE)
+  expect_true(is.data.frame(checked$boundary_report))
+  expect_true(all(checked$boundary_report$decision == "stop_bracketed"))
 })
 
 # ============================================================
@@ -444,7 +550,8 @@ test_that("fit_m0 returns draft page_m0_fit", {
 test_that("fit_m1 and fit_m2 retain their existing fitted payloads", {
   dat <- make_canonical_data()
   selection <- validate_season_selection(
-    dat, training_seasons = c("2017-18", "2018-19")
+    dat,
+    training_seasons = c("2017-18", "2018-19")
   )
   m0 <- make_frozen_m0(selection)
   local_mocked_bindings(
@@ -483,7 +590,8 @@ test_that("fit_m1 and fit_m2 retain their existing fitted payloads", {
 test_that("governed tune APIs record selection and real result schemas", {
   dat <- make_canonical_data()
   selection <- validate_season_selection(
-    dat, training_seasons = c("2017-18", "2018-19")
+    dat,
+    training_seasons = c("2017-18", "2018-19")
   )
   m0 <- make_frozen_m0(selection)
   m1 <- make_frozen_m1(m0)
@@ -536,14 +644,17 @@ test_that("governed tune APIs record selection and real result schemas", {
   )
 
   m0_tuning <- tune_m0(
-    dat, selection = selection, n_cores = 1L, verbose = FALSE
+    dat,
+    selection = selection, n_cores = 1L, verbose = FALSE
   )
   m1_tuning <- tune_m1(
-    dat, m0 = m0, selection = selection,
+    dat,
+    m0 = m0, selection = selection,
     n_cores = 1L, verbose = FALSE
   )
   m2_tuning <- tune_m2(
-    dat, selection, m0, m1, grid = data.frame(spec_id = "v16"),
+    dat, selection, m0, m1,
+    grid = data.frame(spec_id = "v16"),
     n_cores = 1L, verbose = FALSE
   )
 
@@ -590,7 +701,8 @@ test_that("freeze_m0 is idempotent on frozen objects", {
 
 test_that("fit_m1 requires frozen M0", {
   sel <- validate_season_selection(
-    make_canonical_data(), training_seasons = c("2017-18", "2018-19")
+    make_canonical_data(),
+    training_seasons = c("2017-18", "2018-19")
   )
   draft_m0 <- make_draft_m0(sel)
   expect_error(
@@ -601,10 +713,12 @@ test_that("fit_m1 requires frozen M0", {
 
 test_that("fit_m1 rejects mismatched upstream selection", {
   sel_a <- validate_season_selection(
-    make_canonical_data(), training_seasons = c("2017-18", "2018-19")
+    make_canonical_data(),
+    training_seasons = c("2017-18", "2018-19")
   )
   sel_b <- validate_season_selection(
-    make_canonical_data(), training_seasons = c("2017-18", "2019-20")
+    make_canonical_data(),
+    training_seasons = c("2017-18", "2019-20")
   )
   m0 <- make_frozen_m0(sel_a)
   expect_error(
@@ -615,7 +729,8 @@ test_that("fit_m1 rejects mismatched upstream selection", {
 
 test_that("fit_m2 requires frozen M0 and M1", {
   sel <- validate_season_selection(
-    make_canonical_data(), training_seasons = c("2017-18", "2018-19")
+    make_canonical_data(),
+    training_seasons = c("2017-18", "2018-19")
   )
   draft_m0 <- make_draft_m0(sel)
   m1 <- make_frozen_m1()
@@ -637,10 +752,12 @@ test_that("fit_m2 rejects unfrozen M1", {
 
 test_that("fit_m2 rejects mismatched M1 upstream identity", {
   sel_a <- validate_season_selection(
-    make_canonical_data(), training_seasons = c("2017-18", "2018-19")
+    make_canonical_data(),
+    training_seasons = c("2017-18", "2018-19")
   )
   sel_b <- validate_season_selection(
-    make_canonical_data(), training_seasons = c("2017-18", "2019-20")
+    make_canonical_data(),
+    training_seasons = c("2017-18", "2019-20")
   )
   m0_a <- make_frozen_m0(sel_a)
   m0_b <- make_frozen_m0(sel_b)
@@ -664,6 +781,30 @@ test_that("freeze_m0 with invalid tuning rejects", {
   expect_error(freeze_m0(draft, tuning = bad_tuning), "best_params|evaluable")
 })
 
+test_that("freeze_m0 blocks an unresolved boundary before freezing", {
+  draft <- make_draft_m0()
+  sel <- season_selection(draft)
+  edge_config <- make_m0_config()
+  edge_config$p_thr <- 0.01
+  edge_tuning <- structure(
+    list(
+      best_params = edge_config,
+      results = data.frame(score = 1),
+      folds = stats::setNames(
+        list(list(), list()), sel$training_seasons
+      ),
+      grid = data.frame(p_thr = c(0.01, 0.02)),
+      selection = sel
+    ),
+    class = "page_m0_tuning"
+  )
+  expect_error(
+    freeze_m0(draft, tuning = edge_tuning),
+    "M0.*boundary"
+  )
+  expect_identical(draft$status, "draft")
+})
+
 test_that("freeze_m1 with valid tuning succeeds", {
   m0 <- make_frozen_m0()
   draft <- make_draft_m1(m0)
@@ -675,6 +816,11 @@ test_that("freeze_m1 with valid tuning succeeds", {
         spec_id = "s001", mae_weibull = 1.5,
         k_ref = 25L, ref_method = "fs", temperature = 0.25,
         slope_weight = 8, slope_window = 6L
+      ),
+      grid = data.frame(
+        k_ref = c(20L, 25L, 30L),
+        slope_weight = c(4, 8, 12),
+        stringsAsFactors = FALSE
       ),
       selection = sel
     ),
@@ -700,11 +846,43 @@ test_that("freeze rejects tuning from a different selection", {
         k_ref = 25L, ref_method = "fs", temperature = 0.25,
         slope_weight = 8, slope_window = 6L
       ),
+      grid = data.frame(
+        k_ref = c(20L, 25L, 30L),
+        slope_weight = c(4, 8, 12),
+        stringsAsFactors = FALSE
+      ),
       selection = other_selection
     ),
     class = c("page_m1_tuning", "list")
   )
   expect_error(freeze_m1(draft, unrelated_tuning), "selection.*mismatch")
+})
+
+test_that("freeze_m1 blocks an unresolved boundary before freezing", {
+  m0 <- make_frozen_m0()
+  draft <- make_draft_m1(m0)
+  sel <- season_selection(m0)
+  edge_tuning <- structure(
+    list(
+      scores = data.frame(spec_id = "s001", mae_weibull = 1.5, n_seasons = 2L),
+      best = data.frame(
+        spec_id = "s001", mae_weibull = 1.5,
+        k_ref = 20L, ref_method = "fs", temperature = 0.25,
+        slope_weight = 4, slope_window = 6L
+      ),
+      grid = data.frame(
+        k_ref = c(20L, 25L), slope_weight = c(4, 8),
+        stringsAsFactors = FALSE
+      ),
+      selection = sel
+    ),
+    class = c("page_m1_tuning", "list")
+  )
+  expect_error(
+    freeze_m1(draft, tuning = edge_tuning),
+    "M1.*boundary"
+  )
+  expect_identical(draft$status, "draft")
 })
 
 test_that("frozen-stage guard detects artifact tampering", {
@@ -755,17 +933,22 @@ test_that(".require_frozen_stage rejects non-stage objects", {
 
 test_that("assemble_kit with governed artifacts rejects unfrozen M0", {
   sel <- validate_season_selection(
-    make_canonical_data(), training_seasons = c("2017-18", "2018-19")
+    make_canonical_data(),
+    training_seasons = c("2017-18", "2018-19")
   )
   draft_m0 <- make_draft_m0(sel)
-  m1 <- list(ref = list(anchorWeek = 20L, pred_df = data.frame(newWeek = 1:52, fit = 0)),
-             hyper = list(), aligned_train = make_canonical_data(),
-             m1_params = make_m1_config(), seasons_used = c("2017-18", "2018-19"))
-  m2_model <- list(fit = structure(list(model = data.frame(
-    logit_f_eff = 0, z_ema = 0, lead = factor("h1")
-  )), class = "gam"),
-  spec = make_m2_config(), feature_ranges = list(),
-  m1_train_preds = data.frame(), training_seasons = "2017-18")
+  m1 <- list(
+    ref = list(anchorWeek = 20L, pred_df = data.frame(newWeek = 1:52, fit = 0)),
+    hyper = list(), aligned_train = make_canonical_data(),
+    m1_params = make_m1_config(), seasons_used = c("2017-18", "2018-19")
+  )
+  m2_model <- list(
+    fit = structure(list(model = data.frame(
+      logit_f_eff = 0, z_ema = 0, lead = factor("h1")
+    )), class = "gam"),
+    spec = make_m2_config(), feature_ranges = list(),
+    m1_train_preds = data.frame(), training_seasons = "2017-18"
+  )
 
   expect_error(
     assemble_kit(draft_m0, m1, m2_model),
@@ -816,8 +999,10 @@ test_that("legacy assemble_kit with plain lists still works", {
     fit = structure(list(model = data.frame(
       logit_f_eff = 0, z_ema = 0, lead = factor("h1")
     )), class = "gam"),
-    spec = list(k_f = 4L, k_n = 0L, k_de = 0L, k_r = 0L, k_sp = 0L,
-                bias_alpha = 0.05, bias_beta = 0),
+    spec = list(
+      k_f = 4L, k_n = 0L, k_de = 0L, k_r = 0L, k_sp = 0L,
+      bias_alpha = 0.05, bias_beta = 0
+    ),
     feature_ranges = list(),
     m1_train_preds = data.frame(),
     training_seasons = c("2017-18", "2018-19")

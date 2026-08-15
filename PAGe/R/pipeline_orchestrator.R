@@ -733,7 +733,10 @@ train_pipeline <- function(
     n_cores = n_cores, verbose = verbose,
     selection = selection
   )
-  validate_m0_tuning(m0_tuning)
+  m0_tuning <- validate_m0_tuning(
+    m0_tuning,
+    grid = m0_grid, check_boundaries = TRUE
+  )
   m0 <- freeze_m0(
     fit_m0(
       allD, selection,
@@ -755,7 +758,9 @@ train_pipeline <- function(
     checkpoint_dir = m1_checkpoint, verbose = verbose,
     selection = selection
   )
-  validate_m1_tuning(m1_tuning)
+  # M1 is a governed stage boundary: do not freeze an unresolved non-null
+  # edge winner or spend M2 compute on a grid that must be expanded.
+  m1_tuning <- validate_m1_tuning(m1_tuning, check_boundaries = TRUE)
   tuned_m1_params <- .m1_params_from_tuning(m1_params, m1_tuning)
   m1 <- freeze_m1(
     fit_m1(allD, selection, m0 = m0, config = tuned_m1_params),
@@ -798,7 +803,10 @@ train_pipeline <- function(
   } else {
     m2_tuning <- run_full_m2(m2_grid)
   }
-  validate_m2_tuning(m2_tuning)
+  # M2 is the final governed tuning stage: reject a genuinely tuned edge
+  # before fitting/freezing a production configuration. Users can inspect
+  # the warning and call expand_tuning_grid() to extend the same checkpoint.
+  validate_m2_tuning(m2_tuning, check_boundaries = TRUE)
   m2_selection <- select_m2_candidate(m2_tuning, method = selection_method)
   if (is.null(m2_selection$selected_spec)) {
     stop("Selected M2 specification could not be reconstructed from tuning results.")

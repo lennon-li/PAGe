@@ -24,6 +24,53 @@ A boundary hit is not automatically a failure:
 Record why a boundary is accepted or expanded. Never silently promote a
 boundary winner as though the search bracketed it.
 
+## Built-in boundary warning and resumable expansion
+
+The package exposes the boundary check instead of relying on an agent or a
+manual inspection. A governed validation with `check_boundaries = TRUE`
+warns with class `page_boundary_warning` and then stops the stage before the
+next stage can run. Inspect a result without stopping it with:
+
+```r
+report <- inspect_tuning_boundaries(m1_tuning, stage = "M1")
+subset(report, decision == "expand_required")
+```
+
+Expand only the unresolved axes. Existing rows and IDs are retained; the new
+rows are appended using the adjacent tested spacing (or an explicit step):
+
+```r
+m1_grid_next <- expand_tuning_grid(
+  m1_tuning, stage = "M1", steps = c(k_ref = 5, slope_weight = 4)
+)
+m1_next <- tune_m1(
+  data, m0 = m0, m1 = m1, grid = m1_grid_next,
+  checkpoint_dir = "checkpoints/m1"
+)
+```
+
+Use the same `checkpoint_dir`. M1 and M2 reuse completed specification IDs;
+M0 reuses completed per-fold grid scores when its prior result is supplied:
+
+```r
+m0_grid_next <- expand_tuning_grid(m0_tuning, stage = "M0")
+m0_next <- tune_m0(
+  data, grid = m0_grid_next, checkpoint_dir = "checkpoints/m0",
+  previous_results = m0_tuning
+)
+
+m2_grid_next <- expand_tuning_grid(m2_tuning, stage = "M2")
+m2_next <- tune_m2(
+  data, selection = selection, m0 = m0, m1 = m1,
+  grid = m2_grid_next, checkpoint_dir = "checkpoints/m2"
+)
+```
+
+Expansion is additive: it never drops old candidates, silently changes a
+specification identity, or treats a capped search as bracketed. A null/drop
+value (for example `k_e = 0`, `Kr = 1`, or `bias_alpha = 0`) is reported as
+`accept_null_drop`; other edge winners remain `expand_required`.
+
 ## Holdout-safe tuning loop
 
 1. Before looking at the prospective holdout, freeze the season selection,
@@ -31,8 +78,12 @@ boundary winner as though the search bracketed it.
    grid-size cap.
 2. Run a coarse, scientifically plausible grid using identical walk-forward
    folds for every candidate. Save resumable checkpoints.
-3. Pass the stage tuning validator. Do not interpret a ranking with incomplete
-   folds, all-missing metrics, or a non-finite selected score.
+3. Pass the stage tuning validator. For governed M0 runs, supply the M0 grid
+   with `validate_m0_tuning(tuning, grid, check_boundaries = TRUE)`; for M1,
+   call `validate_m1_tuning(tuning, check_boundaries = TRUE)`. Unresolved
+   non-null edges then stop before the stage is frozen or the downstream stage
+   begins. Do not interpret a ranking with incomplete folds, all-missing
+   metrics, or a non-finite selected score.
 4. Inspect the full response profile, per-season scores, worst season, and
    early/late or phase-specific errors—not only the overall mean.
 5. For a winning boundary, add one valid level beyond that boundary using the
@@ -46,7 +97,8 @@ boundary winner as though the search bracketed it.
 8. Stop when the selected configuration is bracketed, or when a documented
    constraint/null value justifies the boundary, and performance is stable
    enough across folds for the intended decision.
-9. Fit and freeze the selected stage. Only then may the downstream stage begin.
+9. Fit and freeze the selected stage. Only then may the downstream stage begin;
+   the high-level retune API enforces this M1-to-M2 boundary automatically.
 10. Keep the prospective holdout untouched. Changing the grid after viewing it
     starts a new development cycle.
 

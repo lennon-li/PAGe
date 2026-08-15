@@ -281,13 +281,18 @@ build_m0 <- function(allD,
 #' @param flag_args List of ignition-flagging parameters.
 #' @param n_cores Integer. Parallel cores (default: all minus 1).
 #' @param verbose Logical. Print progress.
+#' @param checkpoint_dir Optional directory for fold-level M0 tuning
+#'   checkpoints. Reuse the same directory when expanding a grid.
+#' @param previous_results Optional prior M0 tuning result. When supplied,
+#'   completed grid scores are reused and only appended specifications are
+#'   evaluated.
 #' @param selection Optional governed \code{page_season_selection}. When
 #'   supplied, only its training seasons are used and the returned object is a
 #'   \code{page_m0_tuning}.
 #'
 #' @return A list with \code{best_params}, \code{tuning} (full
-#'   \code{loso_M0v2()} output), \code{aligned}, \code{seasons_used},
-#'   \code{manual_labels}, and \code{flag_args}. Pass directly to
+#'   \code{loso_M0v2()} output), the complete \code{grid}, \code{aligned},
+#'   \code{seasons_used}, \code{manual_labels}, and \code{flag_args}. Pass directly to
 #'   \code{build_m1()}, \code{build_m2()}, and \code{train_m2()}.
 #'
 #' @export
@@ -299,7 +304,9 @@ tune_m0 <- function(allD,
                     flag_args = .default_flag_args(),
                     n_cores = parallel::detectCores() - 1L,
                     verbose = TRUE,
-                    selection = NULL) {
+                    selection = NULL,
+                    checkpoint_dir = NULL,
+                    previous_results = NULL) {
   governed <- !is.null(selection)
   if (governed) {
     allD <- .selected_training_data(allD, selection)
@@ -353,12 +360,15 @@ tune_m0 <- function(allD,
     exSeason_tune = NULL,
     fit_args      = fit_args_use,
     tune_args     = tune_args_use,
-    verbose       = verbose
+    verbose       = verbose,
+    checkpoint_dir = checkpoint_dir,
+    previous_results = previous_results
   )
 
   out <- list(
     best_params   = tuning$best_params,
     tuning        = tuning,
+    grid          = as.data.frame(grid),
     aligned       = aligned,
     seasons_used  = m0_built$seasons_used,
     manual_labels = manual_labels,
@@ -584,7 +594,7 @@ tune_m1 <- function(allD,
 
 .m2_checkpoint_schema <- function() "page_m2_phase2_checkpoint"
 
-.m2_checkpoint_version <- function() 1L
+.m2_checkpoint_version <- function() 2L
 
 .m2_checkpoint_identity <- function(allD, test_seasons, grid, m0, m1) {
   upstream_identity <- function(stage, artifact, fields) {
@@ -599,13 +609,12 @@ tune_m1 <- function(allD,
     )
   }
 
-  digest::digest(
+  context <- digest::digest(
     list(
       schema = .m2_checkpoint_schema(),
       version = .m2_checkpoint_version(),
       data_id = .stage_training_data_id(allD),
       test_seasons = as.character(test_seasons),
-      grid = as.data.frame(grid),
       m0 = upstream_identity(
         "m0", m0,
         c("best_params", "manual_labels", "flag_args")
@@ -622,19 +631,28 @@ tune_m1 <- function(allD,
     ),
     algo = "sha256"
   )
+  list(
+    context = context,
+    grid = as.character(.m2_spec_ids(as.data.frame(grid)))
+  )
 }
 
-.read_m2_checkpoint <- function(path, identity) {
+.read_m2_checkpoint <- function(path, identity, allow_grid_extension = FALSE) {
   checkpoint <- tryCatch(readRDS(path), error = function(error) NULL)
   expected_names <- c("schema", "version", "identity", "results")
   if (!is.list(checkpoint) ||
     !identical(names(checkpoint), expected_names) ||
     !identical(checkpoint$schema, .m2_checkpoint_schema()) ||
     !identical(checkpoint$version, .m2_checkpoint_version()) ||
-    !identical(checkpoint$identity, identity) ||
     !is.list(checkpoint$results)) {
     return(NULL)
   }
+  exact <- identical(checkpoint$identity, identity)
+  extension <- isTRUE(allow_grid_extension) &&
+    is.list(checkpoint$identity) && is.list(identity) &&
+    identical(checkpoint$identity$context, identity$context) &&
+    all(checkpoint$identity$grid %in% identity$grid)
+  if (!exact && !extension) return(NULL)
   checkpoint$results
 }
 
@@ -817,7 +835,12 @@ build_m2 <- function(allD,
       m1 = m1
     )
     if (file.exists(ckpt_file)) {
-      restored <- .read_m2_checkpoint(ckpt_file, ckpt_identity)
+      # A changed grid is a governed expansion when data, folds, and frozen
+      # upstream stages are unchanged. Reuse completed spec identities and
+      # evaluate only the appended rows.
+      restored <- .read_m2_checkpoint(
+        ckpt_file, ckpt_identity, allow_grid_extension = TRUE
+      )
       if (is.null(restored)) {
         if (verbose) {
           message(
