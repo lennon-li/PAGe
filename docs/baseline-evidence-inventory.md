@@ -46,9 +46,9 @@ only its README.
 ### Package identity
 
 - Package: `PAGe` 0.2.0.
-- Code source of truth: `PAGe/R/`. A top-level `R/` directory remains as a
-  legacy checkout mirror for historical scripts; it is not package source and
-  must not receive new edits.
+- Code source of truth: `PAGe/R/`. A top-level `R/` directory is maintained as
+  a development mirror for historical scripts; keep the two trees synchronized
+  when a task touches mirrored files, as required by the repository guidance.
 - Export count: 53 (`PAGe/NAMESPACE`).
 - Return classes currently constructed by the package: `page_forecast`,
   `page_training_result`, `page_promotion_report`, and

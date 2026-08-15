@@ -1,8 +1,8 @@
 # Private artifact storage
 
 Large tuning outputs, run checkpoints, logs, and rendered results must not be
-written to the checkout's root filesystem on BCC.  The designated private
-artifact location is:
+written to the checkout's root filesystem on a remote compute host. The
+designated private artifact location is:
 
 ```text
 path:  a writable private NFS artifact share outside the checkout
@@ -30,14 +30,11 @@ Existing preserved material is organized as follows:
 - `legacy-checkout-artifacts-20260813/` — older ignored checkout artifacts
   moved out of the repository tree (including the prior check output).
 
-Asgard accesses this archive through the user-space mount
-`/home/yeli/PAGe-bcc-artifacts/`; the checkout-level `data/` path is a symlink
-into it.  The tracked checkout `results/` directory contains only its small
-documentation README; generated result trees belong under the archive root.
-Asgard's local `/mnt/storage1` disk (`/dev/sdb`)
-entered emergency read-only mode after hardware I/O errors on 2026-08-12.  It
-is not an active destination; older copies there remain only until an
-administrator repairs and verifies the disk.
+The archive is accessed through a configured user-space mount; the checkout's
+`data/` path may be a symlink into it. The tracked checkout `results/`
+directory contains only its small documentation README; generated result trees
+belong under the archive root. Machine-specific mount mappings and disk-health
+notes belong in the private runbook, not in this repository.
 
 Do not commit private observations, model objects, checkpoints, or generated
 result trees.  Record the artifact subdirectory and run identifier in the
