@@ -37,7 +37,10 @@ subset(report, decision == "expand_required")
 ```
 
 Expand only the unresolved axes. Existing rows and IDs are retained; the new
-rows are appended using the adjacent tested spacing (or an explicit step):
+rows are appended using half the adjacent tested spacing (or an explicit
+caller-supplied step for M0/M1). The adaptive M2 planner applies the same
+halving rule automatically. Integer axes are rounded to a valid integer and M1
+reference axes are capped at the declared `n_weeks` domain:
 
 ```r
 m1_grid_next <- expand_tuning_grid(
@@ -71,6 +74,18 @@ specification identity, or treats a capped search as bracketed. A null/drop
 value (for example `k_e = 0`, `Kr = 1`, or `bias_alpha = 0`) is reported as
 `accept_null_drop`; other edge winners remain `expand_required`.
 
+M1 also checks each fold's aligned data before fitting the reference GAM. A
+candidate whose `k_ref` exceeds the number of supported unique aligned weeks
+fails with its specification and fold in the error message; it is never
+silently converted into an all-missing score. Use `n_weeks` in
+`expand_tuning_grid()` when the reference domain is not the default 52 weeks.
+
+M0 validates detector thresholds, ordered ignition windows, gate counts, and
+rolling-window lengths against the observed within-season weeks before scoring.
+M2 validates every enabled smooth basis against the finite, per-lead training
+values before calling `mgcv`; a failed candidate reports its specification and
+fold. These checks apply during initial tuning and every additive expansion.
+
 ## Holdout-safe tuning loop
 
 1. Before looking at the prospective holdout, freeze the season selection,
@@ -87,7 +102,7 @@ value (for example `k_e = 0`, `Kr = 1`, or `bias_alpha = 0`) is reported as
 4. Inspect the full response profile, per-season scores, worst season, and
    early/late or phase-specific errors—not only the overall mean.
 5. For a winning boundary, add one valid level beyond that boundary using the
-   adjacent observed spacing. Retain the current winner, incumbent, and nearest
+   halved adjacent observed spacing. Retain the current winner, incumbent, and nearest
    interior neighbors.
 6. Prefer one-factor local neighbors first. Add targeted interactions only
    when results suggest that two parameters materially interact; avoid
@@ -175,10 +190,12 @@ was interior (`12`), so do not add `slope_weight = 4` unless a later complete
 run again selects `8`.
 
 - `k_ref` controls reference-curve flexibility. If `25` remains the lower-edge
-  winner, a one-step extension using the adjacent spacing is `20`; if `50`
-  wins, the corresponding extension is `60`.
+  winner, the default halved-step extension is `22` (or use an explicit
+  `steps = c(k_ref = 5)` to test `20`). If `50` wins on the default 52-week
+  domain, expansion is capped at `52`; do not generate `k_ref = 60`.
 - `slope_weight` is nonnegative. If `8` remains the lower-edge winner, the
-  adjacent spacing suggests testing `4`. `0` is a meaningful no-slope-weight
+  default halved-step expansion tests `6`; use an explicit `steps` value if
+  the planned `4` comparison is required. `0` is a meaningful no-slope-weight
   candidate and should be tested only as an intentional null comparison.
 - For `multi_temperature`, positive values near zero make template weighting
   increasingly sharp. Expand carefully—often multiplicatively—and inspect

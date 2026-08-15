@@ -9,7 +9,9 @@ expand_tuning_grid(
   stage = c("M0", "M1", "M2"),
   grid = NULL,
   steps = NULL,
-  max_specs = NULL
+  max_specs = NULL,
+  n_weeks = 52L,
+  data = NULL
 )
 }
 \arguments{
@@ -22,6 +24,10 @@ expand_tuning_grid(
 \item{steps}{Optional named numeric vector overriding adjacent spacing.}
 
 \item{max_specs}{Optional cap on returned rows.}
+
+\item{n_weeks}{Integer reference-domain size used to guard M1 basis values.}
+
+\item{data}{Optional stage data used to guard M0 rolling/window support.}
 }
 \value{
 The original grid with new boundary rows appended. New rows carry
@@ -29,7 +35,7 @@ The original grid with new boundary rows appended. New rows carry
 }
 \description{
 This is the user-facing companion to `inspect_tuning_boundaries()`. It
-appends one valid adjacent value per unresolved axis and preserves every
+appends one valid smaller adjacent value per unresolved axis and preserves every
 existing row and specification identity. Pass the returned grid to the
 same `tune_*()` function with its existing `checkpoint_dir`; M1 and M2
 checkpoints reuse completed specifications, while M0 reuses cached grid

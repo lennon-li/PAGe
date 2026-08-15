@@ -353,14 +353,14 @@ tune_m0 <- function(allD,
   }
 
   tuning <- loso_M0v2(
-    dat           = aligned,
-    grid          = as.data.frame(grid),
-    score_col     = "p_cls_p",
-    drop_seasons  = if (length(drop_all) > 0) drop_all else NULL,
+    dat = aligned,
+    grid = as.data.frame(grid),
+    score_col = "p_cls_p",
+    drop_seasons = if (length(drop_all) > 0) drop_all else NULL,
     exSeason_tune = NULL,
-    fit_args      = fit_args_use,
-    tune_args     = tune_args_use,
-    verbose       = verbose,
+    fit_args = fit_args_use,
+    tune_args = tune_args_use,
+    verbose = verbose,
     checkpoint_dir = checkpoint_dir,
     previous_results = previous_results
   )
@@ -565,6 +565,7 @@ tune_m1 <- function(allD,
     checkpoint_dir      = checkpoint_dir,
     n_cores             = as.integer(max(1L, n_cores)),
     verbose             = verbose,
+    fail_fast           = TRUE,
     dynamic_temp        = isTRUE(m1_params$dynamic_temp),
     k_deriv             = 20L,
     buffer_weeks        = 5L,
@@ -652,7 +653,9 @@ tune_m1 <- function(allD,
     is.list(checkpoint$identity) && is.list(identity) &&
     identical(checkpoint$identity$context, identity$context) &&
     all(checkpoint$identity$grid %in% identity$grid)
-  if (!exact && !extension) return(NULL)
+  if (!exact && !extension) {
+    return(NULL)
+  }
   checkpoint$results
 }
 
@@ -700,6 +703,8 @@ tune_m1 <- function(allD,
 #' @param n_cores Integer. Parallel cores.
 #' @param checkpoint_dir Character. Directory for Phase 2 checkpoint files.
 #'   Pass \code{NULL} to disable checkpointing.
+#' @param fail_fast Logical. Stop on the first unsupported fold/spec instead of
+#'   converting model failures to missing scores (default \code{TRUE}).
 #' @param verbose Logical. Print progress.
 #'
 #' @return A list with \code{best_spec}, \code{best_spec_id}, \code{summary}
@@ -718,6 +723,7 @@ build_m2 <- function(allD,
                      bias_beta = 0,
                      n_cores = parallel::detectCores() - 1L,
                      checkpoint_dir = NULL,
+                     fail_fast = TRUE,
                      verbose = TRUE) {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
   if (!requireNamespace("purrr", quietly = TRUE)) stop("Need 'purrr'.")
@@ -758,6 +764,7 @@ build_m2 <- function(allD,
     message("[build_m2] Phase 1: M1 cache for ", length(test_seasons), " folds...")
   }
   future::plan(future::multisession, workers = as.integer(max(1L, n_cores)))
+  on.exit(future::plan(future::sequential), add = TRUE)
 
   m1_cache <- list()
   for (test_s in test_seasons) {
@@ -771,6 +778,13 @@ build_m2 <- function(allD,
         manual_labels = manual_labels, verbose = FALSE
       ),
       error = function(e) {
+        if (isTRUE(fail_fast)) {
+          stop(
+            "M2 Phase 1 fold `", test_s, "` construction failed: ",
+            conditionMessage(e),
+            call. = FALSE
+          )
+        }
         message("  ERROR fold: ", conditionMessage(e))
         NULL
       }
@@ -792,6 +806,13 @@ build_m2 <- function(allD,
         parallel = TRUE, verbose = FALSE
       ),
       error = function(e) {
+        if (isTRUE(fail_fast)) {
+          stop(
+            "M2 Phase 1 fold `", test_s, "` M1 training failed: ",
+            conditionMessage(e),
+            call. = FALSE
+          )
+        }
         message("  ERROR m1_train: ", conditionMessage(e))
         NULL
       }
@@ -810,11 +831,26 @@ build_m2 <- function(allD,
         dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L
       ),
       error = function(e) {
+        if (isTRUE(fail_fast)) {
+          stop(
+            "M2 Phase 1 fold `", test_s, "` M1 test prediction failed: ",
+            conditionMessage(e),
+            call. = FALSE
+          )
+        }
         message("  ERROR m1_test: ", conditionMessage(e))
         NULL
       }
     )
     m1_cache[[test_s]] <- list(fold = fold, m1_train = m1_train, m1_test = m1_test)
+  }
+  if (isTRUE(fail_fast) && !all(test_seasons %in% names(m1_cache))) {
+    missing_folds <- setdiff(test_seasons, names(m1_cache))
+    stop(
+      "M2 Phase 1 did not produce usable M1 caches for fold(s): ",
+      paste(missing_folds, collapse = ", "),
+      call. = FALSE
+    )
   }
   if (verbose) message("[build_m2] Phase 1 complete: ", length(m1_cache), " folds.\n")
 
@@ -839,7 +875,8 @@ build_m2 <- function(allD,
       # upstream stages are unchanged. Reuse completed spec identities and
       # evaluate only the appended rows.
       restored <- .read_m2_checkpoint(
-        ckpt_file, ckpt_identity, allow_grid_extension = TRUE
+        ckpt_file, ckpt_identity,
+        allow_grid_extension = TRUE
       )
       if (is.null(restored)) {
         if (verbose) {
@@ -890,9 +927,19 @@ build_m2 <- function(allD,
                 } else {
                   NULL
                 },
-                spec = spec, method = "REML", verbose = FALSE
+                spec = spec, method = "REML", verbose = FALSE,
+                fail_fast = fail_fast
               ),
-              error = function(e) NULL
+              error = function(e) {
+                if (isTRUE(fail_fast)) {
+                  stop(
+                    "M2 specification `", spec_id, "`, fold `", test_s,
+                    "` training failed: ", conditionMessage(e),
+                    call. = FALSE
+                  )
+                }
+                NULL
+              }
             )
             manual_labels_train <- .m2_training_labels_for_fold(
               manual_labels,
@@ -912,9 +959,25 @@ build_m2 <- function(allD,
                 manual_labels_test = NULL,
                 flag_args = flag_args_use, verbose = FALSE
               ),
-              error = function(e) NULL
+              error = function(e) {
+                if (isTRUE(fail_fast)) {
+                  stop(
+                    "M2 specification `", spec_id, "`, fold `", test_s,
+                    "` evaluation failed: ", conditionMessage(e),
+                    call. = FALSE
+                  )
+                }
+                NULL
+              }
             )
             if (is.null(eval_out)) {
+              if (isTRUE(fail_fast)) {
+                stop(
+                  "M2 specification `", spec_id, "`, fold `", test_s,
+                  "` produced no evaluation output.",
+                  call. = FALSE
+                )
+              }
               fold_scores[[test_s]] <- tibble::tibble(
                 season = test_s, n = NA_integer_, mean_nll = NA_real_,
                 bernoulli_nll = NA_real_, brier = NA_real_, rmse_p = NA_real_

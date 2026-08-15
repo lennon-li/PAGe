@@ -91,7 +91,7 @@ test_that("boundary expansion uses the spacing adjacent to the winning boundary"
     drop = FALSE
   ]
 
-  expect_equal(alpha_boundary$alpha_state, 0)
+  expect_equal(alpha_boundary$alpha_state, 0.05)
   expect_false(any(abs(alpha_boundary$alpha_state - 0.09) < 1e-10))
 })
 
@@ -121,8 +121,9 @@ test_that("M2 EMA boundary expands only to the explicit drop/null", {
 
   expect_true(any(planned$k_e == 0L & grepl("boundary:k_e:drop", planned$provenance, fixed = TRUE)))
   expect_false(any(planned$k_e == 1L))
-  expect_true(any(planned$k_sp == 10L & grepl("boundary:k_sp", planned$provenance, fixed = TRUE)))
-  expect_true(any(planned$bias_alpha == 0 & grepl("boundary:bias_alpha", planned$provenance, fixed = TRUE)))
+  expect_true(any(planned$k_sp == 9L & grepl("boundary:k_sp", planned$provenance, fixed = TRUE)))
+  expect_true(any(abs(planned$bias_alpha - 0.025) < 1e-10 &
+    grepl("boundary:bias_alpha", planned$provenance, fixed = TRUE)))
   expect_error(
     PAGe:::.validate_m2_grid(transform(grid[1L, ], k_e = 1L)),
     "k_e must be 0"

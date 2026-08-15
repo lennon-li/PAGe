@@ -14,6 +14,7 @@ tune_m1_alignment(
   n_cores = parallel::detectCores() - 1L,
   checkpoint_dir = "data/m1_tune_ckpt",
   verbose = TRUE,
+  fail_fast = TRUE,
   ...
 )
 }
@@ -41,6 +42,9 @@ and the results cache (default \code{"data/m1_tune_ckpt"}).}
 
 \item{verbose}{Logical. Print progress (default \code{TRUE}).}
 
+\item{fail_fast}{Logical. Stop and return the failing specification and
+fold error instead of recording an unevaluable candidate (default `TRUE`).}
+
 \item{...}{Additional fixed arguments forwarded to
 \code{loso_walkforward()} (e.g. \code{buffer_weeks}, \code{use_ci}).}
 }
@@ -49,7 +53,7 @@ A list with elements:
 \describe{
   \item{scores}{Tibble with one row per spec: \code{spec_id} plus the
     grid columns, \code{mae_uniform}, \code{mae_exp}, \code{mae_weibull},
-    \code{n_seasons}.}
+    \code{n_seasons}, and \code{failure_reason}.}
   \item{best}{Single-row tibble for the spec with lowest
     \code{mae_weibull}.}
   \item{grid}{The input grid (for reference).}

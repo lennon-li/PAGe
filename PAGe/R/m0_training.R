@@ -79,89 +79,92 @@
 #' }
 #'
 fitIgnition <- function(
-    dat,
-    season_col = "season",
-    week_col   = "weekF",
-    phase_col  = "phase",
-    p_col      = "p",
-    event_k = 1L,
-    lead    = 1L,
-    A_pre   = 6L,
-    B_post  = 6L,
-    k_week  = 6L,
-    k_p     = 8L,
-    k_fs    = 4L,
-    fit_base  = TRUE,
-    fit_slope = FALSE,
-    fit_fs    = FALSE,
-    select = FALSE,
-    verbose = TRUE
+  dat,
+  season_col = "season",
+  week_col = "weekF",
+  phase_col = "phase",
+  p_col = "p",
+  event_k = 1L,
+  lead = 1L,
+  A_pre = 6L,
+  B_post = 6L,
+  k_week = 6L,
+  k_p = 8L,
+  k_fs = 4L,
+  fit_base = TRUE,
+  fit_slope = FALSE,
+  fit_fs = FALSE,
+  select = FALSE,
+  verbose = TRUE
 ) {
   stopifnot(is.data.frame(dat))
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Need package: data.table")
   if (!requireNamespace("gamm4", quietly = TRUE)) stop("Need package: gamm4")
   if (isTRUE(fit_fs) && !requireNamespace("mgcv", quietly = TRUE)) stop("Need package: mgcv for fit_fs=TRUE")
-  
+
   DT_all <- data.table::as.data.table(data.table::copy(dat))
-  
+
   need <- c(season_col, week_col, phase_col, p_col)
   miss <- setdiff(need, names(DT_all))
   if (length(miss)) stop("fitIgnition: dat missing cols: ", paste(miss, collapse = ", "))
-  
+
   data.table::setorderv(DT_all, c(season_col, week_col))
   DT_all[, (season_col) := as.factor(get(season_col))]
-  DT_all[, (week_col)   := as.integer(get(week_col))]
-  
+  DT_all[, (week_col) := as.integer(get(week_col))]
+
   # truth ignition week
   iWeek_dt <- DT_all[get(phase_col) == 1L,
-                     .(iWeek_true = suppressWarnings(min(get(week_col), na.rm = TRUE))),
-                     by = season_col]
+    .(iWeek_true = suppressWarnings(min(get(week_col), na.rm = TRUE))),
+    by = season_col
+  ]
   if (nrow(iWeek_dt) == 0L) stop("fitIgnition: no phase==1 rows found; cannot infer iWeek_true.")
-  
+
   # training window + labeling
   DT_tr <- iWeek_dt[DT_all, on = season_col]
   DT_tr <- DT_tr[!is.na(iWeek_true)]
-  
+
   event_k <- as.integer(event_k)
-  lead    <- as.integer(lead)
-  A_pre   <- as.integer(A_pre)
-  B_post  <- as.integer(B_post)
-  
+  lead <- as.integer(lead)
+  A_pre <- as.integer(A_pre)
+  B_post <- as.integer(B_post)
+
   DT_tr[, w_lo_train := pmax(1L, iWeek_true - A_pre)]
   DT_tr[, w_hi_train := iWeek_true + B_post]
-  
+
   DT_tr[, lo_event := pmax(1L, iWeek_true - lead - event_k)]
   DT_tr[, hi_event := iWeek_true - lead]
-  
+
   # ensure event window is included even if A_pre is too small
   DT_tr[, w_lo_train := pmin(w_lo_train, lo_event)]
-  
+
   DT_tr <- DT_tr[get(week_col) >= w_lo_train & get(week_col) <= w_hi_train]
   DT_tr[, event := as.integer(get(week_col) >= lo_event & get(week_col) <= hi_event)]
-  
+
   if (isTRUE(verbose)) {
     n_pos <- sum(DT_tr$event == 1L, na.rm = TRUE)
     n_all <- nrow(DT_tr)
     message("[fitIgnition] train window: [iWeek_true - A_pre, iWeek_true + B_post]  A_pre=", A_pre, " B_post=", B_post)
     message("[fitIgnition] label window: [iWeek_true - lead - event_k, iWeek_true - lead]  lead=", lead, " event_k=", event_k)
-    message("[fitIgnition] train rows=", n_all,
-            " seasons=", data.table::uniqueN(DT_tr[[season_col]]),
-            " event==1 count=", n_pos, " prevalence=", signif(n_pos / n_all, 3))
+    message(
+      "[fitIgnition] train rows=", n_all,
+      " seasons=", data.table::uniqueN(DT_tr[[season_col]]),
+      " event==1 count=", n_pos, " prevalence=", signif(n_pos / n_all, 3)
+    )
   }
-  
+
   rhs_fixed <- paste0(
     "s(", week_col, ", bs='ts', k=", as.integer(k_week), ") + ",
     "s(", p_col,    ", bs='ts', k=", as.integer(k_p),    ")"
   )
   form_fixed <- stats::as.formula(paste0("event ~ ", rhs_fixed))
-  
+
   fits <- list()
-  
+
   pred_into <- function(gam_obj, outcol) {
     DT_all[, (outcol) := stats::predict(gam_obj, newdata = DT_all, type = "response")]
     invisible(NULL)
   }
-  
+
   # (1) base
   if (isTRUE(fit_base)) {
     if (verbose) message("[fitIgnition] fitting base (random intercept)")
@@ -174,10 +177,10 @@ fitIgnition <- function(
       select  = select
     )
     fits$base <- fit_base_obj
-    pred_into(fit_base_obj$gam, "p_cls_p")            # canonical name used downstream
-    DT_all[, p_cls_base_pop := p_cls_p]               # alias
+    pred_into(fit_base_obj$gam, "p_cls_p") # canonical name used downstream
+    DT_all[, p_cls_base_pop := p_cls_p] # alias
   }
-  
+
   # (2) random slope on week (population-level via $gam)
   if (isTRUE(fit_slope)) {
     if (verbose) message("[fitIgnition] fitting slope (random intercept + slope on week)")
@@ -192,12 +195,12 @@ fitIgnition <- function(
     fits$slope <- fit_slope_obj
     pred_into(fit_slope_obj$gam, "p_cls_slope_pop")
   }
-  
+
   # (3) factor-smooth by season (mgcv::bam)
   if (isTRUE(fit_fs)) {
     if (verbose) message("[fitIgnition] fitting fs (s(week,season), bs='fs')")
     DT_tr[, (season_col) := as.factor(get(season_col))]
-    
+
     term_fs <- paste0("s(", week_col, ",", season_col, ", bs='fs', k=", as.integer(k_fs), ")")
     form_fs <- stats::as.formula(paste0(
       "event ~ ",
@@ -205,7 +208,7 @@ fitIgnition <- function(
       "s(", p_col,    ", bs='ts', k=", as.integer(k_p),    ") + ",
       term_fs
     ))
-    
+
     fit_fs_obj <- mgcv::bam(
       formula  = form_fs,
       data     = DT_tr,
@@ -214,21 +217,23 @@ fitIgnition <- function(
       discrete = TRUE
     )
     fits$fs <- fit_fs_obj
-    
+
     # full score (includes season deviations)
     DT_all[, p_cls_fs_full := stats::predict(fit_fs_obj, newdata = DT_all, type = "response")]
-    
+
     # population-level score: exclude the fs smooth label robustly
     fs_labels <- vapply(fit_fs_obj$smooth, function(sm) sm$label, character(1))
     pat <- paste0("^s\\(", week_col, ",", season_col, "\\)")
     fs_excl <- fs_labels[grepl(pat, fs_labels)]
     if (length(fs_excl) != 1L) {
-      stop("fitIgnition(fs): could not uniquely identify fs smooth label for exclude=. Found: ",
-           paste(fs_excl, collapse = ", "))
+      stop(
+        "fitIgnition(fs): could not uniquely identify fs smooth label for exclude=. Found: ",
+        paste(fs_excl, collapse = ", ")
+      )
     }
     DT_all[, p_cls_fs_pop := stats::predict(fit_fs_obj, newdata = DT_all, type = "response", exclude = fs_excl)]
   }
-  
+
   list(
     data = as.data.frame(DT_all),
     train_data = as.data.frame(DT_tr),
@@ -279,23 +284,23 @@ plot_cls_models_by_season <- function(ign_fit,
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need package: dplyr")
   if (!requireNamespace("tidyr", quietly = TRUE)) stop("Need package: tidyr")
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Need package: ggplot2")
-  
+
   dat0 <- if (is.data.frame(ign_fit)) ign_fit else ign_fit$data
   stopifnot(is.data.frame(dat0))
-  
-  lead  <- as.integer(lead)
+
+  lead <- as.integer(lead)
   x_max <- as.integer(x_max)
   y_max <- as.numeric(y_max)
   if (!is.null(ncol)) ncol <- as.integer(ncol)
-  
+
   keep <- unname(score_cols) %in% names(dat0)
   score_cols <- score_cols[keep]
   if (length(score_cols) == 0L) stop("plot_cls_models_by_season: none of score_cols exist in ign_fit$data.")
-  
+
   need <- c("season", x_col, "phase", unname(score_cols))
   miss <- setdiff(need, names(dat0))
   if (length(miss)) stop("plot_cls_models_by_season: missing cols: ", paste(miss, collapse = ", "))
-  
+
   # truth ignition week per season
   truth <- dat0 |>
     dplyr::group_by(.data$season) |>
@@ -304,7 +309,7 @@ plot_cls_models_by_season <- function(ign_fit,
       .groups = "drop"
     ) |>
     dplyr::mutate(iWeek_label_end = .data$iWeek_true - lead)
-  
+
   dfp <- dat0 |>
     dplyr::select(.data$season, .data$phase, dplyr::all_of(x_col), dplyr::all_of(unname(score_cols))) |>
     dplyr::mutate(x = suppressWarnings(as.integer(.data[[x_col]]))) |>
@@ -320,33 +325,37 @@ plot_cls_models_by_season <- function(ign_fit,
       panel = factor(paste0(.data$model, " | ", .data$season))
     ) |>
     dplyr::arrange(.data$model, .data$season, .data$x)
-  
+
   vlines <- dfp |>
     dplyr::distinct(.data$panel, .data$iWeek_true, .data$iWeek_label_end)
-  
+
   p <- ggplot2::ggplot(dfp, ggplot2::aes(x = .data$x, y = .data$score, group = .data$panel)) +
     ggplot2::geom_line() +
-    ggplot2::geom_vline(data = vlines, ggplot2::aes(xintercept = .data$iWeek_true),
-                        linetype = "dashed", inherit.aes = FALSE) +
-    ggplot2::geom_vline(data = vlines, ggplot2::aes(xintercept = .data$iWeek_label_end),
-                        linetype = "dotted", inherit.aes = FALSE) +
+    ggplot2::geom_vline(
+      data = vlines, ggplot2::aes(xintercept = .data$iWeek_true),
+      linetype = "dashed", inherit.aes = FALSE
+    ) +
+    ggplot2::geom_vline(
+      data = vlines, ggplot2::aes(xintercept = .data$iWeek_label_end),
+      linetype = "dotted", inherit.aes = FALSE
+    ) +
     ggplot2::facet_wrap(~panel, ncol = ncol) +
     ggplot2::coord_cartesian(
       xlim = c(min(dfp$x, na.rm = TRUE), x_max),
       ylim = c(0, y_max)
     ) +
     ggplot2::labs(x = x_col, y = "classifier score")
-  
+
   if (!is.null(thr) && length(thr) > 0) {
     p <- p + ggplot2::geom_hline(yintercept = thr, linetype = "dotted", inherit.aes = FALSE)
   }
-  
+
   if (isTRUE(use_plotly)) {
-      if (!requireNamespace("plotly", quietly = TRUE)) stop("Need package: plotly")
-      return(plotly::ggplotly(p))
-    }
-    p
+    if (!requireNamespace("plotly", quietly = TRUE)) stop("Need package: plotly")
+    return(plotly::ggplotly(p))
   }
+  p
+}
 
 #' Fit ignition classifier and run season-level detection
 #'
@@ -378,27 +387,27 @@ plot_cls_models_by_season <- function(ign_fit,
 #' @keywords internal
 detect_ignition_from_tuning <- function(tuned,
                                         alignedD,
-                                        score_col    = "p_cls_p",
+                                        score_col = "p_cls_p",
                                         keep_signals = TRUE,
-                                        iWeek        = TRUE,
-                                        verbose      = TRUE,
-                                        fit_base     = TRUE,
-                                        fit_slope    = FALSE,
-                                        fit_fs       = FALSE,
-                                        event_k      = 1L,
-                                        lead         = 1L,
-                                        A_pre        = 6L,
-                                        B_post       = 6L,
-                                        k_week       = 6L,
-                                        k_p          = 8L) {
+                                        iWeek = TRUE,
+                                        verbose = TRUE,
+                                        fit_base = TRUE,
+                                        fit_slope = FALSE,
+                                        fit_fs = FALSE,
+                                        event_k = 1L,
+                                        lead = 1L,
+                                        A_pre = 6L,
+                                        B_post = 6L,
+                                        k_week = 6L,
+                                        k_p = 8L) {
   stopifnot(is.list(tuned), !is.null(tuned$best_params))
   ign_fit <- fitIgnition(
-    dat       = alignedD,
-    fit_base  = fit_base,  fit_slope = fit_slope, fit_fs = fit_fs,
-    event_k   = event_k,   lead      = lead,
-    A_pre     = A_pre,     B_post    = B_post,
-    k_week    = k_week,    k_p       = k_p,
-    verbose   = verbose
+    dat = alignedD,
+    fit_base = fit_base, fit_slope = fit_slope, fit_fs = fit_fs,
+    event_k = event_k, lead = lead,
+    A_pre = A_pre, B_post = B_post,
+    k_week = k_week, k_p = k_p,
+    verbose = verbose
   )
   detectIgnitionBySeason_M0v2(
     ign_fit      = ign_fit,
@@ -445,8 +454,11 @@ plot_season_detection_table <- function(det_all, season) {
   raw <- det_all$data[det_all$data$season == season, ]
 
   get_flag <- function(col) {
-    if (col %in% names(raw)) as.logical(raw[[col]]) %in% TRUE
-    else rep(FALSE, nrow(raw))
+    if (col %in% names(raw)) {
+      as.logical(raw[[col]]) %in% TRUE
+    } else {
+      rep(FALSE, nrow(raw))
+    }
   }
 
   fmt_val <- function(val, flag) {
@@ -459,13 +471,13 @@ plot_season_detection_table <- function(det_all, season) {
   }
 
   disp <- data.frame(
-    Week  = raw$weekF,
-    p     = round(raw$p, 4),
+    Week = raw$weekF,
+    p = round(raw$p, 4),
     Sum5w = fmt_val(raw$p_sumK, get_flag("cond_sum")),
-    p_sm  = fmt_val(raw$p_sm, get_flag("cond_p")),
-    Prev  = fmt_val(raw$prev, get_flag("cond_prev")),
-    dp    = fmt_val(raw$dp, !is.na(raw$dp) & raw$dp > 0),
-    Inc   = {
+    p_sm = fmt_val(raw$p_sm, get_flag("cond_p")),
+    Prev = fmt_val(raw$prev, get_flag("cond_prev")),
+    dp = fmt_val(raw$dp, !is.na(raw$dp) & raw$dp > 0),
+    Inc = {
       vals <- if ("n_hit" %in% names(raw)) as.integer(raw$n_hit) else rep(NA_integer_, nrow(raw))
       v <- ifelse(is.na(vals), "", as.character(vals))
       ifelse(
@@ -528,18 +540,18 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
                                         params,
                                         score_col = "p_cls_p",
                                         season_col = "season",
-                                        week_col   = "weekF",
-                                        y_col      = "y",
-                                        N_col      = "N",
-                                        phase_col  = "phase",
-                                        truth_col  = "iWeek",
+                                        week_col = "weekF",
+                                        y_col = "y",
+                                        N_col = "N",
+                                        phase_col = "phase",
+                                        truth_col = "iWeek",
                                         keep_signals = TRUE,
                                         verbose = TRUE,
                                         iWeek = FALSE,
                                         copy_data = TRUE) {
   if (!is.list(params)) stop("params must be a list.")
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Need package: data.table")
-  
+
   dat0 <- if (is.data.frame(ign_fit) || data.table::is.data.table(ign_fit)) {
     ign_fit
   } else if (is.list(ign_fit) && is.data.frame(ign_fit$data)) {
@@ -547,67 +559,84 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
   } else {
     stop("detectIgnitionBySeason_M0v2(): provide a data.frame/data.table, or a list with $data.")
   }
-  
+
   DT <- data.table::as.data.table(if (isTRUE(copy_data)) data.table::copy(dat0) else dat0)
-  
+
   need <- c(season_col, week_col, score_col, "p", y_col, N_col)
   miss <- setdiff(need, names(DT))
   if (length(miss)) stop("detectIgnitionBySeason_M0v2: missing cols: ", paste(miss, collapse = ", "))
-  
-  cls_thr   <- params$cls_thr   %||% 0.20
-  p_thr     <- params$p_thr     %||% 0.01
-  prev_thr  <- params$prev_thr  %||% 0.01
-  
-  n_consec  <- as.integer(params$n_consec %||% 3L)
-  L         <- as.integer(params$L %||% 2L)
-  eps       <- params$eps %||% 0
-  
-  K_sum     <- as.integer(params$K_sum %||% 4L)
+
+  cls_thr <- params$cls_thr %||% 0.20
+  p_thr <- params$p_thr %||% 0.01
+  prev_thr <- params$prev_thr %||% 0.01
+
+  n_consec <- as.integer(params$n_consec %||% 3L)
+  L <- as.integer(params$L %||% 2L)
+  eps <- params$eps %||% 0
+
+  K_sum <- as.integer(params$K_sum %||% 4L)
   p_sum_thr <- params$p_sum_thr %||% 0.04
-  
+
   N_req <- as.integer(params$N_req %||% params$N %||% 3L)
-  
+
   w_min <- as.integer(params$w_min %||% 13L)
   w_max <- as.integer(params$w_max %||% 30L)
-  
+
+  # Validate both the detector domain and the actual within-season support
+  # before rolling windows or gates are computed.  This turns unsupported
+  # expansion candidates into actionable errors instead of silent fallback
+  # detections or all-missing tuning scores.
+  .validate_m0_grid_support(
+    data.frame(
+      cls_thr = cls_thr, p_thr = p_thr, prev_thr = prev_thr,
+      n_consec = n_consec, L = L, eps = eps, K_sum = K_sum,
+      p_sum_thr = p_sum_thr, N_req = N_req, w_min = w_min, w_max = w_max,
+      stringsAsFactors = FALSE
+    ),
+    data = DT,
+    season_col = season_col,
+    week_col = week_col
+  )
+
   data.table::setorderv(DT, c(season_col, week_col))
-  
+
   # prevalence evidence
   DT[, cum_y := cumsum(get(y_col)), by = season_col]
   DT[, cum_N := cumsum(get(N_col)), by = season_col]
-  DT[, prev  := data.table::fifelse(cum_N > 0, cum_y / cum_N, NA_real_)]
-  
+  DT[, prev := data.table::fifelse(cum_N > 0, cum_y / cum_N, NA_real_)]
+
   # rolling-sum evidence (prospective)
   DT[, p0 := data.table::fifelse(is.na(p), 0, p)]
   DT[, p_sumK := data.table::frollsum(p0, n = K_sum, align = "right", fill = NA_real_), by = season_col]
-  
+
   # smoothed level + trend (prospective)
   DT[, p_sm := data.table::frollmean(p, n = L, align = "right", fill = NA_real_), by = season_col]
-  DT[, dp   := p_sm - data.table::shift(p_sm, 1L, type = "lag"), by = season_col]
-  
+  DT[, dp := p_sm - data.table::shift(p_sm, 1L, type = "lag"), by = season_col]
+
   k_inc <- max(1L, n_consec - 1L)
   DT[, inc := dp > -eps]
   need_inc <- max(1L, k_inc - 1L)
   DT[, cond_inc := data.table::frollsum(as.integer(inc), n = k_inc, align = "right", fill = NA_integer_) >= need_inc,
-     by = season_col]
-  
+    by = season_col
+  ]
+
   # gates + vote count
-  DT[, cond_win  := get(week_col) >= w_min & get(week_col) <= w_max]
-  DT[, cond_cls  := get(score_col) >= cls_thr]
-  DT[, cond_sum  := p_sumK >= p_sum_thr]
-  DT[, cond_p    := p_sm >= p_thr]
+  DT[, cond_win := get(week_col) >= w_min & get(week_col) <= w_max]
+  DT[, cond_cls := get(score_col) >= cls_thr]
+  DT[, cond_sum := p_sumK >= p_sum_thr]
+  DT[, cond_p := p_sm >= p_thr]
   DT[, cond_prev := prev >= prev_thr]
-  
+
   DT[, n_hit := rowSums(cbind(cond_cls, cond_sum, cond_p, cond_prev, cond_inc), na.rm = FALSE)]
   DT[, ignite_ok := cond_win & (n_hit >= N_req)]
-  
+
   ignition_rows <- DT[ignite_ok %in% TRUE]
   by_hat <- if (nrow(ignition_rows) > 0L) {
     ignition_rows[, .(iWeek_hat = min(get(week_col), na.rm = TRUE)), by = season_col]
   } else {
     DT[0, .(iWeek_hat = integer()), by = season_col]
   }
-  all_s  <- DT[, .(season = unique(get(season_col)))]
+  all_s <- DT[, .(season = unique(get(season_col)))]
   data.table::setnames(all_s, "season", season_col)
   by_hat <- merge(all_s, by_hat, by = season_col, all.x = TRUE, sort = FALSE)
 
@@ -615,13 +644,13 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
   by_hat[is.na(iWeek_hat), iWeek_hat := w_max]
 
   out <- list(by_season = as.data.frame(by_hat))
-  
+
   if (keep_signals) {
     DT2 <- merge(DT, by_hat, by = season_col, all.x = TRUE, sort = FALSE)
     DT2[, ignite_flag := !is.na(iWeek_hat) & (get(week_col) == iWeek_hat)]
     out$data <- as.data.frame(DT2)
   }
-  
+
   if (isTRUE(iWeek)) {
     truth_dt <- NULL
     if (truth_col %in% names(DT)) {
@@ -635,11 +664,11 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
     comp[, diff := iWeek_hat - iWeek_true]
     out$compare <- as.data.frame(comp)
   }
-  
+
   if (verbose) {
     message("[detectIgnitionBySeason_M0v2] detected seasons=", sum(!is.na(out$by_season$iWeek_hat)), " / ", nrow(out$by_season))
   }
-  
+
   out
 }
 
@@ -674,19 +703,19 @@ detectIgnition_oneSeason <- function(d_now, params) {
   last <- dd[nrow(dd), , drop = FALSE]
 
   now <- data.frame(
-    p_now         = last$p,
-    cum_p_now     = if ("prev" %in% names(last)) last$prev else NA_real_,
-    prev_now      = if ("prev" %in% names(last)) last$prev else NA_real_,
-    p_cls_p_now   = if ("p_cls_p" %in% names(last)) last$p_cls_p else 0,
-    n_hit_now     = if ("n_hit" %in% names(last)) as.integer(last$n_hit) else NA_integer_,
-    d1_last       = if ("dp" %in% names(last)) last$dp else NA_real_,
-    d2_last       = NA_real_,
-    cond_win      = if ("cond_win" %in% names(last)) last$cond_win else NA,
-    cond_cls      = if ("cond_cls" %in% names(last)) last$cond_cls else NA,
-    cond_cum      = if ("cond_sum" %in% names(last)) last$cond_sum else NA,
-    cond_p        = if ("cond_p" %in% names(last)) last$cond_p else NA,
-    cond_prev     = if ("cond_prev" %in% names(last)) last$cond_prev else NA,
-    cond_inc      = if ("cond_inc" %in% names(last)) last$cond_inc else NA,
+    p_now = last$p,
+    cum_p_now = if ("prev" %in% names(last)) last$prev else NA_real_,
+    prev_now = if ("prev" %in% names(last)) last$prev else NA_real_,
+    p_cls_p_now = if ("p_cls_p" %in% names(last)) last$p_cls_p else 0,
+    n_hit_now = if ("n_hit" %in% names(last)) as.integer(last$n_hit) else NA_integer_,
+    d1_last = if ("dp" %in% names(last)) last$dp else NA_real_,
+    d2_last = NA_real_,
+    cond_win = if ("cond_win" %in% names(last)) last$cond_win else NA,
+    cond_cls = if ("cond_cls" %in% names(last)) last$cond_cls else NA,
+    cond_cum = if ("cond_sum" %in% names(last)) last$cond_sum else NA,
+    cond_p = if ("cond_p" %in% names(last)) last$cond_p else NA,
+    cond_prev = if ("cond_prev" %in% names(last)) last$cond_prev else NA,
+    cond_inc = if ("cond_inc" %in% names(last)) last$cond_inc else NA,
     ignite_ok_now = if ("ignite_ok" %in% names(last)) last$ignite_ok else NA,
     stringsAsFactors = FALSE
   )
@@ -730,7 +759,7 @@ detectIgnition_oneSeason <- function(d_now, params) {
 tuneIgnitionGrid_M0v2 <- function(ign_fit,
                                   grid,
                                   score_col = "p_cls_p",
-                                  week_col  = "weekF",
+                                  week_col = "weekF",
                                   season_col = "season",
                                   phase_col = "phase",
                                   truth_col = "iWeek",
@@ -746,11 +775,11 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
                                   progress_every = 200L) {
   start_time <- Sys.time()
   pt0 <- proc.time()
-  
+
   stopifnot(is.data.frame(grid))
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Need package: data.table")
   if (!requireNamespace("parallel", quietly = TRUE)) stop("Need package: parallel")
-  
+
   dat0 <- if (is.data.frame(ign_fit) || data.table::is.data.table(ign_fit)) {
     ign_fit
   } else if (is.list(ign_fit) && is.data.frame(ign_fit$data)) {
@@ -758,27 +787,27 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
   } else {
     stop("Provide a data.frame/data.table or fitIgnition output list with $data.")
   }
-  
+
   DT_all <- data.table::as.data.table(data.table::copy(dat0))
-  
+
   need_det <- c(season_col, week_col, "p", score_col, "y", "N")
   miss_det <- setdiff(need_det, names(DT_all))
   if (length(miss_det)) stop("tuneIgnitionGrid_M0v2: missing cols: ", paste(miss_det, collapse = ", "))
-  
+
   seasons_all <- unique(DT_all[[season_col]])
-  
+
   exSeason <- exSeason %||% NULL
   if (!is.null(exSeason) && length(exSeason) > 0) {
     exSeason <- intersect(as.character(exSeason), as.character(seasons_all))
   } else {
     exSeason <- character(0)
   }
-  
+
   seasons_tune <- setdiff(as.character(seasons_all), exSeason)
   if (length(seasons_tune) == 0L) stop("All seasons excluded; nothing left to tune on.")
-  
+
   DT_base <- DT_all[get(season_col) %in% seasons_tune]
-  
+
   # truth: all seasons
   truth_all <- NULL
   if (isTRUE(iWeek) && truth_col %in% names(DT_all)) {
@@ -788,12 +817,12 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
     if (!(phase_col %in% names(DT_all))) stop("Cannot compute truth: missing iWeek and phase.")
     truth_all <- DT_all[get(phase_col) == 1L, .(iWeek_true = min(get(week_col), na.rm = TRUE)), by = season_col]
   }
-  
+
   all_s <- DT_all[, .(season_tmp = unique(get(season_col)))]
   data.table::setnames(all_s, "season_tmp", season_col)
   truth_all <- merge(all_s, truth_all, by = season_col, all.x = TRUE, sort = FALSE)
   truth_tune <- truth_all[get(season_col) %in% seasons_tune]
-  
+
   defaults <- list(
     cls_thr   = 0.20,
     p_thr     = 0.01,
@@ -808,27 +837,45 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
     w_max     = 30L
   )
   for (nm in names(defaults)) if (!nm %in% names(grid)) grid[[nm]] <- defaults[[nm]]
-  
+  .validate_m0_grid_support(
+    grid,
+    data = DT_base, season_col = season_col, week_col = week_col
+  )
+
   score_one_i <- function(i) {
     params <- as.list(grid[i, , drop = FALSE])
-    
-    det <- detectIgnitionBySeason_M0v2(
-      ign_fit = DT_base,
-      params  = params,
-      score_col = score_col,
-      week_col  = week_col,
-      season_col = season_col,
-      keep_signals = FALSE,
-      verbose = FALSE,
-      iWeek = FALSE,
-      copy_data = FALSE
-    )$by_season
-    
+    spec_label <- if ("spec_id" %in% names(grid)) {
+      as.character(grid$spec_id[i])
+    } else {
+      paste0("row", i)
+    }
+
+    det <- tryCatch(
+      detectIgnitionBySeason_M0v2(
+        ign_fit = DT_base,
+        params = params,
+        score_col = score_col,
+        week_col = week_col,
+        season_col = season_col,
+        keep_signals = FALSE,
+        verbose = FALSE,
+        iWeek = FALSE,
+        copy_data = FALSE
+      )$by_season,
+      error = function(e) {
+        stop(
+          "M0 specification `", spec_label, "` is unsupported: ",
+          conditionMessage(e),
+          call. = FALSE
+        )
+      }
+    )
+
     pred <- data.table::as.data.table(det)
     if (!(season_col %in% names(pred)) && "season" %in% names(pred)) data.table::setnames(pred, "season", season_col)
-    
+
     joined <- merge(truth_tune, pred, by = season_col, all.x = TRUE, sort = FALSE)
-    
+
     joined[, diff := iWeek_hat - iWeek_true]
     joined[, abs_diff := abs(diff)]
     # -1 wiggle room: diff in {-1, 0} both score as 0
@@ -853,41 +900,50 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
     max_abs <- if (all(is.na(joined$adj_diff))) Inf else max(joined$adj_diff, na.rm = TRUE)
     score <- sum_loss + lambda * max_abs + miss_penalty * n_miss
 
-    c(score = score,
+    c(
+      score = score,
       sum_loss = sum_loss,
       max_abs = max_abs,
       n_miss = n_miss,
       n_over2 = n_over2,
       n_late_over2 = n_late_over2,
-      mean_abs = mean(joined$adj_diff, na.rm = TRUE))
+      mean_abs = mean(joined$adj_diff, na.rm = TRUE)
+    )
   }
-  
+
   idx <- seq_len(nrow(grid))
   ncores <- as.integer(ncores %||% 1L)
   if (is.na(ncores) || ncores < 1L) ncores <- 1L
-  
+
   if (verbose) {
-    message("[tuneIgnitionGrid_M0v2] tuning seasons=", length(seasons_tune),
-            " excluded=", length(exSeason),
-            " grid=", length(idx),
-            " ncores=", ncores,
-            " os=", .Platform$OS.type)
+    message(
+      "[tuneIgnitionGrid_M0v2] tuning seasons=", length(seasons_tune),
+      " excluded=", length(exSeason),
+      " grid=", length(idx),
+      " ncores=", ncores,
+      " os=", .Platform$OS.type
+    )
     if (length(exSeason)) message("[tuneIgnitionGrid_M0v2] exSeason: ", paste(exSeason, collapse = ", "))
   }
-  
+
   if (ncores == 1L) {
     metrics <- t(vapply(idx, score_one_i, numeric(7)))
-    colnames(metrics) <- c("score","sum_loss","max_abs","n_miss","n_over2","n_late_over2","mean_abs")
+    colnames(metrics) <- c("score", "sum_loss", "max_abs", "n_miss", "n_over2", "n_late_over2", "mean_abs")
   } else {
     if (identical(.Platform$OS.type, "windows")) {
       cl <- parallel::makeCluster(ncores)
       on.exit(try(parallel::stopCluster(cl), silent = TRUE), add = TRUE)
-      parallel::clusterEvalQ(cl, { library(data.table); NULL })
+      parallel::clusterEvalQ(cl, {
+        library(data.table)
+        NULL
+      })
       parallel::clusterExport(
         cl,
-        varlist = c("DT_base","grid","truth_tune","score_col","week_col","season_col",
-                    "miss_penalty","lambda","kappa","gamma","gamma_late",
-                    "detectIgnitionBySeason_M0v2","score_one_i","%||%"),
+        varlist = c(
+          "DT_base", "grid", "truth_tune", "score_col", "week_col", "season_col",
+          "miss_penalty", "lambda", "kappa", "gamma", "gamma_late",
+          "detectIgnitionBySeason_M0v2", "score_one_i", "%||%"
+        ),
         envir = environment()
       )
       chunks <- split(idx, ceiling(seq_along(idx) / progress_every))
@@ -899,54 +955,60 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
       metrics <- do.call(rbind, lapply(res_list, function(x) do.call(rbind, x)))
     }
   }
-  
+
   res <- cbind(grid, as.data.frame(metrics))
-  
+
   o <- with(res, order(n_over2, n_late_over2, max_abs, n_miss, score))
   best_row <- res[o[1], , drop = FALSE]
-  
+
   best_params <- as.list(best_row[, c(
-    "cls_thr","p_thr","prev_thr","n_consec","L","eps","K_sum","p_sum_thr","N_req","w_min","w_max"
+    "cls_thr", "p_thr", "prev_thr", "n_consec", "L", "eps", "K_sum", "p_sum_thr", "N_req", "w_min", "w_max"
   ), drop = FALSE])
-  
+
   # evaluate on all seasons (including excluded)
   det_all <- detectIgnitionBySeason_M0v2(
     ign_fit = DT_all,
-    params  = best_params,
+    params = best_params,
     score_col = score_col,
-    week_col  = week_col,
+    week_col = week_col,
     season_col = season_col,
     keep_signals = FALSE,
     verbose = FALSE,
     iWeek = FALSE,
     copy_data = FALSE
   )$by_season
-  
+
   pred_all <- data.table::as.data.table(det_all)
   if (!(season_col %in% names(pred_all)) && "season" %in% names(pred_all)) data.table::setnames(pred_all, "season", season_col)
-  
+
   eval_all <- merge(truth_all, pred_all, by = season_col, all.x = TRUE, sort = FALSE)
   eval_all[, diff := iWeek_hat - iWeek_true]
-  
+
   eval_tune <- eval_all[get(season_col) %in% seasons_tune]
   eval_excl <- if (length(exSeason)) eval_all[get(season_col) %in% exSeason] else eval_all[0]
-  
+
   elapsed_sec <- unname((proc.time() - pt0)[["elapsed"]])
-  runtime <- list(start_time = start_time, end_time = Sys.time(), elapsed_seconds = elapsed_sec,
-                  n_grid = nrow(grid), ncores = ncores, os = .Platform$OS.type,
-                  seasons_tuned = length(seasons_tune), seasons_excluded = length(exSeason))
-  
+  runtime <- list(
+    start_time = start_time, end_time = Sys.time(), elapsed_seconds = elapsed_sec,
+    n_grid = nrow(grid), ncores = ncores, os = .Platform$OS.type,
+    seasons_tuned = length(seasons_tune), seasons_excluded = length(exSeason)
+  )
+
   if (verbose) {
-    message("[tuneIgnitionGrid_M0v2] best: n_over2=", best_row$n_over2,
-            " n_late_over2=", best_row$n_late_over2,
-            " max_abs=", best_row$max_abs,
-            " n_miss=", best_row$n_miss,
-            " score=", best_row$score)
-    message("[tuneIgnitionGrid_M0v2] params: ",
-            paste(names(best_params), unlist(best_params), sep="=", collapse=", "))
+    message(
+      "[tuneIgnitionGrid_M0v2] best: n_over2=", best_row$n_over2,
+      " n_late_over2=", best_row$n_late_over2,
+      " max_abs=", best_row$max_abs,
+      " n_miss=", best_row$n_miss,
+      " score=", best_row$score
+    )
+    message(
+      "[tuneIgnitionGrid_M0v2] params: ",
+      paste(names(best_params), unlist(best_params), sep = "=", collapse = ", ")
+    )
     message("[tuneIgnitionGrid_M0v2] runtime: ", round(elapsed_sec, 2), " sec")
   }
-  
+
   list(
     best_params = best_params,
     results = res,
@@ -1005,10 +1067,10 @@ loso_M0v2 <- function(dat,
                       grid,
                       # pass-through knobs
                       season_col = "season",
-                      week_col   = "weekF",
-                      phase_col  = "phase",
-                      p_col      = "p",
-                      score_col  = "p_cls_p",
+                      week_col = "weekF",
+                      phase_col = "phase",
+                      p_col = "p",
+                      score_col = "p_cls_p",
                       # optional: exclude some seasons from BOTH training+evaluation
                       drop_seasons = NULL,
                       # extra exclusions for tuning only (in addition to the heldout season)
@@ -1043,15 +1105,16 @@ loso_M0v2 <- function(dat,
                       verbose = TRUE,
                       checkpoint_dir = NULL,
                       previous_results = NULL) {
-  
   `%||%` <- function(x, y) if (!is.null(x)) x else y
   mode1 <- function(x) {
     x <- x[!is.na(x)]
-    if (!length(x)) return(NA)
+    if (!length(x)) {
+      return(NA)
+    }
     ux <- unique(x)
     ux[which.max(tabulate(match(x, ux)))]
   }
-  
+
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Need package: data.table")
   stopifnot(is.data.frame(dat), is.data.frame(grid))
 
@@ -1097,20 +1160,24 @@ loso_M0v2 <- function(dat,
   previous_folds <- previous_results$folds %||%
     previous_results$fold_out %||%
     previous_results$tuning$folds %||% list()
-  
+
   DT <- data.table::as.data.table(data.table::copy(dat))
-  
+
   # optionally drop some seasons entirely
   if (!is.null(drop_seasons) && length(drop_seasons) > 0) {
     DT <- DT[!(get(season_col) %in% drop_seasons)]
   }
-  
+
   seasons <- sort(unique(as.character(DT[[season_col]])))
   if (length(seasons) < 2L) stop("Need at least 2 seasons for LOSO.")
-  
+  .validate_m0_grid_support(
+    grid,
+    data = DT, season_col = season_col, week_col = week_col
+  )
+
   t0_all <- proc.time()
   start_time <- Sys.time()
-  
+
   fold_out <- vector("list", length(seasons))
   names(fold_out) <- seasons
 
@@ -1126,40 +1193,49 @@ loso_M0v2 <- function(dat,
     "cls_thr", "p_thr", "prev_thr", "n_consec", "L", "eps",
     "K_sum", "p_sum_thr", "N_req", "w_min", "w_max"
   )
-  
+
   for (ss in seasons) {
     if (verbose) message("[loso_M0v2] fold holdout=", ss)
-    
+
     DT_train <- DT[get(season_col) != ss]
-    DT_test  <- DT[get(season_col) == ss]
-    
+    DT_test <- DT[get(season_col) == ss]
+
     # ---- 1) refit classifier on training seasons ----
     t_fit0 <- proc.time()
     fit_call <- c(list(
       dat = as.data.frame(DT_train),
       season_col = season_col,
-      week_col   = week_col,
-      phase_col  = phase_col,
-      p_col      = p_col
+      week_col = week_col,
+      phase_col = phase_col,
+      p_col = p_col
     ), fit_args)
-    ign_fit <- do.call(fitIgnition, fit_call)
+    ign_fit <- tryCatch(
+      do.call(fitIgnition, fit_call),
+      error = function(e) {
+        stop(
+          "M0 LOSO fold `", ss, "` classifier fit failed: ",
+          conditionMessage(e),
+          call. = FALSE
+        )
+      }
+    )
     t_fit <- unname((proc.time() - t_fit0)[["elapsed"]])
-    
+
     DT_train_scored <- data.table::as.data.table(ign_fit$data)
-    
+
     # ---- 2) score heldout season using fold classifier (population-level) ----
     if (is.null(ign_fit$fits$base) || is.null(ign_fit$fits$base$gam)) {
       stop("loso_M0v2: fitIgnition did not produce fits$base$gam; ensure fit_base=TRUE.")
     }
     gam_base <- ign_fit$fits$base$gam
     p_hat <- stats::predict(gam_base, newdata = as.data.frame(DT_test), type = "response")
-    
+
     DT_test_scored <- data.table::copy(DT_test)
     DT_test_scored[, (score_col) := p_hat]
     if (!("p_cls_base_pop" %in% names(DT_test_scored)) && score_col == "p_cls_p") {
       DT_test_scored[, p_cls_base_pop := get(score_col)]
     }
-    
+
     # ---- 3) tune detector thresholds on training seasons only ----
     t_tune0 <- proc.time()
     tune_call <- c(list(
@@ -1172,7 +1248,7 @@ loso_M0v2 <- function(dat,
       truth_col  = tune_args$truth_col %||% "iWeek",
       exSeason   = exSeason_tune
     ), tune_args)
-    
+
     prior_fold <- previous_folds[[ss]]
     prior_scores <- prior_fold$tuning_results %||% NULL
     if (is.data.frame(prior_scores) && "spec_id" %in% names(prior_scores)) {
@@ -1182,7 +1258,16 @@ loso_M0v2 <- function(dat,
     }
     todo_grid <- grid[!grid$spec_id %in% (prior_scores$spec_id %||% character(0)), , drop = FALSE]
     tuned <- if (nrow(todo_grid)) {
-      do.call(tuneIgnitionGrid_M0v2, c(list(grid = todo_grid), tune_call[setdiff(names(tune_call), "grid")]))
+      tryCatch(
+        do.call(tuneIgnitionGrid_M0v2, c(list(grid = todo_grid), tune_call[setdiff(names(tune_call), "grid")])),
+        error = function(e) {
+          stop(
+            "M0 LOSO fold `", ss, "` threshold tuning failed: ",
+            conditionMessage(e),
+            call. = FALSE
+          )
+        }
+      )
     } else {
       NULL
     }
@@ -1194,26 +1279,35 @@ loso_M0v2 <- function(dat,
     best_params <- as.list(best_row[, intersect(m0_param_names, names(best_row)), drop = FALSE])
     best_params <- lapply(best_params, function(value) value[[1L]])
     t_tune <- unname((proc.time() - t_tune0)[["elapsed"]])
-    
+
     # ---- 4) apply detector to heldout season ----
     t_det0 <- proc.time()
-    det <- detectIgnitionBySeason_M0v2(
-      ign_fit = as.data.frame(DT_test_scored),
-      params  = best_params,
-      score_col = score_col,
-      week_col  = week_col,
-      season_col = season_col,
-      phase_col  = phase_col,
-      keep_signals = FALSE,
-      verbose = FALSE,
-      iWeek = TRUE,
-      copy_data = TRUE
+    det <- tryCatch(
+      detectIgnitionBySeason_M0v2(
+        ign_fit = as.data.frame(DT_test_scored),
+        params = best_params,
+        score_col = score_col,
+        week_col = week_col,
+        season_col = season_col,
+        phase_col = phase_col,
+        keep_signals = FALSE,
+        verbose = FALSE,
+        iWeek = TRUE,
+        copy_data = TRUE
+      ),
+      error = function(e) {
+        stop(
+          "M0 LOSO fold `", ss, "` held-out detection failed: ",
+          conditionMessage(e),
+          call. = FALSE
+        )
+      }
     )
     t_det <- unname((proc.time() - t_det0)[["elapsed"]])
-    
+
     comp <- det$compare
     comp <- comp[match(ss, comp[[season_col]]), , drop = FALSE]
-    
+
     fold_out[[ss]] <- list(
       season = ss,
       best_params = best_params,
@@ -1221,7 +1315,7 @@ loso_M0v2 <- function(dat,
       tuning_results = combined_scores,
       compare = comp,
       timing = list(
-        fit_seconds  = t_fit,
+        fit_seconds = t_fit,
         tune_seconds = t_tune,
         detect_seconds = t_det
       )
@@ -1233,12 +1327,13 @@ loso_M0v2 <- function(dat,
       )
     }
   }
-  
+
   # ---- bind fold results ----
   comp_all <- data.table::rbindlist(lapply(fold_out, function(x) data.table::as.data.table(x$compare)),
-                                    fill = TRUE)
+    fill = TRUE
+  )
   comp_all[, abs_diff := abs(diff)]
-  
+
   summary <- list(
     n_seasons = nrow(comp_all),
     n_miss = sum(is.na(comp_all$iWeek_hat)),
@@ -1247,19 +1342,20 @@ loso_M0v2 <- function(dat,
     max_abs = suppressWarnings(max(comp_all$abs_diff, na.rm = TRUE)),
     mean_diff = mean(comp_all$diff, na.rm = TRUE)
   )
-  
+
   # ---- NEW: aggregate a single best parameter set from fold-specific best_params ----
   bp_df <- data.table::rbindlist(lapply(fold_out, function(x) data.table::as.data.table(x$best_params)),
-                                 fill = TRUE)
-  
+    fill = TRUE
+  )
+
   # expected parameter names (only aggregate those that exist)
-  num_par <- intersect(c("cls_thr","p_thr","prev_thr","p_sum_thr","eps"), names(bp_df))
-  int_par <- intersect(c("n_consec","L","K_sum","N_req","w_min","w_max"), names(bp_df))
-  
+  num_par <- intersect(c("cls_thr", "p_thr", "prev_thr", "p_sum_thr", "eps"), names(bp_df))
+  int_par <- intersect(c("n_consec", "L", "K_sum", "N_req", "w_min", "w_max"), names(bp_df))
+
   best_params_loso <- list()
   for (nm in num_par) best_params_loso[[nm]] <- as.numeric(stats::median(as.numeric(bp_df[[nm]]), na.rm = TRUE))
   for (nm in int_par) best_params_loso[[nm]] <- as.integer(mode1(as.integer(bp_df[[nm]])))
-  
+
   # runtime
   elapsed_all <- unname((proc.time() - t0_all)[["elapsed"]])
   runtime <- list(
@@ -1268,124 +1364,126 @@ loso_M0v2 <- function(dat,
     elapsed_seconds = elapsed_all,
     n_folds = length(seasons)
   )
-  
+
   list(
     folds = fold_out,
     compare = as.data.frame(comp_all),
     summary = summary,
     runtime = runtime,
     context_id = context_id,
-    
+
     # NEW outputs
     best_params = best_params_loso,
     best_params_by_fold = as.data.frame(bp_df)
   )
-}  
-  
-  #' Plot truth vs detected ignition week by season (faceted)
-  #'
-  #' @param det_out Output list from detectIgnitionBySeason_M0v2().
-  #'   Must contain $data with per-week rows. If $compare is present, it is used for
-  #'   truth/hat weeks; otherwise it will be constructed from phase==1 and $by_season.
-  #' @param x_col Week index column. Default "weekF".
-  #' @param y_cols Character vector of columns to plot as time series (if present).
-  #'   Default c("p","p_sm").
-  #' @param x_max Optional max week to plot (e.g., 30). Default 30.
-  #' @param ncol Facet columns. Default 4.
-  #' @param y_max Optional y-axis max (e.g., 0.3). Default NULL (no cap).
-  #' @param use_plotly If TRUE return plotly::ggplotly(p). Default TRUE.
-  #'
-  #' @return ggplot or plotly object.
-  #' @export
-  plot_ignition_detect_vs_truth <- function(det_out,
-                                            x_col = "weekF",
-                                            y_cols = c("p", "p_sm"),
-                                            x_max = 30L,
-                                            ncol = 4L,
-                                            y_max = NULL,
-                                            use_plotly = TRUE) {
-    if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need package: dplyr")
-    if (!requireNamespace("tidyr", quietly = TRUE)) stop("Need package: tidyr")
-    if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Need package: ggplot2")
-    
-    if (!is.list(det_out) || is.null(det_out$data)) {
-      stop("det_out must be the list returned by detectIgnitionBySeason_M0v2() with $data.")
-    }
-    df <- det_out$data
-    
-    if (!("season" %in% names(df))) stop("det_out$data must contain column: season")
-    if (!(x_col %in% names(df))) stop("det_out$data must contain x_col: ", x_col)
-    
-    # build compare table if not provided
-    comp <- det_out$compare
-    if (is.null(comp) || !all(c("season","iWeek_hat") %in% names(comp))) {
-      if (is.null(det_out$by_season) || !all(c("season","iWeek_hat") %in% names(det_out$by_season))) {
-        stop("det_out must contain $compare or $by_season with columns season,iWeek_hat.")
-      }
-      if (!("phase" %in% names(df))) {
-        stop("Cannot infer truth ignition week: det_out$data has no 'phase' and det_out$compare is missing.")
-      }
-      truth <- df |>
-        dplyr::group_by(.data$season) |>
-        dplyr::summarise(
-          iWeek_true = suppressWarnings(min(.data[[x_col]][.data$phase == 1L], na.rm = TRUE)),
-          .groups = "drop"
-        )
-      comp <- truth |>
-        dplyr::left_join(det_out$by_season, by = "season") |>
-        dplyr::mutate(diff = .data$iWeek_hat - .data$iWeek_true)
-    }
-    
-    # keep only y columns that exist
-    y_cols <- y_cols[y_cols %in% names(df)]
-    if (length(y_cols) == 0L) stop("None of y_cols exist in det_out$data: ", paste(y_cols, collapse = ", "))
-    
-    x_max <- as.integer(x_max)
-    ncol  <- as.integer(ncol)
-    
-    # long data for plotting multiple series on same panel
-    dfp <- df |>
-      dplyr::mutate(.x = suppressWarnings(as.integer(.data[[x_col]]))) |>
-      dplyr::filter(!is.na(.data$.x), .data$.x <= x_max) |>
-      dplyr::select(.data$season, .data$.x, dplyr::all_of(y_cols)) |>
-      tidyr::pivot_longer(cols = dplyr::all_of(y_cols),
-                          names_to = "series",
-                          values_to = "value") |>
-      dplyr::arrange(.data$season, .data$series, .data$.x)
-    
-    vlines <- comp |>
-      dplyr::select(.data$season, .data$iWeek_true, .data$iWeek_hat) |>
-      dplyr::distinct()
-    
-    p <- ggplot2::ggplot(dfp, ggplot2::aes(x = .data$.x, y = .data$value, group = .data$series)) +
-      ggplot2::geom_line() +
-      ggplot2::facet_wrap(~season, ncol = ncol) +
-      ggplot2::geom_vline(
-        data = vlines,
-        ggplot2::aes(xintercept = .data$iWeek_true),
-        linetype = "dashed",
-        inherit.aes = FALSE
-      ) +
-      ggplot2::geom_vline(
-        data = vlines,
-        ggplot2::aes(xintercept = .data$iWeek_hat),
-        linetype = "solid",
-        inherit.aes = FALSE
-      ) +
-      ggplot2::labs(x = x_col, y = "value")
-    
-    if (!is.null(y_max)) {
-      p <- p + ggplot2::coord_cartesian(ylim = c(0, as.numeric(y_max)))
-    }
-    
-    # Optional: show a legend only if multiple series are plotted
-    if (length(y_cols) > 1L) {
-      p <- p + ggplot2::aes(linetype = .data$series) + ggplot2::guides(linetype = ggplot2::guide_legend(title = NULL))
-    }
-    
-    if (isTRUE(use_plotly)) {
-      if (!requireNamespace("plotly", quietly = TRUE)) stop("Need package: plotly")
-      return(plotly::ggplotly(p))
-    }
-    p
+}
+
+#' Plot truth vs detected ignition week by season (faceted)
+#'
+#' @param det_out Output list from detectIgnitionBySeason_M0v2().
+#'   Must contain $data with per-week rows. If $compare is present, it is used for
+#'   truth/hat weeks; otherwise it will be constructed from phase==1 and $by_season.
+#' @param x_col Week index column. Default "weekF".
+#' @param y_cols Character vector of columns to plot as time series (if present).
+#'   Default c("p","p_sm").
+#' @param x_max Optional max week to plot (e.g., 30). Default 30.
+#' @param ncol Facet columns. Default 4.
+#' @param y_max Optional y-axis max (e.g., 0.3). Default NULL (no cap).
+#' @param use_plotly If TRUE return plotly::ggplotly(p). Default TRUE.
+#'
+#' @return ggplot or plotly object.
+#' @export
+plot_ignition_detect_vs_truth <- function(det_out,
+                                          x_col = "weekF",
+                                          y_cols = c("p", "p_sm"),
+                                          x_max = 30L,
+                                          ncol = 4L,
+                                          y_max = NULL,
+                                          use_plotly = TRUE) {
+  if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need package: dplyr")
+  if (!requireNamespace("tidyr", quietly = TRUE)) stop("Need package: tidyr")
+  if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Need package: ggplot2")
+
+  if (!is.list(det_out) || is.null(det_out$data)) {
+    stop("det_out must be the list returned by detectIgnitionBySeason_M0v2() with $data.")
   }
+  df <- det_out$data
+
+  if (!("season" %in% names(df))) stop("det_out$data must contain column: season")
+  if (!(x_col %in% names(df))) stop("det_out$data must contain x_col: ", x_col)
+
+  # build compare table if not provided
+  comp <- det_out$compare
+  if (is.null(comp) || !all(c("season", "iWeek_hat") %in% names(comp))) {
+    if (is.null(det_out$by_season) || !all(c("season", "iWeek_hat") %in% names(det_out$by_season))) {
+      stop("det_out must contain $compare or $by_season with columns season,iWeek_hat.")
+    }
+    if (!("phase" %in% names(df))) {
+      stop("Cannot infer truth ignition week: det_out$data has no 'phase' and det_out$compare is missing.")
+    }
+    truth <- df |>
+      dplyr::group_by(.data$season) |>
+      dplyr::summarise(
+        iWeek_true = suppressWarnings(min(.data[[x_col]][.data$phase == 1L], na.rm = TRUE)),
+        .groups = "drop"
+      )
+    comp <- truth |>
+      dplyr::left_join(det_out$by_season, by = "season") |>
+      dplyr::mutate(diff = .data$iWeek_hat - .data$iWeek_true)
+  }
+
+  # keep only y columns that exist
+  y_cols <- y_cols[y_cols %in% names(df)]
+  if (length(y_cols) == 0L) stop("None of y_cols exist in det_out$data: ", paste(y_cols, collapse = ", "))
+
+  x_max <- as.integer(x_max)
+  ncol <- as.integer(ncol)
+
+  # long data for plotting multiple series on same panel
+  dfp <- df |>
+    dplyr::mutate(.x = suppressWarnings(as.integer(.data[[x_col]]))) |>
+    dplyr::filter(!is.na(.data$.x), .data$.x <= x_max) |>
+    dplyr::select(.data$season, .data$.x, dplyr::all_of(y_cols)) |>
+    tidyr::pivot_longer(
+      cols = dplyr::all_of(y_cols),
+      names_to = "series",
+      values_to = "value"
+    ) |>
+    dplyr::arrange(.data$season, .data$series, .data$.x)
+
+  vlines <- comp |>
+    dplyr::select(.data$season, .data$iWeek_true, .data$iWeek_hat) |>
+    dplyr::distinct()
+
+  p <- ggplot2::ggplot(dfp, ggplot2::aes(x = .data$.x, y = .data$value, group = .data$series)) +
+    ggplot2::geom_line() +
+    ggplot2::facet_wrap(~season, ncol = ncol) +
+    ggplot2::geom_vline(
+      data = vlines,
+      ggplot2::aes(xintercept = .data$iWeek_true),
+      linetype = "dashed",
+      inherit.aes = FALSE
+    ) +
+    ggplot2::geom_vline(
+      data = vlines,
+      ggplot2::aes(xintercept = .data$iWeek_hat),
+      linetype = "solid",
+      inherit.aes = FALSE
+    ) +
+    ggplot2::labs(x = x_col, y = "value")
+
+  if (!is.null(y_max)) {
+    p <- p + ggplot2::coord_cartesian(ylim = c(0, as.numeric(y_max)))
+  }
+
+  # Optional: show a legend only if multiple series are plotted
+  if (length(y_cols) > 1L) {
+    p <- p + ggplot2::aes(linetype = .data$series) + ggplot2::guides(linetype = ggplot2::guide_legend(title = NULL))
+  }
+
+  if (isTRUE(use_plotly)) {
+    if (!requireNamespace("plotly", quietly = TRUE)) stop("Need package: plotly")
+    return(plotly::ggplotly(p))
+  }
+  p
+}

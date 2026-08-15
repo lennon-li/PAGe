@@ -56,7 +56,7 @@ test_that("the adaptive M2 plan retains diverse finalists and expands boundaries
   retained_ids <- planned$spec_id[grepl("prior_finalist", planned$provenance)]
   expect_true(prior_grid$spec_id[1L] %in% retained_ids)
   expect_true(prior_grid$spec_id[3L] %in% retained_ids)
-  expect_true(any(abs(planned$alpha_state - 0.25) < 1e-8))
+  expect_true(any(abs(planned$alpha_state - 0.225) < 1e-8))
   expect_true(any(grepl("boundary:alpha_state", planned$provenance, fixed = TRUE)))
 })
 
@@ -579,7 +579,8 @@ test_that("retune keeps the prospective holdout out of every stage by default", 
 test_that("malformed promotion reports fail closed", {
   expect_error(
     PAGe::train_pipeline(
-      workflow_surveillance("2025-26", 1L), mode = "refresh",
+      workflow_surveillance("2025-26", 1L),
+      mode = "refresh",
       promotion = list(pass = TRUE), verbose = FALSE
     ),
     "promotion"
@@ -684,12 +685,16 @@ test_that("promotion evidence verifies every bound artifact hash", {
 test_that("promotion evidence requires the supplied saved decision bundle", {
   allD <- workflow_surveillance("2025-26", 1L)
   report <- PAGe::check_promotion(
-    list(overall = data.frame(bernoulli_nll = 0.48),
-         horizon = data.frame(lead = c("1", "2"), mae = c(0.103, 0.103)),
-         phase = data.frame(phase = c("early", "late"), mae = c(0.105, 0.105))),
-    list(overall = data.frame(bernoulli_nll = 0.50),
-         horizon = data.frame(lead = c("1", "2"), mae = c(0.10, 0.10)),
-         phase = data.frame(phase = c("early", "late"), mae = c(0.10, 0.10)))
+    list(
+      overall = data.frame(bernoulli_nll = 0.48),
+      horizon = data.frame(lead = c("1", "2"), mae = c(0.103, 0.103)),
+      phase = data.frame(phase = c("early", "late"), mae = c(0.105, 0.105))
+    ),
+    list(
+      overall = data.frame(bernoulli_nll = 0.50),
+      horizon = data.frame(lead = c("1", "2"), mae = c(0.10, 0.10)),
+      phase = data.frame(phase = c("early", "late"), mae = c(0.10, 0.10))
+    )
   )
   fixture <- training_promotion_fixture(allD, report)
   withr::defer(unlink(fixture$root, recursive = TRUE))
@@ -704,12 +709,16 @@ test_that("promotion evidence requires the supplied saved decision bundle", {
 test_that("post-acceptance retuning is rejected", {
   allD <- workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L))
   report <- PAGe::check_promotion(
-    list(overall = data.frame(bernoulli_nll = 0.48),
-         horizon = data.frame(lead = c("1", "2"), mae = c(0.103, 0.103)),
-         phase = data.frame(phase = c("early", "late"), mae = c(0.105, 0.105))),
-    list(overall = data.frame(bernoulli_nll = 0.50),
-         horizon = data.frame(lead = c("1", "2"), mae = c(0.10, 0.10)),
-         phase = data.frame(phase = c("early", "late"), mae = c(0.10, 0.10)))
+    list(
+      overall = data.frame(bernoulli_nll = 0.48),
+      horizon = data.frame(lead = c("1", "2"), mae = c(0.103, 0.103)),
+      phase = data.frame(phase = c("early", "late"), mae = c(0.105, 0.105))
+    ),
+    list(
+      overall = data.frame(bernoulli_nll = 0.50),
+      horizon = data.frame(lead = c("1", "2"), mae = c(0.10, 0.10)),
+      phase = data.frame(phase = c("early", "late"), mae = c(0.10, 0.10))
+    )
   )
   fixture <- training_promotion_fixture(allD, report)
   withr::defer(unlink(fixture$root, recursive = TRUE))
@@ -718,7 +727,8 @@ test_that("post-acceptance retuning is rejected", {
   tampered_evidence <- evidence
   tampered_evidence$candidate_config$best_spec$k_f <- 99L
   expect_false(PAGe:::.is_verified_promotion_evidence(
-    tampered_evidence, allD = allD, holdout_season = "2025-26"
+    tampered_evidence,
+    allD = allD, holdout_season = "2025-26"
   ))
 
   expect_error(
@@ -730,12 +740,16 @@ test_that("post-acceptance retuning is rejected", {
 test_that("post-acceptance refresh derives its configuration from promotion evidence", {
   allD <- workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L))
   report <- PAGe::check_promotion(
-    list(overall = data.frame(bernoulli_nll = 0.48),
-         horizon = data.frame(lead = c("1", "2"), mae = c(0.103, 0.103)),
-         phase = data.frame(phase = c("early", "late"), mae = c(0.105, 0.105))),
-    list(overall = data.frame(bernoulli_nll = 0.50),
-         horizon = data.frame(lead = c("1", "2"), mae = c(0.10, 0.10)),
-         phase = data.frame(phase = c("early", "late"), mae = c(0.10, 0.10)))
+    list(
+      overall = data.frame(bernoulli_nll = 0.48),
+      horizon = data.frame(lead = c("1", "2"), mae = c(0.103, 0.103)),
+      phase = data.frame(phase = c("early", "late"), mae = c(0.105, 0.105))
+    ),
+    list(
+      overall = data.frame(bernoulli_nll = 0.50),
+      horizon = data.frame(lead = c("1", "2"), mae = c(0.10, 0.10)),
+      phase = data.frame(phase = c("early", "late"), mae = c(0.10, 0.10))
+    )
   )
   fixture <- training_promotion_fixture(allD, report)
   withr::defer(unlink(fixture$root, recursive = TRUE))
@@ -743,14 +757,16 @@ test_that("post-acceptance refresh derives its configuration from promotion evid
 
   expect_error(
     PAGe::train_pipeline(
-      allD, mode = "refresh", promotion = evidence,
+      allD,
+      mode = "refresh", promotion = evidence,
       m0_params = list(p_thr = 1), verbose = FALSE
     ),
     "do not supply component overrides"
   )
   expect_error(
     PAGe::train_pipeline(
-      allD, mode = "refresh", promotion = evidence,
+      allD,
+      mode = "refresh", promotion = evidence,
       exclude = "2024-25", verbose = FALSE
     ),
     "accepted candidate's training seasons"

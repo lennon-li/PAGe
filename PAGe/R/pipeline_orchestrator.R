@@ -306,7 +306,7 @@
 #' results, the plan contains the current v16-corrected incumbent and one-factor
 #' neighbors. With prior results, it retains v16, greedily retains diverse
 #' high-performing finalists, adds one-factor neighbors around the prior
-#' winner, and expands grid boundaries reached by that winner using the
+#' winner, and expands grid boundaries reached by that winner using half the
 #' spacing adjacent to each reached boundary.
 #'
 #' Boundary expansion proposes only new configurations that pass the M2 grid
@@ -366,6 +366,7 @@ plan_m2_grid <- function(previous_results = NULL,
     delta = 1, Kr = 1, k_f = 1, k_e = 1, alpha_state = 0.05,
     k_r = 2, k_de = 2, k_sp = 2, bias_alpha = 0.05, bias_beta = 0.05
   )
+  integer_axes <- c("delta", "Kr", "k_f", "k_e", "k_r", "k_de", "k_sp")
   for (nm in .m2_parameter_names()) {
     observed <- sort(unique(previous_grid[[nm]]))
     current <- winner[[nm]]
@@ -377,6 +378,8 @@ plan_m2_grid <- function(previous_results = NULL,
       } else {
         default_steps[[nm]]
       }
+      step <- step / 2
+      if (nm %in% integer_axes) step <- max(1, ceiling(step))
       boundary_values <- c(boundary_values, current - step)
       # k_e = 1 is not a valid mgcv basis size. When the smallest tested
       # smooth is k_e = 2, the only valid lower comparison is the explicit
@@ -391,9 +394,12 @@ plan_m2_grid <- function(previous_results = NULL,
       } else {
         default_steps[[nm]]
       }
+      step <- step / 2
+      if (nm %in% integer_axes) step <- max(1, ceiling(step))
       boundary_values <- c(boundary_values, current + step)
     }
     for (value in unique(boundary_values)) {
+      if (nm %in% integer_axes) value <- as.integer(round(value))
       candidate <- winner
       candidate[[nm]] <- value
       if (.m2_candidate_is_valid(candidate) && !value %in% observed) {

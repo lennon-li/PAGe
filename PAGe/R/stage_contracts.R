@@ -558,8 +558,10 @@ freeze_m0 <- function(fit, tuning = NULL, ...) {
       reason = if (edge == "none") {
         "selected value is bracketed"
       } else if (is_null) {
-        paste0("value ", .stage_number_label(null_value),
-               " is the predeclared drop/null")
+        paste0(
+          "value ", .stage_number_label(null_value),
+          " is the predeclared drop/null"
+        )
       } else {
         paste0("selected non-null ", stage, " axis is at a tested edge")
       },
@@ -619,7 +621,8 @@ inspect_tuning_boundaries <- function(x,
   if (is.data.frame(selected)) selected <- selected[1L, , drop = FALSE]
   if (is.null(null_axes)) null_axes <- character(0)
   report <- .stage_boundary_report(
-    stage, grid, selected, null_axes = null_axes,
+    stage, grid, selected,
+    null_axes = null_axes,
     null_values = .stage_null_values(stage)
   )
   unresolved <- report[report$decision == "expand_required", , drop = FALSE]
@@ -655,23 +658,163 @@ inspect_tuning_boundaries <- function(x,
 
 .grid_adjacent_step <- function(values, edge, supplied = NULL) {
   values <- sort(unique(as.numeric(values)))
-  if (!is.null(supplied)) return(as.numeric(supplied))
-  if (length(values) < 2L) return(1)
-  if (edge == "lower") values[2L] - values[1L] else
+  if (!is.null(supplied)) {
+    return(as.numeric(supplied))
+  }
+  if (length(values) < 2L) {
+    return(1)
+  }
+  adjacent <- if (edge == "lower") {
+    values[2L] - values[1L]
+  } else {
     values[length(values)] - values[length(values) - 1L]
+  }
+  # Boundary expansion is exploratory; halve the observed spacing so a new
+  # point does not jump past a narrow optimum. Explicit `steps` are unchanged.
+  adjacent / 2
 }
 
-.valid_stage_expansion_value <- function(stage, parameter, value) {
-  if (!is.finite(value)) return(FALSE)
+.m1_integer_axes <- function() c("k_ref", "slope_window")
+
+.m0_integer_axes <- function() {
+  c("n_consec", "L", "K_sum", "N_req", "w_min", "w_max")
+}
+
+.validate_m0_grid_support <- function(grid, data = NULL,
+                                      season_col = "season",
+                                      week_col = "weekF") {
+  grid <- as.data.frame(grid, stringsAsFactors = FALSE)
+  if (!nrow(grid)) {
+    stop("M0 grid is empty.", call. = FALSE)
+  }
+  numeric_axes <- c(
+    "cls_thr", "p_thr", "prev_thr", "p_sum_thr", "eps"
+  )
+  for (parameter in intersect(numeric_axes, names(grid))) {
+    values <- suppressWarnings(as.numeric(grid[[parameter]]))
+    bad <- !is.finite(values) | values < 0
+    if (parameter != "eps") bad <- bad | values > 1
+    if (any(bad)) {
+      stop(
+        "M0 grid `", parameter, "` contains unsupported value(s): ",
+        paste(unique(values[bad]), collapse = ", "),
+        ". Thresholds must be finite values in [0, 1] and eps must be non-negative.",
+        call. = FALSE
+      )
+    }
+  }
+  for (parameter in intersect(.m0_integer_axes(), names(grid))) {
+    values <- suppressWarnings(as.numeric(grid[[parameter]]))
+    bad <- !is.finite(values) | values != round(values) | values < 1
+    if (any(bad)) {
+      stop(
+        "M0 grid `", parameter, "` contains unsupported value(s): ",
+        paste(unique(values[bad]), collapse = ", "),
+        ". Values must be positive integers.",
+        call. = FALSE
+      )
+    }
+  }
+  if (all(c("w_min", "w_max") %in% names(grid)) &&
+    any(as.numeric(grid$w_min) > as.numeric(grid$w_max))) {
+    stop("M0 grid requires w_min <= w_max for every specification.", call. = FALSE)
+  }
+  if ("N_req" %in% names(grid) && any(as.numeric(grid$N_req) > 5)) {
+    stop("M0 grid `N_req` cannot exceed the five available detector gates.", call. = FALSE)
+  }
+  if (!is.null(data)) {
+    data <- as.data.frame(data)
+    if (!all(c(season_col, week_col) %in% names(data))) {
+      stop(
+        "M0 support validation requires `", season_col, "` and `",
+        week_col, "` columns.",
+        call. = FALSE
+      )
+    }
+    weeks <- split(data[[week_col]], data[[season_col]])
+    n_weeks <- vapply(weeks, function(x) length(unique(x[is.finite(x)])), integer(1))
+    if (!length(n_weeks) || any(n_weeks < 1L)) {
+      stop("M0 data has no usable within-season week support.", call. = FALSE)
+    }
+    max_required <- intersect(c("n_consec", "L", "K_sum"), names(grid))
+    if (length(max_required) && any(vapply(max_required, function(nm) {
+      any(as.numeric(grid[[nm]]) > min(n_weeks))
+    }, logical(1)))) {
+      bad <- max_required[vapply(max_required, function(nm) {
+        any(as.numeric(grid[[nm]]) > min(n_weeks))
+      }, logical(1))]
+      stop(
+        "M0 grid requests more observations than the shortest training season supports (",
+        paste(bad, collapse = ", "), "; minimum usable weeks=", min(n_weeks), ").",
+        call. = FALSE
+      )
+    }
+    if (all(c("w_min", "w_max") %in% names(grid))) {
+      week_values <- data[[week_col]]
+      week_range <- range(week_values[is.finite(week_values)], na.rm = TRUE)
+      if (any(as.numeric(grid$w_min) < week_range[1L]) ||
+        any(as.numeric(grid$w_max) > week_range[2L])) {
+        stop(
+          "M0 grid ignition window lies outside the observed week domain [",
+          week_range[1L], ", ", week_range[2L], "].",
+          call. = FALSE
+        )
+      }
+    }
+  }
+  invisible(grid)
+}
+
+.validate_m1_grid_support <- function(grid, n_weeks = 52L) {
+  if (!is.numeric(n_weeks) || length(n_weeks) != 1L ||
+    !is.finite(n_weeks) || n_weeks < 2 ||
+    n_weeks != as.integer(n_weeks)) {
+    stop("`n_weeks` must be one integer of at least 2.", call. = FALSE)
+  }
+  n_weeks <- as.integer(n_weeks)
+  grid <- as.data.frame(grid, stringsAsFactors = FALSE)
+  for (parameter in .m1_integer_axes()) {
+    if (!parameter %in% names(grid)) next
+    values <- suppressWarnings(as.numeric(grid[[parameter]]))
+    bad <- !is.finite(values) | values != round(values) |
+      values < 2 | values > n_weeks
+    if (any(bad)) {
+      invalid <- paste(unique(values[bad]), collapse = ", ")
+      stop(
+        "M1 grid `", parameter, "` contains unsupported value(s): ",
+        invalid, ". Values must be integers in [2, ", n_weeks,
+        "] for the ", n_weeks, "-week reference domain.",
+        call. = FALSE
+      )
+    }
+  }
+  invisible(grid)
+}
+
+.valid_stage_expansion_value <- function(stage, parameter, value,
+                                         n_weeks = 52L) {
+  if (!is.finite(value)) {
+    return(FALSE)
+  }
   if (stage == "M0") {
-    if (parameter == "cls_thr") return(value >= 0 && value <= 1)
-    if (parameter %in% c("p_thr", "prev_thr", "p_sum_thr", "eps")) return(value >= 0)
-    if (parameter %in% c("n_consec", "L", "K_sum", "N_req", "w_min", "w_max")) return(value >= 1)
+    if (parameter == "cls_thr") {
+      return(value >= 0 && value <= 1)
+    }
+    if (parameter %in% c("p_thr", "prev_thr", "p_sum_thr", "eps")) {
+      return(value >= 0 && (parameter == "eps" || value <= 1))
+    }
+    if (parameter %in% c("n_consec", "L", "K_sum", "N_req", "w_min", "w_max")) {
+      return(value >= 1)
+    }
     return(TRUE)
   }
   if (stage == "M1") {
-    if (parameter %in% c("k_ref", "slope_window")) return(value >= 2)
-    if (parameter %in% c("multi_temperature", "align_rise_weight", "slope_weight")) return(value >= 0)
+    if (parameter %in% .m1_integer_axes()) {
+      return(value >= 2 && value <= n_weeks && value == round(value))
+    }
+    if (parameter %in% c("multi_temperature", "align_rise_weight", "slope_weight")) {
+      return(value >= 0)
+    }
   }
   TRUE
 }
@@ -686,7 +829,7 @@ inspect_tuning_boundaries <- function(x,
 #' Expand a tuning grid at every unresolved winner boundary
 #'
 #' This is the user-facing companion to `inspect_tuning_boundaries()`. It
-#' appends one valid adjacent value per unresolved axis and preserves every
+#' appends one valid smaller adjacent value per unresolved axis and preserves every
 #' existing row and specification identity. Pass the returned grid to the
 #' same `tune_*()` function with its existing `checkpoint_dir`; M1 and M2
 #' checkpoints reuse completed specifications, while M0 reuses cached grid
@@ -697,6 +840,8 @@ inspect_tuning_boundaries <- function(x,
 #' @param grid Optional grid override.
 #' @param steps Optional named numeric vector overriding adjacent spacing.
 #' @param max_specs Optional cap on returned rows.
+#' @param n_weeks Integer reference-domain size used to guard M1 basis values.
+#' @param data Optional stage data used to guard M0 rolling/window support.
 #'
 #' @return The original grid with new boundary rows appended. New rows carry
 #'   `provenance = "boundary:<parameter>"` when that column is available.
@@ -705,11 +850,15 @@ expand_tuning_grid <- function(x,
                                stage = c("M0", "M1", "M2"),
                                grid = NULL,
                                steps = NULL,
-                               max_specs = NULL) {
+                               max_specs = NULL,
+                               n_weeks = 52L,
+                               data = NULL) {
   stage <- toupper(match.arg(stage))
   if (is.null(grid)) grid <- x$grid %||% x
   grid <- as.data.frame(grid, stringsAsFactors = FALSE)
   if (!nrow(grid)) stop("Cannot expand an empty tuning grid.", call. = FALSE)
+  if (stage == "M0") .validate_m0_grid_support(grid, data = data)
+  if (stage == "M1") .validate_m1_grid_support(grid, n_weeks = n_weeks)
 
   if (stage == "M2") {
     planned <- plan_m2_grid(
@@ -733,11 +882,47 @@ expand_tuning_grid <- function(x,
         parameter <- unresolved$parameter[i]
         step <- .grid_adjacent_step(
           grid[[parameter]], unresolved$boundary[i],
-          if (!is.null(steps)) steps[[parameter]] else NULL
+          if (!is.null(steps) && parameter %in% names(steps)) {
+            steps[[parameter]]
+          } else {
+            NULL
+          }
         )
+        integer_axes <- if (stage == "M0") {
+          .m0_integer_axes()
+        } else if (stage == "M1") {
+          .m1_integer_axes()
+        } else {
+          character(0)
+        }
+        if (parameter %in% integer_axes) step <- max(1, ceiling(step))
         value <- unresolved$selected_value[i] +
           if (unresolved$boundary[i] == "lower") -step else step
-        if (!.valid_stage_expansion_value(stage, parameter, value)) {
+        if (parameter %in% integer_axes) value <- as.integer(round(value))
+        # A halved step can still cross the finite M1 reference domain. Move
+        # to its supported endpoint rather than generating an impossible GAM.
+        if (stage == "M1" && parameter %in% .m1_integer_axes()) {
+          if (unresolved$boundary[i] == "upper") {
+            value <- min(value, as.integer(n_weeks))
+          }
+          if (unresolved$boundary[i] == "lower") {
+            value <- max(value, 2L)
+          }
+        }
+        if (isTRUE(all.equal(
+          as.numeric(value), as.numeric(unresolved$selected_value[i])
+        ))) {
+          stop(
+            "Cannot expand ", stage, " axis `", parameter,
+            "` beyond its supported domain. Supply a different grid or",
+            " an explicit `steps` value.",
+            call. = FALSE
+          )
+        }
+        if (!.valid_stage_expansion_value(
+          stage, parameter, value,
+          n_weeks = n_weeks
+        )) {
           stop(
             "Expansion for ", stage, " axis `", parameter,
             "` would leave its supported domain (value ",
@@ -752,6 +937,9 @@ expand_tuning_grid <- function(x,
       grid <- rbind(grid, do.call(rbind, new_rows))
     }
   }
+
+  if (stage == "M0") .validate_m0_grid_support(grid, data = data)
+  if (stage == "M1") .validate_m1_grid_support(grid, n_weeks = n_weeks)
 
   if (stage == "M2") {
     grid <- .validate_m2_grid(grid)
@@ -859,7 +1047,8 @@ validate_m0_tuning <- function(x, grid = NULL, check_boundaries = FALSE, ...) {
   }
   if (isTRUE(check_boundaries)) {
     report <- inspect_tuning_boundaries(
-      x, stage = "M0", grid = grid, warn = TRUE,
+      x,
+      stage = "M0", grid = grid, warn = TRUE,
       null_axes = c("p_thr", "prev_thr", "p_sum_thr")
     )
     x$boundary_report <- report
@@ -966,6 +1155,17 @@ validate_m1_tuning <- function(x, check_boundaries = FALSE, ...) {
   best_vals <- best[[metric_col[1L]]]
   if (length(best_vals) != 1L || !is.finite(best_vals)) {
     stop("M1 tuning selected metric is non-finite.", call. = FALSE)
+  }
+  if ("failure_reason" %in% names(scores)) {
+    failed <- scores[!is.na(scores$failure_reason) &
+      nzchar(as.character(scores$failure_reason)), , drop = FALSE]
+    if (nrow(failed)) {
+      details <- paste(
+        utils::head(paste0(failed$spec_id, ": ", failed$failure_reason), 3L),
+        collapse = "; "
+      )
+      stop("M1 tuning contains failed candidate(s): ", details, call. = FALSE)
+    }
   }
   if (!is.null(x$selection) && "n_seasons" %in% names(scores)) {
     n_train <- length(x$selection$training_seasons)

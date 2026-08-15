@@ -16,6 +16,7 @@ build_m2(
   bias_beta = 0,
   n_cores = parallel::detectCores() - 1L,
   checkpoint_dir = NULL,
+  fail_fast = TRUE,
   verbose = TRUE
 )
 }
@@ -46,6 +47,9 @@ fallbacks used when the grid omits the corresponding columns.}
 
 \item{checkpoint_dir}{Character. Directory for Phase 2 checkpoint files.
 Pass \code{NULL} to disable checkpointing.}
+
+\item{fail_fast}{Logical. Stop on the first unsupported fold/spec instead of
+converting model failures to missing scores (default \code{TRUE}).}
 
 \item{verbose}{Logical. Print progress.}
 }
