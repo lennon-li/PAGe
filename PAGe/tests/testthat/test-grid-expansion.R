@@ -5,7 +5,8 @@ test_that("boundary inspection warns and expansion preserves M1 rows", {
       best = data.frame(k_ref = 20L, slope_weight = 8, mae_weibull = 1),
       grid = data.frame(
         k_ref = c(20L, 30L), slope_weight = c(8, 12),
-        spec_id = c("s001", "s002")
+        spec_id = c("s001", "s002"),
+        provenance = c("seed", "seed")
       )
     ),
     class = "page_m1_tuning"
@@ -23,7 +24,20 @@ test_that("boundary inspection warns and expansion preserves M1 rows", {
   expect_equal(expanded$spec_id[1:2], tuning$grid$spec_id)
   expect_true(any(expanded$k_ref == 15L))
   expect_true(any(expanded$slope_weight == 4))
+  expect_true(any(grepl("^boundary:", expanded$provenance)))
   expect_equal(nrow(expanded), 4L)
+})
+
+test_that("boundary inspection and expansion require a selected tuning result", {
+  grid <- data.frame(k_ref = c(20L, 30L), slope_weight = c(8, 12))
+  expect_error(
+    PAGe::inspect_tuning_boundaries(grid, stage = "M1"),
+    "missing its selected configuration"
+  )
+  expect_error(
+    PAGe::expand_tuning_grid(grid, stage = "M1"),
+    "missing its selected configuration"
+  )
 })
 
 test_that("M2 expansion is additive and keeps canonical identities", {
@@ -48,6 +62,10 @@ test_that("M2 expansion is additive and keeps canonical identities", {
   expect_true(all(grid$spec_id %in% expanded$spec_id))
   expect_true(nrow(expanded) > nrow(grid))
   expect_equal(length(unique(expanded$spec_id)), nrow(expanded))
+  expect_true(all(grepl(
+    "existing", expanded$provenance[seq_len(nrow(grid))], fixed = TRUE
+  )))
+  expect_true(any(grepl("^boundary:", expanded$provenance)))
 })
 
 test_that("M2 checkpoint accepts an additive grid with the same context", {
