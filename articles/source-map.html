@@ -73,7 +73,7 @@
 
 
 
-    <p>The installable package under <code>PAGe/</code> is the sole source of truth. Its R source lives under <code>PAGe/R/</code>; there is no separate root-level mirror.</p>
+    <p>The installable package under <code>PAGe/</code> is the package source of truth. Its R source lives under <code>PAGe/R/</code>. A top-level <code>R/</code> directory is maintained as a development mirror for historical scripts; keep the two trees synchronized when a task touches mirrored files, as required by the repository guidance.</p>
 <p>For operational loading, use <code><a href="../reference/load_promoted_kit.html">load_promoted_kit()</a></code> with an immutable registry artifact and its deployment manifest. <code><a href="../reference/load_prospective_kit.html">load_prospective_kit()</a></code> is a strict component-level loader, not proof that acceptance or promotion occurred.</p>
 <table class="table caption-top">
 <colgroup>

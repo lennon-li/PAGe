@@ -70,7 +70,9 @@ result, expand its grid, and resume tuning from the same checkpoint.</p>
 
 
 <dl><dt id="arg-x">x<a class="anchor" aria-label="anchor" href="#arg-x"></a></dt>
-<dd><p>A stage tuning result, or a data frame containing the tuning grid.</p></dd>
+<dd><p>A stage tuning result with a selected configuration and complete
+tuning grid. A raw grid alone is not sufficient because boundary status
+is defined relative to the selected configuration.</p></dd>
 
 
 <dt id="arg-stage">stage<a class="anchor" aria-label="anchor" href="#arg-stage"></a></dt>

@@ -1,7 +1,10 @@
 # Source map
 
-The installable package under `PAGe/` is the sole source of truth. Its R
-source lives under `PAGe/R/`; there is no separate root-level mirror.
+The installable package under `PAGe/` is the package source of truth.
+Its R source lives under `PAGe/R/`. A top-level `R/` directory is
+maintained as a development mirror for historical scripts; keep the two
+trees synchronized when a task touches mirrored files, as required by
+the repository guidance.
 
 For operational loading, use
 [`load_promoted_kit()`](https://lennon-li.github.io/PAGe/reference/load_promoted_kit.md)
