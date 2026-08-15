@@ -17,7 +17,8 @@ detectIgnitionBySeason_M0v2(
   keep_signals = TRUE,
   verbose = TRUE,
   iWeek = FALSE,
-  copy_data = TRUE
+  copy_data = TRUE,
+  validate_support = TRUE
 )
 }
 \arguments{
@@ -42,6 +43,11 @@ detectIgnitionBySeason_M0v2(
 \item{iWeek}{Logical. If TRUE return season-level compare table.}
 
 \item{copy_data}{Logical. If FALSE operate on input data.table by reference.}
+
+\item{validate_support}{Logical. If TRUE (default), reject parameter
+windows that exceed observed within-season data. Prospective one-season
+snapshots may set this to FALSE; rolling gates remain undefined until
+enough observations arrive.}
 }
 \value{
 list with \code{by_season} and optionally \code{data} and \code{compare}.

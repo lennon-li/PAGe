@@ -31,3 +31,18 @@ test_that("M0 detector rejects unsupported windows before rolling gates", {
     "shortest training season"
   )
 })
+
+test_that("M0 weekly runtime accepts intentionally short prospective snapshots", {
+  dat <- data.frame(
+    season = "a", weekF = 1L, p_cls_p = 0.2, p = 0.1, y = 1, N = 10
+  )
+  out <- PAGe:::detectIgnition_oneSeason(
+    dat,
+    params = list(
+      n_consec = 5L, L = 2L, K_sum = 5L, N_req = 3L,
+      w_min = 13L, w_max = 26L
+    )
+  )
+  expect_true(is.list(out))
+  expect_identical(as.integer(out$iWeek_hat), 26L)
+})

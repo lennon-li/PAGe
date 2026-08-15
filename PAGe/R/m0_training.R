@@ -535,6 +535,10 @@ plot_season_detection_table <- function(det_all, season) {
 #' @param verbose Logical. If TRUE prints summary.
 #' @param iWeek Logical. If TRUE return season-level compare table.
 #' @param copy_data Logical. If FALSE operate on input data.table by reference.
+#' @param validate_support Logical. If TRUE (default), reject parameter
+#'   windows that exceed observed within-season data. Prospective one-season
+#'   snapshots may set this to FALSE; rolling gates remain undefined until
+#'   enough observations arrive.
 #' @return list with \code{by_season} and optionally \code{data} and \code{compare}.
 detectIgnitionBySeason_M0v2 <- function(ign_fit,
                                         params,
@@ -548,7 +552,8 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
                                         keep_signals = TRUE,
                                         verbose = TRUE,
                                         iWeek = FALSE,
-                                        copy_data = TRUE) {
+                                        copy_data = TRUE,
+                                        validate_support = TRUE) {
   if (!is.list(params)) stop("params must be a list.")
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Need package: data.table")
 
@@ -586,17 +591,19 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
   # before rolling windows or gates are computed.  This turns unsupported
   # expansion candidates into actionable errors instead of silent fallback
   # detections or all-missing tuning scores.
-  .validate_m0_grid_support(
-    data.frame(
-      cls_thr = cls_thr, p_thr = p_thr, prev_thr = prev_thr,
-      n_consec = n_consec, L = L, eps = eps, K_sum = K_sum,
-      p_sum_thr = p_sum_thr, N_req = N_req, w_min = w_min, w_max = w_max,
-      stringsAsFactors = FALSE
-    ),
-    data = DT,
-    season_col = season_col,
-    week_col = week_col
-  )
+  if (isTRUE(validate_support)) {
+    .validate_m0_grid_support(
+      data.frame(
+        cls_thr = cls_thr, p_thr = p_thr, prev_thr = prev_thr,
+        n_consec = n_consec, L = L, eps = eps, K_sum = K_sum,
+        p_sum_thr = p_sum_thr, N_req = N_req, w_min = w_min, w_max = w_max,
+        stringsAsFactors = FALSE
+      ),
+      data = DT,
+      season_col = season_col,
+      week_col = week_col
+    )
+  }
 
   data.table::setorderv(DT, c(season_col, week_col))
 
@@ -691,7 +698,12 @@ detectIgnition_oneSeason <- function(d_now, params) {
     ign_fit      = d_now,
     params       = params,
     keep_signals = TRUE,
-    verbose      = FALSE
+    verbose      = FALSE,
+    # Weekly prospective snapshots are intentionally shorter than the full
+    # detector windows before ignition. Strict support checks still protect
+    # tuning/expansion entry points; this runtime path returns undefined
+    # gates until enough observations accumulate.
+    validate_support = FALSE
   )
 
   # Extract last row of signal data
