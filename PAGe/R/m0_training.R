@@ -591,19 +591,19 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
   # before rolling windows or gates are computed.  This turns unsupported
   # expansion candidates into actionable errors instead of silent fallback
   # detections or all-missing tuning scores.
-  if (isTRUE(validate_support)) {
-    .validate_m0_grid_support(
-      data.frame(
-        cls_thr = cls_thr, p_thr = p_thr, prev_thr = prev_thr,
-        n_consec = n_consec, L = L, eps = eps, K_sum = K_sum,
-        p_sum_thr = p_sum_thr, N_req = N_req, w_min = w_min, w_max = w_max,
-        stringsAsFactors = FALSE
-      ),
-      data = DT,
-      season_col = season_col,
-      week_col = week_col
-    )
-  }
+  .validate_m0_grid_support(
+    data.frame(
+      cls_thr = cls_thr, p_thr = p_thr, prev_thr = prev_thr,
+      n_consec = n_consec, L = L, eps = eps, K_sum = K_sum,
+      p_sum_thr = p_sum_thr, N_req = N_req, w_min = w_min, w_max = w_max,
+      stringsAsFactors = FALSE
+    ),
+    # Runtime snapshots may be too short for rolling windows, but the
+    # parameter-domain checks must still run on every call.
+    data = if (isTRUE(validate_support)) DT else NULL,
+    season_col = season_col,
+    week_col = week_col
+  )
 
   data.table::setorderv(DT, c(season_col, week_col))
 
