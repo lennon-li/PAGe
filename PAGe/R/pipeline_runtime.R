@@ -1,5 +1,36 @@
 # End-to-end deployment runtime for the prospective pipeline
 
+# Interpolation inputs can contain repeated aligned weeks when the M1
+# ensemble emits multiple template rows at the same coordinate.  `approx()`
+# warns and averages those rows implicitly; aggregate them explicitly so the
+# runtime is deterministic and warning-free.  Empty inputs return an NA
+# vector, allowing callers to handle an unavailable alignment without a base
+# `min()`/interpolation warning.
+.approx_unique <- function(x, y, xout, rule = 2L) {
+  x <- as.numeric(x)
+  y <- as.numeric(y)
+  xout <- as.numeric(xout)
+  out <- rep(NA_real_, length(xout))
+  keep <- is.finite(x) & is.finite(y)
+  out_keep <- is.finite(xout)
+  if (!any(keep) || !any(out_keep)) return(out)
+
+  means <- tapply(y[keep], x[keep], mean)
+  x_unique <- as.numeric(names(means))
+  y_unique <- as.numeric(means)
+  ord <- order(x_unique)
+  x_unique <- x_unique[ord]
+  y_unique <- y_unique[ord]
+  if (length(x_unique) == 1L) {
+    out[out_keep] <- y_unique[[1L]]
+  } else {
+    out[out_keep] <- stats::approx(
+      x_unique, y_unique, xout = xout[out_keep], rule = rule
+    )$y
+  }
+  out
+}
+
 #' Load pre-built model artifacts for prospective deployment
 #'
 #' Reads all offline-trained components from \code{data_dir} and returns them
@@ -531,9 +562,9 @@ run_m2_forecast <- function(kit,
           season = "current",
           eval_weekF = as.integer(cur_weeks),
           h = as.integer(h),
-          m1_p_hat = stats::approx(fdf$newWeek, fdf$p_hat,
+          m1_p_hat = .approx_unique(fdf$newWeek, fdf$p_hat,
             xout = nw, rule = 2
-          )$y
+          )
         )
       }))
       m1_combined <- dplyr::bind_rows(kit$m1_train_preds, cur_m1)
@@ -615,11 +646,11 @@ run_m2_forecast <- function(kit,
       target_weekF <- ew + h
       target_newWeek <- as.numeric(target_weekF - iWeek_hat + anchorWeek)
 
-      m1_p <- stats::approx(fdf$newWeek, fdf$p_hat, xout = target_newWeek, rule = 2)$y
-      m1_lo <- stats::approx(fdf$newWeek, fdf$p_lo, xout = target_newWeek, rule = 2)$y
-      m1_hi <- stats::approx(fdf$newWeek, fdf$p_hi, xout = target_newWeek, rule = 2)$y
+      m1_p <- .approx_unique(fdf$newWeek, fdf$p_hat, xout = target_newWeek, rule = 2)
+      m1_lo <- .approx_unique(fdf$newWeek, fdf$p_lo, xout = target_newWeek, rule = 2)
+      m1_hi <- .approx_unique(fdf$newWeek, fdf$p_hi, xout = target_newWeek, rule = 2)
       m1_spread <- if ("logit_spread" %in% names(fdf)) {
-        stats::approx(fdf$newWeek, fdf$logit_spread, xout = target_newWeek, rule = 2)$y
+        .approx_unique(fdf$newWeek, fdf$logit_spread, xout = target_newWeek, rule = 2)
       } else {
         0
       }

@@ -46,7 +46,7 @@ only its README.
 ### Package identity
 
 - Package: `PAGe` 0.2.0.
-- Code source of truth: `PAGe/R/`; root `R/` is its development mirror.
+- Code source of truth: `PAGe/R/`; there is no separate root-level R mirror.
 - Export count: 53 (`PAGe/NAMESPACE`).
 - Return classes currently constructed by the package: `page_forecast`,
   `page_training_result`, `page_promotion_report`, and

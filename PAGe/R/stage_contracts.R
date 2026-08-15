@@ -403,7 +403,10 @@ season_selection.default <- function(x, ...) {
   }
   shared <- intersect(names(fit$config), names(selected))
   if (!length(shared) ||
-    !identical(unname(fit$config[shared]), unname(selected[shared]))) {
+    !isTRUE(all.equal(
+      unname(fit$config[shared]), unname(selected[shared]),
+      check.attributes = FALSE
+    ))) {
     stop("Fit configuration does not match the tuning selection.", call. = FALSE)
   }
   invisible(tuning)
@@ -466,30 +469,364 @@ fit_m0 <- function(data, selection, config, ...) {
 
 #' Freeze an M0 draft artifact
 #'
-#' Promotes a draft M0 fit to immutable frozen status. When \code{tuning}
-#' is supplied, it is validated first via \code{validate_m0_tuning()}.
+#' Promotes a draft M0 fit to immutable frozen status. Governed tuning is
+#' boundary-validated before the fit can be frozen.
 #'
 #' @param fit A \code{page_m0_fit} in draft or frozen state.
-#' @param tuning Optional \code{page_m0_tuning} result to validate.
+#' @param tuning Optional \code{page_m0_tuning} result to validate. Governed
+#'   tuning must include its complete grid for boundary validation.
 #' @param ... Reserved.
 #'
 #' @return The \code{page_m0_fit} in \code{frozen} state.
 #' @export
 freeze_m0 <- function(fit, tuning = NULL, ...) {
+  if (inherits(tuning, "page_m0_tuning") && !is.null(tuning$selection)) {
+    tuning <- validate_m0_tuning(
+      tuning,
+      grid = tuning$grid, check_boundaries = TRUE
+    )
+  }
   .freeze_stage(fit, tuning, "m0")
+}
+
+.stage_null_values <- function(stage) {
+  stage <- toupper(stage)
+  switch(stage,
+    M0 = c(p_thr = 0, prev_thr = 0, p_sum_thr = 0),
+    M1 = numeric(0),
+    M2 = c(
+      delta = 0, Kr = 1, k_e = 0, k_r = 0, k_de = 0,
+      k_sp = 0, bias_alpha = 0, bias_beta = 0
+    ),
+    numeric(0)
+  )
+}
+
+.stage_boundary_report <- function(stage, grid, selected,
+                                   null_axes = character(),
+                                   null_values = .stage_null_values(stage)) {
+  if (!is.data.frame(grid) || !nrow(grid)) {
+    stop(
+      stage, " boundary validation requires the complete tuning `grid`.",
+      call. = FALSE
+    )
+  }
+  # `tune_m0()` may retain a data.table grid.  Normalize before selecting
+  # multiple columns; data.table interprets `grid[axis_names]` as a join.
+  grid <- as.data.frame(grid)
+  axis_names <- intersect(names(grid), names(selected))
+  axis_names <- axis_names[vapply(
+    grid[axis_names],
+    function(values) {
+      is.numeric(values) &&
+        length(unique(values[is.finite(values)])) >= 2L
+    },
+    logical(1)
+  )]
+  boundary_rows <- lapply(axis_names, function(parameter) {
+    tested <- sort(unique(grid[[parameter]][is.finite(grid[[parameter]])]))
+    chosen <- as.numeric(selected[[parameter]][1L])
+    edge <- if (!is.finite(chosen)) {
+      "unknown"
+    } else if (isTRUE(all.equal(chosen, tested[1L]))) {
+      "lower"
+    } else if (isTRUE(all.equal(chosen, tested[length(tested)]))) {
+      "upper"
+    } else {
+      "none"
+    }
+    null_value <- if (parameter %in% names(null_values)) {
+      as.numeric(null_values[[parameter]])
+    } else {
+      NA_real_
+    }
+    is_null <- edge != "none" &&
+      (parameter %in% null_axes || parameter %in% names(null_values)) &&
+      is.finite(null_value) &&
+      isTRUE(all.equal(chosen, null_value))
+    data.frame(
+      stage = stage, parameter = parameter,
+      tested_min = tested[1L], tested_max = tested[length(tested)],
+      selected_value = chosen, boundary = edge,
+      decision = if (edge == "none") {
+        "stop_bracketed"
+      } else if (is_null) {
+        "accept_null_drop"
+      } else {
+        "expand_required"
+      },
+      reason = if (edge == "none") {
+        "selected value is bracketed"
+      } else if (is_null) {
+        paste0("value ", .stage_number_label(null_value),
+               " is the predeclared drop/null")
+      } else {
+        paste0("selected non-null ", stage, " axis is at a tested edge")
+      },
+      stringsAsFactors = FALSE
+    )
+  })
+  if (length(boundary_rows)) {
+    do.call(rbind, boundary_rows)
+  } else {
+    data.frame(
+      stage = character(0), parameter = character(0),
+      tested_min = numeric(0), tested_max = numeric(0),
+      selected_value = numeric(0), boundary = character(0),
+      decision = character(0), reason = character(0),
+      stringsAsFactors = FALSE
+    )
+  }
+}
+
+.stage_number_label <- function(x) {
+  format(as.numeric(x), scientific = FALSE, trim = TRUE, digits = 12L)
+}
+
+#' Inspect tuning boundaries and optionally warn about unresolved edges
+#'
+#' Reports every genuinely tuned numeric axis and marks an edge winner as
+#' `expand_required`, unless that value is a predeclared null/drop. The report
+#' is deliberately separate from the hard freeze gate so users can inspect a
+#' result, expand its grid, and resume tuning from the same checkpoint.
+#'
+#' @param x A stage tuning result, or a data frame containing the tuning grid.
+#' @param stage One of `"M0"`, `"M1"`, or `"M2"`.
+#' @param grid Optional complete grid. When omitted, uses `x$grid`.
+#' @param warn Logical; emit a warning when a non-null edge requires expansion.
+#' @param null_axes Optional names of axes whose zero value is an accepted
+#'   drop/null. Stage defaults are used when omitted.
+#'
+#' @return A data frame with tested range, selected value, boundary, decision,
+#'   and reason for every varying numeric axis.
+#' @export
+inspect_tuning_boundaries <- function(x,
+                                      stage = c("M0", "M1", "M2"),
+                                      grid = NULL,
+                                      warn = TRUE,
+                                      null_axes = NULL) {
+  stage <- toupper(match.arg(stage))
+  if (is.data.frame(x) && is.null(grid)) grid <- x
+  if (is.null(grid)) grid <- x$grid
+  selected <- switch(stage,
+    M0 = x$best_params %||% x$tuning$best_params,
+    M1 = x$best %||% x$best_params,
+    M2 = x$best_spec %||% x$best
+  )
+  if (is.null(selected)) {
+    stop(stage, " tuning is missing its selected configuration.", call. = FALSE)
+  }
+  if (is.data.frame(selected)) selected <- selected[1L, , drop = FALSE]
+  if (is.null(null_axes)) null_axes <- character(0)
+  report <- .stage_boundary_report(
+    stage, grid, selected, null_axes = null_axes,
+    null_values = .stage_null_values(stage)
+  )
+  unresolved <- report[report$decision == "expand_required", , drop = FALSE]
+  if (isTRUE(warn) && nrow(unresolved)) {
+    message <- paste0(
+      stage, " tuning winner is on an unresolved non-null boundary (",
+      paste(unresolved$parameter, collapse = ", "),
+      "). Call expand_tuning_grid() and rerun the stage with the same ",
+      "checkpoint_dir to score only the added specifications."
+    )
+    condition <- structure(
+      simpleWarning(message),
+      class = c("page_boundary_warning", "warning", "condition")
+    )
+    warning(condition)
+  }
+  class(report) <- c("page_boundary_report", class(report))
+  report
+}
+
+.selected_stage_config <- function(x, stage, grid) {
+  selected <- switch(stage,
+    M0 = x$best_params %||% x$tuning$best_params,
+    M1 = x$best %||% x$best_params,
+    M2 = x$best_spec %||% x$best
+  )
+  if (is.data.frame(selected)) selected <- selected[1L, , drop = FALSE]
+  selected <- as.list(selected)
+  out <- as.list(grid[1L, , drop = FALSE])
+  for (nm in intersect(names(selected), names(out))) out[[nm]] <- selected[[nm]][1L]
+  as.data.frame(out, stringsAsFactors = FALSE)
+}
+
+.grid_adjacent_step <- function(values, edge, supplied = NULL) {
+  values <- sort(unique(as.numeric(values)))
+  if (!is.null(supplied)) return(as.numeric(supplied))
+  if (length(values) < 2L) return(1)
+  if (edge == "lower") values[2L] - values[1L] else
+    values[length(values)] - values[length(values) - 1L]
+}
+
+.valid_stage_expansion_value <- function(stage, parameter, value) {
+  if (!is.finite(value)) return(FALSE)
+  if (stage == "M0") {
+    if (parameter == "cls_thr") return(value >= 0 && value <= 1)
+    if (parameter %in% c("p_thr", "prev_thr", "p_sum_thr", "eps")) return(value >= 0)
+    if (parameter %in% c("n_consec", "L", "K_sum", "N_req", "w_min", "w_max")) return(value >= 1)
+    return(TRUE)
+  }
+  if (stage == "M1") {
+    if (parameter %in% c("k_ref", "slope_window")) return(value >= 2)
+    if (parameter %in% c("multi_temperature", "align_rise_weight", "slope_weight")) return(value >= 0)
+  }
+  TRUE
+}
+
+.m0_grid_spec_ids <- function(grid) {
+  grid <- as.data.frame(grid)
+  vapply(seq_len(nrow(grid)), function(i) {
+    paste0("m0_", digest::digest(as.list(grid[i, , drop = FALSE]), algo = "xxhash64"))
+  }, character(1))
+}
+
+#' Expand a tuning grid at every unresolved winner boundary
+#'
+#' This is the user-facing companion to `inspect_tuning_boundaries()`. It
+#' appends one valid adjacent value per unresolved axis and preserves every
+#' existing row and specification identity. Pass the returned grid to the
+#' same `tune_*()` function with its existing `checkpoint_dir`; M1 and M2
+#' checkpoints reuse completed specifications, while M0 reuses cached grid
+#' scores when the prior tuning object is supplied as `previous_results`.
+#'
+#' @param x A tuning result or a grid data frame.
+#' @param stage One of `"M0"`, `"M1"`, or `"M2"`.
+#' @param grid Optional grid override.
+#' @param steps Optional named numeric vector overriding adjacent spacing.
+#' @param max_specs Optional cap on returned rows.
+#'
+#' @return The original grid with new boundary rows appended. New rows carry
+#'   `provenance = "boundary:<parameter>"` when that column is available.
+#' @export
+expand_tuning_grid <- function(x,
+                               stage = c("M0", "M1", "M2"),
+                               grid = NULL,
+                               steps = NULL,
+                               max_specs = NULL) {
+  stage <- toupper(match.arg(stage))
+  if (is.null(grid)) grid <- x$grid %||% x
+  grid <- as.data.frame(grid, stringsAsFactors = FALSE)
+  if (!nrow(grid)) stop("Cannot expand an empty tuning grid.", call. = FALSE)
+
+  if (stage == "M2") {
+    planned <- plan_m2_grid(
+      previous_results = if (is.list(x)) x else NULL,
+      max_specs = max_specs %||% max(64L, nrow(grid) + 32L)
+    )
+    # The adaptive planner intentionally caps its own plan; expansion must
+    # never discard already scored rows.
+    planned <- planned[setdiff(names(planned), "provenance")]
+    all_names <- union(names(grid), names(planned))
+    for (nm in setdiff(all_names, names(grid))) grid[[nm]] <- NA
+    for (nm in setdiff(all_names, names(planned))) planned[[nm]] <- NA
+    grid <- rbind(grid[all_names], planned[all_names])
+  } else {
+    report <- inspect_tuning_boundaries(x, stage = stage, grid = grid, warn = FALSE)
+    unresolved <- report[report$decision == "expand_required", , drop = FALSE]
+    if (nrow(unresolved)) {
+      selected <- .selected_stage_config(x, stage, grid)
+      new_rows <- lapply(seq_len(nrow(unresolved)), function(i) {
+        row <- selected
+        parameter <- unresolved$parameter[i]
+        step <- .grid_adjacent_step(
+          grid[[parameter]], unresolved$boundary[i],
+          if (!is.null(steps)) steps[[parameter]] else NULL
+        )
+        value <- unresolved$selected_value[i] +
+          if (unresolved$boundary[i] == "lower") -step else step
+        if (!.valid_stage_expansion_value(stage, parameter, value)) {
+          stop(
+            "Expansion for ", stage, " axis `", parameter,
+            "` would leave its supported domain (value ",
+            .stage_number_label(value), "). Supply an explicit valid `steps` value.",
+            call. = FALSE
+          )
+        }
+        row[[parameter]] <- value
+        if ("spec_id" %in% names(row)) row$spec_id <- NA_character_
+        row
+      })
+      grid <- rbind(grid, do.call(rbind, new_rows))
+    }
+  }
+
+  if (stage == "M2") {
+    grid <- .validate_m2_grid(grid)
+    grid <- .deduplicate_m2_grid(grid)
+  } else {
+    grid <- unique(grid)
+    if (stage == "M0") {
+      if (!"spec_id" %in% names(grid)) {
+        grid$spec_id <- .m0_grid_spec_ids(grid)
+      } else {
+        missing_ids <- is.na(grid$spec_id) | !nzchar(grid$spec_id)
+        if (any(missing_ids)) {
+          grid$spec_id[missing_ids] <- .m0_grid_spec_ids(
+            grid[missing_ids, setdiff(names(grid), "spec_id"), drop = FALSE]
+          )
+        }
+      }
+    } else if (!"spec_id" %in% names(grid)) {
+      grid$spec_id <- sprintf("s%03d", seq_len(nrow(grid)))
+    } else {
+      missing_ids <- is.na(grid$spec_id) | !nzchar(grid$spec_id)
+      if (any(missing_ids)) {
+        used <- as.character(grid$spec_id[!missing_ids])
+        proposed <- character(sum(missing_ids))
+        counter <- nrow(grid)
+        for (j in seq_along(proposed)) {
+          repeat {
+            counter <- counter + 1L
+            candidate <- sprintf("s%03d", counter)
+            if (!candidate %in% used && !candidate %in% proposed[seq_len(j - 1L)]) break
+          }
+          proposed[j] <- candidate
+        }
+        grid$spec_id[missing_ids] <- proposed
+      }
+      if (anyDuplicated(grid$spec_id)) {
+        stop("Expanded grid has duplicate spec_id values.", call. = FALSE)
+      }
+    }
+  }
+  if (!is.null(max_specs)) grid <- utils::head(grid, as.integer(max_specs))
+  grid
+}
+
+.enforce_stage_boundaries <- function(stage, report) {
+  unresolved <- report[report$decision == "expand_required", , drop = FALSE]
+  if (nrow(unresolved)) {
+    stop(
+      stage, " tuning has unresolved non-null boundary: ",
+      paste(unresolved$parameter, collapse = ", "),
+      ". Expand the ", stage,
+      " grid before freezing or starting the downstream stage.",
+      call. = FALSE
+    )
+  }
+  invisible(report)
 }
 
 #' Validate an M0 tuning result
 #'
 #' Rejects zero evaluable folds, non-finite selection metrics, missing
 #' selected configuration, or mismatched folds.
+#' Governed workflows can also require every genuinely tuned M0 axis to be
+#' bracketed or explicitly accepted as a null/drop choice.
 #'
 #' @param x A \code{page_m0_tuning} object.
+#' @param grid Complete M0 grid used for tuning when boundary checks are
+#'   enabled.
+#' @param check_boundaries Logical; require all varying numeric M0 axes to be
+#'   bracketed, except predeclared null/drop values.
 #' @param ... Reserved.
 #'
 #' @return \code{x}, invisibly, if valid.
 #' @export
-validate_m0_tuning <- function(x, ...) {
+validate_m0_tuning <- function(x, grid = NULL, check_boundaries = FALSE, ...) {
   if (!inherits(x, "page_m0_tuning")) {
     stop("`x` must be a `page_m0_tuning` object.", call. = FALSE)
   }
@@ -519,6 +856,14 @@ validate_m0_tuning <- function(x, ...) {
       !setequal(fold_seasons, x$selection$training_seasons)) {
       stop("M0 tuning fold/selection mismatch.", call. = FALSE)
     }
+  }
+  if (isTRUE(check_boundaries)) {
+    report <- inspect_tuning_boundaries(
+      x, stage = "M0", grid = grid, warn = TRUE,
+      null_axes = c("p_thr", "prev_thr", "p_sum_thr")
+    )
+    x$boundary_report <- report
+    .enforce_stage_boundaries("M0", report)
   }
   invisible(x)
 }
@@ -567,12 +912,16 @@ fit_m1 <- function(data, selection, m0, config, ...) {
 #' Freeze an M1 draft artifact
 #'
 #' @param fit A \code{page_m1_fit}.
-#' @param tuning Optional \code{page_m1_tuning} to validate.
+#' @param tuning Optional \code{page_m1_tuning} to validate. Governed tuning
+#'   is boundary-validated before freezing.
 #' @param ... Reserved.
 #'
 #' @return The \code{page_m1_fit} in \code{frozen} state.
 #' @export
 freeze_m1 <- function(fit, tuning = NULL, ...) {
+  if (inherits(tuning, "page_m1_tuning") && !is.null(tuning$selection)) {
+    tuning <- validate_m1_tuning(tuning, check_boundaries = TRUE)
+  }
   .freeze_stage(fit, tuning, "m1")
 }
 
@@ -580,13 +929,18 @@ freeze_m1 <- function(fit, tuning = NULL, ...) {
 #'
 #' Rejects zero evaluable seasons, all-missing metrics, non-finite selected
 #' metric, missing selected configuration, or fold/selection mismatches.
+#' Governed workflows can also require every genuinely tuned M1 axis to be
+#' bracketed before the fit is frozen and passed downstream.
 #'
 #' @param x A \code{page_m1_tuning} object.
+#' @param check_boundaries Logical; require all varying numeric M1 axes in the
+#'   supplied grid to have an interior selected value. This is enabled by
+#'   \code{train_pipeline()} before M1 is frozen for M2.
 #' @param ... Reserved.
 #'
 #' @return \code{x}, invisibly, if valid.
 #' @export
-validate_m1_tuning <- function(x, ...) {
+validate_m1_tuning <- function(x, check_boundaries = FALSE, ...) {
   if (!inherits(x, "page_m1_tuning")) {
     stop("`x` must be a `page_m1_tuning` object.", call. = FALSE)
   }
@@ -623,6 +977,11 @@ validate_m1_tuning <- function(x, ...) {
         call. = FALSE
       )
     }
+  }
+  if (isTRUE(check_boundaries)) {
+    report <- inspect_tuning_boundaries(x, stage = "M1", warn = TRUE)
+    x$boundary_report <- report
+    .enforce_stage_boundaries("M1", report)
   }
   invisible(x)
 }
@@ -718,6 +1077,9 @@ fit_m2 <- function(data, selection, m0, m1, config, ...) {
 #' @return The \code{page_m2_fit} in \code{frozen} state.
 #' @export
 freeze_m2 <- function(fit, tuning = NULL, ...) {
+  if (inherits(tuning, "page_m2_tuning") && !is.null(tuning$selection)) {
+    tuning <- validate_m2_tuning(tuning, check_boundaries = TRUE)
+  }
   .freeze_stage(fit, tuning, "m2")
 }
 
@@ -727,11 +1089,13 @@ freeze_m2 <- function(fit, tuning = NULL, ...) {
 #' metric, or absent selected specification.
 #'
 #' @param x A \code{page_m2_tuning} object.
+#' @param check_boundaries Logical; require every genuinely tuned M2 axis to
+#'   be bracketed or an explicitly accepted null/drop.
 #' @param ... Reserved.
 #'
 #' @return \code{x}, invisibly, if valid.
 #' @export
-validate_m2_tuning <- function(x, ...) {
+validate_m2_tuning <- function(x, check_boundaries = FALSE, ...) {
   if (!inherits(x, "page_m2_tuning")) {
     stop("`x` must be a `page_m2_tuning` object.", call. = FALSE)
   }
@@ -786,6 +1150,11 @@ validate_m2_tuning <- function(x, ...) {
       any(!is.finite(scores$bernoulli_nll))) {
       stop("M2 tuning has incomplete or non-finite governed folds.", call. = FALSE)
     }
+  }
+  if (isTRUE(check_boundaries)) {
+    report <- inspect_tuning_boundaries(x, stage = "M2", warn = TRUE)
+    x$boundary_report <- report
+    .enforce_stage_boundaries("M2", report)
   }
   invisible(x)
 }

@@ -75,6 +75,13 @@ constraint. A computational cap leaves an unresolved boundary and does not
 prove an optimum. The stage-specific procedure and stopping rules are in the
 [tuning playbook](tuning-playbook.md).
 
+The governed API enforces this ordering at runtime: `train_pipeline(mode =
+"retune")` checks M0 boundaries before starting M1, then calls
+`validate_m1_tuning(check_boundaries = TRUE)` before freezing M1 or starting M2.
+An unresolved non-null edge now stops the run immediately with the parameters
+named in the error, so downstream compute cannot be spent on a candidate that
+must be retuned.
+
 This differs from the Phase 3 refresh. A post-acceptance refresh keeps the
 accepted M0, M1, M2, and runtime settings fixed and only refits them after the
 passing decision explicitly releases `2025-26` into the training seasons.

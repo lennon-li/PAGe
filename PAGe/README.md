@@ -49,12 +49,14 @@ selection <- validate_season_selection(
 )
 
 m0_tuning <- tune_m0(allD, selection = selection)
+# Supply the exact M0 grid with check_boundaries = TRUE in a governed
+# low-level workflow; train_pipeline() performs this gate automatically.
 validate_m0_tuning(m0_tuning)
 m0 <- fit_m0(allD, selection, m0_tuning$best_params) |>
   freeze_m0(m0_tuning)
 
 m1_tuning <- tune_m1(allD, m0 = m0, selection = selection)
-validate_m1_tuning(m1_tuning)
+validate_m1_tuning(m1_tuning, check_boundaries = TRUE)
 m1_best <- m1_tuning$best[1, , drop = FALSE]
 m1_config <- m1_make_params(
   k_ref = m1_best$k_ref,

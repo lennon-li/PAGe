@@ -1,6 +1,6 @@
 # PAGe workflow status map
 
-Last reconciled: 2026-08-01. This map makes the discoverable entry points
+Last reconciled: 2026-08-11. This map makes the discoverable entry points
 explicit without deleting historical research. Status describes intended use
 and separately identifies local private-data evidence. Reported historical M2
 LOSO remains conditional on globally selected M0/M1 settings; it is not fully
@@ -19,14 +19,19 @@ outside version control; the repository records the specification and
 provenance caveat rather than claiming to reconstruct the original research
 artifact.
 
+Large private run products for BCC are stored on the mounted NFS share
+`/mnt/nfsv4/Users/yeli/PAGe-artifacts/`; see
+[`artifact-storage.md`](artifact-storage.md). The package checkout remains
+source-only.
+
 ## Operational workflow
 
 | Entry point or family | Status | Use and safe replacement |
 |---|---|---|
-| Guarded stage API: `validate_season_selection()`, `tune_*()`, `validate_*_tuning()`, `fit_*()`, `freeze_*()`, `assemble_kit()` | canonical | Preferred low-level training interface. It enforces explicit disjoint season sets, validated tuning results, frozen upstream dependencies, matching artifact identities, and guarded kit assembly. M0, then M1, then M2 must pass before proceeding. |
-| `docs/tuning-playbook.md` | canonical | Grid-design and expansion guidance: boundary reports, adjacent-step expansion, valid null/constraint boundaries, stage-specific parameter tips, stopping rules, and the prohibition on post-holdout tuning. |
+| Guarded stage API: `validate_season_selection()`, `tune_*()`, `validate_*_tuning()`, `fit_*()`, `freeze_*()`, `assemble_kit()` | canonical | Preferred low-level training interface. It enforces explicit disjoint season sets, structural and boundary-validated tuning results, frozen upstream dependencies, matching artifact identities, and guarded kit assembly. Governed retunes stop on unresolved M0 edges before M1 and unresolved M1 edges before M2. |
+| `docs/tuning-playbook.md` | canonical | Grid-design and expansion guidance: boundary reports, adjacent-step expansion, valid null/constraint boundaries, stage-specific parameter tips, stopping rules, and the prohibition on post-holdout tuning. The package calls are `inspect_tuning_boundaries()` and `expand_tuning_grid()`; checkpoint reuse is documented for each stage. |
 | `docs/long-job-supervision.md` | canonical | Long jobs use a detached zero-token watchdog and compact status records. AI involvement is limited to launch/preflight, detected exceptions, and bounded terminal review unless the user explicitly approves a monitoring cadence and token budget. |
-| High-level package API: `load_flu_hist()`, `prepare_surveillance_data()`, `train_pipeline()`, `run_pipeline()`, `run_prospective_pipeline()`, `replay_season_holdout()`, `check_promotion()`, `verify_promotion_evidence()` | canonical compatibility | `train_pipeline()` now composes the guarded stage lifecycle for refresh and retune, including explicit season selection, validation gates, frozen upstream identities, and governed M2 racing full evaluation. It preserves the compatibility result shape. Supply authorized surveillance data through an explicit `load_flu_hist(path)` argument or `PAGE_FLU_HIST_FILE`; observations are not bundled. A bare promotion report cannot release a holdout. |
+| High-level package API: `load_flu_hist()`, `prepare_surveillance_data()`, `train_pipeline()`, `run_pipeline()`, `run_prospective_pipeline()`, `replay_season_holdout()`, `check_promotion()`, `verify_promotion_evidence()` | canonical compatibility | `train_pipeline()` now composes the guarded stage lifecycle for refresh and retune, including explicit season selection, M0/M1 boundary gates before downstream stages, frozen upstream identities, and governed M2 racing full evaluation. It preserves the compatibility result shape. Supply authorized surveillance data through an explicit `load_flu_hist(path)` argument or `PAGE_FLU_HIST_FILE`; observations are not bundled. A bare promotion report cannot release a holdout. |
 | Legacy stage builders: `build_m0()`, `build_m1()`, `build_m2()`, `train_m2()` | compatibility | Retained for existing callers and as underlying statistical implementations. New stage-controlled workflows should call the guarded tune/validate/fit/freeze API instead. |
 
 The canonical `build_m2()` path enforces fold-specific label isolation:

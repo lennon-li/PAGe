@@ -9,7 +9,8 @@ freeze_m0(fit, tuning = NULL, ...)
 \arguments{
 \item{fit}{A \code{page_m0_fit} in draft or frozen state.}
 
-\item{tuning}{Optional \code{page_m0_tuning} result to validate.}
+\item{tuning}{Optional \code{page_m0_tuning} result to validate. Governed
+tuning must include its complete grid for boundary validation.}
 
 \item{...}{Reserved.}
 }
@@ -17,6 +18,6 @@ freeze_m0(fit, tuning = NULL, ...)
 The \code{page_m0_fit} in \code{frozen} state.
 }
 \description{
-Promotes a draft M0 fit to immutable frozen status. When \code{tuning}
-is supplied, it is validated first via \code{validate_m0_tuning()}.
+Promotes a draft M0 fit to immutable frozen status. Governed tuning is
+boundary-validated before the fit can be frozen.
 }

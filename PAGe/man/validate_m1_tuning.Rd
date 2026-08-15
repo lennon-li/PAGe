@@ -4,10 +4,14 @@
 \alias{validate_m1_tuning}
 \title{Validate an M1 tuning result}
 \usage{
-validate_m1_tuning(x, ...)
+validate_m1_tuning(x, check_boundaries = FALSE, ...)
 }
 \arguments{
 \item{x}{A \code{page_m1_tuning} object.}
+
+\item{check_boundaries}{Logical; require all varying numeric M1 axes in the
+supplied grid to have an interior selected value. This is enabled by
+\code{train_pipeline()} before M1 is frozen for M2.}
 
 \item{...}{Reserved.}
 }
@@ -17,4 +21,6 @@ validate_m1_tuning(x, ...)
 \description{
 Rejects zero evaluable seasons, all-missing metrics, non-finite selected
 metric, missing selected configuration, or fold/selection mismatches.
+Governed workflows can also require every genuinely tuned M1 axis to be
+bracketed before the fit is frozen and passed downstream.
 }

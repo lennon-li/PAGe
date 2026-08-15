@@ -601,7 +601,12 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
   DT[, n_hit := rowSums(cbind(cond_cls, cond_sum, cond_p, cond_prev, cond_inc), na.rm = FALSE)]
   DT[, ignite_ok := cond_win & (n_hit >= N_req)]
   
-  by_hat <- DT[ignite_ok %in% TRUE, .(iWeek_hat = min(get(week_col), na.rm = TRUE)), by = season_col]
+  ignition_rows <- DT[ignite_ok %in% TRUE]
+  by_hat <- if (nrow(ignition_rows) > 0L) {
+    ignition_rows[, .(iWeek_hat = min(get(week_col), na.rm = TRUE)), by = season_col]
+  } else {
+    DT[0, .(iWeek_hat = integer()), by = season_col]
+  }
   all_s  <- DT[, .(season = unique(get(season_col)))]
   data.table::setnames(all_s, "season", season_col)
   by_hat <- merge(all_s, by_hat, by = season_col, all.x = TRUE, sort = FALSE)
@@ -987,6 +992,10 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
 #'   \code{tuneIgnitionGrid_M0v2()} on each fold.
 #' @param verbose Logical; print fold-level progress messages (default
 #'   \code{TRUE}).
+#' @param checkpoint_dir Optional directory for fold-level checkpoints.
+#' @param previous_results Optional prior \code{loso_M0v2()} or \code{tune_m0()}
+#'   result. Completed grid rows are reused when their stable specification
+#'   identities are present.
 #'
 #' @return A list with per-fold outputs (\code{fold_out}) and aggregated
 #'   summary data frames (\code{eval_all}, \code{eval_tune},
@@ -1031,7 +1040,9 @@ loso_M0v2 <- function(dat,
                         verbose = FALSE,
                         progress_every = 200L
                       ),
-                      verbose = TRUE) {
+                      verbose = TRUE,
+                      checkpoint_dir = NULL,
+                      previous_results = NULL) {
   
   `%||%` <- function(x, y) if (!is.null(x)) x else y
   mode1 <- function(x) {
@@ -1043,6 +1054,49 @@ loso_M0v2 <- function(dat,
   
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Need package: data.table")
   stopifnot(is.data.frame(dat), is.data.frame(grid))
+
+  grid <- as.data.frame(grid, stringsAsFactors = FALSE)
+  if (!"spec_id" %in% names(grid)) {
+    grid$spec_id <- vapply(seq_len(nrow(grid)), function(i) {
+      paste0("m0_", digest::digest(as.list(grid[i, , drop = FALSE]), algo = "xxhash64"))
+    }, character(1))
+  }
+  if (anyDuplicated(grid$spec_id)) {
+    stop("M0 grid has duplicate spec_id values.", call. = FALSE)
+  }
+
+  context_id <- digest::digest(
+    list(
+      data = dat, season_col = season_col, week_col = week_col,
+      phase_col = phase_col, p_col = p_col, score_col = score_col,
+      drop_seasons = drop_seasons, exSeason_tune = exSeason_tune,
+      fit_args = fit_args, tune_args = tune_args
+    ),
+    algo = "sha256"
+  )
+
+  if (!is.null(checkpoint_dir)) {
+    dir.create(checkpoint_dir, recursive = TRUE, showWarnings = FALSE)
+    checkpoint_file <- file.path(checkpoint_dir, "m0_loso_results.rds")
+    if (is.null(previous_results) && file.exists(checkpoint_file)) {
+      cached <- tryCatch(readRDS(checkpoint_file), error = function(e) NULL)
+      if (is.list(cached) && identical(cached$context_id, context_id)) {
+        previous_results <- cached
+      }
+    }
+  } else {
+    checkpoint_file <- NULL
+  }
+  previous_context <- previous_results$context_id %||%
+    previous_results$tuning$context_id %||% NULL
+  if (is.list(previous_results) &&
+    !is.null(previous_context) &&
+    !identical(previous_context, context_id)) {
+    previous_results <- NULL
+  }
+  previous_folds <- previous_results$folds %||%
+    previous_results$fold_out %||%
+    previous_results$tuning$folds %||% list()
   
   DT <- data.table::as.data.table(data.table::copy(dat))
   
@@ -1059,6 +1113,19 @@ loso_M0v2 <- function(dat,
   
   fold_out <- vector("list", length(seasons))
   names(fold_out) <- seasons
+
+  select_best <- function(results) {
+    if (!is.data.frame(results) || !nrow(results)) {
+      stop("M0 tuning produced no grid results.", call. = FALSE)
+    }
+    ord <- with(results, order(n_over2, n_late_over2, max_abs, n_miss, score))
+    results[ord[1L], , drop = FALSE]
+  }
+
+  m0_param_names <- c(
+    "cls_thr", "p_thr", "prev_thr", "n_consec", "L", "eps",
+    "K_sum", "p_sum_thr", "N_req", "w_min", "w_max"
+  )
   
   for (ss in seasons) {
     if (verbose) message("[loso_M0v2] fold holdout=", ss)
@@ -1106,9 +1173,27 @@ loso_M0v2 <- function(dat,
       exSeason   = exSeason_tune
     ), tune_args)
     
-    tuned <- do.call(tuneIgnitionGrid_M0v2, tune_call)
+    prior_fold <- previous_folds[[ss]]
+    prior_scores <- prior_fold$tuning_results %||% NULL
+    if (is.data.frame(prior_scores) && "spec_id" %in% names(prior_scores)) {
+      prior_scores <- prior_scores[prior_scores$spec_id %in% grid$spec_id, , drop = FALSE]
+    } else {
+      prior_scores <- NULL
+    }
+    todo_grid <- grid[!grid$spec_id %in% (prior_scores$spec_id %||% character(0)), , drop = FALSE]
+    tuned <- if (nrow(todo_grid)) {
+      do.call(tuneIgnitionGrid_M0v2, c(list(grid = todo_grid), tune_call[setdiff(names(tune_call), "grid")]))
+    } else {
+      NULL
+    }
+    combined_scores <- rbind(
+      prior_scores,
+      if (!is.null(tuned)) tuned$results else NULL
+    )
+    best_row <- select_best(combined_scores)
+    best_params <- as.list(best_row[, intersect(m0_param_names, names(best_row)), drop = FALSE])
+    best_params <- lapply(best_params, function(value) value[[1L]])
     t_tune <- unname((proc.time() - t_tune0)[["elapsed"]])
-    best_params <- tuned$best_params
     
     # ---- 4) apply detector to heldout season ----
     t_det0 <- proc.time()
@@ -1132,6 +1217,8 @@ loso_M0v2 <- function(dat,
     fold_out[[ss]] <- list(
       season = ss,
       best_params = best_params,
+      tuning_grid = grid,
+      tuning_results = combined_scores,
       compare = comp,
       timing = list(
         fit_seconds  = t_fit,
@@ -1139,6 +1226,12 @@ loso_M0v2 <- function(dat,
         detect_seconds = t_det
       )
     )
+    if (!is.null(checkpoint_file)) {
+      saveRDS(
+        list(folds = fold_out, grid = grid, context_id = context_id),
+        checkpoint_file
+      )
+    }
   }
   
   # ---- bind fold results ----
@@ -1181,6 +1274,7 @@ loso_M0v2 <- function(dat,
     compare = as.data.frame(comp_all),
     summary = summary,
     runtime = runtime,
+    context_id = context_id,
     
     # NEW outputs
     best_params = best_params_loso,

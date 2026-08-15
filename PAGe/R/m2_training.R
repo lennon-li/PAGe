@@ -735,9 +735,15 @@ estimate_season_re_online <- function(fit, obs_df, ex_terms = NULL, lambda_re = 
       as.character(fit$var.summary$lead[[1L]])
     nd$lead <- factor(lev_lead[1L], levels = lev_lead)
   }
-  if (!"season" %in% names(nd) && "season" %in% names(fit$model)) {
+  if ("season" %in% names(fit$model) && is.factor(fit$model$season)) {
     lev_seas <- levels(fit$model$season)
-    nd$season <- factor(lev_seas[1L], levels = lev_seas)
+    season_values <- if ("season" %in% names(nd)) {
+      as.character(nd$season)
+    } else {
+      rep(lev_seas[1L], nrow(nd))
+    }
+    nd$season <- factor(season_values, levels = lev_seas)
+    nd$season[is.na(nd$season)] <- lev_seas[1L]
   }
   # Fill remaining missing numeric covariates with column medians from training.
   model_cols <- names(fit$model)
