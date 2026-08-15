@@ -13,7 +13,9 @@ tune_m0(
   flag_args = .default_flag_args(),
   n_cores = parallel::detectCores() - 1L,
   verbose = TRUE,
-  selection = NULL
+  selection = NULL,
+  checkpoint_dir = NULL,
+  previous_results = NULL
 )
 }
 \arguments{
@@ -39,6 +41,13 @@ acceptable for quick demos). A character vector selects specific seasons.}
 \item{selection}{Optional governed \code{page_season_selection}. When
 supplied, only its training seasons are used and the returned object is a
 \code{page_m0_tuning}.}
+
+\item{checkpoint_dir}{Optional directory for fold-level M0 tuning
+checkpoints. Reuse the same directory when expanding a grid.}
+
+\item{previous_results}{Optional prior M0 tuning result. When supplied,
+completed grid scores are reused and only appended specifications are
+evaluated.}
 }
 \value{
 A list with \code{best_params}, \code{tuning} (full

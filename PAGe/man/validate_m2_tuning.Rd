@@ -4,10 +4,13 @@
 \alias{validate_m2_tuning}
 \title{Validate an M2 tuning result}
 \usage{
-validate_m2_tuning(x, ...)
+validate_m2_tuning(x, check_boundaries = FALSE, ...)
 }
 \arguments{
 \item{x}{A \code{page_m2_tuning} object.}
+
+\item{check_boundaries}{Logical; require every genuinely tuned M2 axis to
+be bracketed or an explicitly accepted null/drop.}
 
 \item{...}{Reserved.}
 }

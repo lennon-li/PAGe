@@ -19,7 +19,9 @@ loso_M0v2(
     verbose = FALSE),
   tune_args = list(miss_penalty = 0, lambda = 20, kappa = 0, gamma = 25, gamma_late = 0,
     iWeek = TRUE, ncores = 10L, verbose = FALSE, progress_every = 200L),
-  verbose = TRUE
+  verbose = TRUE,
+  checkpoint_dir = NULL,
+  previous_results = NULL
 )
 }
 \arguments{
@@ -46,6 +48,12 @@ on each fold.}
 
 \item{verbose}{Logical; print fold-level progress messages (default
 \code{TRUE}).}
+
+\item{checkpoint_dir}{Optional directory for fold-level checkpoints.}
+
+\item{previous_results}{Optional prior \code{loso_M0v2()} or \code{tune_m0()}
+result. Completed grid rows are reused when their stable specification
+identities are present.}
 }
 \value{
 A list with per-fold outputs (\code{fold_out}) and aggregated

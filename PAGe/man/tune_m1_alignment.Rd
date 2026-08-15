@@ -77,10 +77,10 @@ grid <- expand.grid(
 )
 res <- tune_m1_alignment(
   allD, params, grid,
-  manual_labels   = manual_labels,
+  manual_labels = manual_labels,
   exclude_seasons = "2015-16",
   use_multi_template = TRUE,
-  ref_method         = "fs"
+  ref_method = "fs"
 )
 res$best
 }

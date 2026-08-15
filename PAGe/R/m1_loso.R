@@ -585,10 +585,25 @@ tune_m1_alignment <- function(allD,
     dplyr::ungroup() |>
     dplyr::select(season, true_peak_weekF = weekF)
 
-  # Build spec IDs
+  # Build stable spec IDs. Expanded grids append new rows while retaining the
+  # IDs of previously scored rows, allowing the checkpoint to skip them.
   grid <- tibble::as_tibble(grid)
   n_specs <- nrow(grid)
-  grid$spec_id <- sprintf("s%03d", seq_len(n_specs))
+  if (!"spec_id" %in% names(grid)) {
+    grid$spec_id <- sprintf("s%03d", seq_len(n_specs))
+  } else {
+    grid$spec_id <- as.character(grid$spec_id)
+    missing_ids <- is.na(grid$spec_id) | !nzchar(grid$spec_id)
+    if (any(missing_ids)) {
+      next_id <- seq_len(sum(missing_ids)) + n_specs
+      grid$spec_id[missing_ids] <- sprintf("s%03d", next_id)
+    }
+    if (anyDuplicated(grid$spec_id)) {
+      stop("M1 grid has duplicate spec_id values; preserve existing IDs when expanding.",
+        call. = FALSE
+      )
+    }
+  }
 
   # Load previously completed specs
   if (file.exists(results_cache)) {

@@ -155,6 +155,17 @@ tips, stopping rules, and the boundary-report schema.
 
 ## Current implementation boundary
 
+Boundary handling is now part of the package API. Use
+`inspect_tuning_boundaries()` for a typed warning/report and
+`expand_tuning_grid()` to append one valid adjacent value for every unresolved
+axis. The expansion preserves prior rows and stable specification IDs. Reuse
+the same checkpoint directory when calling `tune_m1()` or `tune_m2()`; their
+completed specifications are skipped. For M0, pass the prior object as
+`previous_results` to `tune_m0()` so cached per-fold grid scores are reused.
+The governed pipeline stops on unresolved M0, M1, or M2 non-null boundaries;
+null/drop values are explicitly recorded rather than expanded into invalid
+parameter domains.
+
 Completed:
 
 1. `page_season_selection`, deterministic training-data identities, stage

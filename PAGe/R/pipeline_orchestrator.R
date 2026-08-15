@@ -803,7 +803,10 @@ train_pipeline <- function(
   } else {
     m2_tuning <- run_full_m2(m2_grid)
   }
-  validate_m2_tuning(m2_tuning)
+  # M2 is the final governed tuning stage: reject a genuinely tuned edge
+  # before fitting/freezing a production configuration. Users can inspect
+  # the warning and call expand_tuning_grid() to extend the same checkpoint.
+  validate_m2_tuning(m2_tuning, check_boundaries = TRUE)
   m2_selection <- select_m2_candidate(m2_tuning, method = selection_method)
   if (is.null(m2_selection$selected_spec)) {
     stop("Selected M2 specification could not be reconstructed from tuning results.")
