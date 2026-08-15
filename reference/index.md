@@ -242,6 +242,8 @@ Compatibility helpers and implementation details.
 - [`expand_grid_specs()`](https://lennon-li.github.io/PAGe/reference/expand_grid_specs.md)
   : Expand a hyperparameter grid into Stage-2 spec objects (ALL
   hyperparams can vary)
+- [`expand_tuning_grid()`](https://lennon-li.github.io/PAGe/reference/expand_tuning_grid.md)
+  : Expand a tuning grid at every unresolved winner boundary
 - [`fitIgnition()`](https://lennon-li.github.io/PAGe/reference/fitIgnition.md)
   : Fit ignition classifier scores (Stage-1)
 - [`fit_m0()`](https://lennon-li.github.io/PAGe/reference/fit_m0.md) :
@@ -278,6 +280,8 @@ Compatibility helpers and implementation details.
   : Compute a SHA-256 file fingerprint
 - [`inject_m1_into_snapshots()`](https://lennon-li.github.io/PAGe/reference/inject_m1_into_snapshots.md)
   : Replace logit_f_eff in M2 snapshots with M1's aligned prediction
+- [`inspect_tuning_boundaries()`](https://lennon-li.github.io/PAGe/reference/inspect_tuning_boundaries.md)
+  : Inspect tuning boundaries and optionally warn about unresolved edges
 - [`learn_alignment_hyperparams()`](https://lennon-li.github.io/PAGe/reference/learn_alignment_hyperparams.md)
   : Learn tau/delta bounds and penalty from historical seasons
 - [`load_flu_hist()`](https://lennon-li.github.io/PAGe/reference/load_flu_hist.md)

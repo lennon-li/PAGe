@@ -59,7 +59,9 @@ loso_M0v2(). The 36-spec grid matches the production tuning run."></head><body>
 <span>  flag_args <span class="op">=</span> <span class="fu">.default_flag_args</span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  n_cores <span class="op">=</span> <span class="fu">parallel</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/parallel/detectCores.html" class="external-link">detectCores</a></span><span class="op">(</span><span class="op">)</span> <span class="op">-</span> <span class="fl">1L</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  selection <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  selection <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  checkpoint_dir <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  previous_results <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -107,12 +109,23 @@ acceptable for quick demos). A character vector selects specific seasons.</p></d
 supplied, only its training seasons are used and the returned object is a
 <code>page_m0_tuning</code>.</p></dd>
 
+
+<dt id="arg-checkpoint-dir">checkpoint_dir<a class="anchor" aria-label="anchor" href="#arg-checkpoint-dir"></a></dt>
+<dd><p>Optional directory for fold-level M0 tuning
+checkpoints. Reuse the same directory when expanding a grid.</p></dd>
+
+
+<dt id="arg-previous-results">previous_results<a class="anchor" aria-label="anchor" href="#arg-previous-results"></a></dt>
+<dd><p>Optional prior M0 tuning result. When supplied,
+completed grid scores are reused and only appended specifications are
+evaluated.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A list with <code>best_params</code>, <code>tuning</code> (full
-  <code><a href="loso_M0v2.html">loso_M0v2()</a></code> output), <code>aligned</code>, <code>seasons_used</code>,
-  <code>manual_labels</code>, and <code>flag_args</code>. Pass directly to
+  <code><a href="loso_M0v2.html">loso_M0v2()</a></code> output), the complete <code>grid</code>, <code>aligned</code>,
+  <code>seasons_used</code>, <code>manual_labels</code>, and <code>flag_args</code>. Pass directly to
   <code><a href="build_m1.html">build_m1()</a></code>, <code><a href="build_m2.html">build_m2()</a></code>, and <code><a href="train_m2.html">train_m2()</a></code>.</p>
     </div>
 

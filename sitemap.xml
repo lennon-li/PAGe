@@ -41,6 +41,7 @@
 <url><loc>https://lennon-li.github.io/PAGe/reference/estimateRef.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/estimate_season_re_online.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/expand_grid_specs.html</loc></url>
+<url><loc>https://lennon-li.github.io/PAGe/reference/expand_tuning_grid.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/fitIgnition.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/fit_m0.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/fit_m1.html</loc></url>
@@ -63,6 +64,7 @@
 <url><loc>https://lennon-li.github.io/PAGe/reference/hash_file_sha256.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/index.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/inject_m1_into_snapshots.html</loc></url>
+<url><loc>https://lennon-li.github.io/PAGe/reference/inspect_tuning_boundaries.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/is_cov_ok.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/learn_alignment_hyperparams.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/load_flu_hist.html</loc></url>

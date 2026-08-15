@@ -24,7 +24,9 @@ loso_M0v2(
     verbose = FALSE),
   tune_args = list(miss_penalty = 0, lambda = 20, kappa = 0, gamma = 25, gamma_late = 0,
     iWeek = TRUE, ncores = 10L, verbose = FALSE, progress_every = 200L),
-  verbose = TRUE
+  verbose = TRUE,
+  checkpoint_dir = NULL,
+  previous_results = NULL
 )
 ```
 
@@ -71,6 +73,17 @@ loso_M0v2(
 - verbose:
 
   Logical; print fold-level progress messages (default `TRUE`).
+
+- checkpoint_dir:
+
+  Optional directory for fold-level checkpoints.
+
+- previous_results:
+
+  Optional prior `loso_M0v2()` or
+  [`tune_m0()`](https://lennon-li.github.io/PAGe/reference/tune_m0.md)
+  result. Completed grid rows are reused when their stable specification
+  identities are present.
 
 ## Value
 

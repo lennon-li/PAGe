@@ -74,7 +74,9 @@ detection accuracy metrics.</p>
 <span>    verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span>,</span>
 <span>  tune_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>miss_penalty <span class="op">=</span> <span class="fl">0</span>, lambda <span class="op">=</span> <span class="fl">20</span>, kappa <span class="op">=</span> <span class="fl">0</span>, gamma <span class="op">=</span> <span class="fl">25</span>, gamma_late <span class="op">=</span> <span class="fl">0</span>,</span>
 <span>    iWeek <span class="op">=</span> <span class="cn">TRUE</span>, ncores <span class="op">=</span> <span class="fl">10L</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span>, progress_every <span class="op">=</span> <span class="fl">200L</span><span class="op">)</span>,</span>
-<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  checkpoint_dir <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  previous_results <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -120,6 +122,16 @@ on each fold.</p></dd>
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
 <dd><p>Logical; print fold-level progress messages (default
 <code>TRUE</code>).</p></dd>
+
+
+<dt id="arg-checkpoint-dir">checkpoint_dir<a class="anchor" aria-label="anchor" href="#arg-checkpoint-dir"></a></dt>
+<dd><p>Optional directory for fold-level checkpoints.</p></dd>
+
+
+<dt id="arg-previous-results">previous_results<a class="anchor" aria-label="anchor" href="#arg-previous-results"></a></dt>
+<dd><p>Optional prior <code>loso_M0v2()</code> or <code><a href="tune_m0.html">tune_m0()</a></code>
+result. Completed grid rows are reused when their stable specification
+identities are present.</p></dd>
 
 </dl></div>
     <div class="section level2">

@@ -101,12 +101,14 @@
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">m0_tuning</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tune_m0.html">tune_m0</a></span><span class="op">(</span><span class="va">allD</span>, selection <span class="op">=</span> <span class="va">selection</span><span class="op">)</span></span>
+<span><span class="co"># Supply the exact M0 grid with check_boundaries = TRUE in a governed</span></span>
+<span><span class="co"># low-level workflow; train_pipeline() performs this gate automatically.</span></span>
 <span><span class="fu"><a href="reference/validate_m0_tuning.html">validate_m0_tuning</a></span><span class="op">(</span><span class="va">m0_tuning</span><span class="op">)</span></span>
 <span><span class="va">m0</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_m0.html">fit_m0</a></span><span class="op">(</span><span class="va">allD</span>, <span class="va">selection</span>, <span class="va">m0_tuning</span><span class="op">$</span><span class="va">best_params</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/freeze_m0.html">freeze_m0</a></span><span class="op">(</span><span class="va">m0_tuning</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">m1_tuning</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/tune_m1.html">tune_m1</a></span><span class="op">(</span><span class="va">allD</span>, m0 <span class="op">=</span> <span class="va">m0</span>, selection <span class="op">=</span> <span class="va">selection</span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/validate_m1_tuning.html">validate_m1_tuning</a></span><span class="op">(</span><span class="va">m1_tuning</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/validate_m1_tuning.html">validate_m1_tuning</a></span><span class="op">(</span><span class="va">m1_tuning</span>, check_boundaries <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="va">m1_best</span> <span class="op">&lt;-</span> <span class="va">m1_tuning</span><span class="op">$</span><span class="va">best</span><span class="op">[</span><span class="fl">1</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
 <span><span class="va">m1_config</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/m1_make_params.html">m1_make_params</a></span><span class="op">(</span></span>
 <span>  k_ref <span class="op">=</span> <span class="va">m1_best</span><span class="op">$</span><span class="va">k_ref</span>,</span>

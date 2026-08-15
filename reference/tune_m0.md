@@ -16,7 +16,9 @@ tune_m0(
   flag_args = .default_flag_args(),
   n_cores = parallel::detectCores() - 1L,
   verbose = TRUE,
-  selection = NULL
+  selection = NULL,
+  checkpoint_dir = NULL,
+  previous_results = NULL
 )
 ```
 
@@ -63,12 +65,22 @@ tune_m0(
   training seasons are used and the returned object is a
   `page_m0_tuning`.
 
+- checkpoint_dir:
+
+  Optional directory for fold-level M0 tuning checkpoints. Reuse the
+  same directory when expanding a grid.
+
+- previous_results:
+
+  Optional prior M0 tuning result. When supplied, completed grid scores
+  are reused and only appended specifications are evaluated.
+
 ## Value
 
 A list with `best_params`, `tuning` (full
 [`loso_M0v2()`](https://lennon-li.github.io/PAGe/reference/loso_M0v2.md)
-output), `aligned`, `seasons_used`, `manual_labels`, and `flag_args`.
-Pass directly to
+output), the complete `grid`, `aligned`, `seasons_used`,
+`manual_labels`, and `flag_args`. Pass directly to
 [`build_m1()`](https://lennon-li.github.io/PAGe/reference/build_m1.md),
 [`build_m2()`](https://lennon-li.github.io/PAGe/reference/build_m2.md),
 and

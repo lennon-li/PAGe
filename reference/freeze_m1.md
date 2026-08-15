@@ -16,7 +16,8 @@ freeze_m1(fit, tuning = NULL, ...)
 
 - tuning:
 
-  Optional `page_m1_tuning` to validate.
+  Optional `page_m1_tuning` to validate. Governed tuning is
+  boundary-validated before freezing.
 
 - ...:
 

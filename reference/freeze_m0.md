@@ -1,8 +1,7 @@
 # Freeze an M0 draft artifact
 
-Promotes a draft M0 fit to immutable frozen status. When `tuning` is
-supplied, it is validated first via
-[`validate_m0_tuning()`](https://lennon-li.github.io/PAGe/reference/validate_m0_tuning.md).
+Promotes a draft M0 fit to immutable frozen status. Governed tuning is
+boundary-validated before the fit can be frozen.
 
 ## Usage
 
@@ -18,7 +17,8 @@ freeze_m0(fit, tuning = NULL, ...)
 
 - tuning:
 
-  Optional `page_m0_tuning` result to validate.
+  Optional `page_m0_tuning` result to validate. Governed tuning must
+  include its complete grid for boundary validation.
 
 - ...:
 
