@@ -493,7 +493,7 @@ freeze_m0 <- function(fit, tuning = NULL, ...) {
   stage <- toupper(stage)
   switch(stage,
     M0 = c(p_thr = 0, prev_thr = 0, p_sum_thr = 0),
-    M1 = numeric(0),
+    M1 = c(slope_weight = 0),
     M2 = c(
       delta = 0, Kr = 1, k_e = 0, k_r = 0, k_de = 0,
       k_sp = 0, bias_alpha = 0, bias_beta = 0
@@ -598,6 +598,14 @@ freeze_m0 <- function(fit, tuning = NULL, ...) {
 #' @param warn Logical; emit a warning when a non-null edge requires expansion.
 #' @param null_axes Optional names of axes whose zero value is an accepted
 #'   drop/null. Stage defaults are used when omitted.
+#' @param hard_caps Optional named numeric vector or named list of lower/upper
+#'   hard caps. An edge exactly at a declared cap is reported as
+#'   `stop_hard_cap` rather than `expand_required`.
+#' @param min_nll_gain Optional M2-only NLL improvement threshold. Supply a
+#'   named numeric vector for parameter-specific thresholds, or one unnamed
+#'   number to apply the same threshold to every M2 axis. When a selected edge
+#'   has a matched adjacent NLL comparison and its outward gain is less than
+#'   or equal to the threshold, it is reported as `stop_small_gain`.
 #'
 #' @return A data frame with tested range, selected value, boundary, decision,
 #'   and reason for every varying numeric axis.
@@ -606,7 +614,9 @@ inspect_tuning_boundaries <- function(x,
                                       stage = c("M0", "M1", "M2"),
                                       grid = NULL,
                                       warn = TRUE,
-                                      null_axes = NULL) {
+                                      null_axes = NULL,
+                                      hard_caps = NULL,
+                                      min_nll_gain = NULL) {
   stage <- toupper(match.arg(stage))
   if (is.data.frame(x) && is.null(grid)) grid <- x
   if (is.null(grid)) grid <- x$grid
@@ -625,6 +635,59 @@ inspect_tuning_boundaries <- function(x,
     null_axes = null_axes,
     null_values = .stage_null_values(stage)
   )
+  if (!is.null(hard_caps) && nrow(report)) {
+    cap_names <- names(hard_caps)
+    for (parameter in intersect(cap_names, report$parameter)) {
+      cap <- hard_caps[[parameter]]
+      if (is.list(hard_caps)) {
+        cap <- suppressWarnings(as.numeric(cap))
+        names(cap) <- names(hard_caps[[parameter]])
+        upper <- cap[["upper"]]
+        lower <- cap[["lower"]]
+      } else {
+        upper <- suppressWarnings(as.numeric(cap))
+        lower <- NA_real_
+      }
+      hit_upper <- is.finite(upper) & report$boundary == "upper" &
+        report$selected_value == upper & report$tested_max == upper
+      hit_lower <- is.finite(lower) & report$boundary == "lower" &
+        report$selected_value == lower & report$tested_min == lower
+      hit <- hit_upper | hit_lower
+      if (any(hit)) {
+        report$decision[hit] <- "stop_hard_cap"
+        report$reason[hit] <- paste0(
+          "selected value is the declared hard cap (",
+          ifelse(hit_upper[hit], upper, lower), ")"
+        )
+      }
+    }
+  }
+  if (stage == "M2" && !is.null(min_nll_gain) && nrow(report)) {
+    gain_thresholds <- .normalize_m2_nll_gain(min_nll_gain, report$parameter)
+    report$min_nll_gain <- unname(gain_thresholds[report$parameter])
+    report$nll_gain <- NA_real_
+    for (i in which(report$decision == "expand_required")) {
+      threshold <- report$min_nll_gain[i]
+      if (!is.finite(threshold)) next
+      evidence <- .m2_boundary_nll_gain(
+        x,
+        parameter = report$parameter[i],
+        boundary = report$boundary[i]
+      )
+      report$nll_gain[i] <- evidence
+      if (is.finite(evidence) && evidence <= threshold) {
+        report$decision[i] <- "stop_small_gain"
+        report$reason[i] <- paste0(
+          "matched outward NLL gain ", format(evidence, digits = 6),
+          " is <= min_nll_gain ", format(threshold, digits = 6)
+        )
+      } else if (!is.finite(evidence)) {
+        report$reason[i] <- paste0(
+          report$reason[i], "; no matched adjacent NLL comparison"
+        )
+      }
+    }
+  }
   unresolved <- report[report$decision == "expand_required", , drop = FALSE]
   if (isTRUE(warn) && nrow(unresolved)) {
     message <- paste0(
@@ -641,6 +704,158 @@ inspect_tuning_boundaries <- function(x,
   }
   class(report) <- c("page_boundary_report", class(report))
   report
+}
+
+.normalize_m2_nll_gain <- function(min_nll_gain, parameters) {
+  if (!is.numeric(min_nll_gain) || !length(min_nll_gain) ||
+    anyNA(min_nll_gain) || any(!is.finite(min_nll_gain)) ||
+    any(min_nll_gain < 0)) {
+    stop(
+      "`min_nll_gain` must contain finite non-negative numeric values.",
+      call. = FALSE
+    )
+  }
+  supplied_names <- names(min_nll_gain)
+  if (is.null(supplied_names) || !length(supplied_names)) {
+    if (length(min_nll_gain) != 1L) {
+      stop(
+        "An unnamed `min_nll_gain` must be one scalar; use names for ",
+        "parameter-specific thresholds.",
+        call. = FALSE
+      )
+    }
+    return(stats::setNames(rep(min_nll_gain, length(parameters)), parameters))
+  }
+  if (anyNA(supplied_names) || any(!nzchar(supplied_names)) ||
+    anyDuplicated(supplied_names)) {
+    stop("`min_nll_gain` names must be unique and non-empty.", call. = FALSE)
+  }
+  unknown <- setdiff(supplied_names, parameters)
+  if (length(unknown)) {
+    stop(
+      "`min_nll_gain` contains unknown M2 parameter(s): ",
+      paste(unknown, collapse = ", "),
+      call. = FALSE
+    )
+  }
+  out <- stats::setNames(rep(NA_real_, length(parameters)), parameters)
+  out[supplied_names] <- as.numeric(min_nll_gain)
+  out
+}
+
+.m2_boundary_nll_gain <- function(x, parameter, boundary) {
+  if (is.null(x$best_spec_id) || !is.character(x$best_spec_id) ||
+    length(x$best_spec_id) != 1L) {
+    return(NA_real_)
+  }
+  sensitivity <- tryCatch(
+    extract_nll_sensitivity(
+      x,
+      metric = "bernoulli_nll", parameters = .m2_parameter_names()
+    ),
+    error = function(e) NULL
+  )
+  matched <- sensitivity$matched_gains %||% NULL
+  if (!is.data.frame(matched) || !nrow(matched)) {
+    return(NA_real_)
+  }
+  selected_id <- as.character(x$best_spec_id)
+  if (boundary == "upper") {
+    rows <- matched[matched$to_spec_id == selected_id, , drop = FALSE]
+    if (!nrow(rows)) {
+      return(NA_real_)
+    }
+    return(as.numeric(rows$adjacent_gain[1L]))
+  }
+  if (boundary == "lower") {
+    rows <- matched[matched$from_spec_id == selected_id, , drop = FALSE]
+    if (!nrow(rows)) {
+      return(NA_real_)
+    }
+    return(as.numeric(-rows$adjacent_gain[1L]))
+  }
+  NA_real_
+}
+
+#' Select an M1 candidate with a practical-gain backoff rule
+#'
+#' When a more flexible `k_ref` is only marginally better, select the smallest
+#' tested `k_ref` within `min_gain` weeks of the best M1 score. This keeps an
+#' upper-cap winner from being accepted solely because it is more flexible.
+#'
+#' @param x A `page_m1_tuning` object.
+#' @param min_gain Numeric minimum M1 Weibull-MAE improvement, in weeks, needed
+#'   to justify the more complex candidate. Defaults to 0.05.
+#' @param prefer_simpler Logical; choose the smallest eligible `k_ref`.
+#'
+#' @return A list containing `selected`, `selected_spec_id`, the best and
+#'   selected scores, and the backoff gain.
+#' @export
+select_m1_candidate <- function(x, min_gain = 0.05, prefer_simpler = TRUE) {
+  if (!inherits(x, "page_m1_tuning")) {
+    stop("`x` must be a `page_m1_tuning` object.", call. = FALSE)
+  }
+  if (!is.numeric(min_gain) || length(min_gain) != 1L ||
+    !is.finite(min_gain) || min_gain < 0) {
+    stop("`min_gain` must be one finite non-negative number.", call. = FALSE)
+  }
+  scores <- x$scores
+  if (!is.data.frame(scores) || !nrow(scores) ||
+    !"mae_weibull" %in% names(scores)) {
+    stop("M1 tuning is missing finite `mae_weibull` scores.", call. = FALSE)
+  }
+  finite <- is.finite(scores$mae_weibull)
+  scores <- scores[finite, , drop = FALSE]
+  if (!nrow(scores)) stop("M1 tuning has no finite candidate scores.", call. = FALSE)
+  if (!"k_ref" %in% names(scores) &&
+    is.data.frame(x$best) && nrow(x$best) > 0L) {
+    best_row <- x$best[1L, , drop = FALSE]
+    if (!"mae_weibull" %in% names(best_row) ||
+      !is.finite(best_row$mae_weibull[[1L]])) {
+      best_row$mae_weibull <- min(scores$mae_weibull)
+    }
+  } else {
+    best_i <- which.min(scores$mae_weibull)
+    best_row <- scores[best_i, , drop = FALSE]
+  }
+  selected_row <- best_row
+  if (isTRUE(prefer_simpler) && "k_ref" %in% names(scores)) {
+    by_k <- stats::aggregate(
+      scores$mae_weibull,
+      list(k_ref = as.numeric(scores$k_ref)),
+      min
+    )
+    names(by_k)[2L] <- "mae_weibull"
+    eligible <- by_k[by_k$mae_weibull <=
+      best_row$mae_weibull[[1L]] + min_gain, , drop = FALSE]
+    if (nrow(eligible)) {
+      selected_k <- min(eligible$k_ref)
+      candidates <- scores[as.numeric(scores$k_ref) == selected_k, , drop = FALSE]
+      selected_row <- candidates[which.min(candidates$mae_weibull), , drop = FALSE]
+    }
+  }
+  selected_score <- selected_row$mae_weibull[[1L]]
+  best_score <- best_row$mae_weibull[[1L]]
+  selected_id <- if ("spec_id" %in% names(selected_row)) {
+    as.character(selected_row$spec_id[[1L]])
+  } else {
+    NA_character_
+  }
+  best_id <- if ("spec_id" %in% names(best_row)) {
+    as.character(best_row$spec_id[[1L]])
+  } else {
+    NA_character_
+  }
+  list(
+    selected = selected_row,
+    selected_spec_id = selected_id,
+    best = best_row,
+    best_score = best_score,
+    selected_score = selected_score,
+    gain_to_best = selected_score - best_score,
+    min_gain = min_gain,
+    backed_off = !identical(selected_id, best_id)
+  )
 }
 
 .selected_stage_config <- function(x, stage, grid) {
@@ -675,6 +890,31 @@ inspect_tuning_boundaries <- function(x,
 }
 
 .m1_integer_axes <- function() c("k_ref", "slope_window")
+
+.m1_k_ref_bounds <- function() c(lower = 10L, upper = 50L)
+
+.validate_m1_k_ref_bounds <- function(bounds, n_weeks = 52L) {
+  if (is.null(bounds)) {
+    return(NULL)
+  }
+  bound_names <- names(bounds)
+  bounds <- suppressWarnings(as.numeric(bounds))
+  names(bounds) <- bound_names
+  if (length(bounds) != 2L || any(!is.finite(bounds)) ||
+    is.null(names(bounds)) || !all(c("lower", "upper") %in% names(bounds)) ||
+    bounds[["lower"]] < 2 || bounds[["upper"]] > n_weeks ||
+    bounds[["lower"]] > bounds[["upper"]] ||
+    any(bounds != round(bounds))) {
+    stop(
+      "`m1_k_ref_bounds` must be named integer bounds `lower` and `upper` ",
+      "within [2, ", n_weeks, "] with lower <= upper.",
+      call. = FALSE
+    )
+  }
+  out <- as.integer(bounds)
+  names(out) <- names(bounds)
+  out
+}
 
 .m0_integer_axes <- function() {
   c("n_consec", "L", "K_sum", "N_req", "w_min", "w_max")
@@ -842,6 +1082,8 @@ inspect_tuning_boundaries <- function(x,
 #' @param max_specs Optional cap on returned rows.
 #' @param n_weeks Integer reference-domain size used to guard M1 basis values.
 #' @param data Optional stage data used to guard M0 rolling/window support.
+#' @param m1_k_ref_bounds Named integer vector with `lower` and `upper` hard
+#'   bounds for M1 `k_ref` expansion. Defaults to 10--50.
 #'
 #' @return The original grid with new boundary rows appended. New rows carry
 #'   `provenance = "boundary:<parameter>"` when that column is available.
@@ -852,13 +1094,28 @@ expand_tuning_grid <- function(x,
                                steps = NULL,
                                max_specs = NULL,
                                n_weeks = 52L,
-                               data = NULL) {
+                               data = NULL,
+                               m1_k_ref_bounds = .m1_k_ref_bounds()) {
   stage <- toupper(match.arg(stage))
   if (is.null(grid)) grid <- x$grid %||% x
   grid <- as.data.frame(grid, stringsAsFactors = FALSE)
   if (!nrow(grid)) stop("Cannot expand an empty tuning grid.", call. = FALSE)
   if (stage == "M0") .validate_m0_grid_support(grid, data = data)
-  if (stage == "M1") .validate_m1_grid_support(grid, n_weeks = n_weeks)
+  if (stage == "M1") {
+    .validate_m1_grid_support(grid, n_weeks = n_weeks)
+    bounds <- .validate_m1_k_ref_bounds(m1_k_ref_bounds, n_weeks)
+    if ("k_ref" %in% names(grid) &&
+      any(as.numeric(grid$k_ref) < bounds[["lower"]] |
+        as.numeric(grid$k_ref) > bounds[["upper"]])) {
+      stop(
+        "M1 grid `k_ref` lies outside the declared hard bounds [",
+        bounds[["lower"]], ", ", bounds[["upper"]], "].",
+        call. = FALSE
+      )
+    }
+  } else {
+    bounds <- NULL
+  }
 
   if (stage == "M2") {
     planned <- plan_m2_grid(
@@ -875,6 +1132,15 @@ expand_tuning_grid <- function(x,
   } else {
     report <- inspect_tuning_boundaries(x, stage = stage, grid = grid, warn = FALSE)
     unresolved <- report[report$decision == "expand_required", , drop = FALSE]
+    if (stage == "M1" && nrow(unresolved) &&
+      "k_ref" %in% unresolved$parameter) {
+      at_hard_cap <- unresolved$parameter == "k_ref" &
+        ((unresolved$boundary == "upper" &
+          unresolved$selected_value >= bounds[["upper"]]) |
+          (unresolved$boundary == "lower" &
+            unresolved$selected_value <= bounds[["lower"]]))
+      unresolved <- unresolved[!at_hard_cap, , drop = FALSE]
+    }
     if (nrow(unresolved)) {
       selected <- .selected_stage_config(x, stage, grid)
       new_rows <- lapply(seq_len(nrow(unresolved)), function(i) {
@@ -900,13 +1166,23 @@ expand_tuning_grid <- function(x,
           if (unresolved$boundary[i] == "lower") -step else step
         if (parameter %in% integer_axes) value <- as.integer(round(value))
         # A halved step can still cross the finite M1 reference domain. Move
-        # to its supported endpoint rather than generating an impossible GAM.
+        # to the declared hard endpoint rather than generating an impossible
+        # or over-flexible reference GAM.
         if (stage == "M1" && parameter %in% .m1_integer_axes()) {
-          if (unresolved$boundary[i] == "upper") {
-            value <- min(value, as.integer(n_weeks))
-          }
-          if (unresolved$boundary[i] == "lower") {
-            value <- max(value, 2L)
+          if (parameter == "k_ref") {
+            if (unresolved$boundary[i] == "upper") {
+              value <- min(value, bounds[["upper"]])
+            }
+            if (unresolved$boundary[i] == "lower") {
+              value <- max(value, bounds[["lower"]])
+            }
+          } else {
+            if (unresolved$boundary[i] == "upper") {
+              value <- min(value, as.integer(n_weeks))
+            }
+            if (unresolved$boundary[i] == "lower") {
+              value <- max(value, 2L)
+            }
           }
         }
         if (isTRUE(all.equal(
@@ -914,8 +1190,8 @@ expand_tuning_grid <- function(x,
         ))) {
           stop(
             "Cannot expand ", stage, " axis `", parameter,
-            "` beyond its supported domain. Supply a different grid or",
-            " an explicit `steps` value.",
+            "` beyond its declared hard cap. Supply a different grid or",
+            " an explicit hard-cap decision.",
             call. = FALSE
           )
         }
@@ -939,7 +1215,18 @@ expand_tuning_grid <- function(x,
   }
 
   if (stage == "M0") .validate_m0_grid_support(grid, data = data)
-  if (stage == "M1") .validate_m1_grid_support(grid, n_weeks = n_weeks)
+  if (stage == "M1") {
+    .validate_m1_grid_support(grid, n_weeks = n_weeks)
+    if ("k_ref" %in% names(grid) &&
+      any(as.numeric(grid$k_ref) < bounds[["lower"]] |
+        as.numeric(grid$k_ref) > bounds[["upper"]])) {
+      stop(
+        "Expanded M1 grid `k_ref` lies outside the declared hard bounds [",
+        bounds[["lower"]], ", ", bounds[["upper"]], "].",
+        call. = FALSE
+      )
+    }
+  }
 
   if (stage == "M2") {
     grid <- .validate_m2_grid(grid)
@@ -1125,11 +1412,17 @@ freeze_m1 <- function(fit, tuning = NULL, ...) {
 #' @param check_boundaries Logical; require all varying numeric M1 axes in the
 #'   supplied grid to have an interior selected value. This is enabled by
 #'   \code{train_pipeline()} before M1 is frozen for M2.
+#' @param hard_caps Optional named numeric vector or named list of lower/upper
+#'   bounds, such as `list(k_ref = c(lower = 10, upper = 50))`. A selected
+#'   value exactly at a hard cap is accepted and recorded as `stop_hard_cap`.
 #' @param ... Reserved.
 #'
 #' @return \code{x}, invisibly, if valid.
 #' @export
-validate_m1_tuning <- function(x, check_boundaries = FALSE, ...) {
+validate_m1_tuning <- function(x,
+                               check_boundaries = FALSE,
+                               hard_caps = NULL,
+                               ...) {
   if (!inherits(x, "page_m1_tuning")) {
     stop("`x` must be a `page_m1_tuning` object.", call. = FALSE)
   }
@@ -1179,7 +1472,11 @@ validate_m1_tuning <- function(x, check_boundaries = FALSE, ...) {
     }
   }
   if (isTRUE(check_boundaries)) {
-    report <- inspect_tuning_boundaries(x, stage = "M1", warn = TRUE)
+    hard_caps <- hard_caps %||% x$hard_caps
+    report <- inspect_tuning_boundaries(
+      x,
+      stage = "M1", warn = TRUE, hard_caps = hard_caps
+    )
     x$boundary_report <- report
     .enforce_stage_boundaries("M1", report)
   }
@@ -1278,7 +1575,11 @@ fit_m2 <- function(data, selection, m0, m1, config, ...) {
 #' @export
 freeze_m2 <- function(fit, tuning = NULL, ...) {
   if (inherits(tuning, "page_m2_tuning") && !is.null(tuning$selection)) {
-    tuning <- validate_m2_tuning(tuning, check_boundaries = TRUE)
+    tuning <- validate_m2_tuning(
+      tuning,
+      check_boundaries = TRUE,
+      min_nll_gain = tuning$min_nll_gain %||% NULL
+    )
   }
   .freeze_stage(fit, tuning, "m2")
 }
@@ -1291,11 +1592,18 @@ freeze_m2 <- function(fit, tuning = NULL, ...) {
 #' @param x A \code{page_m2_tuning} object.
 #' @param check_boundaries Logical; require every genuinely tuned M2 axis to
 #'   be bracketed or an explicitly accepted null/drop.
+#' @param min_nll_gain Optional named parameter-specific NLL gain threshold,
+#'   or one scalar applied to every M2 axis. A boundary with matched outward
+#'   gain at or below its threshold is accepted as `stop_small_gain`; a
+#'   boundary without matched evidence remains unresolved.
 #' @param ... Reserved.
 #'
 #' @return \code{x}, invisibly, if valid.
 #' @export
-validate_m2_tuning <- function(x, check_boundaries = FALSE, ...) {
+validate_m2_tuning <- function(x,
+                               check_boundaries = FALSE,
+                               min_nll_gain = NULL,
+                               ...) {
   if (!inherits(x, "page_m2_tuning")) {
     stop("`x` must be a `page_m2_tuning` object.", call. = FALSE)
   }
@@ -1352,8 +1660,13 @@ validate_m2_tuning <- function(x, check_boundaries = FALSE, ...) {
     }
   }
   if (isTRUE(check_boundaries)) {
-    report <- inspect_tuning_boundaries(x, stage = "M2", warn = TRUE)
+    min_nll_gain <- min_nll_gain %||% x$min_nll_gain %||% NULL
+    report <- inspect_tuning_boundaries(
+      x,
+      stage = "M2", warn = TRUE, min_nll_gain = min_nll_gain
+    )
     x$boundary_report <- report
+    if (!is.null(min_nll_gain)) x$min_nll_gain <- min_nll_gain
     .enforce_stage_boundaries("M2", report)
   }
   invisible(x)

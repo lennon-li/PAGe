@@ -11,7 +11,8 @@ expand_tuning_grid(
   steps = NULL,
   max_specs = NULL,
   n_weeks = 52L,
-  data = NULL
+  data = NULL,
+  m1_k_ref_bounds = .m1_k_ref_bounds()
 )
 }
 \arguments{
@@ -28,6 +29,9 @@ expand_tuning_grid(
 \item{n_weeks}{Integer reference-domain size used to guard M1 basis values.}
 
 \item{data}{Optional stage data used to guard M0 rolling/window support.}
+
+\item{m1_k_ref_bounds}{Named integer vector with `lower` and `upper` hard
+bounds for M1 `k_ref` expansion. Defaults to 10--50.}
 }
 \value{
 The original grid with new boundary rows appended. New rows carry

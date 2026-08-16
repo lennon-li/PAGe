@@ -17,6 +17,7 @@ build_m2(
   n_cores = parallel::detectCores() - 1L,
   checkpoint_dir = NULL,
   fail_fast = TRUE,
+  future_max_size = NULL,
   verbose = TRUE
 )
 }
@@ -50,6 +51,10 @@ Pass \code{NULL} to disable checkpointing.}
 
 \item{fail_fast}{Logical. Stop on the first unsupported fold/spec instead of
 converting model failures to missing scores (default \code{TRUE}).}
+
+\item{future_max_size}{Numeric. Maximum size, in bytes, of globals exported
+to \pkg{future} workers. When \code{NULL} (default), the limit is raised
+only as needed for the prepared M1 cache, with a 2 GiB safety ceiling.}
 
 \item{verbose}{Logical. Print progress.}
 }

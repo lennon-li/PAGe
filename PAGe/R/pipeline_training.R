@@ -705,6 +705,9 @@ tune_m1 <- function(allD,
 #'   Pass \code{NULL} to disable checkpointing.
 #' @param fail_fast Logical. Stop on the first unsupported fold/spec instead of
 #'   converting model failures to missing scores (default \code{TRUE}).
+#' @param future_max_size Numeric. Maximum size, in bytes, of globals exported
+#'   to \pkg{future} workers. When \code{NULL} (default), the limit is raised
+#'   only as needed for the prepared M1 cache, with a 2 GiB safety ceiling.
 #' @param verbose Logical. Print progress.
 #'
 #' @return A list with \code{best_spec}, \code{best_spec_id}, \code{summary}
@@ -724,6 +727,7 @@ build_m2 <- function(allD,
                      n_cores = parallel::detectCores() - 1L,
                      checkpoint_dir = NULL,
                      fail_fast = TRUE,
+                     future_max_size = NULL,
                      verbose = TRUE) {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
   if (!requireNamespace("purrr", quietly = TRUE)) stop("Need 'purrr'.")
@@ -856,6 +860,25 @@ build_m2 <- function(allD,
 
   # ---- Phase 2: M2 grid search ----
   if (verbose) message("[build_m2] Phase 2: ", length(spec_ids), " specs...")
+
+  # The prepared M1 cache is intentionally shared by every M2 specification.
+  # On realistic holdouts it can exceed future's conservative 500 MiB default
+  # export limit. Raise the limit only for this call and only to the measured
+  # cache size plus generous bounded headroom; never remove the safety check.
+  old_future_max_size <- getOption("future.globals.maxSize")
+  cache_bytes <- as.numeric(utils::object.size(m1_cache))
+  requested_max_size <- if (is.null(future_max_size)) {
+    min(2 * 1024^3, max(768 * 1024^2, ceiling(cache_bytes * 1.5)))
+  } else {
+    as.numeric(future_max_size)
+  }
+  if (!is.finite(requested_max_size) || requested_max_size <= 0) {
+    stop("future_max_size must be a positive finite byte count.", call. = FALSE)
+  }
+  if (is.null(old_future_max_size) || old_future_max_size < requested_max_size) {
+    options(future.globals.maxSize = requested_max_size)
+  }
+  on.exit(options(future.globals.maxSize = old_future_max_size), add = TRUE)
 
   cv_results <- list()
   todo_ids <- spec_ids

@@ -562,6 +562,14 @@ plan_m2_grid <- function(previous_results = NULL,
 #' @param manual_labels,flag_args,m1_params Optional component settings. For a
 #'   released holdout, these are derived exclusively from verified promotion
 #'   evidence and explicit overrides are rejected.
+#' @param m1_min_gain Minimum M1 Weibull-MAE improvement, in weeks, required to
+#'   justify a more flexible `k_ref` candidate (default 0.05).
+#' @param m1_hard_caps Named M1 hard caps accepted by the boundary gate. The
+#'   default bounds `k_ref` to 10--50 on the 52-week reference domain.
+#' @param m2_min_nll_gain Optional named parameter-specific NLL gain thresholds
+#'   passed to the M2 boundary gate. A scalar applies to every M2 axis. An
+#'   edge is accepted only when its matched outward gain is at or below the
+#'   threshold; missing matched evidence still requires expansion.
 #' @param m0_params Optional M0 parameters for refresh mode. Defaults to the
 #'   deployed configuration when no holdout has been released. For a released
 #'   holdout it is derived exclusively from verified promotion evidence.
@@ -598,6 +606,9 @@ train_pipeline <- function(
   manual_labels = NULL,
   flag_args = NULL,
   m1_params = NULL,
+  m1_min_gain = 0.05,
+  m1_hard_caps = list(k_ref = c(lower = 10L, upper = 50L)),
+  m2_min_nll_gain = NULL,
   m0_params = NULL,
   m2_spec_id = NULL
 ) {
@@ -766,7 +777,17 @@ train_pipeline <- function(
   )
   # M1 is a governed stage boundary: do not freeze an unresolved non-null
   # edge winner or spend M2 compute on a grid that must be expanded.
-  m1_tuning <- validate_m1_tuning(m1_tuning, check_boundaries = TRUE)
+  m1_tuning$hard_caps <- m1_hard_caps
+  m1_tuning <- validate_m1_tuning(
+    m1_tuning,
+    check_boundaries = TRUE, hard_caps = m1_hard_caps
+  )
+  m1_selection <- select_m1_candidate(
+    m1_tuning,
+    min_gain = m1_min_gain, prefer_simpler = TRUE
+  )
+  m1_tuning$best <- m1_selection$selected
+  m1_tuning$m1_selection <- m1_selection
   tuned_m1_params <- .m1_params_from_tuning(m1_params, m1_tuning)
   m1 <- freeze_m1(
     fit_m1(allD, selection, m0 = m0, config = tuned_m1_params),
@@ -812,7 +833,12 @@ train_pipeline <- function(
   # M2 is the final governed tuning stage: reject a genuinely tuned edge
   # before fitting/freezing a production configuration. Users can inspect
   # the warning and call expand_tuning_grid() to extend the same checkpoint.
-  validate_m2_tuning(m2_tuning, check_boundaries = TRUE)
+  m2_tuning$min_nll_gain <- m2_min_nll_gain
+  m2_tuning <- validate_m2_tuning(
+    m2_tuning,
+    check_boundaries = TRUE,
+    min_nll_gain = m2_min_nll_gain
+  )
   m2_selection <- select_m2_candidate(m2_tuning, method = selection_method)
   if (is.null(m2_selection$selected_spec)) {
     stop("Selected M2 specification could not be reconstructed from tuning results.")

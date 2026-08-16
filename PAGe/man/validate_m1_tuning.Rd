@@ -4,7 +4,7 @@
 \alias{validate_m1_tuning}
 \title{Validate an M1 tuning result}
 \usage{
-validate_m1_tuning(x, check_boundaries = FALSE, ...)
+validate_m1_tuning(x, check_boundaries = FALSE, hard_caps = NULL, ...)
 }
 \arguments{
 \item{x}{A \code{page_m1_tuning} object.}
@@ -12,6 +12,10 @@ validate_m1_tuning(x, check_boundaries = FALSE, ...)
 \item{check_boundaries}{Logical; require all varying numeric M1 axes in the
 supplied grid to have an interior selected value. This is enabled by
 \code{train_pipeline()} before M1 is frozen for M2.}
+
+\item{hard_caps}{Optional named numeric vector or named list of lower/upper
+bounds, such as `list(k_ref = c(lower = 10, upper = 50))`. A selected
+value exactly at a hard cap is accepted and recorded as `stop_hard_cap`.}
 
 \item{...}{Reserved.}
 }

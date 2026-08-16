@@ -128,7 +128,7 @@ Preserve a small table with every tuning result:
 | `selected_value` | Value chosen by the declared selection rule |
 | `boundary` | `lower`, `upper`, `none`, or `fixed` |
 | `proposed_next` | One new valid value, or `NA` |
-| `decision` | `expand`, `accept_constraint`, `accept_null`, or `stop_flat` |
+| `decision` | `expand_required`, `stop_small_gain`, `stop_hard_cap`, or `accept_null_drop` |
 | `reason` | Scientific/statistical justification |
 
 Fixed values are not boundary findings. Only axes with at least two distinct
@@ -189,10 +189,13 @@ for the next pre-holdout run, not a new result. The fresh slope-weight winner
 was interior (`12`), so do not add `slope_weight = 4` unless a later complete
 run again selects `8`.
 
-- `k_ref` controls reference-curve flexibility. If `25` remains the lower-edge
-  winner, the default halved-step extension is `22` (or use an explicit
-  `steps = c(k_ref = 5)` to test `20`). If `50` wins on the default 52-week
-  domain, expansion is capped at `52`; do not generate `k_ref = 60`.
+- `k_ref` controls reference-curve flexibility. Governed tuning bounds it to
+  `10 <= k_ref <= 50`; use an explicit five-unit step when an edge winner
+  requires an expansion. If the upper cap is reached, compare inward values
+  and prefer the smallest candidate within `0.05` weeks of the best M1
+  Weibull MAE. If the lower cap is reached, record the hard lower constraint.
+  Do not generate `k_ref = 52` or `k_ref = 60` merely because the reference
+  domain has 52 weeks.
 - `slope_weight` is nonnegative. If `8` remains the lower-edge winner, the
   default halved-step expansion tests `6`; use an explicit `steps` value if
   the planned `4` comparison is required. `0` is a meaningful no-slope-weight
@@ -219,6 +222,53 @@ the planned grid below. This distinction prevents an unverified historical
 boundary from silently changing the next search.
 
 ## M2: forecast tuning
+
+### Inspecting parameter-specific NLL gains
+
+Before choosing an M2 expansion threshold, inventory the observed NLL changes
+rather than treating every boundary as equally valuable:
+
+```r
+holdout_tuning <- list(
+  `2017-18` = readRDS(".../m2_tuning.rds"),
+  `2018-19` = readRDS(".../m2_tuning.rds")
+)
+sensitivity <- extract_nll_sensitivity(holdout_tuning)
+write.csv(sensitivity$matched_gains, "matched_adjacent_nll_gains.csv", row.names = FALSE)
+plot_nll_sensitivity(sensitivity)
+```
+
+`sensitivity$gains` is a marginal best-at-value envelope. For a
+parameter-specific gain cap, use `sensitivity$matched_gains`: each row compares
+two specifications that are identical on the other inspected axes and differ
+only in the named parameter. Positive `adjacent_gain` means the move reduced
+NLL; `gain_per_unit` normalizes that change by the parameter step. A sparse or
+non-factorial grid can have no matched comparison for an axis, which should be
+reported as insufficient evidence rather than treated as zero gain.
+
+The governed boundary gate can apply those caps without pretending that an
+unmatched edge is settled. Use a named vector so each parameter has its own
+scale (an unnamed scalar applies the same threshold to every axis):
+
+```r
+m2_gain_caps <- c(
+  alpha_state = 0.001, k_r = 0.0005, k_f = 0.00025,
+  k_e = 0.001, k_sp = 0.00025, k_de = 0.00005,
+  bias_alpha = 0.00005
+)
+report <- inspect_tuning_boundaries(
+  m2_tuning, stage = "M2", min_nll_gain = m2_gain_caps
+)
+validate_m2_tuning(
+  m2_tuning, check_boundaries = TRUE, min_nll_gain = m2_gain_caps
+)
+```
+
+`stop_small_gain` is emitted only when the selected edge is part of an exact
+matched adjacent comparison and the outward NLL gain is at or below its cap.
+An edge with no matched comparison remains `expand_required`. The thresholds
+are a stopping rule for practical gain, not a replacement for the holdout
+gate, and should be frozen before inspecting prospective holdout results.
 
 M2 has more axes and can produce a very large Cartesian grid. Prefer the
 bounded planner:
