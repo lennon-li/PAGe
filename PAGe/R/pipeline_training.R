@@ -966,8 +966,9 @@ build_m2 <- function(allD,
   if (verbose) {
     message("[build_m2] Phase 1: M1 cache for ", length(test_seasons), " folds...")
   }
+  old_future_plan <- future::plan()
+  on.exit(future::plan(old_future_plan), add = TRUE)
   future::plan(future::multisession, workers = as.integer(max(1L, n_cores)))
-  on.exit(future::plan(future::sequential), add = TRUE)
 
   m1_cache <- NULL
   if (!is.null(phase1_artifact_path) && file.exists(phase1_artifact_path)) {
@@ -1166,11 +1167,9 @@ build_m2 <- function(allD,
     n_workers <- as.integer(max(1L, n_cores))
     todo_batches <- split(todo_ids, ceiling(seq_along(todo_ids) / n_workers))
     future::plan(
-      future::tweak(
-        future::multisession,
-        workers = n_workers,
-        maxSizeOfObjects = requested_max_size
-      )
+      future::multisession,
+      workers = n_workers,
+      maxSizeOfObjects = requested_max_size
     )
 
     for (bi in seq_along(todo_batches)) {

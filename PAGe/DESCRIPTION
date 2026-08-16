@@ -33,7 +33,7 @@ Imports:
     gamm4,
     plotly,
     MMWRweek,
-    future,
+    future (>= 1.40.0),
     furrr,
     gratia,
     DT,
