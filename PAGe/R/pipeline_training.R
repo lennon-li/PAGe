@@ -208,6 +208,48 @@ default_m2_grid <- function() {
 # M0
 # ============================================================
 
+#' Compact a complete M0 artifact for the M1 handoff
+#'
+#' M1 needs the aligned M0 output, detector parameters, and the label/flag
+#' contract. It does not need the M0 tuning grid, fold scores, or other
+#' provenance payloads. The complete M0 artifact remains available separately
+#' for audit; this projection is safe to pass into the next stage.
+#'
+#' @param m0 Complete M0 artifact from \code{build_m0()}, \code{tune_m0()}, or
+#'   a governed frozen M0 fit.
+#'
+#' @return A named list containing the M1-required M0 fields and its optional
+#'   data identity. \code{aligned}
+#'   may be \code{NULL} for legacy minimal inputs, in which case
+#'   \code{build_m1()} rebuilds the alignment rather than silently using an
+#'   incomplete handoff.
+#' @export
+compact_m0_artifact_for_m1 <- function(m0) {
+  if (!is.list(m0)) {
+    stop("`m0` must be a complete M0 artifact list.", call. = FALSE)
+  }
+  aligned <- m0$aligned %||% NULL
+  seasons_used <- m0$seasons_used %||% {
+    if (is.data.frame(aligned) && "season" %in% names(aligned)) {
+      sort(unique(as.character(aligned$season)))
+    } else {
+      NULL
+    }
+  }
+  list(
+    aligned = aligned,
+    seasons_used = if (is.null(seasons_used)) {
+      NULL
+    } else {
+      sort(unique(as.character(seasons_used)))
+    },
+    best_params = m0$best_params %||% NULL,
+    manual_labels = m0$manual_labels %||% NULL,
+    flag_args = m0$flag_args %||% NULL,
+    data_id = m0$data_id %||% NULL
+  )
+}
+
 #' Build aligned training data using M0 ignition detection
 #'
 #' Computes seasonal derivative signals via \code{estimateDerivs()}, flags
@@ -391,7 +433,8 @@ tune_m0 <- function(allD,
 #'
 #' Fits the epidemic reference curve via \code{estimateRef()} and learns
 #' alignment search bounds via \code{learn_alignment_hyperparams()}.
-#' Inherits \code{manual_labels} and \code{flag_args} from \code{m0}.
+#' Inherits \code{manual_labels} and \code{flag_args} from \code{m0}, and
+#' reuses its aligned output when the data identity and season set match.
 #'
 #' @param allD Multi-season surveillance data frame.
 #' @param m0 Output of \code{tune_m0()} or \code{build_m0()}. Carries
@@ -419,8 +462,9 @@ build_m1 <- function(allD,
                      m1_params = .default_m1_params()) {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
 
-  manual_labels <- m0$manual_labels %||% .default_manual_labels()
-  flag_args <- m0$flag_args %||% .default_flag_args()
+  m0_handoff <- compact_m0_artifact_for_m1(m0)
+  manual_labels <- m0_handoff$manual_labels %||% .default_manual_labels()
+  flag_args <- m0_handoff$flag_args %||% .default_flag_args()
 
   dat <- if (length(exclude) > 0) {
     dplyr::filter(allD, !.data$season %in% exclude)
@@ -443,12 +487,21 @@ build_m1 <- function(allD,
     }
   }
 
-  seasons_used <- sort(unique(dat$season))
-  aligned_train <- build_m0(dat,
-    exclude = character(0),
-    manual_labels = manual_labels,
-    flag_args = flag_args
-  )$aligned
+  seasons_used <- sort(unique(as.character(dat$season)))
+  can_reuse_m0 <- !is.null(m0_handoff$aligned) &&
+    !is.null(m0_handoff$seasons_used) &&
+    setequal(m0_handoff$seasons_used, seasons_used) &&
+    (is.null(m0_handoff$data_id) ||
+      identical(m0_handoff$data_id, .stage_training_data_id(dat)))
+  aligned_train <- if (can_reuse_m0) {
+    m0_handoff$aligned
+  } else {
+    build_m0(dat,
+      exclude = character(0),
+      manual_labels = manual_labels,
+      flag_args = flag_args
+    )$aligned
+  }
 
   ref <- estimateRef(
     alignedD = aligned_train,
@@ -516,11 +569,12 @@ tune_m1 <- function(allD,
     allD <- .selected_training_data(allD, selection)
     loso_seasons <- selection$training_seasons
   }
+  m0_handoff <- compact_m0_artifact_for_m1(m0)
   manual_labels <- manual_labels %||%
-    m0$manual_labels %||%
+    m0_handoff$manual_labels %||%
     .default_manual_labels()
   m1_params <- m1$m1_params %||% .default_m1_params()
-  params <- m0$best_params
+  params <- m0_handoff$best_params
   if (is.null(params)) {
     stop("tune_m1 requires m0 from tune_m0() (needs best_params).")
   }
@@ -596,6 +650,134 @@ tune_m1 <- function(allD,
 .m2_checkpoint_schema <- function() "page_m2_phase2_checkpoint"
 
 .m2_checkpoint_version <- function() 2L
+
+.m1_phase1_schema <- function() "page_m1_phase1_artifact"
+
+.m1_phase1_version <- function() 1L
+
+.m1_phase1_identity <- function(allD, test_seasons, m0, m1) {
+  upstream_identity <- function(stage, artifact, fields) {
+    artifact_id <- artifact$artifact_id
+    if (is.character(artifact_id) && length(artifact_id) == 1L &&
+      !is.na(artifact_id) && nzchar(artifact_id)) {
+      return(list(stage = stage, artifact_id = artifact_id))
+    }
+    list(
+      stage = stage,
+      legacy_payload = artifact[intersect(fields, names(artifact))]
+    )
+  }
+
+  list(
+    context = digest::digest(
+      list(
+        schema = .m1_phase1_schema(),
+        version = .m1_phase1_version(),
+        data_id = .stage_training_data_id(allD),
+        test_seasons = as.character(test_seasons),
+        m0 = upstream_identity(
+          "m0", m0,
+          c("best_params", "manual_labels", "flag_args")
+        ),
+        m1 = upstream_identity(
+          "m1", m1,
+          c("m1_params", "ref", "hyper")
+        )
+      ),
+      algo = "sha256"
+    )
+  )
+}
+
+.read_m1_phase1_artifact <- function(path, identity) {
+  artifact <- tryCatch(readRDS(path), error = function(error) NULL)
+  expected_names <- c("schema", "version", "identity", "cache")
+  if (!is.list(artifact) ||
+    !identical(names(artifact), expected_names) ||
+    !identical(artifact$schema, .m1_phase1_schema()) ||
+    !identical(artifact$version, .m1_phase1_version()) ||
+    !identical(artifact$identity, identity) ||
+    !is.list(artifact$cache)) {
+    return(NULL)
+  }
+  artifact$cache
+}
+
+.write_m1_phase1_artifact <- function(path, identity, cache) {
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  temporary <- tempfile(".page-m1-phase1-", tmpdir = dirname(path))
+  on.exit(unlink(temporary), add = TRUE)
+  saveRDS(
+    list(
+      schema = .m1_phase1_schema(),
+      version = .m1_phase1_version(),
+      identity = identity,
+      cache = cache
+    ),
+    temporary
+  )
+  if (!file.copy(temporary, path, overwrite = TRUE)) {
+    stop("Could not update M1 Phase 1 artifact: `", path, "`.")
+  }
+  restored <- .read_m1_phase1_artifact(path, identity)
+  if (is.null(restored) || !identical(names(restored), names(cache))) {
+    stop("M1 Phase 1 artifact verification failed after writing: `", path, "`.")
+  }
+  invisible(path)
+}
+
+#' Compact a complete M1 LOSO cache for M2
+#'
+#' A complete Phase 1 cache retains the reference fit and alignment objects
+#' used to generate M1 predictions. M2 only needs the aligned training data,
+#' per-fold template metadata, and the already generated M1 train/test
+#' predictions. This function preserves the latter inputs while dropping the
+#' M1-only reference and hyperparameter payload before parallel M2 evaluation.
+#'
+#' @param m1_cache Named list of complete Phase 1 fold artifacts, as produced
+#'   internally by \code{build_m2()}.
+#'
+#' @return A named list with the M2-only fold handoff. The original cache is
+#'   not modified.
+#' @export
+compact_m1_cache_for_m2 <- function(m1_cache) {
+  if (!is.list(m1_cache)) {
+    stop("`m1_cache` must be a named list of fold artifacts.", call. = FALSE)
+  }
+  if (is.null(names(m1_cache)) || any(!nzchar(names(m1_cache)))) {
+    stop("`m1_cache` must have non-empty fold names.", call. = FALSE)
+  }
+
+  compact <- lapply(m1_cache, function(entry) {
+    if (!is.list(entry) || !is.list(entry$fold)) {
+      stop("Each M1 cache entry must contain a `fold` list.", call. = FALSE)
+    }
+    fold <- entry$fold
+    required <- c("aligned_train", "template_df", "test_season")
+    missing <- setdiff(required, names(fold))
+    if (length(missing) > 0L) {
+      stop(
+        "M1 cache fold is missing required M2 input(s): ",
+        paste(missing, collapse = ", "),
+        call. = FALSE
+      )
+    }
+    anchor_week <- fold$anchorWeek %||% fold$ref$anchorWeek %||% 20L
+    list(
+      fold = list(
+        aligned_train = fold$aligned_train,
+        template_df = fold$template_df,
+        train_seasons = fold$train_seasons %||% character(),
+        test_season = fold$test_season,
+        anchorWeek = as.integer(anchor_week)
+      ),
+      m1_train = entry$m1_train %||% NULL,
+      m1_test = entry$m1_test %||% NULL
+    )
+  })
+  names(compact) <- names(m1_cache)
+  compact
+}
 
 .m2_checkpoint_identity <- function(allD, test_seasons, grid, m0, m1) {
   upstream_identity <- function(stage, artifact, fields) {
@@ -703,6 +885,10 @@ tune_m1 <- function(allD,
 #' @param n_cores Integer. Parallel cores.
 #' @param checkpoint_dir Character. Directory for Phase 2 checkpoint files.
 #'   Pass \code{NULL} to disable checkpointing.
+#' @param m1_artifact_path Character. Optional path for the complete Phase 1
+#'   M1 LOSO artifact. When \code{NULL} and \code{checkpoint_dir} is supplied,
+#'   \code{m1_phase1.rds} is written inside that directory. A matching existing
+#'   artifact is reused; it is compacted in memory before M2 workers receive it.
 #' @param fail_fast Logical. Stop on the first unsupported fold/spec instead of
 #'   converting model failures to missing scores (default \code{TRUE}).
 #' @param future_max_size Numeric. Maximum size, in bytes, of globals exported
@@ -726,6 +912,7 @@ build_m2 <- function(allD,
                      bias_beta = 0,
                      n_cores = parallel::detectCores() - 1L,
                      checkpoint_dir = NULL,
+                     m1_artifact_path = NULL,
                      fail_fast = TRUE,
                      future_max_size = NULL,
                      verbose = TRUE) {
@@ -755,6 +942,18 @@ build_m2 <- function(allD,
   exclude_all <- unique(c(exclude_seas, holdout_season, perm_excl))
   all_seas <- sort(setdiff(unique(allD$season), exclude_all))
   test_seasons <- .select_loso_seasons(all_seas, loso_seasons)
+  phase1_artifact_path <- m1_artifact_path
+  if (is.null(phase1_artifact_path) && !is.null(checkpoint_dir)) {
+    phase1_artifact_path <- file.path(checkpoint_dir, "m1_phase1.rds")
+  }
+  if (!is.null(phase1_artifact_path) &&
+    (!is.character(phase1_artifact_path) || length(phase1_artifact_path) != 1L ||
+      !nzchar(phase1_artifact_path))) {
+    stop("`m1_artifact_path` must be NULL or one non-empty path.", call. = FALSE)
+  }
+  phase1_identity <- .m1_phase1_identity(
+    allD = allD, test_seasons = test_seasons, m0 = m0, m1 = m1
+  )
 
   if (verbose) {
     message(sprintf(
@@ -770,83 +969,114 @@ build_m2 <- function(allD,
   future::plan(future::multisession, workers = as.integer(max(1L, n_cores)))
   on.exit(future::plan(future::sequential), add = TRUE)
 
-  m1_cache <- list()
-  for (test_s in test_seasons) {
-    if (verbose) message(sprintf("  [%s] build_fold + M1...", test_s))
-    fold <- tryCatch(
-      nested_loso_build_fold(
-        allD = allD, test_season = test_s,
-        exclude_seasons = exclude_all,
-        k_ref = as.integer(m1_params$k_ref %||% 25L),
-        ref_method = m1_params$ref_method %||% "fs",
-        manual_labels = manual_labels, verbose = FALSE
-      ),
-      error = function(e) {
-        if (isTRUE(fail_fast)) {
-          stop(
-            "M2 Phase 1 fold `", test_s, "` construction failed: ",
-            conditionMessage(e),
-            call. = FALSE
-          )
-        }
-        message("  ERROR fold: ", conditionMessage(e))
-        NULL
+  m1_cache <- NULL
+  if (!is.null(phase1_artifact_path) && file.exists(phase1_artifact_path)) {
+    m1_cache <- .read_m1_phase1_artifact(phase1_artifact_path, phase1_identity)
+    if (is.null(m1_cache)) {
+      if (verbose) {
+        message(
+          "[build_m2] Ignoring M1 Phase 1 artifact whose identity does not ",
+          "match the current data, stages, and folds."
+        )
       }
-    )
-    if (is.null(fold)) next
+    } else if (verbose) {
+      message(
+        "[build_m2] Reusing complete M1 Phase 1 artifact: ",
+        phase1_artifact_path
+      )
+    }
+  }
 
-    m1_train <- tryCatch(
-      m1_walkforward_multi(
-        allD = allD, ref = fold$ref, hyper = fold$hyper, params = params,
-        seasons = fold$train_seasons,
-        temperature = m1_params$temperature %||% 0.25,
-        rise_weight = m1_params$rise_weight %||% 1.0,
-        trough_weight = m1_params$trough_weight %||% 0.1,
-        peak_decay = m1_params$peak_decay %||% 0.3,
-        slope_weight = m1_params$slope_weight %||% 8.0,
-        slope_window = m1_params$slope_window %||% 6L,
-        dynamic_temp = isTRUE(m1_params$dynamic_temp),
-        dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L,
-        parallel = TRUE, verbose = FALSE
-      ),
-      error = function(e) {
-        if (isTRUE(fail_fast)) {
-          stop(
-            "M2 Phase 1 fold `", test_s, "` M1 training failed: ",
-            conditionMessage(e),
-            call. = FALSE
-          )
+  if (is.null(m1_cache)) {
+    m1_cache <- list()
+    for (test_s in test_seasons) {
+      if (verbose) message(sprintf("  [%s] build_fold + M1...", test_s))
+      fold <- tryCatch(
+        nested_loso_build_fold(
+          allD = allD, test_season = test_s,
+          exclude_seasons = exclude_all,
+          k_ref = as.integer(m1_params$k_ref %||% 25L),
+          ref_method = m1_params$ref_method %||% "fs",
+          manual_labels = manual_labels, verbose = FALSE
+        ),
+        error = function(e) {
+          if (isTRUE(fail_fast)) {
+            stop(
+              "M2 Phase 1 fold `", test_s, "` construction failed: ",
+              conditionMessage(e),
+              call. = FALSE
+            )
+          }
+          message("  ERROR fold: ", conditionMessage(e))
+          NULL
         }
-        message("  ERROR m1_train: ", conditionMessage(e))
-        NULL
-      }
-    )
-    m1_test <- tryCatch(
-      m1_walkforward_predictions(
-        seasonD = allD[allD$season == test_s, ],
-        ref = fold$ref, hyper = fold$hyper, params = params,
-        temperature = m1_params$temperature %||% 0.25,
-        rise_weight = m1_params$rise_weight %||% 1.0,
-        trough_weight = m1_params$trough_weight %||% 0.1,
-        peak_decay = m1_params$peak_decay %||% 0.3,
-        slope_weight = m1_params$slope_weight %||% 8.0,
-        slope_window = m1_params$slope_window %||% 6L,
-        dynamic_temp = isTRUE(m1_params$dynamic_temp),
-        dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L
-      ),
-      error = function(e) {
-        if (isTRUE(fail_fast)) {
-          stop(
-            "M2 Phase 1 fold `", test_s, "` M1 test prediction failed: ",
-            conditionMessage(e),
-            call. = FALSE
-          )
+      )
+      if (is.null(fold)) next
+
+      m1_train <- tryCatch(
+        m1_walkforward_multi(
+          allD = allD, ref = fold$ref, hyper = fold$hyper, params = params,
+          seasons = fold$train_seasons,
+          temperature = m1_params$temperature %||% 0.25,
+          rise_weight = m1_params$rise_weight %||% 1.0,
+          trough_weight = m1_params$trough_weight %||% 0.1,
+          peak_decay = m1_params$peak_decay %||% 0.3,
+          slope_weight = m1_params$slope_weight %||% 8.0,
+          slope_window = m1_params$slope_window %||% 6L,
+          dynamic_temp = isTRUE(m1_params$dynamic_temp),
+          dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L,
+          parallel = TRUE, verbose = FALSE
+        ),
+        error = function(e) {
+          if (isTRUE(fail_fast)) {
+            stop(
+              "M2 Phase 1 fold `", test_s, "` M1 training failed: ",
+              conditionMessage(e),
+              call. = FALSE
+            )
+          }
+          message("  ERROR m1_train: ", conditionMessage(e))
+          NULL
         }
-        message("  ERROR m1_test: ", conditionMessage(e))
-        NULL
+      )
+      m1_test <- tryCatch(
+        m1_walkforward_predictions(
+          seasonD = allD[allD$season == test_s, ],
+          ref = fold$ref, hyper = fold$hyper, params = params,
+          temperature = m1_params$temperature %||% 0.25,
+          rise_weight = m1_params$rise_weight %||% 1.0,
+          trough_weight = m1_params$trough_weight %||% 0.1,
+          peak_decay = m1_params$peak_decay %||% 0.3,
+          slope_weight = m1_params$slope_weight %||% 8.0,
+          slope_window = m1_params$slope_window %||% 6L,
+          dynamic_temp = isTRUE(m1_params$dynamic_temp),
+          dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L
+        ),
+        error = function(e) {
+          if (isTRUE(fail_fast)) {
+            stop(
+              "M2 Phase 1 fold `", test_s, "` M1 test prediction failed: ",
+              conditionMessage(e),
+              call. = FALSE
+            )
+          }
+          message("  ERROR m1_test: ", conditionMessage(e))
+          NULL
+        }
+      )
+      m1_cache[[test_s]] <- list(fold = fold, m1_train = m1_train, m1_test = m1_test)
+    }
+    if (!is.null(phase1_artifact_path)) {
+      .write_m1_phase1_artifact(
+        phase1_artifact_path, phase1_identity, m1_cache
+      )
+      if (verbose) {
+        message(
+          "[build_m2] Saved complete M1 Phase 1 artifact: ",
+          phase1_artifact_path
+        )
       }
-    )
-    m1_cache[[test_s]] <- list(fold = fold, m1_train = m1_train, m1_test = m1_test)
+    }
   }
   if (isTRUE(fail_fast) && !all(test_seasons %in% names(m1_cache))) {
     missing_folds <- setdiff(test_seasons, names(m1_cache))
@@ -856,17 +1086,28 @@ build_m2 <- function(allD,
       call. = FALSE
     )
   }
-  if (verbose) message("[build_m2] Phase 1 complete: ", length(m1_cache), " folds.\n")
+  full_m1_cache_bytes <- as.numeric(utils::object.size(m1_cache))
+  m1_cache <- compact_m1_cache_for_m2(m1_cache)
+  compact_m1_cache_bytes <- as.numeric(utils::object.size(m1_cache))
+  if (verbose) {
+    message(
+      "[build_m2] Phase 1 complete: ", length(m1_cache),
+      " folds; full artifact ",
+      format(structure(full_m1_cache_bytes, class = "object_size"), units = "auto"),
+      "; M2 handoff ",
+      format(structure(compact_m1_cache_bytes, class = "object_size"), units = "auto"),
+      ".\n"
+    )
+  }
 
   # ---- Phase 2: M2 grid search ----
   if (verbose) message("[build_m2] Phase 2: ", length(spec_ids), " specs...")
 
-  # The prepared M1 cache is intentionally shared by every M2 specification.
-  # On realistic holdouts it can exceed future's conservative 500 MiB default
-  # export limit. Raise the limit only for this call and only to the measured
-  # cache size plus generous bounded headroom; never remove the safety check.
+  # The compact M1-to-M2 handoff is intentionally shared by every M2
+  # specification. Keep the export limit scoped to this call and bounded by
+  # the measured handoff size; never remove the safety check.
   old_future_max_size <- getOption("future.globals.maxSize")
-  cache_bytes <- as.numeric(utils::object.size(m1_cache))
+  cache_bytes <- compact_m1_cache_bytes
   requested_max_size <- if (is.null(future_max_size)) {
     min(2 * 1024^3, max(768 * 1024^2, ceiling(cache_bytes * 1.5)))
   } else {
@@ -924,7 +1165,13 @@ build_m2 <- function(allD,
   if (length(todo_ids) > 0) {
     n_workers <- as.integer(max(1L, n_cores))
     todo_batches <- split(todo_ids, ceiling(seq_along(todo_ids) / n_workers))
-    future::plan(future::multisession, workers = n_workers)
+    future::plan(
+      future::tweak(
+        future::multisession,
+        workers = n_workers,
+        maxSizeOfObjects = requested_max_size
+      )
+    )
 
     for (bi in seq_along(todo_batches)) {
       batch <- todo_batches[[bi]]
@@ -1061,12 +1308,15 @@ build_m2 <- function(allD,
   }
 
   list(
-    best_spec    = best_spec,
+    best_spec = best_spec,
     best_spec_id = best_id,
-    summary      = summary_df,
-    scores       = all_scores,
-    cv_results   = cv_all,
-    grid         = grid_df
+    summary = summary_df,
+    scores = all_scores,
+    cv_results = cv_all,
+    grid = grid_df,
+    m1_artifact_path = phase1_artifact_path,
+    m1_cache_bytes = full_m1_cache_bytes,
+    m2_handoff_bytes = compact_m1_cache_bytes
   )
 }
 

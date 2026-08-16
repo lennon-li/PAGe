@@ -158,7 +158,9 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
 
   ex_terms <- spec$exclude_newseason
   if (is.null(ex_terms)) ex_terms <- stage2_exclude_newseason(spec)
-  anchorWeek <- as.integer(spec$anchorWeek %||% fold$ref$anchorWeek %||% 20L)
+  anchorWeek <- as.integer(
+    spec$anchorWeek %||% fold$anchorWeek %||% fold$ref$anchorWeek %||% 20L
+  )
 
   eval_weeks <- sort(unique(m1_test_preds$eval_weekF))
   eval_weeks <- eval_weeks[eval_weeks >= iWeek_used]
@@ -476,7 +478,9 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
   ex_terms <- spec$exclude_newseason
   if (is.null(ex_terms)) ex_terms <- stage2_exclude_newseason(spec)
   # Season RE handling delegated to m2_predict_one() via include_season_re.
-  anchorWeek <- as.integer(spec$anchorWeek %||% fold$ref$anchorWeek %||% 20L)
+  anchorWeek <- as.integer(
+    spec$anchorWeek %||% fold$anchorWeek %||% fold$ref$anchorWeek %||% 20L
+  )
 
   eval_weeks <- sort(unique(m1_test_preds$eval_weekF))
   eval_weeks <- eval_weeks[eval_weeks >= iWeek_used]

@@ -41,6 +41,7 @@ routes its full evaluator through governed `tune_m2()`.
 |---|---|---|
 | `build_m0(allD, exclude, ...)` | Fits the M0 component using a fixed parameter set. | Legacy-compatible implementation used by `fit_m0()`. |
 | `tune_m0(allD, loso_seasons, exclude, grid, ..., selection = NULL)` | Runs M0 LOSO tuning. | With `selection`, returns a governed tuning result restricted to the selected seasons; without it, retains legacy behavior. |
+| `compact_m0_artifact_for_m1(m0)` | Projects a complete M0 artifact to aligned data, detector parameters, and the label/flag contract. | Stable M0 → M1 handoff; M1 reuses aligned output when its season set matches, otherwise rebuilds safely. |
 | `run_m0_detection()` / `run_m0()` | Runs prospective ignition detection. | Retain as the M0 runtime API. |
 
 ### M1 — alignment
@@ -57,6 +58,7 @@ routes its full evaluator through governed `tune_m2()`.
 | Existing function | Current role | Target role |
 |---|---|---|
 | `build_m2(allD, m0, m1, loso_seasons, grid, ...)` | Runs M2 LOSO tuning and selection inputs. | Legacy-compatible implementation used by `tune_m2()`; its current name is misleading. |
+| `compact_m1_cache_for_m2(m1_cache)` | Drops M1-only reference fits from a completed Phase 1 cache. | Stable handoff helper; `build_m2()` persists the full `m1_phase1.rds` artifact and passes only this compact projection to M2 workers. |
 | `train_m2(allD, m0, m1, best_spec, exclude, ...)` | Fits a fixed selected M2 specification. | Legacy-compatible implementation used by `fit_m2()`. |
 | `run_m2_forecast()` / `run_m2()` | Runs prospective M2 forecasting. | Retain as the M2 runtime API. |
 

@@ -69,10 +69,25 @@ m2_next <- tune_m2(
 )
 ```
 
+`build_m2()` persists the complete Phase 1 fold cache as
+`checkpoints/m2/m1_phase1.rds` (or at the explicit `m1_artifact_path`). Before
+parallel M2 evaluation it calls `compact_m1_cache_for_m2()`, retaining only
+aligned training data, the fold template/metadata, and the generated M1
+train/test predictions. The complete artifact remains available for audit or
+resume, while workers receive only the M2 handoff and do not export the large
+M1 reference fits and alignment closures.
+
 Expansion is additive: it never drops old candidates, silently changes a
 specification identity, or treats a capped search as bracketed. A null/drop
 value (for example `k_e = 0`, `Kr = 1`, or `bias_alpha = 0`) is reported as
 `accept_null_drop`; other edge winners remain `expand_required`.
+
+At the M0 → M1 boundary, persist the complete M0 stage artifact (for example,
+`m0_frozen.rds`) for audit and use `compact_m0_artifact_for_m1(m0)` when a
+caller needs an explicit handoff. `build_m1()` reuses the aligned M0 output
+only when both its season set and data identity match the M1 input; otherwise
+it rebuilds alignment safely. Nested M1 tuning still rebuilds M0 inside each
+LOSO fold, because one global M0 alignment would violate fold isolation.
 
 M1 also checks each fold's aligned data before fitting the reference GAM. A
 candidate whose `k_ref` exceeds the number of supported unique aligned weeks
