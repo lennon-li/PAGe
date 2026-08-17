@@ -108,3 +108,16 @@ Key data for M2 development:
 
 Scripts in `scripts/` have hardcoded Windows paths — set `wd` to the repo root
 on your platform. Package code (`PAGe/R/`) and QMDs use relative paths.
+
+## Current run state (2026-08-16)
+
+- Canonical artifact root: `/home/yeli/PAGe-bcc-artifacts/asgard-archive-20260812`.
+  This is the BCC-backed archive mounted on Asgard; `/mnt/storage1` is
+  currently read-only and is not a destination for new artifacts.
+- Audited holdout replays are preserved for 2016-17, 2017-18, 2018-19,
+  2022-23, 2023-24, 2024-25, and 2025-26. Counts differ with ignition and
+  observed holdout coverage because each row is an origin/horizon forecast.
+- `2015/run_2015_api_cycle.R` is the governed 2015-16 runner. It excludes the
+  holdout from training, settles M0 before M1 and M1 before M2, expands
+  unresolved boundaries, saves stage artifacts, and performs a strict unseen
+  replay under `holdouts-and-docs/2015-16` in the canonical archive.
