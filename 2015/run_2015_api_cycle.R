@@ -84,9 +84,15 @@ saveRDS(selection, file.path(artifact_dir, "season_selection.rds"))
 
 expand_until_settled <- function(tuning, stage, grid, tune_again,
                                  max_rounds = 8L) {
+  m2_gain_caps <- if (identical(stage, "M2")) {
+    PAGe::default_m2_nll_gain_caps()
+  } else {
+    NULL
+  }
   for (round in seq_len(max_rounds)) {
     report <- PAGe::inspect_tuning_boundaries(
-      tuning, stage = stage, grid = grid, warn = FALSE
+      tuning, stage = stage, grid = grid, warn = FALSE,
+      min_nll_gain = m2_gain_caps
     )
     write.csv(
       report,
@@ -222,7 +228,11 @@ m2_cycle <- expand_until_settled(
     verbose = TRUE
   )
 )
-m2 <- PAGe::validate_m2_tuning(m2_cycle$tuning, check_boundaries = TRUE)
+m2 <- PAGe::validate_m2_tuning(
+  m2_cycle$tuning,
+  check_boundaries = TRUE,
+  min_nll_gain = PAGe::default_m2_nll_gain_caps()
+)
 saveRDS(m2, file.path(artifact_dir, "m2_tuning.rds"))
 write.csv(m2_cycle$grid, file.path(artifact_dir, "m2_grid.csv"), row.names = FALSE)
 

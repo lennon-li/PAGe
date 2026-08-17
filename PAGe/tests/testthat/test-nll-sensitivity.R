@@ -129,6 +129,12 @@ test_that("M2 boundary gate accepts a matched small outward NLL gain", {
   )
   expect_equal(report$decision, "stop_small_gain")
   expect_equal(report$nll_gain, 0.01)
+
+  default_report <- PAGe::inspect_tuning_boundaries(
+    tuning, stage = "M2", warn = FALSE
+  )
+  expect_equal(default_report$min_nll_gain, 0.001)
+  expect_equal(default_report$decision, "expand_required")
 })
 
 test_that("M2 boundary gate does not hide missing matched evidence", {

@@ -18,6 +18,16 @@ test_that("the initial M2 plan is bounded, deterministic, and contains the curre
   expect_match(incumbent$provenance, "incumbent", fixed = TRUE)
 })
 
+test_that("the default M2 gain caps cover every tuned parameter", {
+  caps <- PAGe::default_m2_nll_gain_caps()
+  expect_named(caps, c(
+    "delta", "Kr", "k_f", "k_e", "alpha_state",
+    "k_r", "k_de", "k_sp", "bias_alpha", "bias_beta"
+  ))
+  expect_true(all(is.finite(caps)))
+  expect_true(all(caps >= 0))
+})
+
 test_that("the adaptive M2 plan retains diverse finalists and expands boundaries", {
   prior_grid <- data.frame(
     delta = 0L,

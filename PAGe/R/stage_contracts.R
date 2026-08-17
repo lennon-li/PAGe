@@ -601,11 +601,13 @@ freeze_m0 <- function(fit, tuning = NULL, ...) {
 #' @param hard_caps Optional named numeric vector or named list of lower/upper
 #'   hard caps. An edge exactly at a declared cap is reported as
 #'   `stop_hard_cap` rather than `expand_required`.
-#' @param min_nll_gain Optional M2-only NLL improvement threshold. Supply a
-#'   named numeric vector for parameter-specific thresholds, or one unnamed
-#'   number to apply the same threshold to every M2 axis. When a selected edge
-#'   has a matched adjacent NLL comparison and its outward gain is less than
-#'   or equal to the threshold, it is reported as `stop_small_gain`.
+#' @param min_nll_gain M2-only NLL improvement threshold. Defaults to
+#'   \code{default_m2_nll_gain_caps()}; supply a named numeric vector for
+#'   parameter-specific thresholds, or one unnamed number to apply the same
+#'   threshold to every M2 axis. Omitted names use the governed defaults. When
+#'   a selected edge has a matched adjacent NLL comparison and its outward
+#'   gain is less than or equal to the threshold, it is reported as
+#'   `stop_small_gain`.
 #'
 #' @return A data frame with tested range, selected value, boundary, decision,
 #'   and reason for every varying numeric axis.
@@ -661,6 +663,9 @@ inspect_tuning_boundaries <- function(x,
         )
       }
     }
+  }
+  if (stage == "M2" && is.null(min_nll_gain)) {
+    min_nll_gain <- x$min_nll_gain %||% default_m2_nll_gain_caps()
   }
   if (stage == "M2" && !is.null(min_nll_gain) && nrow(report)) {
     gain_thresholds <- .normalize_m2_nll_gain(min_nll_gain, report$parameter)
@@ -730,7 +735,15 @@ inspect_tuning_boundaries <- function(x,
     anyDuplicated(supplied_names)) {
     stop("`min_nll_gain` names must be unique and non-empty.", call. = FALSE)
   }
-  unknown <- setdiff(supplied_names, parameters)
+  known_parameters <- unique(c(
+    parameters,
+    if (exists(".m2_parameter_names", mode = "function")) {
+      .m2_parameter_names()
+    } else {
+      character(0)
+    }
+  ))
+  unknown <- setdiff(supplied_names, known_parameters)
   if (length(unknown)) {
     stop(
       "`min_nll_gain` contains unknown M2 parameter(s): ",
@@ -738,8 +751,14 @@ inspect_tuning_boundaries <- function(x,
       call. = FALSE
     )
   }
-  out <- stats::setNames(rep(NA_real_, length(parameters)), parameters)
-  out[supplied_names] <- as.numeric(min_nll_gain)
+  defaults <- if (exists("default_m2_nll_gain_caps", mode = "function")) {
+    default_m2_nll_gain_caps()
+  } else {
+    stats::setNames(rep(0, length(known_parameters)), known_parameters)
+  }
+  out <- defaults[parameters]
+  matched_names <- intersect(supplied_names, parameters)
+  out[matched_names] <- as.numeric(min_nll_gain[matched_names])
   out
 }
 
@@ -1592,10 +1611,12 @@ freeze_m2 <- function(fit, tuning = NULL, ...) {
 #' @param x A \code{page_m2_tuning} object.
 #' @param check_boundaries Logical; require every genuinely tuned M2 axis to
 #'   be bracketed or an explicitly accepted null/drop.
-#' @param min_nll_gain Optional named parameter-specific NLL gain threshold,
-#'   or one scalar applied to every M2 axis. A boundary with matched outward
-#'   gain at or below its threshold is accepted as `stop_small_gain`; a
-#'   boundary without matched evidence remains unresolved.
+#' @param min_nll_gain Named parameter-specific NLL gain threshold, or one
+#'   scalar applied to every M2 axis. Defaults to
+#'   \code{default_m2_nll_gain_caps()}; omitted names use the governed
+#'   defaults. A boundary with matched outward gain at or below its threshold
+#'   is accepted as `stop_small_gain`; a boundary without matched evidence
+#'   remains unresolved.
 #' @param ... Reserved.
 #'
 #' @return \code{x}, invisibly, if valid.
@@ -1660,7 +1681,8 @@ validate_m2_tuning <- function(x,
     }
   }
   if (isTRUE(check_boundaries)) {
-    min_nll_gain <- min_nll_gain %||% x$min_nll_gain %||% NULL
+    min_nll_gain <- min_nll_gain %||% x$min_nll_gain %||%
+      default_m2_nll_gain_caps()
     report <- inspect_tuning_boundaries(
       x,
       stage = "M2", warn = TRUE, min_nll_gain = min_nll_gain

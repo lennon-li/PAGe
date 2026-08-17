@@ -285,6 +285,15 @@ An edge with no matched comparison remains `expand_required`. The thresholds
 are a stopping rule for practical gain, not a replacement for the holdout
 gate, and should be frozen before inspecting prospective holdout results.
 
+The package also provides a complete governed default via
+`default_m2_nll_gain_caps()`. It covers every tuned M2 axis; callers may supply
+a reviewed replacement vector, but governed workflows must not silently omit
+an axis. Zero is the explicit drop/null value for the optional smooth degrees
+of freedom `k_e`, `k_r`, `k_de`, and `k_sp`. The initial M2 plan includes those
+drop candidates, and later boundary expansion preserves them. A practical-gain
+stop therefore cannot settle a positive lower edge before its drop model has
+been scored.
+
 M2 has more axes and can produce a very large Cartesian grid. Prefer the
 bounded planner:
 
