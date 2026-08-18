@@ -47,8 +47,10 @@ h4 {
 - `$M_2$` consumes alignment-derived covariates plus real-time features to forecast 1- and 2-week-ahead positivity.
 - The linked documents contain the derivations and historical tuning analyses;
   [`deployment-workflow.qmd`](deployment-workflow.qmd) is the canonical
-  governed release workflow. A rendered document is not evidence that a
-  private-data run completed.
+  governed release workflow. For the complete holdout protocol and the
+  fold-by-fold nested LOSO diagram, see
+  [`holdout_loso_workflow.qmd`](holdout_loso_workflow.qmd). A rendered document
+  is not evidence that a private-data run completed.
 :::
 
 ## Notation

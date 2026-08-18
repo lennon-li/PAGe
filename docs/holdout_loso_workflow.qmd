@@ -1,0 +1,265 @@
+---
+title: "Holdout Replays and Full Nested LOSO Training"
+format:
+  html:
+    self-contained: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    page-layout: full
+execute:
+  eval: false
+---
+
+This page documents how a PAGe holdout cycle is built and audited. It is the
+operational diagram for the exchangeable-season protocol: choose one untouched
+holdout label, run complete leave-one-season-out (LOSO) tuning inside each
+stage using the remaining training seasons, freeze the stages in order, and
+only then replay the holdout.
+
+::: {.callout-important}
+## Core rule
+
+The holdout season is never a tuning fold. It is not used to select a grid,
+fit a final stage, choose a boundary expansion, or create M1 labels. The
+holdout is opened only after the M0, M1, and M2 artifacts have passed their
+stage gates and have been assembled into a validated kit.
+:::
+
+## Season sets and notation
+
+For a selected holdout season $H$, define:
+
+- $S$ as the eligible, exchangeable seasons in the data contract;
+- $E$ as permanent exclusions (currently `2011-12`, `2020-21`, and
+  `2021-22`; `2015-16` is treated as a special ignition/drop-test cycle);
+- $T_H = S \setminus (E \cup \{H\})$ as the training seasons for this cycle;
+- $F \in T_H$ as one LOSO evaluation fold; and
+- $T_{H,F} = T_H \setminus \{F\}$ as the fold's actual fitting seasons.
+
+The label of a season is only an identifier. It is not a chronological rule:
+when `2024-25` is held out, `2025-26` may be a member of $T_H$ if the chosen
+development cycle declares it eligible. The season-selection object records
+this decision explicitly and rejects overlaps.
+
+For every stage, the full LOSO score is the collection
+
+$$
+  \{\operatorname{score}(\theta, F; T_{H,F}) : F \in T_H\},
+$$
+
+not a score from one global fit. A candidate is selected only after every
+required fold is complete and finite.
+
+## End-to-end holdout diagram
+
+The same structure is used for every holdout. The inner loops are shown
+explicitly because they are the part most easily mistaken for a single global
+fit.
+
+```{mermaid}
+flowchart TD
+    A["Choose holdout H"] --> B["Declare T_H, exclusions, and H\nvalidate_season_selection()"]
+    B --> C
+
+    subgraph M0["M0: ignition — complete LOSO"]
+      C["For each fold F in T_H"] --> C1["Fit/tune M0 on T_H minus F"]
+      C1 --> C2["Run ignition prospectively on F"]
+      C2 --> C3["Record fold loss and boundary report"]
+      C3 --> C
+      C3 --> C4["Aggregate all folds and select M0"]
+      C4 --> C5["validate_m0_tuning()\nexpand or accept valid null/cap"]
+      C5 --> C6["fit_m0() on all T_H\nfreeze_m0()"]
+    end
+
+    C6 --> D
+    subgraph M1["M1: alignment — nested LOSO"]
+      D["For each fold F in T_H"] --> D1["Rebuild fold-local M0\nusing T_H minus F"]
+      D1 --> D2["Fit/tune M1 on T_H minus F"]
+      D2 --> D3["Walk forward and score alignment on F"]
+      D3 --> D4["Record peak/phase loss and boundaries"]
+      D4 --> D
+      D4 --> D5["Aggregate all folds and select M1"]
+      D5 --> D6["validate_m1_tuning()\nexpand or accept valid null/cap"]
+      D6 --> D7["fit_m1() using frozen all-T_H M0\nfreeze_m1()"]
+    end
+
+    D7 --> E
+    subgraph M2["M2: forecast — nested full LOSO"]
+      E["For each fold F in T_H"] --> E1["Use fold-local M0 and M1\nwith F still unseen"]
+      E1 --> E2["Build fold M1 walk-forward\ncompact handoff cache"]
+      E2 --> E3["Fit/evaluate every M2 candidate\non T_H minus F; score F"]
+      E3 --> E4["Record NLL, horizon/phase loss, boundaries"]
+      E4 --> E
+      E4 --> E5["Aggregate all folds and select M2"]
+      E5 --> E6["validate_m2_tuning()\nexpand or accept valid null/cap"]
+      E6 --> E7["fit_m2() using frozen M0/M1\nfreeze_m2()"]
+    end
+
+    E7 --> F["assemble_kit()\nvalidate_page_kit()"]
+    A -. "H is untouched until here" .-> G["Replay H sequentially\nreplay_season_holdout(..., kit_compatibility='strict')"]
+    F --> G
+    G --> H["Audit predictions, metrics, provenance,\nand add one comparable table row"]
+
+    classDef holdout fill:#fff2cc,stroke:#b8860b,color:#000;
+    classDef gate fill:#e8f1f8,stroke:#1e5f8e,color:#000;
+    class A,G,H holdout;
+    class B,C5,D6,E6,F gate;
+```
+
+## What “full LOSO” means at each stage
+
+| Stage | Fold-local fitting data | Fold evaluation | Final fit after the gate | Main leakage protection |
+|---|---|---|---|---|
+| **M0 ignition** | `T_H \ {F}` | Detect ignition prospectively on `F`; compare with its declared label | Fit the selected M0 configuration on all `T_H` | No detector threshold is selected using `F` or `H` |
+| **M1 alignment** | Fold-local M0 is rebuilt on `T_H \ {F}`; M1 reference/templates use that same fold data | Walk alignment forward on `F`; score peak, phase, and alignment errors | Fit selected M1 with the frozen all-`T_H` M0 | A global M0 reference is never reused as if it were fold-independent |
+| **M2 forecast** | Fold-local M0/M1 states and M1 walk-forward predictions; M2 fit uses `T_H \ {F}` | Forecast horizons 1 and 2 on `F`; score Bernoulli NLL and diagnostics | Fit selected M2 with frozen all-`T_H` M0/M1 | `manual_labels_train` excludes `F`; held-out labels are not supplied to the fold |
+
+The M1 and M2 rows are deliberately nested. Passing one global M0 or M1
+artifact through every fold would make the downstream score optimistic. The
+complete M1 phase cache is retained for audit/resume, while
+`compact_m1_cache_for_m2()` sends only the handoff needed by M2 workers.
+
+## Stage gates and expansion decisions
+
+Each stage has four distinct states:
+
+```text
+tune_* -> validate_*_tuning(check_boundaries = TRUE)
+       -> fit_* -> freeze_*
+```
+
+The next stage cannot start from a draft or from a tuning object alone:
+
+1. M0 must have complete finite LOSO folds and a valid selected configuration.
+2. M1 requires a frozen M0 with the exact same `page_season_selection` and
+   matching data identity.
+3. M2 requires the exact frozen M0/M1 identity chain and complete fold scores.
+4. `assemble_kit()` requires all three frozen stages and rechecks provenance.
+
+A non-null winner at a tested grid edge is not silently accepted. Inspect it
+with `inspect_tuning_boundaries()`, append one controlled adjacent value with
+`expand_tuning_grid()`, and rerun the same folds. A value at an edge may stop
+only when it is an explicit null/drop choice, a valid structural cap, or when
+the predeclared minimum-gain rule justifies stopping. Expansion must finish
+before the holdout is viewed.
+
+## Canonical manual call sequence
+
+The following is a template; supply the authorized data and the grids for the
+cycle. It intentionally shows the low-level calls so that every gate is
+visible. `train_pipeline(mode = "retune")` composes the same lifecycle when a
+single orchestrator is preferred.
+
+```{r}
+# H is the only season reserved for replay.
+holdout <- "2024-25"
+permanent_exclusions <- c("2011-12", "2020-21", "2021-22")
+eligible <- setdiff(sort(unique(allD$season)), permanent_exclusions)
+training <- setdiff(eligible, holdout)
+
+selection <- validate_season_selection(
+  allD,
+  training_seasons = training,
+  exclude_seasons = permanent_exclusions,
+  holdout_seasons = holdout,
+  application_seasons = character()
+)
+
+# M0: complete LOSO, validate, fit and freeze.
+m0_tuning <- tune_m0(allD, selection = selection, grid = m0_grid)
+m0_tuning <- validate_m0_tuning(m0_tuning, check_boundaries = TRUE)
+m0 <- fit_m0(allD, selection, config = m0_tuning$best_params) |>
+  freeze_m0(tuning = m0_tuning)
+
+# M1: fold-local M0/M1 LOSO is performed by the governed tuner.
+m1_tuning <- tune_m1(
+  allD, selection = selection, m0 = m0,
+  grid = m1_grid, checkpoint_dir = "checkpoints/m1"
+)
+m1_tuning <- validate_m1_tuning(m1_tuning, check_boundaries = TRUE)
+m1_best <- m1_tuning$best[1, , drop = FALSE]
+m1_config <- m1_make_params(
+  k_ref = m1_best$k_ref,
+  temperature = m1_best$multi_temperature,
+  rise_weight = m1_best$align_rise_weight,
+  slope_window = m1_best$slope_window,
+  slope_weight = m1_best$slope_weight
+)
+m1 <- fit_m1(allD, selection, m0, config = m1_config) |>
+  freeze_m1(tuning = m1_tuning)
+
+# M2: fold-local M0/M1 predictions, complete candidate evaluation, then freeze.
+m2_tuning <- tune_m2(
+  allD, selection, m0, m1, grid = m2_grid,
+  checkpoint_dir = "checkpoints/m2"
+)
+m2_tuning <- validate_m2_tuning(m2_tuning, check_boundaries = TRUE)
+m2 <- fit_m2(allD, selection, m0, m1, config = m2_tuning$best_spec) |>
+  freeze_m2(tuning = m2_tuning)
+
+kit <- assemble_kit(m0, m1, m2)
+validate_page_kit(kit)
+
+# Only now is H opened.
+replay <- replay_season_holdout(
+  kit, allD, season = holdout, kit_compatibility = "strict"
+)
+```
+
+For a boundary expansion, keep the same selection, checkpoint directory, and
+fold definitions. Pass the previous tuning result to the expansion helper so
+completed specification IDs are reused; do not restart a fresh grid that loses
+the prior audit trail.
+
+## Holdout inventory
+
+The table records the current artifact inventory. “Completed” means a replay
+artifact exists and reports `unseen_replay_complete`; “special” means it is
+retained for diagnostic history but is not a normal exchangeable cycle.
+
+| Holdout | Protocol / variant | Status | Canonical artifact area |
+|---|---|---|---|
+| 2012–13 | Governed exchangeable cycle | Pending | `2012-13/` |
+| 2013–14 | Governed exchangeable cycle | Pending | `2013-14/` |
+| 2014–15 | Governed exchangeable cycle | Pending | `2014-15/` |
+| 2015–16 | Ignition/drop-test | Completed; special | `2015-16/holdouts-and-docs/` |
+| 2016–17 | BCC v5 current API | Completed | `2016-17/runs/bcc-2016-17-v5/` |
+| 2017–18 | BCC v2 exchangeable replay | Completed | `2017-18/runs/bcc-2017-18-v2/` |
+| 2018–19 | Expanded API (with retry) | Completed | `2018-19/runs/` |
+| 2019–20 | Governed exchangeable cycle | Pending | `2019-20/` |
+| 2020–21 | Permanent data-contract exclusion | Excluded | — |
+| 2021–22 | Permanent data-contract exclusion | Excluded | — |
+| 2022–23 | API exchangeable replay | Completed | `2022-23/runs/2022-final-expanded-v3/` |
+| 2023–24 | Exchangeable replay | Completed | `2023-24/holdouts-and-docs-2023/exchangeable/` |
+| 2024–25 | Exchangeable replay | Completed | `2024-25/holdouts-and-docs-2024/exchangeable/` |
+| 2025–26 | Current API governed replay | Completed | `2025-26/runs/2025-capped-api-20260815-r2/` |
+
+The artifact root is configured outside the repository. The current archive is
+`/home/yeli/PAGe-bcc-artifacts/seasonal-archive-20260818/`; `_shared/replays/`
+contains the aggregate comparison tables. The old archive path is a
+compatibility symlink to the new root.
+
+## What is and is not comparable
+
+Rows marked **exchangeable** use the same season-selection and governed
+stage-order rules. Same-holdout variants are useful for implementation checks
+(for example, the two 2018–19 expanded retries), but they are not additional
+independent seasons. The 2015–16 drop-test and historical legacy variants must
+remain labelled as special evidence. Cross-season metric ranking is descriptive
+because seasons differ in difficulty; promotion decisions require a
+predeclared candidate/incumbent comparison on the same untouched holdout.
+
+## Evidence to retain for every cycle
+
+Each season directory should retain, at minimum:
+
+- the normalized season selection and data identity;
+- M0, M1, and M2 tuning results, grids, fold scores, and boundary reports;
+- frozen `m0`, `m1`, and `m2` artifacts plus the assembled kit;
+- checkpoint directories needed to resume additive expansion;
+- the strict replay object, predictions, aggregate metrics, and warnings; and
+- a run manifest recording package version, API mode, host, cores, and paths.
+
+The holdout replay is the final evaluation artifact, not an input to another
+search. Any tuning change after viewing it starts a new pre-holdout cycle.
