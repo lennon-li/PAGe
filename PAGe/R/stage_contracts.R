@@ -806,11 +806,15 @@ inspect_tuning_boundaries <- function(x,
 #' @param min_gain Numeric minimum M1 Weibull-MAE improvement, in weeks, needed
 #'   to justify the more complex candidate. Defaults to 0.05.
 #' @param prefer_simpler Logical; choose the smallest eligible `k_ref`.
+#' @param hard_caps Optional M1 hard-cap specification forwarded to the
+#'   boundary guard. Practical backoff never selects an unresolved edge;
+#'   declared structural caps may be selected.
 #'
 #' @return A list containing `selected`, `selected_spec_id`, the best and
 #'   selected scores, and the backoff gain.
 #' @export
-select_m1_candidate <- function(x, min_gain = 0.05, prefer_simpler = TRUE) {
+select_m1_candidate <- function(x, min_gain = 0.05, prefer_simpler = TRUE,
+                                hard_caps = NULL) {
   if (!inherits(x, "page_m1_tuning")) {
     stop("`x` must be a `page_m1_tuning` object.", call. = FALSE)
   }
@@ -848,9 +852,35 @@ select_m1_candidate <- function(x, min_gain = 0.05, prefer_simpler = TRUE) {
     eligible <- by_k[by_k$mae_weibull <=
       best_row$mae_weibull[[1L]] + min_gain, , drop = FALSE]
     if (nrow(eligible)) {
-      selected_k <- min(eligible$k_ref)
-      candidates <- scores[as.numeric(scores$k_ref) == selected_k, , drop = FALSE]
-      selected_row <- candidates[which.min(candidates$mae_weibull), , drop = FALSE]
+      # Practical simplification is subordinate to the stage boundary gate:
+      # a simpler candidate is eligible only when every genuinely tuned axis
+      # is bracketed, a declared null/drop, or an explicit hard cap. This
+      # prevents the selector from undoing a successful boundary audit.
+      for (selected_k in sort(eligible$k_ref)) {
+        candidates <- scores[
+          as.numeric(scores$k_ref) == selected_k &
+            scores$mae_weibull <= best_row$mae_weibull[[1L]] + min_gain, ,
+          drop = FALSE
+        ]
+        if (!nrow(candidates)) next
+        safe <- vapply(seq_len(nrow(candidates)), function(i) {
+          probe <- x
+          probe$best <- candidates[i, , drop = FALSE]
+          report <- inspect_tuning_boundaries(
+            probe,
+            stage = "M1", warn = FALSE, hard_caps = hard_caps
+          )
+          !any(report$decision == "expand_required")
+        }, logical(1))
+        if (any(safe)) {
+          candidates <- candidates[safe, , drop = FALSE]
+          selected_row <- candidates[
+            which.min(candidates$mae_weibull), ,
+            drop = FALSE
+          ]
+          break
+        }
+      }
     }
   }
   selected_score <- selected_row$mae_weibull[[1L]]
@@ -1415,7 +1445,15 @@ fit_m1 <- function(data, selection, m0, config, ...) {
 #' @export
 freeze_m1 <- function(fit, tuning = NULL, ...) {
   if (inherits(tuning, "page_m1_tuning") && !is.null(tuning$selection)) {
-    tuning <- validate_m1_tuning(tuning, check_boundaries = TRUE)
+    # Preserve an explicit structural k_ref cap through the final freeze
+    # gate. Without forwarding it, a tuning result that was deliberately
+    # stopped at the declared reference-domain cap is reclassified as an
+    # unresolved edge here, after the runner already validated it.
+    tuning <- validate_m1_tuning(
+      tuning,
+      check_boundaries = TRUE,
+      hard_caps = tuning$hard_caps %||% NULL
+    )
   }
   .freeze_stage(fit, tuning, "m1")
 }

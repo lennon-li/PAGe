@@ -816,7 +816,8 @@ train_pipeline <- function(
   )
   m1_selection <- select_m1_candidate(
     m1_tuning,
-    min_gain = m1_min_gain, prefer_simpler = TRUE
+    min_gain = m1_min_gain, prefer_simpler = TRUE,
+    hard_caps = m1_hard_caps
   )
   m1_tuning$best <- m1_selection$selected
   m1_tuning$m1_selection <- m1_selection

@@ -112,6 +112,36 @@ test_that("M1 candidate selection backs off within the practical gain", {
   expect_equal(selected$gain_to_best, 0.02)
 })
 
+test_that("M1 practical backoff skips unresolved edges", {
+  tuning <- structure(
+    list(
+      scores = data.frame(
+        spec_id = c("s019", "s024", "s009", "s005", "s014"),
+        k_ref = c(40L, 50L, 25L, 20L, 30L),
+        slope_weight = c(20, 20, 20, 30, 20),
+        mae_weibull = c(1.287142, 1.311019, 1.312491, 1.313609, 1.314000)
+      ),
+      best = data.frame(
+        spec_id = "s019", k_ref = 40L, slope_weight = 20,
+        mae_weibull = 1.287142
+      ),
+      grid = data.frame(
+        k_ref = c(20L, 25L, 30L, 40L, 50L),
+        slope_weight = c(8, 12, 16, 20, 30),
+        spec_id = c("s005", "s009", "s014", "s019", "s024")
+      )
+    ),
+    class = "page_m1_tuning"
+  )
+  selected <- PAGe::select_m1_candidate(
+    tuning, min_gain = 0.05,
+    hard_caps = list(k_ref = c(lower = 10L, upper = 52L))
+  )
+  expect_equal(selected$selected$k_ref, 25L)
+  expect_equal(selected$selected$slope_weight, 20)
+  expect_equal(selected$selected_spec_id, "s009")
+})
+
 test_that("zero slope weight is an accepted M1 drop", {
   tuning <- structure(
     list(
