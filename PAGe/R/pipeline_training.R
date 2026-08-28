@@ -29,7 +29,8 @@
     k_ref = 25L, ref_method = "fs",
     temperature = 0.25, rise_weight = 1.0, trough_weight = 0.1,
     peak_decay = 0.3, slope_weight = 8.0, slope_window = 6L,
-    dynamic_temp = FALSE, dynamic_temp_pivot = 10L
+    dynamic_temp = FALSE, dynamic_temp_pivot = 10L,
+    spread_method = "between"
   )
 }
 
@@ -99,6 +100,9 @@
 #'   season (default \code{FALSE}).
 #' @param dynamic_temp_pivot Integer. Week at which dynamic temperature pivots
 #'   (default 10; ignored when \code{dynamic_temp = FALSE}).
+#' @param spread_method Character. \code{"between"} (default) computes
+#'   \code{logit_spread} using between-template variation; \code{"total"}
+#'   also includes per-template GAM uncertainty.
 #'
 #' @return A named list suitable for the \code{m1_params} argument of
 #'   \code{build_m1()}, \code{build_m2()}, and \code{train_m2()}.
@@ -117,7 +121,9 @@ m1_make_params <- function(k_ref = 25L,
                            slope_weight = 8.0,
                            slope_window = 6L,
                            dynamic_temp = FALSE,
-                           dynamic_temp_pivot = 10L) {
+                           dynamic_temp_pivot = 10L,
+                           spread_method = c("between", "total")) {
+  spread_method <- match.arg(spread_method)
   list(
     k_ref              = as.integer(k_ref),
     ref_method         = ref_method,
@@ -128,7 +134,8 @@ m1_make_params <- function(k_ref = 25L,
     slope_weight       = slope_weight,
     slope_window       = as.integer(slope_window),
     dynamic_temp       = dynamic_temp,
-    dynamic_temp_pivot = as.integer(dynamic_temp_pivot)
+    dynamic_temp_pivot = as.integer(dynamic_temp_pivot),
+    spread_method      = spread_method
   )
 }
 
@@ -789,6 +796,7 @@ build_m2 <- function(allD,
         slope_window = m1_params$slope_window %||% 6L,
         dynamic_temp = isTRUE(m1_params$dynamic_temp),
         dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L,
+        spread_method = m1_params$spread_method %||% "between",
         parallel = TRUE, verbose = FALSE
       ),
       error = function(e) {
@@ -807,7 +815,8 @@ build_m2 <- function(allD,
         slope_weight = m1_params$slope_weight %||% 8.0,
         slope_window = m1_params$slope_window %||% 6L,
         dynamic_temp = isTRUE(m1_params$dynamic_temp),
-        dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L
+        dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L,
+        spread_method = m1_params$spread_method %||% "between"
       ),
       error = function(e) {
         message("  ERROR m1_test: ", conditionMessage(e))
@@ -1065,6 +1074,7 @@ train_m2 <- function(allD,
     slope_window = m1_params$slope_window %||% 6L,
     dynamic_temp = isTRUE(m1_params$dynamic_temp),
     dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L,
+    spread_method = m1_params$spread_method %||% "between",
     parallel = TRUE, verbose = verbose
   )
 

@@ -29,6 +29,9 @@
 #' @param slope_weight,slope_window Growth-rate similarity controls.
 #' @param dynamic_temp,dynamic_temp_pivot Early-season temperature controls.
 #' @param top_k,blend_alpha Template filtering and blending controls.
+#' @param spread_method Character; \code{"between"} (default) or \code{"total"}.
+#'   Passed to \code{run_alignment_prospective_multi()} to select the
+#'   \code{logit_spread} computation method.
 #'
 #' @return A tibble with columns:
 #' \describe{
@@ -65,7 +68,9 @@ m1_walkforward_predictions <- function(seasonD,
                                        dynamic_temp = TRUE,
                                        dynamic_temp_pivot = 10L,
                                        top_k = NULL,
-                                       blend_alpha = 1.0) {
+                                       blend_alpha = 1.0,
+                                       spread_method = c("between", "total")) {
+  spread_method <- match.arg(spread_method)
   season_name <- unique(as.character(seasonD$season))[1]
   horizons <- as.integer(horizons)
   max_weekF <- max(seasonD$weekF, na.rm = TRUE)
@@ -124,7 +129,8 @@ m1_walkforward_predictions <- function(seasonD,
         dynamic_temp       = dynamic_temp,
         dynamic_temp_pivot = dynamic_temp_pivot,
         top_k              = top_k,
-        blend_alpha        = blend_alpha
+        blend_alpha        = blend_alpha,
+        spread_method      = spread_method
       ),
       error = function(e) NULL
     )
@@ -214,6 +220,9 @@ m1_walkforward_predictions <- function(seasonD,
 #' @param top_k,blend_alpha Template filtering and blending controls.
 #' @param parallel Logical; use parallel via furrr (default TRUE).
 #' @param verbose Logical; print progress (default TRUE).
+#' @param spread_method Character; \code{"between"} (default) or \code{"total"}.
+#'   Passed to \code{m1_walkforward_predictions()} and onward to
+#'   \code{run_alignment_prospective_multi()}.
 #'
 #' @return A tibble (stacked across seasons) with the same columns as
 #'   \code{m1_walkforward_predictions()}.
@@ -239,8 +248,10 @@ m1_walkforward_multi <- function(allD,
                                  dynamic_temp_pivot = 10L,
                                  top_k = NULL,
                                  blend_alpha = 1.0,
+                                 spread_method = c("between", "total"),
                                  parallel = TRUE,
                                  verbose = TRUE) {
+  spread_method <- match.arg(spread_method)
   if (is.null(seasons)) seasons <- sort(unique(as.character(allD$season)))
 
   map_fn <- if (isTRUE(parallel) && requireNamespace("furrr", quietly = TRUE)) {
@@ -274,7 +285,8 @@ m1_walkforward_multi <- function(allD,
       dynamic_temp       = dynamic_temp,
       dynamic_temp_pivot = dynamic_temp_pivot,
       top_k              = top_k,
-      blend_alpha        = blend_alpha
+      blend_alpha        = blend_alpha,
+      spread_method      = spread_method
     )
   })
 

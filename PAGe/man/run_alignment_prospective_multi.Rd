@@ -24,7 +24,8 @@ run_alignment_prospective_multi(
   slope_weight = 1,
   slope_window = 6L,
   dynamic_temp = TRUE,
-  dynamic_temp_pivot = 10L
+  dynamic_temp_pivot = 10L,
+  spread_method = c("between", "total")
 )
 }
 \arguments{
@@ -64,6 +65,10 @@ contain \code{eta_mat}.}
 \item{slope_weight, slope_window}{Growth-rate similarity controls.}
 
 \item{dynamic_temp, dynamic_temp_pivot}{Early-season temperature controls.}
+
+\item{spread_method}{Character; \code{"between"} (default) or \code{"total"}.
+Passed to \code{align_multi_template()} to select the \code{logit_spread}
+computation method. See \code{\link{align_multi_template}} for details.}
 }
 \value{
 List with same structure as \code{run_alignment_prospective()} output.

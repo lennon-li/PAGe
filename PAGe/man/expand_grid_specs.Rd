@@ -20,7 +20,7 @@ expand_grid_specs(
   k_r_grid = c(0L),
   bs_week_grid = "ts",
   bs_fs_marginal_grid = "tp",
-  bias_alpha_grid = c(0.4),
+  bias_alpha_grid = c(0.05),
   bias_beta_grid = c(0),
   drop_unused_kf_for_nonS = TRUE,
   verbose = TRUE

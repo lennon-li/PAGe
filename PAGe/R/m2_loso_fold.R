@@ -124,6 +124,8 @@ nested_loso_build_fold <- function(allD,
 #' @param slope_weight,slope_window Growth-rate similarity controls.
 #' @param dynamic_temp,dynamic_temp_pivot Early-season temperature controls.
 #' @param top_k,blend_alpha Template filtering and blending controls.
+#' @param spread_method Character; \code{"between"} (default) or \code{"total"}.
+#'   Passed to \code{m1_walkforward_multi()}.
 #' @param parallel Logical; run M1 seasons in parallel (default TRUE).
 #' @param verbose Logical; print progress.
 #'
@@ -150,8 +152,11 @@ nested_loso_m1_train <- function(allD,
                                  dynamic_temp_pivot = 10L,
                                  top_k              = NULL,
                                  blend_alpha        = 1.0,
+                                 spread_method      = c("between", "total"),
                                  parallel           = TRUE,
                                  verbose            = TRUE) {
+
+  spread_method <- match.arg(spread_method)
 
   if (isTRUE(verbose))
     message("[m1_train] Running M1 walk-forward on ",
@@ -179,6 +184,7 @@ nested_loso_m1_train <- function(allD,
     dynamic_temp_pivot = dynamic_temp_pivot,
     top_k              = top_k,
     blend_alpha        = blend_alpha,
+    spread_method      = spread_method,
     parallel           = parallel,
     verbose            = FALSE
   )
@@ -261,6 +267,8 @@ nested_loso_m2_train <- function(fold,
 #' @param slope_weight,slope_window Growth-rate similarity controls.
 #' @param dynamic_temp,dynamic_temp_pivot Early-season temperature controls.
 #' @param top_k,blend_alpha Template filtering and blending controls.
+#' @param spread_method Character; \code{"between"} (default) or \code{"total"}.
+#'   Passed to \code{m1_walkforward_predictions()}.
 #' @param verbose Logical; print progress.
 #'
 #' @return Tibble of M1 walk-forward predictions for the test season,
@@ -285,7 +293,10 @@ nested_loso_m1_test <- function(allD,
                                 dynamic_temp_pivot = 10L,
                                 top_k              = NULL,
                                 blend_alpha        = 1.0,
+                                spread_method      = c("between", "total"),
                                 verbose            = TRUE) {
+
+  spread_method <- match.arg(spread_method)
 
   if (isTRUE(verbose))
     message("[m1_test] Running M1 walk-forward on test season ", fold$test_season)
@@ -312,6 +323,7 @@ nested_loso_m1_test <- function(allD,
     dynamic_temp       = dynamic_temp,
     dynamic_temp_pivot = dynamic_temp_pivot,
     top_k              = top_k,
-    blend_alpha        = blend_alpha
+    blend_alpha        = blend_alpha,
+    spread_method      = spread_method
   )
 }
