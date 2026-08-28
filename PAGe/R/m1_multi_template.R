@@ -670,5 +670,5 @@ run_alignment_prospective_multi <- function(
   }, numeric(1))
 
   total_var <- ifelse(has_se, between_var + within_var, between_var)
-  list(spread = sqrt(total_var), fallback_count = sum(!has_se))
+  list(spread = sqrt(total_var), fallback_count = as.integer(sum(!has_se)))
 }
