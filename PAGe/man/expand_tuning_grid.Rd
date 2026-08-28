@@ -16,7 +16,8 @@ expand_tuning_grid(
 )
 }
 \arguments{
-\item{x}{A tuning result or a grid data frame.}
+\item{x}{A stage tuning result with a selected configuration and complete
+tuning grid. A raw grid alone is not sufficient for M0 or M1 expansion.}
 
 \item{stage}{One of `"M0"`, `"M1"`, or `"M2"`.}
 

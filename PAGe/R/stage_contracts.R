@@ -592,7 +592,9 @@ freeze_m0 <- function(fit, tuning = NULL, ...) {
 #' is deliberately separate from the hard freeze gate so users can inspect a
 #' result, expand its grid, and resume tuning from the same checkpoint.
 #'
-#' @param x A stage tuning result, or a data frame containing the tuning grid.
+#' @param x A stage tuning result with a selected configuration and complete
+#'   tuning grid. A raw grid alone is not sufficient because boundary status
+#'   is defined relative to the selected configuration.
 #' @param stage One of `"M0"`, `"M1"`, or `"M2"`.
 #' @param grid Optional complete grid. When omitted, uses `x$grid`.
 #' @param warn Logical; emit a warning when a non-null edge requires expansion.
@@ -1124,7 +1126,8 @@ select_m1_candidate <- function(x, min_gain = 0.05, prefer_simpler = TRUE,
 #' checkpoints reuse completed specifications, while M0 reuses cached grid
 #' scores when the prior tuning object is supplied as `previous_results`.
 #'
-#' @param x A tuning result or a grid data frame.
+#' @param x A stage tuning result with a selected configuration and complete
+#'   tuning grid. A raw grid alone is not sufficient for M0 or M1 expansion.
 #' @param stage One of `"M0"`, `"M1"`, or `"M2"`.
 #' @param grid Optional grid override.
 #' @param steps Optional named numeric vector overriding adjacent spacing.
@@ -1173,7 +1176,9 @@ expand_tuning_grid <- function(x,
     )
     # The adaptive planner intentionally caps its own plan; expansion must
     # never discard already scored rows.
-    planned <- planned[setdiff(names(planned), "provenance")]
+    if (!"provenance" %in% names(grid) && "provenance" %in% names(planned)) {
+      grid$provenance <- "existing"
+    }
     all_names <- union(names(grid), names(planned))
     for (nm in setdiff(all_names, names(grid))) grid[[nm]] <- NA
     for (nm in setdiff(all_names, names(planned))) planned[[nm]] <- NA
@@ -1257,6 +1262,9 @@ expand_tuning_grid <- function(x,
         }
         row[[parameter]] <- value
         if ("spec_id" %in% names(row)) row$spec_id <- NA_character_
+        if ("provenance" %in% names(row)) {
+          row$provenance <- paste0("boundary:", parameter)
+        }
         row
       })
       grid <- rbind(grid, do.call(rbind, new_rows))
