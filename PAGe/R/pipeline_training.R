@@ -1168,8 +1168,7 @@ build_m2 <- function(allD,
     todo_batches <- split(todo_ids, ceiling(seq_along(todo_ids) / n_workers))
     future::plan(
       future::multisession,
-      workers = n_workers,
-      maxSizeOfObjects = requested_max_size
+      workers = n_workers
     )
 
     for (bi in seq_along(todo_batches)) {
@@ -1386,6 +1385,8 @@ train_m2 <- function(allD,
 
   # M1 walk-forward predictions for all training seasons
   if (verbose) message("[train_m2] M1 walk-forward predictions...")
+  old_future_plan <- future::plan()
+  on.exit(future::plan(old_future_plan), add = TRUE)
   future::plan(future::multisession, workers = as.integer(max(1L, n_cores)))
   m1_train_preds <- m1_walkforward_multi(
     allD = allD, ref = ref, hyper = hyper, params = params,
@@ -1400,7 +1401,6 @@ train_m2 <- function(allD,
     dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L,
     parallel = TRUE, verbose = verbose
   )
-  future::plan(future::sequential)
 
   # Fit production GAM
   if (verbose) message("[train_m2] Fitting production GAM...")
