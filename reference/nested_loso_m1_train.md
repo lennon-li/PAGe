@@ -27,6 +27,7 @@ nested_loso_m1_train(
   dynamic_temp_pivot = 10L,
   top_k = NULL,
   blend_alpha = 1,
+  spread_method = c("between", "total"),
   parallel = TRUE,
   verbose = TRUE
 )
@@ -87,6 +88,12 @@ nested_loso_m1_train(
 - top_k, blend_alpha:
 
   Template filtering and blending controls.
+
+- spread_method:
+
+  Character; `"between"` (default) or `"total"`. Passed to
+  [`m1_walkforward_multi()`](https://lennon-li.github.io/PAGe/reference/m1_walkforward_multi.md)
+  to select the `logit_spread` computation method.
 
 - parallel:
 

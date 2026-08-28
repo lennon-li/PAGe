@@ -31,7 +31,8 @@ m1_walkforward_predictions(
   dynamic_temp = TRUE,
   dynamic_temp_pivot = 10L,
   top_k = NULL,
-  blend_alpha = 1
+  blend_alpha = 1,
+  spread_method = c("between", "total")
 )
 ```
 
@@ -108,6 +109,12 @@ m1_walkforward_predictions(
 - top_k, blend_alpha:
 
   Template filtering and blending controls.
+
+- spread_method:
+
+  Character; `"between"` (default) or `"total"`. Passed to
+  [`run_alignment_prospective_multi()`](https://lennon-li.github.io/PAGe/reference/run_alignment_prospective_multi.md)
+  to select the `logit_spread` computation method.
 
 ## Value
 

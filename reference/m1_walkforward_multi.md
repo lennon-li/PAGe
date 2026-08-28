@@ -31,6 +31,7 @@ m1_walkforward_multi(
   dynamic_temp_pivot = 10L,
   top_k = NULL,
   blend_alpha = 1,
+  spread_method = c("between", "total"),
   parallel = TRUE,
   verbose = TRUE
 )
@@ -103,6 +104,13 @@ m1_walkforward_multi(
 - top_k, blend_alpha:
 
   Template filtering and blending controls.
+
+- spread_method:
+
+  Character; `"between"` (default) or `"total"`. Passed to
+  [`m1_walkforward_predictions()`](https://lennon-li.github.io/PAGe/reference/m1_walkforward_predictions.md)
+  and onward to
+  [`run_alignment_prospective_multi()`](https://lennon-li.github.io/PAGe/reference/run_alignment_prospective_multi.md).
 
 - parallel:
 

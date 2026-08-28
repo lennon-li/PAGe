@@ -79,9 +79,7 @@
 <span>  w_min <span class="op">=</span> <span class="fl">20L</span>,</span>
 <span>  w_max <span class="op">=</span> <span class="fl">21L</span>,</span>
 <span>  d2_relax <span class="op">=</span> <span class="op">-</span><span class="fl">0.01</span>,</span>
-<span>  manual_labels <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>`2012-13` <span class="op">=</span> <span class="fl">18L</span>, `2013-14` <span class="op">=</span> <span class="fl">20L</span>, `2014-15` <span class="op">=</span> <span class="fl">20L</span>, `2015-16` <span class="op">=</span> <span class="fl">24L</span>,</span>
-<span>    `2016-17` <span class="op">=</span> <span class="fl">19L</span>, `2017-18` <span class="op">=</span> <span class="fl">20L</span>, `2018-19` <span class="op">=</span> <span class="fl">19L</span>, `2019-20` <span class="op">=</span> <span class="fl">22L</span>, `2022-23` <span class="op">=</span> <span class="fl">15L</span>,</span>
-<span>    `2023-24` <span class="op">=</span> <span class="fl">20L</span>, `2024-25` <span class="op">=</span> <span class="fl">23L</span><span class="op">)</span></span>
+<span>  manual_labels <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -135,8 +133,9 @@ If y and N are present, cum_p_obs/cum_p_fit are computed (cum_p_fit weighted by 
 <dd><p>named integer vector mapping season labels (e.g. "2015-16") to
 manually-verified ignition weekF values. When a season is found in this vector,
 the algorithmic detection is bypassed and the specified week is used directly.
-Pass <code>NULL</code> to always run the algorithm. Defaults to a set of pre-verified
-historical labels.</p></dd>
+Defaults to <code>NULL</code> (algorithmic detection only). Pass
+<code><a href="page_manual_ignition_labels.html">page_manual_ignition_labels()</a></code> to restore the pre-verified historical
+labels (retrospective; never use for held-out LOSO test seasons).</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -152,11 +151,12 @@ Extra gate (rule 4 only): weekF &gt; w_max.</p>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># Use default manual labels (bypasses algorithm for known seasons)</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># Algorithmic detection only (default; safe for prospective / LOSO use)</span></span></span>
 <span class="r-in"><span><span class="co"># out &lt;- flagIgnition(season_df, p_thresh = 0.01, k1 = 0.05)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Force algorithmic detection for all seasons</span></span></span>
-<span class="r-in"><span><span class="co"># out &lt;- flagIgnition(season_df, p_thresh = 0.01, k1 = 0.05, manual_labels = NULL)</span></span></span>
+<span class="r-in"><span><span class="co"># Opt into retrospective manual labels for known seasons</span></span></span>
+<span class="r-in"><span><span class="co"># out &lt;- flagIgnition(season_df, p_thresh = 0.01, k1 = 0.05,</span></span></span>
+<span class="r-in"><span><span class="co">#                     manual_labels = page_manual_ignition_labels())</span></span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

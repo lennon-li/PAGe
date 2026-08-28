@@ -70,7 +70,8 @@ align_multi_template() internally. Returns the same output structure."></head><b
 <span>  slope_weight <span class="op">=</span> <span class="fl">1</span>,</span>
 <span>  slope_window <span class="op">=</span> <span class="fl">6L</span>,</span>
 <span>  dynamic_temp <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  dynamic_temp_pivot <span class="op">=</span> <span class="fl">10L</span></span>
+<span>  dynamic_temp_pivot <span class="op">=</span> <span class="fl">10L</span>,</span>
+<span>  spread_method <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"between"</span>, <span class="st">"total"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -149,6 +150,12 @@ contain <code>eta_mat</code>.</p></dd>
 
 <dt id="arg-dynamic-temp-dynamic-temp-pivot">dynamic_temp, dynamic_temp_pivot<a class="anchor" aria-label="anchor" href="#arg-dynamic-temp-dynamic-temp-pivot"></a></dt>
 <dd><p>Early-season temperature controls.</p></dd>
+
+
+<dt id="arg-spread-method">spread_method<a class="anchor" aria-label="anchor" href="#arg-spread-method"></a></dt>
+<dd><p>Character; <code>"between"</code> (default) or <code>"total"</code>.
+Passed to <code><a href="align_multi_template.html">align_multi_template()</a></code> to select the <code>logit_spread</code>
+computation method. See <code><a href="align_multi_template.html">align_multi_template</a></code> for details.</p></dd>
 
 </dl></div>
     <div class="section level2">

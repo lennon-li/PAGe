@@ -340,6 +340,8 @@ Compatibility helpers and implementation details.
   : Construct a disclosure-safe result manifest
 - [`num_deriv()`](https://lennon-li.github.io/PAGe/reference/num_deriv.md)
   : Numerical central-difference derivative
+- [`page_manual_ignition_labels()`](https://lennon-li.github.io/PAGe/reference/page_manual_ignition_labels.md)
+  : Pre-verified historical manual ignition labels
 - [`peak_status_from_align()`](https://lennon-li.github.io/PAGe/reference/peak_status_from_align.md)
   : Determine whether the epidemic peak has passed
 - [`peak_summary_from_fit()`](https://lennon-li.github.io/PAGe/reference/peak_summary_from_fit.md)

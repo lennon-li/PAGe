@@ -34,6 +34,7 @@
 <url><loc>https://lennon-li.github.io/PAGe/reference/detectIgnition_oneSeason.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/detect_ignition_from_tuning.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/dot-apply_peak_calibration.html</loc></url>
+<url><loc>https://lennon-li.github.io/PAGe/reference/dot-compute_logit_spread.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/dot-resolve_correction_spec.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/dot-weighted_quantile.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/estimateDerivs.html</loc></url>
@@ -97,6 +98,7 @@
 <url><loc>https://lennon-li.github.io/PAGe/reference/nested_loso_run_fold.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/new_result_manifest.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/num_deriv.html</loc></url>
+<url><loc>https://lennon-li.github.io/PAGe/reference/page_manual_ignition_labels.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/peak_status_from_align.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/peak_summary_from_fit.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/plan_m2_grid.html</loc></url>

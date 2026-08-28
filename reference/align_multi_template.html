@@ -77,7 +77,8 @@ weighted by alignment NLL via softmax.</p>
 <span>  slope_window <span class="op">=</span> <span class="fl">6L</span>,</span>
 <span>  dynamic_temp <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  dynamic_temp_pivot <span class="op">=</span> <span class="fl">10L</span>,</span>
-<span>  gam_obj <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  gam_obj <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  spread_method <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"between"</span>, <span class="st">"total"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -192,6 +193,16 @@ is inflated (default 10). Temperature is scaled by
 <dt id="arg-gam-obj">gam_obj<a class="anchor" aria-label="anchor" href="#arg-gam-obj"></a></dt>
 <dd><p>Optional fitted GAM used to estimate per-template uncertainty.</p></dd>
 
+
+<dt id="arg-spread-method">spread_method<a class="anchor" aria-label="anchor" href="#arg-spread-method"></a></dt>
+<dd><p>Character; <code>"between"</code> (default) computes
+<code>logit_spread</code> as the weighted between-template standard deviation on
+the logit scale, preserving the incumbent behaviour. <code>"total"</code> adds
+weighted per-template GAM SE\^2 (from <code>g_s_mu_se</code>) to the
+between-template variance, yielding a total-variance spread. When per-template
+SEs are unavailable (zero or missing) the method falls back to between-only
+for that forecast week and increments <code>spread_fallback_count</code>.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -204,6 +215,14 @@ is inflated (default 10). Temperature is scaled by
 
     <dt>template_names</dt>
 <dd><p>Character vector of template season labels.</p></dd>
+
+    <dt>spread_method</dt>
+<dd><p>Character; the spread method used.</p></dd>
+
+    <dt>spread_fallback_count</dt>
+<dd><p>Integer; number of forecast weeks that fell
+      back to between-only because per-template SEs were unavailable
+      (total mode only; 0 for between mode).</p></dd>
 
 
 </dl></div>

@@ -29,7 +29,8 @@ run_alignment_prospective_multi(
   slope_weight = 1,
   slope_window = 6L,
   dynamic_temp = TRUE,
-  dynamic_temp_pivot = 10L
+  dynamic_temp_pivot = 10L,
+  spread_method = c("between", "total")
 )
 ```
 
@@ -107,6 +108,14 @@ run_alignment_prospective_multi(
 - dynamic_temp, dynamic_temp_pivot:
 
   Early-season temperature controls.
+
+- spread_method:
+
+  Character; `"between"` (default) or `"total"`. Passed to
+  [`align_multi_template()`](https://lennon-li.github.io/PAGe/reference/align_multi_template.md)
+  to select the `logit_spread` computation method. See
+  [`align_multi_template`](https://lennon-li.github.io/PAGe/reference/align_multi_template.md)
+  for details.
 
 ## Value
 

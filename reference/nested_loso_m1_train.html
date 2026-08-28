@@ -73,6 +73,7 @@ and hyperparams.</p>
 <span>  dynamic_temp_pivot <span class="op">=</span> <span class="fl">10L</span>,</span>
 <span>  top_k <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  blend_alpha <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>  spread_method <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"between"</span>, <span class="st">"total"</span><span class="op">)</span>,</span>
 <span>  parallel <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -133,6 +134,12 @@ alignment-loss controls.</p></dd>
 
 <dt id="arg-top-k-blend-alpha">top_k, blend_alpha<a class="anchor" aria-label="anchor" href="#arg-top-k-blend-alpha"></a></dt>
 <dd><p>Template filtering and blending controls.</p></dd>
+
+
+<dt id="arg-spread-method">spread_method<a class="anchor" aria-label="anchor" href="#arg-spread-method"></a></dt>
+<dd><p>Character; <code>"between"</code> (default) or <code>"total"</code>.
+Passed to <code><a href="m1_walkforward_multi.html">m1_walkforward_multi()</a></code> to select the <code>logit_spread</code>
+computation method.</p></dd>
 
 
 <dt id="arg-parallel">parallel<a class="anchor" aria-label="anchor" href="#arg-parallel"></a></dt>

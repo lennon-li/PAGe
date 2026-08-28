@@ -31,7 +31,8 @@ align_multi_template(
   slope_window = 6L,
   dynamic_temp = TRUE,
   dynamic_temp_pivot = 10L,
-  gam_obj = NULL
+  gam_obj = NULL,
+  spread_method = c("between", "total")
 )
 ```
 
@@ -144,6 +145,16 @@ align_multi_template(
 
   Optional fitted GAM used to estimate per-template uncertainty.
 
+- spread_method:
+
+  Character; `"between"` (default) computes `logit_spread` as the
+  weighted between-template standard deviation on the logit scale,
+  preserving the incumbent behaviour. `"total"` adds weighted
+  per-template GAM SE\\2 (from `g_s_mu_se`) to the between-template
+  variance, yielding a total-variance spread. When per-template SEs are
+  unavailable (zero or missing) the method falls back to between-only
+  for that forecast week and increments `spread_fallback_count`.
+
 ## Value
 
 List with the same structure as
@@ -161,3 +172,13 @@ output, plus:
 - template_names:
 
   Character vector of template season labels.
+
+- spread_method:
+
+  Character; the spread method used.
+
+- spread_fallback_count:
+
+  Integer; number of forecast weeks that fell back to between-only
+  because per-template SEs were unavailable (total mode only; 0 for
+  between mode).

@@ -22,7 +22,8 @@ m1_make_params(
   slope_weight = 8,
   slope_window = 6L,
   dynamic_temp = FALSE,
-  dynamic_temp_pivot = 10L
+  dynamic_temp_pivot = 10L,
+  spread_method = c("between", "total")
 )
 ```
 
@@ -73,6 +74,14 @@ m1_make_params(
 
   Integer. Week at which dynamic temperature pivots (default 10; ignored
   when `dynamic_temp = FALSE`).
+
+- spread_method:
+
+  Character. `"between"` (default) computes `logit_spread` as the
+  weighted between-template standard deviation. `"total"` adds weighted
+  per-template GAM SE\\2 for a total-variance spread. See
+  [`align_multi_template`](https://lennon-li.github.io/PAGe/reference/align_multi_template.md)
+  for details.
 
 ## Value
 

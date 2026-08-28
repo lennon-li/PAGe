@@ -22,9 +22,7 @@ flagIgnition(
   w_min = 20L,
   w_max = 21L,
   d2_relax = -0.01,
-  manual_labels = c(`2012-13` = 18L, `2013-14` = 20L, `2014-15` = 20L, `2015-16` = 24L,
-    `2016-17` = 19L, `2017-18` = 20L, `2018-19` = 19L, `2019-20` = 22L, `2022-23` = 15L,
-    `2023-24` = 20L, `2024-25` = 23L)
+  manual_labels = NULL
 )
 ```
 
@@ -79,8 +77,11 @@ flagIgnition(
   named integer vector mapping season labels (e.g. "2015-16") to
   manually-verified ignition weekF values. When a season is found in
   this vector, the algorithmic detection is bypassed and the specified
-  week is used directly. Pass `NULL` to always run the algorithm.
-  Defaults to a set of pre-verified historical labels.
+  week is used directly. Defaults to `NULL` (algorithmic detection
+  only). Pass
+  [`page_manual_ignition_labels()`](https://lennon-li.github.io/PAGe/reference/page_manual_ignition_labels.md)
+  to restore the pre-verified historical labels (retrospective; never
+  use for held-out LOSO test seasons).
 
 ## Value
 
@@ -96,9 +97,10 @@ weekF \> w_max.
 ## Examples
 
 ``` r
-# Use default manual labels (bypasses algorithm for known seasons)
+# Algorithmic detection only (default; safe for prospective / LOSO use)
 # out <- flagIgnition(season_df, p_thresh = 0.01, k1 = 0.05)
 
-# Force algorithmic detection for all seasons
-# out <- flagIgnition(season_df, p_thresh = 0.01, k1 = 0.05, manual_labels = NULL)
+# Opt into retrospective manual labels for known seasons
+# out <- flagIgnition(season_df, p_thresh = 0.01, k1 = 0.05,
+#                     manual_labels = page_manual_ignition_labels())
 ```

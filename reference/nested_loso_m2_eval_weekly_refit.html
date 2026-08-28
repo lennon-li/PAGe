@@ -65,6 +65,8 @@ aligned data plus the current-season observations accumulated to that week.</p>
 <span>  eval_window <span class="op">=</span> <span class="fl">12L</span>,</span>
 <span>  horizons <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1L</span>, <span class="fl">2L</span><span class="op">)</span>,</span>
 <span>  manual_labels <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  manual_labels_train <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  manual_labels_test <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  flag_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>p_thresh <span class="op">=</span> <span class="fl">0.01</span>, k1 <span class="op">=</span> <span class="fl">0.4</span>, k_c <span class="op">=</span> <span class="fl">0.01</span>, n_consec <span class="op">=</span> <span class="fl">2L</span>, min_window <span class="op">=</span></span>
 <span>    <span class="fl">10L</span>, w_min <span class="op">=</span> <span class="fl">21L</span>, w_max <span class="op">=</span> <span class="fl">21L</span>, d2_relax <span class="op">=</span> <span class="op">-</span><span class="fl">0.01</span><span class="op">)</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
@@ -104,7 +106,19 @@ aligned data plus the current-season observations accumulated to that week.</p>
 
 
 <dt id="arg-manual-labels">manual_labels<a class="anchor" aria-label="anchor" href="#arg-manual-labels"></a></dt>
-<dd><p>Optional named ignition labels.</p></dd>
+<dd><p>Optional named ignition labels (deprecated; use
+<code>manual_labels_train</code> and <code>manual_labels_test</code>).</p></dd>
+
+
+<dt id="arg-manual-labels-train">manual_labels_train<a class="anchor" aria-label="anchor" href="#arg-manual-labels-train"></a></dt>
+<dd><p>Optional named integer vector of manual ignition
+labels for training seasons only. Should exclude the held-out test season.</p></dd>
+
+
+<dt id="arg-manual-labels-test">manual_labels_test<a class="anchor" aria-label="anchor" href="#arg-manual-labels-test"></a></dt>
+<dd><p>Optional named integer vector of manual ignition
+labels for the test season. Default <code>NULL</code> uses prospective
+<code><a href="flagIgnition.html">flagIgnition()</a></code> without override.</p></dd>
 
 
 <dt id="arg-flag-args">flag_args<a class="anchor" aria-label="anchor" href="#arg-flag-args"></a></dt>

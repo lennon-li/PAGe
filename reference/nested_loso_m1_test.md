@@ -26,6 +26,7 @@ nested_loso_m1_test(
   dynamic_temp_pivot = 10L,
   top_k = NULL,
   blend_alpha = 1,
+  spread_method = c("between", "total"),
   verbose = TRUE
 )
 ```
@@ -85,6 +86,12 @@ nested_loso_m1_test(
 - top_k, blend_alpha:
 
   Template filtering and blending controls.
+
+- spread_method:
+
+  Character; `"between"` (default) or `"total"`. Passed to
+  [`m1_walkforward_predictions()`](https://lennon-li.github.io/PAGe/reference/m1_walkforward_predictions.md)
+  to select the `logit_spread` computation method.
 
 - verbose:
 
