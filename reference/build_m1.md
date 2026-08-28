@@ -4,7 +4,8 @@ Fits the epidemic reference curve via
 [`estimateRef()`](https://lennon-li.github.io/PAGe/reference/estimateRef.md)
 and learns alignment search bounds via
 [`learn_alignment_hyperparams()`](https://lennon-li.github.io/PAGe/reference/learn_alignment_hyperparams.md).
-Inherits `manual_labels` and `flag_args` from `m0`.
+Inherits `manual_labels` and `flag_args` from `m0`, and reuses its
+aligned output when the data identity and season set match.
 
 ## Usage
 

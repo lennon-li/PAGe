@@ -68,6 +68,9 @@ switch to <code>"all"</code> for production tuning.</p>
 <span>  bias_beta <span class="op">=</span> <span class="fl">0</span>,</span>
 <span>  n_cores <span class="op">=</span> <span class="fu">parallel</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/parallel/detectCores.html" class="external-link">detectCores</a></span><span class="op">(</span><span class="op">)</span> <span class="op">-</span> <span class="fl">1L</span>,</span>
 <span>  checkpoint_dir <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  m1_artifact_path <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  fail_fast <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  future_max_size <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -121,6 +124,24 @@ fallbacks used when the grid omits the corresponding columns.</p></dd>
 <dt id="arg-checkpoint-dir">checkpoint_dir<a class="anchor" aria-label="anchor" href="#arg-checkpoint-dir"></a></dt>
 <dd><p>Character. Directory for Phase 2 checkpoint files.
 Pass <code>NULL</code> to disable checkpointing.</p></dd>
+
+
+<dt id="arg-m-artifact-path">m1_artifact_path<a class="anchor" aria-label="anchor" href="#arg-m-artifact-path"></a></dt>
+<dd><p>Character. Optional path for the complete Phase 1
+M1 LOSO artifact. When <code>NULL</code> and <code>checkpoint_dir</code> is supplied,
+<code>m1_phase1.rds</code> is written inside that directory. A matching existing
+artifact is reused; it is compacted in memory before M2 workers receive it.</p></dd>
+
+
+<dt id="arg-fail-fast">fail_fast<a class="anchor" aria-label="anchor" href="#arg-fail-fast"></a></dt>
+<dd><p>Logical. Stop on the first unsupported fold/spec instead of
+converting model failures to missing scores (default <code>TRUE</code>).</p></dd>
+
+
+<dt id="arg-future-max-size">future_max_size<a class="anchor" aria-label="anchor" href="#arg-future-max-size"></a></dt>
+<dd><p>Numeric. Maximum size, in bytes, of globals exported
+to <span class="pkg">future</span> workers. When <code>NULL</code> (default), the limit is raised
+only as needed for the prepared M1 cache, with a 2 GiB safety ceiling.</p></dd>
 
 
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>

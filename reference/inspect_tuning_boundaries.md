@@ -14,7 +14,9 @@ inspect_tuning_boundaries(
   stage = c("M0", "M1", "M2"),
   grid = NULL,
   warn = TRUE,
-  null_axes = NULL
+  null_axes = NULL,
+  hard_caps = NULL,
+  min_nll_gain = NULL
 )
 ```
 
@@ -42,6 +44,22 @@ inspect_tuning_boundaries(
 
   Optional names of axes whose zero value is an accepted drop/null.
   Stage defaults are used when omitted.
+
+- hard_caps:
+
+  Optional named numeric vector or named list of lower/upper hard caps.
+  An edge exactly at a declared cap is reported as \`stop_hard_cap\`
+  rather than \`expand_required\`.
+
+- min_nll_gain:
+
+  M2-only NLL improvement threshold. Defaults to
+  [`default_m2_nll_gain_caps()`](https://lennon-li.github.io/PAGe/reference/default_m2_nll_gain_caps.md);
+  supply a named numeric vector for parameter-specific thresholds, or
+  one unnamed number to apply the same threshold to every M2 axis.
+  Omitted names use the governed defaults. When a selected edge has a
+  matched adjacent NLL comparison and its outward gain is less than or
+  equal to the threshold, it is reported as \`stop_small_gain\`.
 
 ## Value
 

@@ -12,7 +12,8 @@ nested_loso_m2_train(
   m1_train_preds = NULL,
   spec,
   method = "REML",
-  verbose = TRUE
+  verbose = TRUE,
+  fail_fast = FALSE
 )
 ```
 
@@ -41,6 +42,11 @@ nested_loso_m2_train(
 - verbose:
 
   Logical; print progress.
+
+- fail_fast:
+
+  Logical; rethrow unsupported-model errors instead of converting them
+  to a warning and `NULL` (default `FALSE`).
 
 ## Value
 

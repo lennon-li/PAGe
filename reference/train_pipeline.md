@@ -34,6 +34,9 @@ train_pipeline(
   manual_labels = NULL,
   flag_args = NULL,
   m1_params = NULL,
+  m1_min_gain = 0.05,
+  m1_hard_caps = list(k_ref = c(lower = 10L, upper = 50L)),
+  m2_min_nll_gain = default_m2_nll_gain_caps(),
   m0_params = NULL,
   m2_spec_id = NULL
 )
@@ -129,6 +132,25 @@ train_pipeline(
   Optional component settings. For a released holdout, these are derived
   exclusively from verified promotion evidence and explicit overrides
   are rejected.
+
+- m1_min_gain:
+
+  Minimum M1 Weibull-MAE improvement, in weeks, required to justify a
+  more flexible \`k_ref\` candidate (default 0.05).
+
+- m1_hard_caps:
+
+  Named M1 hard caps accepted by the boundary gate. The default bounds
+  \`k_ref\` to 10–50 on the 52-week reference domain.
+
+- m2_min_nll_gain:
+
+  Named parameter-specific NLL gain thresholds passed to the M2 boundary
+  gate. Defaults to
+  [`default_m2_nll_gain_caps()`](https://lennon-li.github.io/PAGe/reference/default_m2_nll_gain_caps.md)
+  and covers every M2 axis. A scalar applies to every M2 axis. An edge
+  is accepted only when its matched outward gain is at or below the
+  threshold; missing matched evidence still requires expansion.
 
 - m0_params:
 

@@ -20,6 +20,9 @@ build_m2(
   bias_beta = 0,
   n_cores = parallel::detectCores() - 1L,
   checkpoint_dir = NULL,
+  m1_artifact_path = NULL,
+  fail_fast = TRUE,
+  future_max_size = NULL,
   verbose = TRUE
 )
 ```
@@ -77,6 +80,24 @@ build_m2(
 
   Character. Directory for Phase 2 checkpoint files. Pass `NULL` to
   disable checkpointing.
+
+- m1_artifact_path:
+
+  Character. Optional path for the complete Phase 1 M1 LOSO artifact.
+  When `NULL` and `checkpoint_dir` is supplied, `m1_phase1.rds` is
+  written inside that directory. A matching existing artifact is reused;
+  it is compacted in memory before M2 workers receive it.
+
+- fail_fast:
+
+  Logical. Stop on the first unsupported fold/spec instead of converting
+  model failures to missing scores (default `TRUE`).
+
+- future_max_size:
+
+  Numeric. Maximum size, in bytes, of globals exported to future
+  workers. When `NULL` (default), the limit is raised only as needed for
+  the prepared M1 cache, with a 2 GiB safety ceiling.
 
 - verbose:
 

@@ -61,7 +61,8 @@ predictions.</p>
 <span>  m1_train_preds <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  <span class="va">spec</span>,</span>
 <span>  method <span class="op">=</span> <span class="st">"REML"</span>,</span>
-<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  fail_fast <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -88,6 +89,11 @@ predictions.</p>
 
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
 <dd><p>Logical; print progress.</p></dd>
+
+
+<dt id="arg-fail-fast">fail_fast<a class="anchor" aria-label="anchor" href="#arg-fail-fast"></a></dt>
+<dd><p>Logical; rethrow unsupported-model errors instead of
+converting them to a warning and <code>NULL</code> (default <code>FALSE</code>).</p></dd>
 
 </dl></div>
     <div class="section level2">

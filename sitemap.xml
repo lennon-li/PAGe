@@ -26,10 +26,13 @@
 <url><loc>https://lennon-li.github.io/PAGe/reference/checkSeasonLength.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/check_promotion.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/check_scale_identifiability.html</loc></url>
+<url><loc>https://lennon-li.github.io/PAGe/reference/compact_m0_artifact_for_m1.html</loc></url>
+<url><loc>https://lennon-li.github.io/PAGe/reference/compact_m1_cache_for_m2.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/compute_align_weights.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/cov_tau_delta_from_profile.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/default_m1_grid.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/default_m2_grid.html</loc></url>
+<url><loc>https://lennon-li.github.io/PAGe/reference/default_m2_nll_gain_caps.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/detectIgnitionBySeason_M0v2.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/detectIgnition_oneSeason.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/detect_ignition_from_tuning.html</loc></url>
@@ -43,6 +46,7 @@
 <url><loc>https://lennon-li.github.io/PAGe/reference/estimate_season_re_online.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/expand_grid_specs.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/expand_tuning_grid.html</loc></url>
+<url><loc>https://lennon-li.github.io/PAGe/reference/extract_nll_sensitivity.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/fitIgnition.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/fit_m0.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/fit_m1.html</loc></url>
@@ -110,6 +114,7 @@
 <url><loc>https://lennon-li.github.io/PAGe/reference/plot_ignition_detect_vs_truth.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/plot_ignition_weekly_snapshots.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/plot_nested_loso_predictions.html</loc></url>
+<url><loc>https://lennon-li.github.io/PAGe/reference/plot_nll_sensitivity.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/plot_season_detection_table.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/plot_stage2.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/plot_stage2_joint_fit_by_season.html</loc></url>
@@ -132,6 +137,7 @@
 <url><loc>https://lennon-li.github.io/PAGe/reference/score_params.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/score_stage2_metrics.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/season_selection.html</loc></url>
+<url><loc>https://lennon-li.github.io/PAGe/reference/select_m1_candidate.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/select_m2_candidate.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/simulate_flu_seasons.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/stage2_build_joint_formula.html</loc></url>

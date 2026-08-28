@@ -83,6 +83,9 @@ winning M2 specification on all non-excluded seasons.</p>
 <span>  manual_labels <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  flag_args <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  m1_params <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  m1_min_gain <span class="op">=</span> <span class="fl">0.05</span>,</span>
+<span>  m1_hard_caps <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>k_ref <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>lower <span class="op">=</span> <span class="fl">10L</span>, upper <span class="op">=</span> <span class="fl">50L</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  m2_min_nll_gain <span class="op">=</span> <span class="fu"><a href="default_m2_nll_gain_caps.html">default_m2_nll_gain_caps</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  m0_params <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  m2_spec_id <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -175,6 +178,24 @@ results only eliminate clear losers; surviving specs still run full LOSO.</p></d
 <dd><p>Optional component settings. For a
 released holdout, these are derived exclusively from verified promotion
 evidence and explicit overrides are rejected.</p></dd>
+
+
+<dt id="arg-m-min-gain">m1_min_gain<a class="anchor" aria-label="anchor" href="#arg-m-min-gain"></a></dt>
+<dd><p>Minimum M1 Weibull-MAE improvement, in weeks, required to
+justify a more flexible `k_ref` candidate (default 0.05).</p></dd>
+
+
+<dt id="arg-m-hard-caps">m1_hard_caps<a class="anchor" aria-label="anchor" href="#arg-m-hard-caps"></a></dt>
+<dd><p>Named M1 hard caps accepted by the boundary gate. The
+default bounds `k_ref` to 10–50 on the 52-week reference domain.</p></dd>
+
+
+<dt id="arg-m-min-nll-gain">m2_min_nll_gain<a class="anchor" aria-label="anchor" href="#arg-m-min-nll-gain"></a></dt>
+<dd><p>Named parameter-specific NLL gain thresholds passed to
+the M2 boundary gate. Defaults to <code><a href="default_m2_nll_gain_caps.html">default_m2_nll_gain_caps()</a></code> and
+covers every M2 axis. A scalar applies to every M2 axis. An edge is
+accepted only when its matched outward gain is at or below the threshold;
+missing matched evidence still requires expansion.</p></dd>
 
 
 <dt id="arg-m-params">m0_params<a class="anchor" aria-label="anchor" href="#arg-m-params"></a></dt>

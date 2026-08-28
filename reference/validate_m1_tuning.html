@@ -56,7 +56,7 @@ bracketed before the fit is frozen and passed downstream.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">validate_m1_tuning</span><span class="op">(</span><span class="va">x</span>, check_boundaries <span class="op">=</span> <span class="cn">FALSE</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">validate_m1_tuning</span><span class="op">(</span><span class="va">x</span>, check_boundaries <span class="op">=</span> <span class="cn">FALSE</span>, hard_caps <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -71,6 +71,12 @@ bracketed before the fit is frozen and passed downstream.</p>
 <dd><p>Logical; require all varying numeric M1 axes in the
 supplied grid to have an interior selected value. This is enabled by
 <code><a href="train_pipeline.html">train_pipeline()</a></code> before M1 is frozen for M2.</p></dd>
+
+
+<dt id="arg-hard-caps">hard_caps<a class="anchor" aria-label="anchor" href="#arg-hard-caps"></a></dt>
+<dd><p>Optional named numeric vector or named list of lower/upper
+bounds, such as `list(k_ref = c(lower = 10, upper = 50))`. A selected
+value exactly at a hard cap is accepted and recorded as `stop_hard_cap`.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>

@@ -19,6 +19,7 @@ tune_m1_alignment(
   n_cores = parallel::detectCores() - 1L,
   checkpoint_dir = "data/m1_tune_ckpt",
   verbose = TRUE,
+  fail_fast = TRUE,
   ...
 )
 ```
@@ -69,6 +70,11 @@ tune_m1_alignment(
 
   Logical. Print progress (default `TRUE`).
 
+- fail_fast:
+
+  Logical. Stop and return the failing specification and fold error
+  instead of recording an unevaluable candidate (default \`TRUE\`).
+
 - ...:
 
   Additional fixed arguments forwarded to
@@ -82,7 +88,8 @@ A list with elements:
 - scores:
 
   Tibble with one row per spec: `spec_id` plus the grid columns,
-  `mae_uniform`, `mae_exp`, `mae_weibull`, `n_seasons`.
+  `mae_uniform`, `mae_exp`, `mae_weibull`, `n_seasons`, and
+  `failure_reason`.
 
 - best:
 

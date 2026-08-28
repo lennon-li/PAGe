@@ -78,7 +78,8 @@ noise-tolerant trend gate on p_sm requiring sustained increases with tolerance e
 <span>  keep_signals <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  iWeek <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  copy_data <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>  copy_data <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  validate_support <span class="op">=</span> <span class="cn">TRUE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -128,6 +129,13 @@ noise-tolerant trend gate on p_sm requiring sustained increases with tolerance e
 
 <dt id="arg-copy-data">copy_data<a class="anchor" aria-label="anchor" href="#arg-copy-data"></a></dt>
 <dd><p>Logical. If FALSE operate on input data.table by reference.</p></dd>
+
+
+<dt id="arg-validate-support">validate_support<a class="anchor" aria-label="anchor" href="#arg-validate-support"></a></dt>
+<dd><p>Logical. If TRUE (default), reject parameter
+windows that exceed observed within-season data. Prospective one-season
+snapshots may set this to FALSE; rolling gates remain undefined until
+enough observations arrive.</p></dd>
 
 </dl></div>
     <div class="section level2">

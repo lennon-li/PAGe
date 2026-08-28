@@ -91,7 +91,8 @@ nested_loso_m1_test(
 
   Character; `"between"` (default) or `"total"`. Passed to
   [`m1_walkforward_predictions()`](https://lennon-li.github.io/PAGe/reference/m1_walkforward_predictions.md)
-  to select the `logit_spread` computation method.
+  and onward to
+  [`run_alignment_prospective_multi()`](https://lennon-li.github.io/PAGe/reference/run_alignment_prospective_multi.md).
 
 - verbose:
 

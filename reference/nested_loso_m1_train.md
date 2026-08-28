@@ -93,7 +93,8 @@ nested_loso_m1_train(
 
   Character; `"between"` (default) or `"total"`. Passed to
   [`m1_walkforward_multi()`](https://lennon-li.github.io/PAGe/reference/m1_walkforward_multi.md)
-  to select the `logit_spread` computation method.
+  and onward to
+  [`run_alignment_prospective_multi()`](https://lennon-li.github.io/PAGe/reference/run_alignment_prospective_multi.md).
 
 - parallel:
 

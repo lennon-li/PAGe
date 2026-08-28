@@ -244,6 +244,8 @@ Run individual stages or the complete weekly pipeline.
   : Extract Stage-2 hyperparameters from tuning output
 - [`plot_nested_loso_predictions()`](https://lennon-li.github.io/PAGe/reference/plot_nested_loso_predictions.md)
   : Plot nested LOSO predictions by season
+- [`plot_nll_sensitivity()`](https://lennon-li.github.io/PAGe/reference/plot_nll_sensitivity.md)
+  : Plot metric sensitivity across tuning-grid parameters
 - [`plot_season_detection_table()`](https://lennon-li.github.io/PAGe/reference/plot_season_detection_table.md)
   : Per-season ignition detection signal table
 - [`plot_stage2()`](https://lennon-li.github.io/PAGe/reference/plot_stage2.md)
@@ -382,10 +384,16 @@ Compatibility helpers and implementation details.
   : Check whether a candidate forecast model qualifies for promotion
 - [`check_scale_identifiability()`](https://lennon-li.github.io/PAGe/reference/check_scale_identifiability.md)
   : Check if scaling (b) is identifiable yet, with a more sensitive rule
+- [`compact_m0_artifact_for_m1()`](https://lennon-li.github.io/PAGe/reference/compact_m0_artifact_for_m1.md)
+  : Compact a complete M0 artifact for the M1 handoff
+- [`compact_m1_cache_for_m2()`](https://lennon-li.github.io/PAGe/reference/compact_m1_cache_for_m2.md)
+  : Compact a complete M1 LOSO cache for M2
 - [`default_m1_grid()`](https://lennon-li.github.io/PAGe/reference/default_m1_grid.md)
   : Return the default M1 alignment tuning grid
 - [`default_m2_grid()`](https://lennon-li.github.io/PAGe/reference/default_m2_grid.md)
   : Return the default M2 forecast tuning grid
+- [`default_m2_nll_gain_caps()`](https://lennon-li.github.io/PAGe/reference/default_m2_nll_gain_caps.md)
+  : Default parameter-specific M2 NLL gain caps
 - [`detectIgnitionBySeason_M0v2()`](https://lennon-li.github.io/PAGe/reference/detectIgnitionBySeason_M0v2.md)
   : Prospective ignition detection (M0v2) across seasons
 - [`detectIgnition_oneSeason()`](https://lennon-li.github.io/PAGe/reference/detectIgnition_oneSeason.md)
@@ -405,6 +413,8 @@ Compatibility helpers and implementation details.
   hyperparams can vary)
 - [`expand_tuning_grid()`](https://lennon-li.github.io/PAGe/reference/expand_tuning_grid.md)
   : Expand a tuning grid at every unresolved winner boundary
+- [`extract_nll_sensitivity()`](https://lennon-li.github.io/PAGe/reference/extract_nll_sensitivity.md)
+  : Extract metric sensitivity across tuning-grid parameters
 - [`fitIgnition()`](https://lennon-li.github.io/PAGe/reference/fitIgnition.md)
   : Fit ignition classifier scores (Stage-1)
 - [`fit_m0()`](https://lennon-li.github.io/PAGe/reference/fit_m0.md) :
@@ -526,6 +536,8 @@ Compatibility helpers and implementation details.
   : Extract Stage-2 hyperparameters from tuning output
 - [`plot_nested_loso_predictions()`](https://lennon-li.github.io/PAGe/reference/plot_nested_loso_predictions.md)
   : Plot nested LOSO predictions by season
+- [`plot_nll_sensitivity()`](https://lennon-li.github.io/PAGe/reference/plot_nll_sensitivity.md)
+  : Plot metric sensitivity across tuning-grid parameters
 - [`plot_season_detection_table()`](https://lennon-li.github.io/PAGe/reference/plot_season_detection_table.md)
   : Per-season ignition detection signal table
 - [`plot_stage2()`](https://lennon-li.github.io/PAGe/reference/plot_stage2.md)
@@ -570,6 +582,8 @@ Compatibility helpers and implementation details.
   : Score an ignition-threshold grid on historical seasons
 - [`season_selection()`](https://lennon-li.github.io/PAGe/reference/season_selection.md)
   : Extract the season selection from a stage artifact
+- [`select_m1_candidate()`](https://lennon-li.github.io/PAGe/reference/select_m1_candidate.md)
+  : Select an M1 candidate with a practical-gain backoff rule
 - [`select_m2_candidate()`](https://lennon-li.github.io/PAGe/reference/select_m2_candidate.md)
   : Select an M2 candidate from full nested-LOSO results
 - [`simulate_flu_seasons()`](https://lennon-li.github.io/PAGe/reference/simulate_flu_seasons.md)

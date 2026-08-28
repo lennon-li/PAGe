@@ -61,7 +61,9 @@ result, expand its grid, and resume tuning from the same checkpoint.</p>
 <span>  stage <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"M0"</span>, <span class="st">"M1"</span>, <span class="st">"M2"</span><span class="op">)</span>,</span>
 <span>  grid <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  warn <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  null_axes <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  null_axes <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  hard_caps <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  min_nll_gain <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -90,6 +92,22 @@ is defined relative to the selected configuration.</p></dd>
 <dt id="arg-null-axes">null_axes<a class="anchor" aria-label="anchor" href="#arg-null-axes"></a></dt>
 <dd><p>Optional names of axes whose zero value is an accepted
 drop/null. Stage defaults are used when omitted.</p></dd>
+
+
+<dt id="arg-hard-caps">hard_caps<a class="anchor" aria-label="anchor" href="#arg-hard-caps"></a></dt>
+<dd><p>Optional named numeric vector or named list of lower/upper
+hard caps. An edge exactly at a declared cap is reported as
+`stop_hard_cap` rather than `expand_required`.</p></dd>
+
+
+<dt id="arg-min-nll-gain">min_nll_gain<a class="anchor" aria-label="anchor" href="#arg-min-nll-gain"></a></dt>
+<dd><p>M2-only NLL improvement threshold. Defaults to
+<code><a href="default_m2_nll_gain_caps.html">default_m2_nll_gain_caps()</a></code>; supply a named numeric vector for
+parameter-specific thresholds, or one unnamed number to apply the same
+threshold to every M2 axis. Omitted names use the governed defaults. When
+a selected edge has a matched adjacent NLL comparison and its outward
+gain is less than or equal to the threshold, it is reported as
+`stop_small_gain`.</p></dd>
 
 </dl></div>
     <div class="section level2">

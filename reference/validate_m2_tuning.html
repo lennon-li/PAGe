@@ -50,7 +50,7 @@ metric, or absent selected specification.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">validate_m2_tuning</span><span class="op">(</span><span class="va">x</span>, check_boundaries <span class="op">=</span> <span class="cn">FALSE</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">validate_m2_tuning</span><span class="op">(</span><span class="va">x</span>, check_boundaries <span class="op">=</span> <span class="cn">FALSE</span>, min_nll_gain <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -64,6 +64,15 @@ metric, or absent selected specification.</p>
 <dt id="arg-check-boundaries">check_boundaries<a class="anchor" aria-label="anchor" href="#arg-check-boundaries"></a></dt>
 <dd><p>Logical; require every genuinely tuned M2 axis to
 be bracketed or an explicitly accepted null/drop.</p></dd>
+
+
+<dt id="arg-min-nll-gain">min_nll_gain<a class="anchor" aria-label="anchor" href="#arg-min-nll-gain"></a></dt>
+<dd><p>Named parameter-specific NLL gain threshold, or one
+scalar applied to every M2 axis. Defaults to
+<code><a href="default_m2_nll_gain_caps.html">default_m2_nll_gain_caps()</a></code>; omitted names use the governed
+defaults. A boundary with matched outward gain at or below its threshold
+is accepted as `stop_small_gain`; a boundary without matched evidence
+remains unresolved.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
