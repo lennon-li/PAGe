@@ -974,10 +974,6 @@ build_m2 <- function(allD,
   if (verbose) {
     message("[build_m2] Phase 1: M1 cache for ", length(test_seasons), " folds...")
   }
-  old_future_plan <- future::plan()
-  on.exit(future::plan(old_future_plan), add = TRUE)
-  future::plan(future::multisession, workers = as.integer(max(1L, n_cores)))
-
   m1_cache <- NULL
   if (!is.null(phase1_artifact_path) && file.exists(phase1_artifact_path)) {
     m1_cache <- .read_m1_phase1_artifact(phase1_artifact_path, phase1_identity)
@@ -995,6 +991,17 @@ build_m2 <- function(allD,
       )
     }
   }
+
+  # Validate a reusable artifact before allocating the multisession pool.
+  # This keeps malformed handoffs fail-fast and deterministic on hosts where
+  # worker socket creation is restricted.
+  if (!is.null(m1_cache)) {
+    invisible(compact_m1_cache_for_m2(m1_cache))
+  }
+
+  old_future_plan <- future::plan()
+  on.exit(future::plan(old_future_plan), add = TRUE)
+  future::plan(future::multisession, workers = as.integer(max(1L, n_cores)))
 
   if (is.null(m1_cache)) {
     m1_cache <- list()
