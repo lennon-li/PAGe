@@ -50,6 +50,7 @@ to evaluation are not valid prospective evidence and must be recomputed.
 | Entry point or family | Status | Why / safe replacement |
 |---|---|---|
 | `scripts/fresh_run/00_shared.R` and stages `01_m0.R` through `07_compare.R` | research-only | Preserved historical/research workflow. It loads private local files and has no promotion chain. Use the high-level API and governed release workflow for new production work. |
+| `test/` standalone LOSO harness | deprecated/non-running | Invalid LOSO harness: it uses a global pooled template, retrospective test-season ignition, and is not walk-forward. Its hyperparameter outputs must not be used. |
 | `scripts/fresh_run/04e_m2_loso_v16.R`, `04f_m2_loso_v16_expand.R`, and `05b_m2_production_v16.R` | research-only | v16 research and kit-building history. Private result artifacts are absent, and the builder does not itself establish a promoted immutable production artifact. Use `train_pipeline()` followed by the governed release workflow. |
 | `scripts/fresh_run/04h_m2_loso_v17_adaptive_ba.R`, `04k_m2_loso_v18_spread.R`, `03b_m1_kappa_sweep.R`, and other experiment-specific fresh-run stages | research-only | Retained for hypotheses and comparisons; they are not deployment instructions. Use the canonical API for production work. |
 | `scripts/run_nested_loso_v14.R`, `run_nested_loso_v14b.R`, and `_rebuild_m2_production_v14.R` | superseded | Historical v14 search/build path. Do not rebuild a kit from it; use the canonical API and governed release workflow. |

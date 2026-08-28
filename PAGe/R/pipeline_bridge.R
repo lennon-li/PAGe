@@ -29,6 +29,9 @@
 #' @param slope_weight,slope_window Growth-rate similarity controls.
 #' @param dynamic_temp,dynamic_temp_pivot Early-season temperature controls.
 #' @param top_k,blend_alpha Template filtering and blending controls.
+#' @param spread_method Character; \code{"between"} (default) or \code{"total"}.
+#'   Passed to \code{run_alignment_prospective_multi()} to select the
+#'   \code{logit_spread} computation method.
 #'
 #' @return A tibble with columns:
 #' \describe{
@@ -47,34 +50,36 @@
 m1_walkforward_predictions <- function(seasonD,
                                        ref,
                                        hyper,
-                                       ign_out            = NULL,
-                                       params             = NULL,
-                                       horizons           = c(1L, 2L),
-                                       eval_weeks         = NULL,
-                                       allow_scale        = NULL,
-                                       use_ci             = TRUE,
-                                       buffer_weeks       = 0L,
-                                       min_obs            = 4L,
-                                       curvature_ratio    = 1.0,
-                                       temperature        = 0.25,
-                                       rise_weight        = 1.0,
-                                       trough_weight      = 0.1,
-                                       peak_decay         = 0.3,
-                                       slope_weight       = 0.5,
-                                       slope_window       = 4L,
-                                       dynamic_temp       = TRUE,
+                                       ign_out = NULL,
+                                       params = NULL,
+                                       horizons = c(1L, 2L),
+                                       eval_weeks = NULL,
+                                       allow_scale = NULL,
+                                       use_ci = TRUE,
+                                       buffer_weeks = 0L,
+                                       min_obs = 4L,
+                                       curvature_ratio = 1.0,
+                                       temperature = 0.25,
+                                       rise_weight = 1.0,
+                                       trough_weight = 0.1,
+                                       peak_decay = 0.3,
+                                       slope_weight = 0.5,
+                                       slope_window = 4L,
+                                       dynamic_temp = TRUE,
                                        dynamic_temp_pivot = 10L,
-                                       top_k              = NULL,
-                                       blend_alpha        = 1.0) {
-
+                                       top_k = NULL,
+                                       blend_alpha = 1.0,
+                                       spread_method = c("between", "total")) {
+  spread_method <- match.arg(spread_method)
   season_name <- unique(as.character(seasonD$season))[1]
-  horizons    <- as.integer(horizons)
-  max_weekF   <- max(seasonD$weekF, na.rm = TRUE)
+  horizons <- as.integer(horizons)
+  max_weekF <- max(seasonD$weekF, na.rm = TRUE)
 
   # --- M0: run ignition detection if not supplied ---
   if (is.null(ign_out)) {
-    if (is.null(params))
+    if (is.null(params)) {
       stop("Either 'ign_out' or 'params' must be provided.")
+    }
     ign_out <- run_ignition_weekly(
       currentSeason  = seasonD,
       ign_fit_or_gam = NULL,
@@ -84,14 +89,18 @@ m1_walkforward_predictions <- function(seasonD,
   }
 
   # No ignition detected -> empty result
-  if (is.na(ign_out$ign_week_locked))
+  if (is.na(ign_out$ign_week_locked)) {
     return(.empty_m1_preds())
+  }
 
   # --- Resolve eval weeks ---
   if (is.null(eval_weeks)) {
     eval_weeks <- seq(as.integer(ign_out$ign_week_locked), max_weekF)
   }
   eval_weeks <- as.integer(eval_weeks)
+  if (!length(eval_weeks) || min(eval_weeks, na.rm = TRUE) > max_weekF) {
+    return(.empty_m1_preds())
+  }
 
   # --- Walk-forward over eval weeks ---
   results <- vector("list", length(eval_weeks))
@@ -120,37 +129,47 @@ m1_walkforward_predictions <- function(seasonD,
         dynamic_temp       = dynamic_temp,
         dynamic_temp_pivot = dynamic_temp_pivot,
         top_k              = top_k,
-        blend_alpha        = blend_alpha
+        blend_alpha        = blend_alpha,
+        spread_method      = spread_method
       ),
       error = function(e) NULL
     )
 
-    if (is.null(ap) || ap$state == "pre_ignition" || is.null(ap$forecast_df))
+    if (is.null(ap) || ap$state == "pre_ignition" || is.null(ap$forecast_df)) {
       next
+    }
 
-    iWeek_hat  <- ap$iWeek_hat
+    iWeek_hat <- ap$iWeek_hat
     anchorWeek <- ref$anchorWeek
-    fdf        <- ap$forecast_df
+    fdf <- ap$forecast_df
 
     # Extract predictions at each target week for each horizon
     rows <- vector("list", length(horizons))
     for (j in seq_along(horizons)) {
       h <- horizons[j]
-      target_weekF   <- ew + h
+      target_weekF <- ew + h
       target_newWeek <- as.numeric(target_weekF - iWeek_hat + anchorWeek)
 
       # Interpolate M1's prediction and spread at target_newWeek.
       # logit_spread is the weighted SD of logit-scale template predictions --
       # high values indicate M1 ensemble disagreement (alignment uncertainty).
-      p_hat  <- stats::approx(fdf$newWeek, fdf$p_hat, xout = target_newWeek,
-                              rule = 2)$y
-      p_lo   <- stats::approx(fdf$newWeek, fdf$p_lo,  xout = target_newWeek,
-                              rule = 2)$y
-      p_hi   <- stats::approx(fdf$newWeek, fdf$p_hi,  xout = target_newWeek,
-                              rule = 2)$y
-      spread <- if ("logit_spread" %in% names(fdf))
+      p_hat <- stats::approx(fdf$newWeek, fdf$p_hat,
+        xout = target_newWeek,
+        rule = 2
+      )$y
+      p_lo <- stats::approx(fdf$newWeek, fdf$p_lo,
+        xout = target_newWeek,
+        rule = 2
+      )$y
+      p_hi <- stats::approx(fdf$newWeek, fdf$p_hi,
+        xout = target_newWeek,
+        rule = 2
+      )$y
+      spread <- if ("logit_spread" %in% names(fdf)) {
         stats::approx(fdf$newWeek, fdf$logit_spread, xout = target_newWeek, rule = 2)$y
-      else NA_real_
+      } else {
+        NA_real_
+      }
 
       rows[[j]] <- tibble::tibble(
         season           = season_name,
@@ -170,7 +189,9 @@ m1_walkforward_predictions <- function(seasonD,
   }
 
   out <- dplyr::bind_rows(results)
-  if (nrow(out) == 0) return(.empty_m1_preds())
+  if (nrow(out) == 0) {
+    return(.empty_m1_preds())
+  }
   out
 }
 
@@ -199,6 +220,9 @@ m1_walkforward_predictions <- function(seasonD,
 #' @param top_k,blend_alpha Template filtering and blending controls.
 #' @param parallel Logical; use parallel via furrr (default TRUE).
 #' @param verbose Logical; print progress (default TRUE).
+#' @param spread_method Character; \code{"between"} (default) or \code{"total"}.
+#'   Passed to \code{m1_walkforward_predictions()} and onward to
+#'   \code{run_alignment_prospective_multi()}.
 #'
 #' @return A tibble (stacked across seasons) with the same columns as
 #'   \code{m1_walkforward_predictions()}.
@@ -206,27 +230,28 @@ m1_walkforward_multi <- function(allD,
                                  ref,
                                  hyper,
                                  params,
-                                 seasons            = NULL,
-                                 horizons           = c(1L, 2L),
-                                 eval_weeks         = NULL,
-                                 allow_scale        = NULL,
-                                 use_ci             = TRUE,
-                                 buffer_weeks       = 0L,
-                                 min_obs            = 4L,
-                                 curvature_ratio    = 1.0,
-                                 temperature        = 0.25,
-                                 rise_weight        = 1.0,
-                                 trough_weight      = 0.1,
-                                 peak_decay         = 0.3,
-                                 slope_weight       = 0.5,
-                                 slope_window       = 4L,
-                                 dynamic_temp       = TRUE,
+                                 seasons = NULL,
+                                 horizons = c(1L, 2L),
+                                 eval_weeks = NULL,
+                                 allow_scale = NULL,
+                                 use_ci = TRUE,
+                                 buffer_weeks = 0L,
+                                 min_obs = 4L,
+                                 curvature_ratio = 1.0,
+                                 temperature = 0.25,
+                                 rise_weight = 1.0,
+                                 trough_weight = 0.1,
+                                 peak_decay = 0.3,
+                                 slope_weight = 0.5,
+                                 slope_window = 4L,
+                                 dynamic_temp = TRUE,
                                  dynamic_temp_pivot = 10L,
-                                 top_k              = NULL,
-                                 blend_alpha        = 1.0,
-                                 parallel           = TRUE,
-                                 verbose            = TRUE) {
-
+                                 top_k = NULL,
+                                 blend_alpha = 1.0,
+                                 spread_method = c("between", "total"),
+                                 parallel = TRUE,
+                                 verbose = TRUE) {
+  spread_method <- match.arg(spread_method)
   if (is.null(seasons)) seasons <- sort(unique(as.character(allD$season)))
 
   map_fn <- if (isTRUE(parallel) && requireNamespace("furrr", quietly = TRUE)) {
@@ -260,7 +285,8 @@ m1_walkforward_multi <- function(allD,
       dynamic_temp       = dynamic_temp,
       dynamic_temp_pivot = dynamic_temp_pivot,
       top_k              = top_k,
-      blend_alpha        = blend_alpha
+      blend_alpha        = blend_alpha,
+      spread_method      = spread_method
     )
   })
 
@@ -309,14 +335,14 @@ inject_m1_into_snapshots <- function(pp,
                                      m1_result,
                                      ref,
                                      horizons = c(1L, 2L),
-                                     eps      = 1e-6) {
-
+                                     eps = 1e-6) {
   if (is.null(m1_result) || m1_result$state == "pre_ignition" ||
-      is.null(m1_result$forecast_df))
+    is.null(m1_result$forecast_df)) {
     return(pp)
+  }
 
-  fdf        <- m1_result$forecast_df
-  iWeek_hat  <- m1_result$iWeek_hat
+  fdf <- m1_result$forecast_df
+  iWeek_hat <- m1_result$iWeek_hat
   anchorWeek <- ref$anchorWeek
 
   for (i in seq_along(pp$df)) {
@@ -325,11 +351,13 @@ inject_m1_into_snapshots <- function(pp,
 
     # For each row, compute M1's prediction at the target week
     h_int <- as.integer(sub("^h", "", as.character(snap$lead)))
-    target_weekF   <- as.integer(snap$weekF) + h_int
+    target_weekF <- as.integer(snap$weekF) + h_int
     target_newWeek <- as.numeric(target_weekF - iWeek_hat + anchorWeek)
 
-    m1_p <- stats::approx(fdf$newWeek, fdf$p_hat, xout = target_newWeek,
-                          rule = 2)$y
+    m1_p <- stats::approx(fdf$newWeek, fdf$p_hat,
+      xout = target_newWeek,
+      rule = 2
+    )$y
 
     has_m1 <- is.finite(m1_p) & !is.na(m1_p)
     m1_logit <- ifelse(has_m1, logit_stable(m1_p, eps = eps), snap$logit_f_eff)

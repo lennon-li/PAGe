@@ -26,7 +26,8 @@ m1_walkforward_predictions(
   dynamic_temp = TRUE,
   dynamic_temp_pivot = 10L,
   top_k = NULL,
-  blend_alpha = 1
+  blend_alpha = 1,
+  spread_method = c("between", "total")
 )
 }
 \arguments{
@@ -65,6 +66,10 @@ alignment-loss controls.}
 \item{dynamic_temp, dynamic_temp_pivot}{Early-season temperature controls.}
 
 \item{top_k, blend_alpha}{Template filtering and blending controls.}
+
+\item{spread_method}{Character; \code{"between"} (default) or \code{"total"}.
+Passed to \code{run_alignment_prospective_multi()} to select the
+\code{logit_spread} computation method.}
 }
 \value{
 A tibble with columns:

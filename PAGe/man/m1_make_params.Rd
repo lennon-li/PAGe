@@ -14,7 +14,8 @@ m1_make_params(
   slope_weight = 8,
   slope_window = 6L,
   dynamic_temp = FALSE,
-  dynamic_temp_pivot = 10L
+  dynamic_temp_pivot = 10L,
+  spread_method = c("between", "total")
 )
 }
 \arguments{
@@ -48,6 +49,11 @@ season (default \code{FALSE}).}
 
 \item{dynamic_temp_pivot}{Integer. Week at which dynamic temperature pivots
 (default 10; ignored when \code{dynamic_temp = FALSE}).}
+
+\item{spread_method}{Character. \code{"between"} (default) computes
+\code{logit_spread} as the weighted between-template standard deviation.
+\code{"total"} adds weighted per-template GAM SE\^2 for a total-variance
+spread. See \code{\link{align_multi_template}} for details.}
 }
 \value{
 A named list suitable for the \code{m1_params} argument of

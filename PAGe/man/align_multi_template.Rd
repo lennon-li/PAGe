@@ -28,7 +28,8 @@ align_multi_template(
   slope_window = 6L,
   dynamic_temp = TRUE,
   dynamic_temp_pivot = 10L,
-  gam_obj = NULL
+  gam_obj = NULL,
+  spread_method = c("between", "total")
 )
 }
 \arguments{
@@ -91,6 +92,14 @@ is inflated (default 10). Temperature is scaled by
 \code{pivot / n_obs} when \code{n_obs < pivot}.}
 
 \item{gam_obj}{Optional fitted GAM used to estimate per-template uncertainty.}
+
+\item{spread_method}{Character; \code{"between"} (default) computes
+\code{logit_spread} as the weighted between-template standard deviation on
+the logit scale, preserving the incumbent behaviour. \code{"total"} adds
+weighted per-template GAM SE\^2 (from \code{g_s_mu_se}) to the
+between-template variance, yielding a total-variance spread. When per-template
+SEs are unavailable (zero or missing) the method falls back to between-only
+for that forecast week and increments \code{spread_fallback_count}.}
 }
 \value{
 List with the same structure as
@@ -99,6 +108,10 @@ List with the same structure as
     \item{per_template}{List of per-template alignment results.}
     \item{weights}{Named numeric vector of softmax ensemble weights.}
     \item{template_names}{Character vector of template season labels.}
+    \item{spread_method}{Character; the spread method used.}
+    \item{spread_fallback_count}{Integer; number of forecast weeks that fell
+      back to between-only because per-template SEs were unavailable
+      (total mode only; 0 for between mode).}
   }
 }
 \description{
