@@ -345,6 +345,20 @@ run_m1_alignment <- function(kit,
   } else {
     walk_start
   }
+  if (actual_walk_start > walk_end) {
+    return(list(
+      params_df = tibble::tibble(
+        eval_week = integer(0), state = character(0),
+        iWeek_hat = integer(0), tau = numeric(0),
+        delta_m1 = numeric(0), a = numeric(0), b = numeric(0),
+        t_peak = numeric(0), peak_weekF = integer(0),
+        peak_passed = logical(0), fallback = character(0)
+      ),
+      m1_curves = tibble::tibble(),
+      per_week = list(),
+      m0_result = m0_result
+    ))
+  }
   eval_weeks <- seq(actual_walk_start, walk_end)
 
   per_week <- lapply(eval_weeks, function(ew) {
