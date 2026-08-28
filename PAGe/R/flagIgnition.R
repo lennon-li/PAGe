@@ -24,8 +24,9 @@
 #' @param manual_labels named integer vector mapping season labels (e.g. "2015-16") to
 #'   manually-verified ignition weekF values. When a season is found in this vector,
 #'   the algorithmic detection is bypassed and the specified week is used directly.
-#'   Pass \code{NULL} to always run the algorithm. Defaults to a set of pre-verified
-#'   historical labels.
+#'   Defaults to \code{NULL} (algorithmic detection only). Pass
+#'   \code{page_manual_ignition_labels()} to restore the pre-verified historical
+#'   labels (retrospective; never use for held-out LOSO test seasons).
 #'
 #' @return list(data=augmented df, ignition=1-row summary)
 #'
@@ -35,11 +36,12 @@
 #' Extra gate (rule 4 only): weekF > w_max.
 #'
 #' @examples
-#' # Use default manual labels (bypasses algorithm for known seasons)
+#' # Algorithmic detection only (default; safe for prospective / LOSO use)
 #' # out <- flagIgnition(season_df, p_thresh = 0.01, k1 = 0.05)
 #'
-#' # Force algorithmic detection for all seasons
-#' # out <- flagIgnition(season_df, p_thresh = 0.01, k1 = 0.05, manual_labels = NULL)
+#' # Opt into retrospective manual labels for known seasons
+#' # out <- flagIgnition(season_df, p_thresh = 0.01, k1 = 0.05,
+#' #                     manual_labels = page_manual_ignition_labels())
 #'
 flagIgnition <- function(
   df,
@@ -52,19 +54,7 @@ flagIgnition <- function(
   w_min        = 20L,
   w_max        = 21L,
   d2_relax     = -0.01,
-  manual_labels = c(
-    "2012-13" = 18L,
-    "2013-14" = 20L,
-    "2014-15" = 20L,
-    "2015-16" = 24L,
-    "2016-17" = 19L,
-    "2017-18" = 20L,
-    "2018-19" = 19L,
-    "2019-20" = 22L,
-    "2022-23" = 15L,
-    "2023-24" = 20L,
-    "2024-25" = 23L
-  )
+  manual_labels = NULL
 ) {
   stopifnot(
     is.data.frame(df),
@@ -85,7 +75,7 @@ flagIgnition <- function(
 
   df <- df[order(df$weekF), , drop = FALSE]
 
-  # Cumulative positivity (unconditional — always computed)
+  # Cumulative positivity (unconditional -- always computed)
   if (all(c("y", "N") %in% names(df))) {
     cum_y          <- cumsum(df$y)
     cum_N          <- cumsum(df$N)
@@ -211,4 +201,35 @@ flagIgnition <- function(
   )
 
   list(data = df, ignition = ign)
+}
+
+
+#' Pre-verified historical manual ignition labels
+#'
+#' Returns the named integer vector of manually-verified ignition weekF values
+#' for historical flu seasons. Pass this to \code{flagIgnition(manual_labels = ...)}
+#' to bypass algorithmic detection for known seasons.
+#'
+#' These labels are retrospective and must never be supplied for a held-out
+#' LOSO test season (use \code{manual_labels_test = NULL} in LOSO eval paths).
+#'
+#' @return Named integer vector mapping season labels (e.g. \code{"2015-16"}) to
+#'   ignition weekF integer values.
+#' @export
+#' @examples
+#' page_manual_ignition_labels()
+page_manual_ignition_labels <- function() {
+  c(
+    "2012-13" = 18L,
+    "2013-14" = 20L,
+    "2014-15" = 20L,
+    "2015-16" = 24L,
+    "2016-17" = 19L,
+    "2017-18" = 20L,
+    "2018-19" = 19L,
+    "2019-20" = 22L,
+    "2022-23" = 15L,
+    "2023-24" = 20L,
+    "2024-25" = 23L
+  )
 }

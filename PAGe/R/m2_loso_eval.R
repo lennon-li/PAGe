@@ -5,6 +5,40 @@
 # Section 5c: weekly refit (legacy comparison path).
 # ============================================================
 
+# ---------- LOSO label safety ----------
+
+#' Assert a LOSO test season is absent from supplied ignition labels
+#'
+#' Prevents retrospective ignition leakage by verifying the held-out test
+#' season does not appear in a supplied manual-label vector. By default this
+#' is a hard assertion (\code{action = "stop"}); use \code{action = "warn"}
+#' for a soft notice.
+#'
+#' @param test_season Character scalar; the held-out LOSO test season.
+#' @param labels Named integer vector of manual ignition labels, or \code{NULL}.
+#' @param label_name Character; name shown in the message.
+#' @param action \code{"stop"} (default) or \code{"warn"}.
+#' @return Invisible \code{TRUE}, or raises an error/warning.
+assert_loso_test_season_absent <- function(test_season,
+                                           labels,
+                                           label_name = "labels",
+                                           action = c("stop", "warn")) {
+  action <- match.arg(action)
+  if (is.null(labels) || is.null(test_season)) return(invisible(TRUE))
+  if (!test_season %in% names(labels)) return(invisible(TRUE))
+  msg <- paste0(
+    "LOSO label safety: test season '", test_season, "' is present in `",
+    label_name, "`. Held-out seasons must not appear in supplied labels to ",
+    "prevent retrospective ignition leakage. Pass NULL for the test season's ",
+    "labels to use prospective flagIgnition() detection."
+  )
+  if (action == "stop") {
+    stop(msg, call. = FALSE)
+  } else {
+    warning(msg, call. = FALSE)
+  }
+}
+
 # ---------- 5b. M2 eval with frozen GAM + trend-augmented bias ----------
 
 #' Evaluate M2 using a frozen GAM with walk-forward bias correction
@@ -99,6 +133,9 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
   )
 
   test_s <- fold$test_season
+  assert_loso_test_season_absent(test_s, manual_labels_train, "manual_labels_train")
+  assert_loso_test_season_absent(test_s, manual_labels_test, "manual_labels_test",
+    action = "warn")
   na_scores <- tibble::tibble(
     season = test_s, n = NA_integer_,
     mean_nll = NA_real_, bernoulli_nll = NA_real_,
@@ -394,7 +431,13 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
 #' @param m1_train_preds Optional training-season M1 predictions.
 #' @param eval_window Maximum post-ignition evaluation week.
 #' @param horizons Forecast horizons.
-#' @param manual_labels Optional named ignition labels.
+#' @param manual_labels Optional named ignition labels
+#'   (deprecated; use \code{manual_labels_train} and \code{manual_labels_test}).
+#' @param manual_labels_train Optional named integer vector of manual ignition
+#'   labels for training seasons only. Should exclude the held-out test season.
+#' @param manual_labels_test Optional named integer vector of manual ignition
+#'   labels for the test season. Default \code{NULL} = use prospective
+#'   \code{flagIgnition()} without override (no retrospective label leakage).
 #' @param flag_args Named list forwarded to \code{flagIgnition()}.
 #' @param verbose Logical.
 #' @return Same structure as \code{nested_loso_m2_eval()}: list with
@@ -407,6 +450,8 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
                                              eval_window = 12L,
                                              horizons = c(1L, 2L),
                                              manual_labels = NULL,
+                                             manual_labels_train = NULL,
+                                             manual_labels_test = NULL,
                                              flag_args = list(
                                                p_thresh   = 0.01,
                                                k1         = 0.4,
@@ -423,7 +468,26 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
   if (!requireNamespace("purrr", quietly = TRUE)) stop("Please install purrr.")
   `%||%` <- function(x, y) if (is.null(x)) y else x
 
+  .Deprecated(msg = paste0(
+    "nested_loso_m2_eval_weekly_refit() is a legacy comparison path; ",
+    "use nested_loso_m2_eval_frozen_bias() for production M2 evaluation."
+  ))
+
+  if (!is.null(manual_labels) && is.null(manual_labels_train) && is.null(manual_labels_test)) {
+    warning(
+      "[nested_loso_m2_eval_weekly_refit] `manual_labels` is deprecated. ",
+      "Use `manual_labels_train` and `manual_labels_test` instead. ",
+      "Redirecting: manual_labels_train = manual_labels, manual_labels_test = NULL.",
+      call. = FALSE
+    )
+    manual_labels_train <- manual_labels
+    manual_labels_test <- NULL
+  }
+
   test_s <- fold$test_season
+  assert_loso_test_season_absent(test_s, manual_labels_train, "manual_labels_train")
+  assert_loso_test_season_absent(test_s, manual_labels_test, "manual_labels_test",
+    action = "warn")
   na_scores <- tibble::tibble(
     season = test_s, n = NA_integer_,
     mean_nll = NA_real_, brier = NA_real_, rmse_p = NA_real_
@@ -449,7 +513,7 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
   test_outs <- list(test_deriv_data) |>
     purrr::map(~ do.call(
       flagIgnition,
-      c(list(df = .x, manual_labels = manual_labels), flag_args)
+      c(list(df = .x, manual_labels = manual_labels_test), flag_args)
     ))
   aligned_test <- alignIgnition(test_outs)
 
@@ -549,6 +613,7 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
     )
     if (is.null(refit_out)) next
     fit_ew <- refit_out$fit # extract actual GAM from train_stage2_joint() list
+    refit_fr <- refit_out$feature_ranges
 
     soft_cap_fn <- make_soft_cap_fn(fit_ew)
     lev_lead <- levels(fit_ew$model$lead)
@@ -570,7 +635,8 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
     z_ema_now <- utils::tail(z_ema_v, 1L)
     logN_now <- log(max(obs_arr$N[obs_arr$weekF == ew], 1L))
 
-    dz_ema_now_loso <- if (is.na(prev_z_ema_loso)) 0 else z_ema_now - prev_z_ema_loso
+    dz_sd <- refit_fr$dz_ema_sd %||% 1
+    dz_ema_now_loso <- if (is.na(prev_z_ema_loso)) 0 else (z_ema_now - prev_z_ema_loso) / dz_sd
     prev_z_ema_loso <- z_ema_now
 
     for (h in as.integer(horizons)) {

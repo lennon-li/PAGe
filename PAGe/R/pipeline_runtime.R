@@ -383,7 +383,8 @@ run_m1_alignment <- function(kit,
         slope_weight       = M1_PARAMS$slope_weight,
         slope_window       = M1_PARAMS$slope_window,
         dynamic_temp       = M1_PARAMS$dynamic_temp,
-        dynamic_temp_pivot = M1_PARAMS$dynamic_temp_pivot
+        dynamic_temp_pivot = M1_PARAMS$dynamic_temp_pivot,
+        spread_method      = M1_PARAMS$spread_method %||% "between"
       ),
       error = function(e) {
         if (verbose) message("M1 error at week ", ew, ": ", conditionMessage(e))
