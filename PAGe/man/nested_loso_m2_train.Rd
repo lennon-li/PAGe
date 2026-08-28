@@ -9,7 +9,8 @@ nested_loso_m2_train(
   m1_train_preds = NULL,
   spec,
   method = "REML",
-  verbose = TRUE
+  verbose = TRUE,
+  fail_fast = FALSE
 )
 }
 \arguments{
@@ -23,6 +24,9 @@ nested_loso_m2_train(
 \item{method}{GAM fitting method (default \code{"REML"}).}
 
 \item{verbose}{Logical; print progress.}
+
+\item{fail_fast}{Logical; rethrow unsupported-model errors instead of
+converting them to a warning and \code{NULL} (default \code{FALSE}).}
 }
 \value{
 Output of \code{train_stage2_joint()} (list with \code{fit},

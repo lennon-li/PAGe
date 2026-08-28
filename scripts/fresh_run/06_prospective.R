@@ -22,11 +22,11 @@ kit_data_dir <- if (length(kit_data_dir)) kit_data_dir else "data"
 if (kit_smoke) {
   # Keep the smoke path independent of optional package/devtools loading so it
   # can validate a synthetic artifact fixture in a minimal R environment.
-  source("R/pipeline_runtime.R")
+  source("PAGe/R/pipeline_runtime.R")
 } else {
   source("scripts/fresh_run/00_shared.R")
 
-  # prospective_deployment.qmd sources two files from PAGe/R/ (not root R/)
+  # prospective_deployment.qmd sources two files from PAGe/R/
   for (f in c("PAGe/R/identifiability.R", "PAGe/R/m1_peak_flags.R")) {
     if (file.exists(f)) source(f) else
       message("Optional file not found (skipping): ", f)

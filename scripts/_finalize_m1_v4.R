@@ -45,9 +45,9 @@ improved <- best$mae_weibull < base_v3$mae_weibull - 0.001  # >0.001 improvement
 
 # ---- 3. Update defaults in m1_multi_template.R if improved ----
 if (improved && (best_sw != 4L || abs(best_wt - 0.5) > 0.01)) {
-  cat("\n=== STEP 2: Updating slope defaults in R/m1_multi_template.R ===\n")
+  cat("\n=== STEP 2: Updating slope defaults in PAGe/R/m1_multi_template.R ===\n")
 
-  for (f in c("R/m1_multi_template.R", "flualign/R/m1_multi_template.R")) {
+  for (f in c("PAGe/R/m1_multi_template.R", "flualign/R/m1_multi_template.R")) {
     txt <- readLines(f)
     # Update slope_window default
     txt <- gsub(
@@ -138,7 +138,7 @@ ckpt_best <- tryCatch(
 )
 if (!is.null(ckpt_best) && !is.null(ckpt_best$params_df)) {
   suppressPackageStartupMessages(library(PAGe))
-  for (f in c("R/utils.R","R/m0_retro.R","R/flagIgnition.R")) source(f)
+  for (f in c("PAGe/R/utils.R","PAGe/R/m0_retro.R","PAGe/R/flagIgnition.R")) source(f)
   library(MMWRweek)
   n_weeks_in_start_year <- function(sy)
     52L + as.integer(MMWRweek::MMWRweek(as.Date(paste0(sy,"-12-31")))$MMWRweek == 53L)

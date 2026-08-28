@@ -1,12 +1,12 @@
 setwd("C:/Users/lennon.li/Documents/claude/PAGe")
 suppressPackageStartupMessages({ library(dplyr); library(mgcv); library(data.table) })
-source("R/m0_training.R")
-source("R/m2_spec_grid.R")
-source("R/m2_training.R")
-source("R/pipeline_runtime_helpers.R")
-source("R/m0_runtime.R")
-source("R/m2_runtime.R")
-source("R/pipeline_runtime.R")
+source("PAGe/R/m0_training.R")
+source("PAGe/R/m2_spec_grid.R")
+source("PAGe/R/m2_training.R")
+source("PAGe/R/pipeline_runtime_helpers.R")
+source("PAGe/R/m0_runtime.R")
+source("PAGe/R/m2_runtime.R")
+source("PAGe/R/pipeline_runtime.R")
 load("data/data.RData")
 
 tuned2 <- readRDS("data/stage2_tuning.rds")
@@ -78,7 +78,7 @@ print(tpl_sub)
 
 # Check 2025-26 z_ema
 cat("\n=== Current season z_ema ===\n")
-cs <- tryCatch(source("R/getCurrentD.R")$value, error=function(e) NULL)
+cs <- tryCatch(source("PAGe/R/getCurrentD.R")$value, error=function(e) NULL)
 if (is.null(cs)) {
   # Try loading from data
   cs2526 <- tryCatch({

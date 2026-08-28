@@ -57,8 +57,8 @@ alignment-loss controls.}
 \item{top_k, blend_alpha}{Template filtering and blending controls.}
 
 \item{spread_method}{Character; \code{"between"} (default) or \code{"total"}.
-Passed to \code{m1_walkforward_predictions()} to select the
-\code{logit_spread} computation method.}
+Passed to \code{m1_walkforward_predictions()} and onward to
+\code{run_alignment_prospective_multi()}.}
 
 \item{verbose}{Logical; print progress.}
 }

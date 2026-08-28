@@ -10,13 +10,13 @@ library(mgcv)
 library(gamm4)
 library(gratia)
 
-source("R/m1_reference.R")
-source("R/m1_loso.R")
-source("R/utils.R")
-source("R/pipeline_runtime_helpers.R")
-source("R/m0_runtime.R")
-source("R/m2_runtime.R")
-source("R/pipeline_runtime.R")
+source("PAGe/R/m1_reference.R")
+source("PAGe/R/m1_loso.R")
+source("PAGe/R/utils.R")
+source("PAGe/R/pipeline_runtime_helpers.R")
+source("PAGe/R/m0_runtime.R")
+source("PAGe/R/m2_runtime.R")
+source("PAGe/R/pipeline_runtime.R")
 
 # ---- 1. Build allD ----
 startWeek <- 27

@@ -1,0 +1,31 @@
+---
+title: "PAGe 2018–19 Holdout Development Cycle"
+format:
+  html:
+    toc: true
+    number-sections: true
+execute:
+  eval: false
+---
+
+This is the reproducible record for the governed 2018–19 holdout cycle.
+Season identifiers are labels, not an ordering rule: every valid season other
+than the permanent exclusions and `2018-19` is used for training.  The runner
+is `run_2018_cycle.R`; it enforces M0 boundary validation before M1 tuning and
+M1 boundary validation before M2 tuning.
+
+All private outputs, checkpoints, logs, and replay artifacts are written to the
+canonical archive configured by `PAGE_ARTIFACT_ROOT` (on this run:
+`/home/yeli/PAGe-bcc-artifacts/asgard-archive-20260812/2018/`).
+
+```bash
+PAGE_ARTIFACT_ROOT=/home/yeli/PAGe-bcc-artifacts/asgard-archive-20260812 \
+  PAGE_RUN_ID=2018-final \
+  Rscript 2018/run_2018_cycle.R \
+  > /home/yeli/PAGe-bcc-artifacts/asgard-archive-20260812/2018-final/run.log 2>&1
+```
+
+The compact `status.tsv`, stage checkpoints, tuning objects, frozen candidate,
+season selection, and run manifest are the authoritative run record.  The
+holdout is not used during tuning or fitting and is evaluated only after the
+candidate is frozen.

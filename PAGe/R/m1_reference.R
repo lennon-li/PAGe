@@ -1,3 +1,36 @@
+.validate_m1_reference_support <- function(alignedD, k, n_weeks) {
+  if (!is.numeric(k) || length(k) != 1L || !is.finite(k) ||
+    k != as.integer(k) || k < 2L) {
+    stop("M1 reference basis `k_ref` must be one integer of at least 2.",
+      call. = FALSE
+    )
+  }
+  if (!is.numeric(n_weeks) || length(n_weeks) != 1L ||
+    !is.finite(n_weeks) || n_weeks < 2L ||
+    n_weeks != as.integer(n_weeks)) {
+    stop("M1 reference `n_weeks` must be one integer of at least 2.",
+      call. = FALSE
+    )
+  }
+  if (!"newWeek" %in% names(alignedD)) {
+    stop("M1 reference data must contain `newWeek`.", call. = FALSE)
+  }
+  week <- suppressWarnings(as.numeric(alignedD$newWeek))
+  week <- week[is.finite(week)]
+  week <- pmin(pmax(week, 1), as.integer(n_weeks))
+  n_unique <- length(unique(week))
+  if (as.integer(k) > n_unique) {
+    stop(
+      "M1 reference model cannot support k_ref=", as.integer(k),
+      ": only ", n_unique, " unique `newWeek` values are available after ",
+      "clamping to the ", as.integer(n_weeks), "-week domain. Use k_ref <= ",
+      n_unique, " or expand the data/domain first.",
+      call. = FALSE
+    )
+  }
+  invisible(n_unique)
+}
+
 #' Estimate a reference (template) curve for influenza positivity
 #'
 #' Fits a season-pooled model on aligned week index \code{newWeek} with a cyclic
@@ -45,20 +78,21 @@ estimateRef <- function(alignedD,
                         k = 10,
                         n_weeks = 52L,
                         nAGQ = 1,
-                        method = c("binomial", "binomial_weighted",
-                                   "gaussian_logit", "median_smooth",
-                                   "fs", "gaussian_logit_fs"),
+                        method = c(
+                          "binomial", "binomial_weighted",
+                          "gaussian_logit", "median_smooth",
+                          "fs", "gaussian_logit_fs"
+                        ),
                         trough_weight = 0.1,
                         peak_weight_boost = 3,
                         agg = c("median", "mean")) {
-
   method <- match.arg(method)
-  agg    <- match.arg(agg)
+  agg <- match.arg(agg)
 
-  if (!requireNamespace("gamm4",  quietly = TRUE)) stop("Need 'gamm4'.")
-  if (!requireNamespace("mgcv",   quietly = TRUE)) stop("Need 'mgcv'.")
+  if (!requireNamespace("gamm4", quietly = TRUE)) stop("Need 'gamm4'.")
+  if (!requireNamespace("mgcv", quietly = TRUE)) stop("Need 'mgcv'.")
   if (!requireNamespace("tibble", quietly = TRUE)) stop("Need 'tibble'.")
-  if (!requireNamespace("dplyr",  quietly = TRUE)) stop("Need 'dplyr'.")
+  if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
   if (!requireNamespace("gratia", quietly = TRUE)) stop("Need 'gratia'.")
 
   needed <- c("season", "newWeek", "y", "neg")
@@ -69,7 +103,9 @@ estimateRef <- function(alignedD,
   .make_weights <- function(dat, trough_weight, peak_weight_boost,
                             peak_weight_decay = 0.3) {
     wt <- rep(1.0, nrow(dat))
-    if (!"phase" %in% names(dat)) return(wt)
+    if (!"phase" %in% names(dat)) {
+      return(wt)
+    }
     wt[dat$phase == 0L] <- trough_weight
     if (peak_weight_boost > 1 && "iWeek" %in% names(dat) && "weekF" %in% names(dat)) {
       for (s in unique(dat$season)) {
@@ -82,8 +118,8 @@ estimateRef <- function(alignedD,
         w <- rep(1.0, length(idx))
         in_rise <- wk >= iw & wk <= pk
         past_pk <- wk > pk
-        w[in_rise]  <- peak_weight_boost
-        w[past_pk]  <- 1 + (peak_weight_boost - 1) *
+        w[in_rise] <- peak_weight_boost
+        w[past_pk] <- 1 + (peak_weight_boost - 1) *
           exp(-peak_weight_decay * (wk[past_pk] - pk))
         wt[idx] <- w
       }
@@ -95,6 +131,7 @@ estimateRef <- function(alignedD,
   if (!is.null(exSeason) && length(exSeason) > 0) {
     dat <- dplyr::filter(dat, !(.data$season %in% exSeason))
   }
+  .validate_m1_reference_support(dat, k = k, n_weeks = n_weeks)
   dat <- dplyr::mutate(dat, newWeek = pmin(as.integer(.data$newWeek), as.integer(n_weeks)))
 
   # ---------- helpers for re-smooth models ----------
@@ -102,20 +139,20 @@ estimateRef <- function(alignedD,
   # fs: s(newWeek, season, bs="fs") -- population curve = average across seasons
   # gaussian_logit_fs: global s(newWeek) + fs deviations -- exclude fs for population curve
   uses_re_smooth <- method == "gaussian_logit"
-  uses_fs        <- method == "fs"              # average-across-seasons approach
-  uses_fs_combo  <- method == "gaussian_logit_fs"  # exclude-fs approach
+  uses_fs <- method == "fs" # average-across-seasons approach
+  uses_fs_combo <- method == "gaussian_logit_fs" # exclude-fs approach
 
   # ==================== METHOD: binomial (original) ====================
   if (method == "binomial") {
     mod2 <- gamm4::gamm4(
       cbind(y, neg) ~ s(newWeek, bs = "cc", k = k),
-      random = ~(1 | season),
-      data   = dat,
+      random = ~ (1 | season),
+      data = dat,
       family = stats::binomial(),
-      nAGQ   = nAGQ
+      nAGQ = nAGQ
     )
 
-  # ==================== METHOD: binomial_weighted ====================
+    # ==================== METHOD: binomial_weighted ====================
   } else if (method == "binomial_weighted") {
     # Inflate counts for in-season rows (like estimateDerivs' ignition-to-peak boost).
     # phase==1 rows get counts multiplied by peak_weight_boost; phase==0 by trough_weight.
@@ -124,21 +161,23 @@ estimateRef <- function(alignedD,
       wt[dat$phase == 1L] <- peak_weight_boost
       wt[dat$phase == 0L] <- trough_weight
     }
-    dat$.y_w   <- as.integer(round(wt * dat$y))
+    dat$.y_w <- as.integer(round(wt * dat$y))
     dat$.neg_w <- as.integer(round(wt * dat$neg))
     mod2 <- gamm4::gamm4(
       cbind(.y_w, .neg_w) ~ s(newWeek, bs = "cc", k = k),
-      random = ~(1 | season),
-      data   = dat,
+      random = ~ (1 | season),
+      data = dat,
       family = stats::binomial(),
-      nAGQ   = nAGQ
+      nAGQ = nAGQ
     )
-    dat$.y_w <- NULL; dat$.neg_w <- NULL
+    dat$.y_w <- NULL
+    dat$.neg_w <- NULL
 
-  # ==================== METHOD: gaussian_logit ====================
+    # ==================== METHOD: gaussian_logit ====================
   } else if (method == "gaussian_logit") {
-    if (!"fit" %in% names(dat))
+    if (!"fit" %in% names(dat)) {
       stop("method='gaussian_logit' requires a 'fit' column from estimateDerivs().")
+    }
     dat$logit_fit <- stats::qlogis(pmin(pmax(dat$fit, 1e-4), 1 - 1e-4))
     dat$.gw <- .make_weights(dat, trough_weight, peak_weight_boost)
     dat$season <- factor(dat$season)
@@ -149,15 +188,16 @@ estimateRef <- function(alignedD,
     dat$.gw <- NULL
     mod2 <- list(gam = mod_gam)
 
-  # ==================== METHOD: median_smooth ====================
+    # ==================== METHOD: median_smooth ====================
   } else if (method == "median_smooth") {
-    if (!"fit" %in% names(dat))
+    if (!"fit" %in% names(dat)) {
       stop("method='median_smooth' requires a 'fit' column from estimateDerivs().")
+    }
     # Step 1: pointwise median of per-season smoothed fit at each newWeek
     agg <- dat |>
       dplyr::group_by(newWeek) |>
       dplyr::summarise(
-        med_p  = stats::median(fit, na.rm = TRUE),
+        med_p = stats::median(fit, na.rm = TRUE),
         n_seas = dplyr::n_distinct(season),
         .groups = "drop"
       ) |>
@@ -170,10 +210,11 @@ estimateRef <- function(alignedD,
     )
     mod2 <- list(gam = mod_gam, agg = agg)
 
-  # ==================== METHOD: fs (factor smooth) ====================
+    # ==================== METHOD: fs (factor smooth) ====================
   } else if (method == "fs") {
-    if (!"fit" %in% names(dat))
+    if (!"fit" %in% names(dat)) {
       stop("method='fs' requires a 'fit' column from estimateDerivs().")
+    }
     dat$logit_fit <- stats::qlogis(pmin(pmax(dat$fit, 1e-4), 1 - 1e-4))
     dat$.gw <- .make_weights(dat, trough_weight, peak_weight_boost)
     dat$season <- factor(dat$season)
@@ -185,12 +226,13 @@ estimateRef <- function(alignedD,
     dat$.gw <- NULL
     mod2 <- list(gam = mod_gam)
 
-  # ==================== METHOD: gaussian_logit_fs (ensemble) ====================
+    # ==================== METHOD: gaussian_logit_fs (ensemble) ====================
   } else if (method == "gaussian_logit_fs") {
     # Ensemble: average the population curves from gaussian_logit and fs methods.
     # Both sub-models are fit internally, then their logit-scale predictions are averaged.
-    if (!"fit" %in% names(dat))
+    if (!"fit" %in% names(dat)) {
       stop("method='gaussian_logit_fs' requires a 'fit' column from estimateDerivs().")
+    }
     dat$logit_fit <- stats::qlogis(pmin(pmax(dat$fit, 1e-4), 1 - 1e-4))
     dat$.gw <- .make_weights(dat, trough_weight, peak_weight_boost)
     dat$season <- factor(dat$season)
@@ -247,8 +289,10 @@ estimateRef <- function(alignedD,
     seas_levs <- levels(dat$season)
     # gaussian_logit population curve (exclude season RE)
     gl_grid <- cbind(grid, season = factor(seas_levs[1L], levels = seas_levs))
-    eta_gl <- drop(stats::predict(mod2$gam, newdata = gl_grid, type = "link",
-                                  exclude = "s(season)"))
+    eta_gl <- drop(stats::predict(mod2$gam,
+      newdata = gl_grid, type = "link",
+      exclude = "s(season)"
+    ))
     # fs population curve (average across seasons)
     eta_fs_mat <- sapply(seas_levs, function(s) {
       nd <- cbind(grid, season = factor(s, levels = seas_levs))
@@ -258,48 +302,56 @@ estimateRef <- function(alignedD,
     # Average on logit scale
     eta_hat <- (eta_gl + eta_fs) / 2
   } else {
-    eta_hat <- drop(stats::predict(mod2$gam, newdata = pred_grid, type = "link",
-                                   exclude = pred_exclude))
+    eta_hat <- drop(stats::predict(mod2$gam,
+      newdata = pred_grid, type = "link",
+      exclude = pred_exclude
+    ))
   }
-  g_ref_fun  <- stats::splinefun(grid$newWeek, eta_hat, method = "natural")
+  g_ref_fun <- stats::splinefun(grid$newWeek, eta_hat, method = "natural")
   g_ref_safe <- function(u) g_ref_fun(pmin(pmax(u, 1L), n_weeks))
 
   dat <- dplyr::mutate(dat, fit_ref = stats::plogis(g_ref_safe(.data$newWeek)))
 
-  weeks  <- seq_len(n_weeks)
+  weeks <- seq_len(n_weeks)
   ref_df <- tibble::tibble(newWeek = weeks, p_gamm = stats::plogis(g_ref_fun(weeks)))
 
   # --- predictions + CI ---
   is_logit_model <- method %in% c("gaussian_logit", "median_smooth", "fs", "gaussian_logit_fs")
 
   if (uses_fs || uses_fs_combo) {
-    fit    <- stats::plogis(eta_hat)
+    fit <- stats::plogis(eta_hat)
     se_fit <- if (uses_fs) {
       apply(eta_mat, 1, stats::sd) / sqrt(ncol(eta_mat))
     } else {
       rep(0, length(fit))
     }
-    low      <- stats::plogis(eta_hat - 1.96 * se_fit)
-    high     <- stats::plogis(eta_hat + 1.96 * se_fit)
+    low <- stats::plogis(eta_hat - 1.96 * se_fit)
+    high <- stats::plogis(eta_hat + 1.96 * se_fit)
     binom_se <- rep(0, length(fit))
     total_se <- se_fit
   } else if (is_logit_model) {
-    pr_nd <- if (needs_season_col) pred_grid
-             else if (method == "median_smooth") grid
-             else dplyr::mutate(grid, season = "fit")
-    pr <- stats::predict(mod2$gam, newdata = pr_nd, type = "response",
-                         se.fit = TRUE, exclude = pred_exclude)
-    fit    <- as.numeric(pr$fit)
+    pr_nd <- if (needs_season_col) {
+      pred_grid
+    } else if (method == "median_smooth") {
+      grid
+    } else {
+      dplyr::mutate(grid, season = "fit")
+    }
+    pr <- stats::predict(mod2$gam,
+      newdata = pr_nd, type = "response",
+      se.fit = TRUE, exclude = pred_exclude
+    )
+    fit <- as.numeric(pr$fit)
     se_fit <- as.numeric(pr$se.fit)
-    low      <- stats::plogis(eta_hat - 1.96 * se_fit)
-    high     <- stats::plogis(eta_hat + 1.96 * se_fit)
-    fit      <- stats::plogis(fit)
+    low <- stats::plogis(eta_hat - 1.96 * se_fit)
+    high <- stats::plogis(eta_hat + 1.96 * se_fit)
+    fit <- stats::plogis(fit)
     binom_se <- rep(0, length(fit))
     total_se <- se_fit
   } else {
     # binomial / binomial_weighted: predict from gamm4 GAM component
-    pr     <- stats::predict(mod2$gam, newdata = grid, type = "response", se.fit = TRUE)
-    fit    <- as.numeric(pr$fit)
+    pr <- stats::predict(mod2$gam, newdata = grid, type = "response", se.fit = TRUE)
+    fit <- as.numeric(pr$fit)
     se_fit <- as.numeric(pr$se.fit)
     if ("N" %in% names(dat)) {
       N_med <- tapply(dat$N, dat$newWeek, stats::median, na.rm = TRUE)
@@ -309,7 +361,7 @@ estimateRef <- function(alignedD,
     }
     binom_se <- if (all(is.na(N_vec))) rep(0, length(fit)) else sqrt(pmax(0, fit * (1 - fit) / N_vec))
     total_se <- sqrt(binom_se^2 + se_fit^2)
-    low  <- pmax(0, fit - 1.96 * total_se)
+    low <- pmax(0, fit - 1.96 * total_se)
     high <- pmin(1, fit + 1.96 * total_se)
   }
 
@@ -319,12 +371,16 @@ estimateRef <- function(alignedD,
     d1_eta <- g_ref_fun(grid$newWeek, deriv = 1)
     d2_eta <- g_ref_fun(grid$newWeek, deriv = 2)
   } else {
-    deriv_grid   <- if (needs_season_col) pred_grid else grid
+    deriv_grid <- if (needs_season_col) pred_grid else grid
     deriv_select <- if (needs_season_col) "s(newWeek)" else NULL
-    d1_eta <- gratia::derivatives(mod2$gam, order = 1, se = TRUE, data = deriv_grid,
-                                  select = deriv_select)$.derivative
-    d2_eta <- gratia::derivatives(mod2$gam, order = 2, se = TRUE, data = deriv_grid,
-                                  select = deriv_select)$.derivative
+    d1_eta <- gratia::derivatives(mod2$gam,
+      order = 1, se = TRUE, data = deriv_grid,
+      select = deriv_select
+    )$.derivative
+    d2_eta <- gratia::derivatives(mod2$gam,
+      order = 2, se = TRUE, data = deriv_grid,
+      select = deriv_select
+    )$.derivative
   }
 
   pred_df <- tibble::tibble(
@@ -352,8 +408,10 @@ estimateRef <- function(alignedD,
         } else {
           rowMeans(eta_mat)
         }
-        list(mu = mu,
-             se = apply(eta_mat, 1, stats::sd) / sqrt(ncol(eta_mat)))
+        list(
+          mu = mu,
+          se = apply(eta_mat, 1, stats::sd) / sqrt(ncol(eta_mat))
+        )
       }
     })(mod2$gam, levels(dat$season), agg)
   } else if (uses_fs_combo) {
@@ -362,8 +420,10 @@ estimateRef <- function(alignedD,
       function(u) {
         # gaussian_logit population curve
         nd_gl <- data.frame(newWeek = u, season = factor(seas_levs[1L], levels = seas_levs))
-        eta_gl <- drop(stats::predict(gam_gl, newdata = nd_gl, type = "link",
-                                      exclude = "s(season)"))
+        eta_gl <- drop(stats::predict(gam_gl,
+          newdata = nd_gl, type = "link",
+          exclude = "s(season)"
+        ))
         # fs population curve (average across seasons)
         eta_fs_mat <- sapply(seas_levs, function(s) {
           nd <- data.frame(newWeek = u, season = factor(s, levels = seas_levs))
@@ -383,12 +443,14 @@ estimateRef <- function(alignedD,
         } else {
           data.frame(newWeek = u)
         }
-        out <- stats::predict(gam_obj, newdata = nd, type = "link", se.fit = TRUE,
-                              exclude = excl)
+        out <- stats::predict(gam_obj,
+          newdata = nd, type = "link", se.fit = TRUE,
+          exclude = excl
+        )
         list(mu = drop(out$fit), se = drop(out$se.fit))
       }
     })(mod2$gam, pred_exclude,
-       if (needs_season_col) levels(dat$season) else NULL)
+      if (needs_season_col) levels(dat$season) else NULL)
   }
 
   out <- list(
@@ -455,37 +517,37 @@ estimateRef <- function(alignedD,
 #' @importFrom stats as.formula predict qnorm
 #' @rawNamespace import(data.table, except = c(between, first, last, transpose))
 estimateDerivs <- function(
-    allD,
-    k = 10,
-    bs = "ps",
-    week_col   = "weekF",
-    season_col = "season",
-    y_col      = "y",
-    n_col      = "N",
-    ci_level   = 0.95,
-    deriv_interval = "simultaneous",
-    method = "REML",
-    peak_weight_boost = 1,
-    peak_weight_decay = 0.3,
-    ignition_weeks    = NULL
+  allD,
+  k = 10,
+  bs = "ps",
+  week_col = "weekF",
+  season_col = "season",
+  y_col = "y",
+  n_col = "N",
+  ci_level = 0.95,
+  deriv_interval = "simultaneous",
+  method = "REML",
+  peak_weight_boost = 1,
+  peak_weight_decay = 0.3,
+  ignition_weeks = NULL
 ) {
   stopifnot(
     is.data.frame(allD),
     all(c(season_col, week_col, y_col, n_col) %in% names(allD))
   )
-  
+
   if (!requireNamespace("mgcv", quietly = TRUE)) stop("Package 'mgcv' is required.")
   if (!requireNamespace("gratia", quietly = TRUE)) stop("Package 'gratia' is required.")
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Package 'data.table' is required.")
-  
+
   DT <- data.table::as.data.table(allD)
   DT[, (season_col) := as.factor(as.character(get(season_col)))]
   DT[, neg := get(n_col) - get(y_col)]
-  
+
   z <- stats::qnorm(1 - (1 - ci_level) / 2)
-  
+
   idx_by_season <- split(seq_len(nrow(DT)), DT[[season_col]])
-  
+
   fit_one <- function(idx) {
     dts <- DT[idx]
     data.table::setorderv(dts, week_col)
@@ -500,8 +562,8 @@ estimateDerivs <- function(
     # Original y/neg columns are left untouched so downstream p = y/N remains valid.
     if (peak_weight_boost > 1) {
       s_label <- as.character(dts[[season_col]][1])
-      wk      <- dts[[week_col]]
-      p_obs   <- dts[[y_col]] / (dts[[y_col]] + dts[["neg"]])
+      wk <- dts[[week_col]]
+      p_obs <- dts[[y_col]] / (dts[[y_col]] + dts[["neg"]])
 
       # ignition week: from user-supplied map, or fallback to first p >= 0.01
       iw <- if (!is.null(ignition_weeks) && s_label %in% names(ignition_weeks)) {
@@ -516,28 +578,30 @@ estimateDerivs <- function(
       obs_peak <- if (length(valid_idx) > 0) {
         wk[valid_idx[which.max(p_obs[valid_idx])]]
       } else {
-        max(wk, na.rm = TRUE)  # no valid peak: boost nowhere, decay starts at end
+        max(wk, na.rm = TRUE) # no valid peak: boost nowhere, decay starts at end
       }
 
       # soft ramp weight vector
       wt <- rep(1.0, nrow(dts))
-      in_region  <- wk >= iw & wk <= obs_peak
-      past_peak  <- wk > obs_peak
+      in_region <- wk >= iw & wk <= obs_peak
+      past_peak <- wk > obs_peak
       wt[in_region] <- peak_weight_boost
       wt[past_peak] <- 1 + (peak_weight_boost - 1) *
         exp(-peak_weight_decay * (wk[past_peak] - obs_peak))
 
       # inflate counts into temporary columns -- originals y/neg stay intact in output
-      dts[, .y_fit   := as.integer(round(wt * get(y_col)))]
+      dts[, .y_fit := as.integer(round(wt * get(y_col)))]
       dts[, .neg_fit := as.integer(round(wt * neg))]
     } else {
-      dts[, .y_fit   := get(y_col)]
+      dts[, .y_fit := get(y_col)]
       dts[, .neg_fit := neg]
     }
 
     fml <- stats::as.formula(
-      sprintf("cbind(.y_fit, .neg_fit) ~ s(%s, k = %d, bs = '%s')",
-              week_col, k, bs)
+      sprintf(
+        "cbind(.y_fit, .neg_fit) ~ s(%s, k = %d, bs = '%s')",
+        week_col, k, bs
+      )
     )
 
     g <- mgcv::gam(
@@ -546,24 +610,24 @@ estimateDerivs <- function(
       family  = binomial(),
       method  = method
     )
-    
+
     # predictions on link scale -> transform => response-scale CI
-    pr  <- stats::predict(g, newdata = dts, type = "link", se.fit = TRUE)
+    pr <- stats::predict(g, newdata = dts, type = "link", se.fit = TRUE)
     eta <- as.numeric(pr$fit)
-    se  <- as.numeric(pr$se.fit)
-    
+    se <- as.numeric(pr$se.fit)
+
     dts[, `:=`(
       fit      = g$family$linkinv(eta),
       fit_low  = g$family$linkinv(eta - z * se),
       fit_high = g$family$linkinv(eta + z * se)
     )]
-    
+
     d1 <- gratia::derivatives(g, order = 1, interval = deriv_interval, data = dts)
     d2 <- gratia::derivatives(g, order = 2, interval = deriv_interval, data = dts)
-    
+
     d1 <- data.table::as.data.table(d1)
     d2 <- data.table::as.data.table(d2)
-    
+
     # bring along season + week, keep only needed cols
     # (gratia output includes the covariate column named week_col, e.g. weekF)
     d1 <- d1[, .(
@@ -580,12 +644,12 @@ estimateDerivs <- function(
       d2_low     = .lower_ci,
       d2_high    = .upper_ci
     )]
-    
+
     # ensure unique weeks in derivative outputs too
     if (anyDuplicated(d1$week_tmp) > 0L || anyDuplicated(d2$week_tmp) > 0L) {
       stop("derivatives() returned duplicate ", week_col, " values; cannot merge safely.")
     }
-    
+
     # merge by season+week (robust across seasons)
     out <- merge(
       dts, d1,
@@ -601,18 +665,18 @@ estimateDerivs <- function(
       all.x = TRUE,
       sort = FALSE
     )
-    
+
     data.table::setorderv(out, c(season_col, week_col))
-    out[, .y_fit   := NULL]
+    out[, .y_fit := NULL]
     out[, .neg_fit := NULL]
     list(data = out, model = g)
   }
 
-  res_list  <- lapply(idx_by_season, fit_one)
-  data_out  <- data.table::rbindlist(lapply(res_list, `[[`, "data"))
+  res_list <- lapply(idx_by_season, fit_one)
+  data_out <- data.table::rbindlist(lapply(res_list, `[[`, "data"))
   models_out <- lapply(res_list, `[[`, "model")
   names(models_out) <- names(idx_by_season)
-  
+
   list(
     data   = as.data.frame(data_out),
     models = models_out
@@ -628,40 +692,40 @@ estimateDerivs <- function(
 #' @return data.frame with newWeek and phase_inSeason added; attributes: anchorWeek, ignD
 alignIgnition <- function(outs,
                           season_col = "season",
-                          week_col   = "weekF",
-                          nweek_col  = "nW_true") {
+                          week_col = "weekF",
+                          nweek_col = "nW_true") {
   stopifnot(is.list(outs), length(outs) > 0)
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Need 'data.table'.")
   if (!requireNamespace("purrr", quietly = TRUE)) stop("Need 'purrr'.")
-  
+
   # bind data + ignition
   allD <- data.table::rbindlist(purrr::map(outs, "data"), fill = TRUE)
   ignD <- data.table::rbindlist(purrr::map(outs, "ignition"), fill = TRUE)
-  
+
   stopifnot(season_col %in% names(allD), week_col %in% names(allD))
   stopifnot(season_col %in% names(ignD), week_col %in% names(ignD))
-  
+
   # robust int coercion (handles factor/character safely)
   to_int <- function(x) suppressWarnings(as.integer(as.character(x)))
-  
+
   allD[, (season_col) := as.character(get(season_col))]
-  allD[, (week_col)   := to_int(get(week_col))]
-  
+  allD[, (week_col) := to_int(get(week_col))]
+
   ignD[, (season_col) := as.character(get(season_col))]
-  ignD[, (week_col)   := to_int(get(week_col))]
-  
+  ignD[, (week_col) := to_int(get(week_col))]
+
   # one ignition week per season (first non-NA)
-  ign_small <- ignD[, .(iWeek = get(week_col)) , by = season_col][
+  ign_small <- ignD[, .(iWeek = get(week_col)), by = season_col][
     , .(iWeek = if (all(is.na(iWeek))) NA_integer_ else iWeek[which(!is.na(iWeek))[1]]),
     by = season_col
   ]
-  
+
   anchorWeek <- to_int(stats::median(ign_small$iWeek, na.rm = TRUE))
-  
+
   # named maps: season -> iWeek and season -> offset
-  iweek_map  <- setNames(ign_small$iWeek, ign_small[[season_col]])
+  iweek_map <- setNames(ign_small$iWeek, ign_small[[season_col]])
   offset_map <- setNames(anchorWeek - ign_small$iWeek, ign_small[[season_col]])
-  
+
   # season length nW (52/53)
   if (!is.null(nweek_col) && nweek_col %in% names(allD)) {
     allD[, nW := to_int(get(nweek_col))]
@@ -669,29 +733,29 @@ alignIgnition <- function(outs,
   } else {
     allD[, nW := max(get(week_col), na.rm = TRUE), by = season_col]
   }
-  
+
   # lookup iWeek and offset WITHOUT merge
-  allD[, iWeek  := iweek_map[get(season_col)]]
+  allD[, iWeek := iweek_map[get(season_col)]]
   allD[, offset := offset_map[get(season_col)]]
-  
+
   # aligned week (wrap by nW to handle 52 vs 53)
   allD[, newWeek := ifelse(
     is.na(get(week_col)) | is.na(iWeek) | is.na(nW) | is.na(anchorWeek),
     NA_integer_,
     ((get(week_col) + offset - 1L) %% nW) + 1L
   )]
-  
+
   # ---- phase indicator: in-season (>= ignition) vs pre-season (< ignition) ----
   allD[, phase := as.integer(
     !is.na(iWeek) &
       !is.na(get(week_col)) &
       (get(week_col) >= iWeek)
   )]
-  
-  allD[, offset := NULL]  # drop helper
-  
+
+  allD[, offset := NULL] # drop helper
+
   out <- as.data.frame(allD)
   attr(out, "anchorWeek") <- anchorWeek
-  attr(out, "ignD")       <- as.data.frame(ign_small)
+  attr(out, "ignD") <- as.data.frame(ign_small)
   out
 }

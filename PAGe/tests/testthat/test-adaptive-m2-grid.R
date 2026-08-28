@@ -91,7 +91,7 @@ test_that("boundary expansion uses the spacing adjacent to the winning boundary"
     drop = FALSE
   ]
 
-  expect_equal(alpha_boundary$alpha_state, 0)
+  expect_equal(alpha_boundary$alpha_state, 0.05)
   expect_false(any(abs(alpha_boundary$alpha_state - 0.09) < 1e-10))
 })
 
@@ -121,8 +121,9 @@ test_that("M2 EMA boundary expands only to the explicit drop/null", {
 
   expect_true(any(planned$k_e == 0L & grepl("boundary:k_e:drop", planned$provenance, fixed = TRUE)))
   expect_false(any(planned$k_e == 1L))
-  expect_true(any(planned$k_sp == 10L & grepl("boundary:k_sp", planned$provenance, fixed = TRUE)))
-  expect_true(any(planned$bias_alpha == 0 & grepl("boundary:bias_alpha", planned$provenance, fixed = TRUE)))
+  expect_true(any(planned$k_sp == 9L & grepl("boundary:k_sp", planned$provenance, fixed = TRUE)))
+  expect_true(any(abs(planned$bias_alpha - 0.025) < 1e-10 &
+    grepl("boundary:bias_alpha", planned$provenance, fixed = TRUE)))
   expect_error(
     PAGe:::.validate_m2_grid(transform(grid[1L, ], k_e = 1L)),
     "k_e must be 0"
@@ -130,6 +131,58 @@ test_that("M2 EMA boundary expands only to the explicit drop/null", {
 
   dropped_ema <- PAGe::stage2_make_spec(k_e = 0L)
   expect_false(any(grepl("z_ema", deparse(dropped_ema$formula), fixed = TRUE)))
+})
+
+test_that("all optional M2 smooth dimensions retain explicit drop candidates", {
+  grid <- data.frame(
+    delta = 0L, Kr = 1L, k_f = 4L, k_e = c(2L, 4L),
+    alpha_state = 0.20, k_r = c(2L, 4L), k_de = c(2L, 4L),
+    k_sp = c(4L, 8L), bias_alpha = 0.05, bias_beta = 0
+  )
+  planned <- PAGe::plan_m2_grid(max_specs = 64L)
+
+  expect_true(any(planned$k_e == 0L))
+  expect_true(any(planned$k_r == 0L))
+  expect_true(any(planned$k_de == 0L))
+  expect_true(any(planned$k_sp == 0L))
+
+  grid$spec_id <- PAGe:::.m2_spec_ids(grid)
+  previous <- list(
+    grid = grid,
+    summary = data.frame(
+      spec_id = grid$spec_id,
+      bernoulli_nll = c(0.10, 0.20)
+    )
+  )
+  expanded <- PAGe::plan_m2_grid(previous, max_specs = 64L)
+  for (parameter in c("k_r", "k_de", "k_sp")) {
+    expect_true(any(
+      expanded[[parameter]] == 0L &
+        grepl(paste0("boundary:", parameter, ":drop"),
+              expanded$provenance, fixed = TRUE)
+    ))
+  }
+})
+
+test_that("adaptive planning adds a missing drop after positive expansion", {
+  grid <- data.frame(
+    delta = 0L, Kr = 1L, k_f = 4L, k_e = 2L,
+    alpha_state = 0.20, k_r = 0L, k_de = 0L, k_sp = c(1L, 2L),
+    bias_alpha = 0.05, bias_beta = 0
+  )
+  grid$spec_id <- PAGe:::.m2_spec_ids(grid)
+  previous <- list(
+    grid = grid,
+    summary = data.frame(
+      spec_id = grid$spec_id,
+      bernoulli_nll = c(0.20, 0.10)
+    )
+  )
+  planned <- PAGe::plan_m2_grid(previous, max_specs = 64L)
+  expect_true(any(
+    planned$k_sp == 0L &
+      grepl("boundary:k_sp:drop", planned$provenance, fixed = TRUE)
+  ))
 })
 
 test_that("adaptive M2 caps preserve the incumbent and best prior specification", {

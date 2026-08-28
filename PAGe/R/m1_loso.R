@@ -263,10 +263,19 @@ loso_walkforward <- function(allD,
       warning(sprintf("[loso_walkforward] ref_method='%s' ignored when use_multi_template=TRUE; forcing 'fs' (required for eta_mat).", ref_method))
     }
     ref_meth <- if (use_multi_template) "fs" else ref_method
-    ref <- estimateRef(
-      alignedD = aligned_train, exSeason = character(0),
-      k = k_ref, n_weeks = n_weeks,
-      method = ref_meth
+    ref <- tryCatch(
+      estimateRef(
+        alignedD = aligned_train, exSeason = character(0),
+        k = k_ref, n_weeks = n_weeks,
+        method = ref_meth
+      ),
+      error = function(e) {
+        stop(
+          "M1 reference fit failed for fold `", test_s,
+          "` with k_ref=", as.integer(k_ref), ": ", conditionMessage(e),
+          call. = FALSE
+        )
+      }
     )
 
     # Store original (unshifted) template for plotting, then apply lag if requested
@@ -524,6 +533,8 @@ loso_walkforward <- function(allD,
 #' @param checkpoint_dir Character. Directory for per-spec checkpoint files
 #'   and the results cache (default \code{"data/m1_tune_ckpt"}).
 #' @param verbose Logical. Print progress (default \code{TRUE}).
+#' @param fail_fast Logical. Stop and return the failing specification and
+#'   fold error instead of recording an unevaluable candidate (default `TRUE`).
 #' @param ... Additional fixed arguments forwarded to
 #'   \code{loso_walkforward()} (e.g. \code{buffer_weeks}, \code{use_ci}).
 #'
@@ -531,7 +542,7 @@ loso_walkforward <- function(allD,
 #' \describe{
 #'   \item{scores}{Tibble with one row per spec: \code{spec_id} plus the
 #'     grid columns, \code{mae_uniform}, \code{mae_exp}, \code{mae_weibull},
-#'     \code{n_seasons}.}
+#'     \code{n_seasons}, and \code{failure_reason}.}
 #'   \item{best}{Single-row tibble for the spec with lowest
 #'     \code{mae_weibull}.}
 #'   \item{grid}{The input grid (for reference).}
@@ -565,6 +576,7 @@ tune_m1_alignment <- function(allD,
                               n_cores = parallel::detectCores() - 1L,
                               checkpoint_dir = "data/m1_tune_ckpt",
                               verbose = TRUE,
+                              fail_fast = TRUE,
                               ...) {
   if (!dir.exists(checkpoint_dir)) {
     dir.create(checkpoint_dir, recursive = TRUE)
@@ -588,6 +600,7 @@ tune_m1_alignment <- function(allD,
   # Build stable spec IDs. Expanded grids append new rows while retaining the
   # IDs of previously scored rows, allowing the checkpoint to skip them.
   grid <- tibble::as_tibble(grid)
+  .validate_m1_grid_support(grid, n_weeks = n_weeks)
   n_specs <- nrow(grid)
   if (!"spec_id" %in% names(grid)) {
     grid$spec_id <- sprintf("s%03d", seq_len(n_specs))
@@ -668,13 +681,19 @@ tune_m1_alignment <- function(allD,
       paste0("ckpt_", sid, ".rds")
     )
 
+    wf_error <- NULL
     wf <- tryCatch(
       do.call(loso_walkforward, wf_args),
       error = function(e) {
-        warning(sprintf("[tune_m1] Spec %s failed: %s", sid, conditionMessage(e)))
+        wf_error <<- conditionMessage(e)
         NULL
       }
     )
+    if (!is.null(wf_error)) {
+      message <- paste0("M1 tuning specification ", sid, " failed: ", wf_error)
+      if (isTRUE(fail_fast)) stop(message, call. = FALSE)
+      warning(message, call. = FALSE)
+    }
 
     if (is.null(wf)) {
       row <- tibble::tibble(
@@ -685,7 +704,8 @@ tune_m1_alignment <- function(allD,
         mae_med_uniform = NA_real_,
         mae_med_exp     = NA_real_,
         mae_med_weibull = NA_real_,
-        n_seasons       = 0L
+        n_seasons       = 0L,
+        failure_reason  = if (is.null(wf_error)) NA_character_ else wf_error
       )
     } else {
       base_df <- wf$params_df |>
@@ -716,7 +736,8 @@ tune_m1_alignment <- function(allD,
         mae_med_uniform  = .weighted_mae(score_med, "w_unif"),
         mae_med_exp      = .weighted_mae(score_med, "w_exp"),
         mae_med_weibull  = .weighted_mae(score_med, "w_weib"),
-        n_seasons        = dplyr::n_distinct(base_df$season)
+        n_seasons        = dplyr::n_distinct(base_df$season),
+        failure_reason   = NA_character_
       )
     }
 

@@ -48,10 +48,10 @@ suppressPackageStartupMessages({
 n_cores <- max(1L, parallel::detectCores() - 1L)
 future::plan(future::multisession, workers = n_cores)
 cat("Parallel plan: multisession with", n_cores, "workers\n")
-for (f in c('R/utils.R', 'R/m0_retro.R', 'R/flagIgnition.R',
-            'R/m1_reference.R', 'R/m1_reference_helpers.R', 'R/m1_multi_template.R',
-            'R/m2_spec_grid.R', 'R/m2_training.R', 'R/m2_nested_loso.R',
-            'R/pipeline_bridge.R', 'R/pipeline_runtime_helpers.R')) source(f)
+for (f in c('PAGe/R/utils.R', 'PAGe/R/m0_retro.R', 'PAGe/R/flagIgnition.R',
+            'PAGe/R/m1_reference.R', 'PAGe/R/m1_reference_helpers.R', 'PAGe/R/m1_multi_template.R',
+            'PAGe/R/m2_spec_grid.R', 'PAGe/R/m2_training.R', 'PAGe/R/m2_nested_loso.R',
+            'PAGe/R/pipeline_bridge.R', 'PAGe/R/pipeline_runtime_helpers.R')) source(f)
 
 n_weeks_in_start_year <- function(sy)
   52L + as.integer(MMWRweek::MMWRweek(as.Date(paste0(sy, '-12-31')))$MMWRweek == 53L)

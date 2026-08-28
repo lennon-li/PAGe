@@ -27,7 +27,7 @@ Creates a compact, explainable M2 grid. Without compatible prior tuning
 results, the plan contains the current v16-corrected incumbent and one-factor
 neighbors. With prior results, it retains v16, greedily retains diverse
 high-performing finalists, adds one-factor neighbors around the prior
-winner, and expands grid boundaries reached by that winner using the
+winner, and expands grid boundaries reached by that winner using half the
 spacing adjacent to each reached boundary.
 }
 \details{

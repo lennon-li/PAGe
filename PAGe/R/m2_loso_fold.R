@@ -38,12 +38,12 @@
 nested_loso_build_fold <- function(allD,
                                    test_season,
                                    exclude_seasons = NULL,
-                                   k_deriv         = 10L,
-                                   k_ref           = 25L,
-                                   n_weeks         = 52L,
-                                   ref_method      = "fs",
-                                   manual_labels   = NULL,
-                                   flag_args       = list(
+                                   k_deriv = 10L,
+                                   k_ref = 25L,
+                                   n_weeks = 52L,
+                                   ref_method = "fs",
+                                   manual_labels = NULL,
+                                   flag_args = list(
                                      p_thresh   = 0.01,
                                      k1         = 0.4,
                                      k_c        = 0.01,
@@ -54,38 +54,47 @@ nested_loso_build_fold <- function(allD,
                                      d2_relax   = -0.01
                                    ),
                                    verbose = TRUE) {
-
   all_seasons <- sort(unique(as.character(allD$season)))
   if (!is.null(exclude_seasons)) {
-    allD        <- dplyr::filter(allD, !.data$season %in% exclude_seasons)
+    allD <- dplyr::filter(allD, !.data$season %in% exclude_seasons)
     all_seasons <- setdiff(all_seasons, exclude_seasons)
   }
   stopifnot(test_season %in% all_seasons)
 
   tr_seasons <- setdiff(all_seasons, test_season)
-  if (length(tr_seasons) < 2L)
+  if (length(tr_seasons) < 2L) {
     stop("Need >= 2 training seasons; got ", length(tr_seasons))
+  }
 
-  if (isTRUE(verbose))
-    message("[build_fold] test=", test_season,
-            " | training on ", length(tr_seasons), " seasons")
+  if (isTRUE(verbose)) {
+    message(
+      "[build_fold] test=", test_season,
+      " | training on ", length(tr_seasons), " seasons"
+    )
+  }
 
   # M0 pipeline on training data
   train_allD <- dplyr::filter(allD, .data$season %in% tr_seasons)
-  res_deriv  <- estimateDerivs(train_allD, k = k_deriv)
+  res_deriv <- estimateDerivs(train_allD, k = k_deriv)
 
   train_outs <- res_deriv$data |>
     dplyr::group_by(.data$season) |>
     dplyr::group_split(.keep = TRUE) |>
-    purrr::map(~ do.call(flagIgnition,
-                         c(list(df = .x, manual_labels = manual_labels),
-                           flag_args)))
+    purrr::map(~ do.call(
+      flagIgnition,
+      c(
+        list(df = .x, manual_labels = manual_labels),
+        flag_args
+      )
+    ))
 
   aligned_train <- alignIgnition(train_outs)
 
   # Reference curve (leakage-free: test season excluded)
-  ref   <- estimateRef(alignedD = aligned_train, exSeason = character(0),
-                       k = k_ref, n_weeks = n_weeks, method = ref_method)
+  ref <- estimateRef(
+    alignedD = aligned_train, exSeason = character(0),
+    k = k_ref, n_weeks = n_weeks, method = ref_method
+  )
   hyper <- learn_alignment_hyperparams(ref$dat, ref$g_ref_fun)
 
   # Per-fold template
@@ -124,10 +133,11 @@ nested_loso_build_fold <- function(allD,
 #' @param slope_weight,slope_window Growth-rate similarity controls.
 #' @param dynamic_temp,dynamic_temp_pivot Early-season temperature controls.
 #' @param top_k,blend_alpha Template filtering and blending controls.
-#' @param spread_method Character; \code{"between"} (default) or \code{"total"}.
-#'   Passed to \code{m1_walkforward_multi()}.
 #' @param parallel Logical; run M1 seasons in parallel (default TRUE).
 #' @param verbose Logical; print progress.
+#' @param spread_method Character; \code{"between"} (default) or \code{"total"}.
+#'   Passed to \code{m1_walkforward_multi()} and onward to
+#'   \code{run_alignment_prospective_multi()}.
 #'
 #' @return Tibble of M1 walk-forward predictions for training seasons
 #'   (columns: season, eval_weekF, target_weekF, h, m1_p_hat, ...).
@@ -136,31 +146,32 @@ nested_loso_build_fold <- function(allD,
 nested_loso_m1_train <- function(allD,
                                  fold,
                                  params,
-                                 horizons           = c(1L, 2L),
-                                 allow_scale        = NULL,
-                                 use_ci             = TRUE,
-                                 buffer_weeks       = 0L,
-                                 min_obs            = 4L,
-                                 curvature_ratio    = 1.0,
-                                 temperature        = 0.25,
-                                 rise_weight        = 1.0,
-                                 trough_weight      = 0.1,
-                                 peak_decay         = 0.3,
-                                 slope_weight       = 8.0,
-                                 slope_window       = 6L,
-                                 dynamic_temp       = FALSE,
+                                 horizons = c(1L, 2L),
+                                 allow_scale = NULL,
+                                 use_ci = TRUE,
+                                 buffer_weeks = 0L,
+                                 min_obs = 4L,
+                                 curvature_ratio = 1.0,
+                                 temperature = 0.25,
+                                 rise_weight = 1.0,
+                                 trough_weight = 0.1,
+                                 peak_decay = 0.3,
+                                 slope_weight = 8.0,
+                                 slope_window = 6L,
+                                 dynamic_temp = FALSE,
                                  dynamic_temp_pivot = 10L,
-                                 top_k              = NULL,
-                                 blend_alpha        = 1.0,
-                                 spread_method      = c("between", "total"),
-                                 parallel           = TRUE,
-                                 verbose            = TRUE) {
-
+                                 top_k = NULL,
+                                 blend_alpha = 1.0,
+                                 spread_method = c("between", "total"),
+                                 parallel = TRUE,
+                                 verbose = TRUE) {
   spread_method <- match.arg(spread_method)
-
-  if (isTRUE(verbose))
-    message("[m1_train] Running M1 walk-forward on ",
-            length(fold$train_seasons), " training seasons")
+  if (isTRUE(verbose)) {
+    message(
+      "[m1_train] Running M1 walk-forward on ",
+      length(fold$train_seasons), " training seasons"
+    )
+  }
 
   m1_walkforward_multi(
     allD               = allD,
@@ -206,6 +217,8 @@ nested_loso_m1_train <- function(allD,
 #' @param spec M2 hyperparameter spec object (as used by \code{train_stage2_joint()}).
 #' @param method GAM fitting method (default \code{"REML"}).
 #' @param verbose Logical; print progress.
+#' @param fail_fast Logical; rethrow unsupported-model errors instead of
+#'   converting them to a warning and \code{NULL} (default \code{FALSE}).
 #'
 #' @return Output of \code{train_stage2_joint()} (list with \code{fit},
 #'   \code{train_data}, ...), or \code{NULL} if training fails.
@@ -213,20 +226,25 @@ nested_loso_m1_train <- function(allD,
 nested_loso_m2_train <- function(fold,
                                  m1_train_preds = NULL,
                                  spec,
-                                 method  = "REML",
-                                 verbose = TRUE) {
-
-  if (isTRUE(verbose))
+                                 method = "REML",
+                                 verbose = TRUE,
+                                 fail_fast = FALSE) {
+  if (isTRUE(verbose)) {
     message("[m2_train] Training M2 on fold (test=", fold$test_season, ")")
+  }
 
   # Prepare aligned training data with prospective derivatives
   alignedD_prosp <- add_prospective_derivs_link(fold$aligned_train)
-  if (!"N" %in% names(alignedD_prosp))
+  if (!"N" %in% names(alignedD_prosp)) {
     alignedD_prosp$N <- alignedD_prosp$y + alignedD_prosp$neg
+  }
 
   # Normalize empty M1 predictions to NULL
-  m1_preds_use <- if (!is.null(m1_train_preds) && nrow(m1_train_preds) > 0)
-    m1_train_preds else NULL
+  m1_preds_use <- if (!is.null(m1_train_preds) && nrow(m1_train_preds) > 0) {
+    m1_train_preds
+  } else {
+    NULL
+  }
 
   tryCatch(
     train_stage2_joint(
@@ -238,8 +256,13 @@ nested_loso_m2_train <- function(fold,
       verbose     = FALSE
     ),
     error = function(e) {
-      warning("[m2_train] Failed for test season ", fold$test_season,
-              ": ", e$message)
+      if (isTRUE(fail_fast)) {
+        stop(conditionMessage(e), call. = FALSE)
+      }
+      warning(
+        "[m2_train] Failed for test season ", fold$test_season,
+        ": ", e$message
+      )
       NULL
     }
   )
@@ -267,9 +290,10 @@ nested_loso_m2_train <- function(fold,
 #' @param slope_weight,slope_window Growth-rate similarity controls.
 #' @param dynamic_temp,dynamic_temp_pivot Early-season temperature controls.
 #' @param top_k,blend_alpha Template filtering and blending controls.
-#' @param spread_method Character; \code{"between"} (default) or \code{"total"}.
-#'   Passed to \code{m1_walkforward_predictions()}.
 #' @param verbose Logical; print progress.
+#' @param spread_method Character; \code{"between"} (default) or \code{"total"}.
+#'   Passed to \code{m1_walkforward_predictions()} and onward to
+#'   \code{run_alignment_prospective_multi()}.
 #'
 #' @return Tibble of M1 walk-forward predictions for the test season,
 #'   or a zero-row tibble if no ignition detected.
@@ -277,29 +301,28 @@ nested_loso_m2_train <- function(fold,
 nested_loso_m1_test <- function(allD,
                                 fold,
                                 params,
-                                horizons           = c(1L, 2L),
-                                allow_scale        = NULL,
-                                use_ci             = TRUE,
-                                buffer_weeks       = 0L,
-                                min_obs            = 4L,
-                                curvature_ratio    = 1.0,
-                                temperature        = 0.25,
-                                rise_weight        = 1.0,
-                                trough_weight      = 0.1,
-                                peak_decay         = 0.3,
-                                slope_weight       = 8.0,
-                                slope_window       = 6L,
-                                dynamic_temp       = FALSE,
+                                horizons = c(1L, 2L),
+                                allow_scale = NULL,
+                                use_ci = TRUE,
+                                buffer_weeks = 0L,
+                                min_obs = 4L,
+                                curvature_ratio = 1.0,
+                                temperature = 0.25,
+                                rise_weight = 1.0,
+                                trough_weight = 0.1,
+                                peak_decay = 0.3,
+                                slope_weight = 8.0,
+                                slope_window = 6L,
+                                dynamic_temp = FALSE,
                                 dynamic_temp_pivot = 10L,
-                                top_k              = NULL,
-                                blend_alpha        = 1.0,
-                                spread_method      = c("between", "total"),
-                                verbose            = TRUE) {
-
+                                top_k = NULL,
+                                blend_alpha = 1.0,
+                                spread_method = c("between", "total"),
+                                verbose = TRUE) {
   spread_method <- match.arg(spread_method)
-
-  if (isTRUE(verbose))
+  if (isTRUE(verbose)) {
     message("[m1_test] Running M1 walk-forward on test season ", fold$test_season)
+  }
 
   seasonD <- dplyr::filter(allD, .data$season == fold$test_season)
 

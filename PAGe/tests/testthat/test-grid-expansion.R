@@ -19,13 +19,188 @@ test_that("boundary inspection warns and expansion preserves M1 rows", {
   expect_true(all(report$decision == "expand_required"))
 
   expanded <- PAGe::expand_tuning_grid(
-    tuning, stage = "M1", steps = c(k_ref = 5, slope_weight = 4)
+    tuning,
+    stage = "M1", steps = c(k_ref = 5, slope_weight = 4)
   )
   expect_equal(expanded$spec_id[1:2], tuning$grid$spec_id)
   expect_true(any(expanded$k_ref == 15L))
   expect_true(any(expanded$slope_weight == 4))
   expect_true(any(grepl("^boundary:", expanded$provenance)))
   expect_equal(nrow(expanded), 4L)
+})
+
+test_that("M1 expansion stops at the governed reference cap", {
+  tuning <- structure(
+    list(
+      scores = data.frame(spec_id = "s001", mae_weibull = 1),
+      best = data.frame(k_ref = 50L, slope_weight = 8, mae_weibull = 1),
+      grid = data.frame(
+        k_ref = c(20L, 25L, 30L, 40L, 50L),
+        slope_weight = c(8, 12, 16, 20, 30),
+        spec_id = paste0("s00", 1:5)
+      )
+    ),
+    class = "page_m1_tuning"
+  )
+
+  expanded <- PAGe::expand_tuning_grid(tuning, stage = "M1")
+  expect_false(any(expanded$k_ref > 50L))
+  expect_true(any(expanded$slope_weight == 6))
+})
+
+test_that("M1 hard bounds accept an upper cap and expand a lower edge", {
+  tuning <- structure(
+    list(
+      scores = data.frame(spec_id = "s001", mae_weibull = 1),
+      best = data.frame(k_ref = 50L, slope_weight = 8, mae_weibull = 1),
+      grid = data.frame(k_ref = c(20L, 30L, 40L, 50L), slope_weight = 8)
+    ),
+    class = "page_m1_tuning"
+  )
+  report <- PAGe::inspect_tuning_boundaries(
+    tuning, stage = "M1", hard_caps = list(k_ref = c(lower = 10, upper = 50))
+  )
+  expect_equal(report$decision[report$parameter == "k_ref"], "stop_hard_cap")
+
+  lower <- tuning
+  lower$best$k_ref <- 20L
+  lower$grid <- data.frame(k_ref = c(20L, 30L), slope_weight = 8)
+  expanded <- PAGe::expand_tuning_grid(
+    lower, stage = "M1", steps = c(k_ref = 5)
+  )
+  expect_true(any(expanded$k_ref == 15L))
+})
+
+test_that("M1 expansion respects the governed k_ref cap", {
+  tuning <- structure(
+    list(
+      scores = data.frame(spec_id = "s001", mae_weibull = 1),
+      best = data.frame(k_ref = 50L, slope_weight = 8, mae_weibull = 1),
+      grid = data.frame(
+        k_ref = c(20L, 30L, 40L, 50L),
+        slope_weight = c(8, 12, 16, 20),
+        spec_id = paste0("s00", 1:4)
+      )
+    ),
+    class = "page_m1_tuning"
+  )
+  expanded <- PAGe::expand_tuning_grid(tuning, stage = "M1")
+  expect_false(any(expanded$k_ref > 50L))
+})
+
+test_that("M1 candidate selection backs off within the practical gain", {
+  tuning <- structure(
+    list(
+      scores = data.frame(
+        spec_id = paste0("s", 1:3),
+        k_ref = c(25L, 40L, 50L),
+        slope_weight = 8,
+        mae_weibull = c(1.30, 1.18, 1.16)
+      ),
+      best = data.frame(
+        spec_id = "s3", k_ref = 50L, slope_weight = 8,
+        mae_weibull = 1.16
+      ),
+      grid = data.frame(
+        k_ref = c(25L, 40L, 50L), slope_weight = 8,
+        spec_id = paste0("s", 1:3)
+      )
+    ),
+    class = "page_m1_tuning"
+  )
+  selected <- PAGe::select_m1_candidate(tuning, min_gain = 0.05)
+  expect_equal(selected$selected$k_ref, 40L)
+  expect_equal(selected$selected_spec_id, "s2")
+  expect_equal(selected$gain_to_best, 0.02)
+})
+
+test_that("M1 practical backoff skips unresolved edges", {
+  tuning <- structure(
+    list(
+      scores = data.frame(
+        spec_id = c("s019", "s024", "s009", "s005", "s014"),
+        k_ref = c(40L, 50L, 25L, 20L, 30L),
+        slope_weight = c(20, 20, 20, 30, 20),
+        mae_weibull = c(1.287142, 1.311019, 1.312491, 1.313609, 1.314000)
+      ),
+      best = data.frame(
+        spec_id = "s019", k_ref = 40L, slope_weight = 20,
+        mae_weibull = 1.287142
+      ),
+      grid = data.frame(
+        k_ref = c(20L, 25L, 30L, 40L, 50L),
+        slope_weight = c(8, 12, 16, 20, 30),
+        spec_id = c("s005", "s009", "s014", "s019", "s024")
+      )
+    ),
+    class = "page_m1_tuning"
+  )
+  selected <- PAGe::select_m1_candidate(
+    tuning, min_gain = 0.05,
+    hard_caps = list(k_ref = c(lower = 10L, upper = 52L))
+  )
+  expect_equal(selected$selected$k_ref, 25L)
+  expect_equal(selected$selected$slope_weight, 20)
+  expect_equal(selected$selected_spec_id, "s009")
+})
+
+test_that("zero slope weight is an accepted M1 drop", {
+  tuning <- structure(
+    list(
+      scores = data.frame(spec_id = "s1", mae_weibull = 1),
+      best = data.frame(k_ref = 25L, slope_weight = 0, mae_weibull = 1),
+      grid = data.frame(k_ref = c(20L, 25L), slope_weight = c(0, 8))
+    ),
+    class = "page_m1_tuning"
+  )
+  report <- PAGe::inspect_tuning_boundaries(tuning, stage = "M1")
+  expect_true(any(report$parameter == "slope_weight" &
+    report$decision == "accept_null_drop"))
+})
+
+test_that("M1 expansion rejects an already unsupported reference basis", {
+  tuning <- structure(
+    list(
+      scores = data.frame(spec_id = c("s001", "s002"), mae_weibull = c(1, 2)),
+      best = data.frame(k_ref = 60L, slope_weight = 8, mae_weibull = 1),
+      grid = data.frame(
+        k_ref = c(20L, 60L), slope_weight = c(8, 12),
+        spec_id = c("s001", "s002")
+      )
+    ),
+    class = "page_m1_tuning"
+  )
+  expect_error(
+    PAGe::expand_tuning_grid(tuning, stage = "M1"),
+    "unsupported value|reference domain"
+  )
+})
+
+test_that("M0 expansion halves numeric spacing and validates detector support", {
+  tuning <- structure(
+    list(
+      best_params = list(
+        cls_thr = 0.2, p_thr = 0.2, prev_thr = 0.1,
+        n_consec = 2L, L = 2L, eps = 0, K_sum = 2L,
+        p_sum_thr = 0.1, N_req = 3L, w_min = 1L, w_max = 4L
+      ),
+      grid = data.frame(
+        p_thr = c(0.1, 0.2), spec_id = c("m0a", "m0b")
+      )
+    ),
+    class = "page_m0_tuning"
+  )
+  expanded <- PAGe::expand_tuning_grid(tuning, stage = "M0")
+  expect_true(any(abs(expanded$p_thr - 0.25) < 1e-8))
+  expect_error(
+    PAGe:::.validate_m0_grid_support(
+      transform(tuning$grid, K_sum = 6L),
+      data = data.frame(
+        season = rep(c("a", "b"), each = 4), weekF = rep(1:4, 2)
+      )
+    ),
+    "shortest training season"
+  )
 })
 
 test_that("boundary inspection and expansion require a selected tuning result", {

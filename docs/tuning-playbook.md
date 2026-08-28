@@ -37,7 +37,10 @@ subset(report, decision == "expand_required")
 ```
 
 Expand only the unresolved axes. Existing rows and IDs are retained; the new
-rows are appended using the adjacent tested spacing (or an explicit step):
+rows are appended using half the adjacent tested spacing (or an explicit
+caller-supplied step for M0/M1). The adaptive M2 planner applies the same
+halving rule automatically. Integer axes are rounded to a valid integer and M1
+reference axes are capped at the declared `n_weeks` domain:
 
 ```r
 m1_grid_next <- expand_tuning_grid(
@@ -66,10 +69,37 @@ m2_next <- tune_m2(
 )
 ```
 
+`build_m2()` persists the complete Phase 1 fold cache as
+`checkpoints/m2/m1_phase1.rds` (or at the explicit `m1_artifact_path`). Before
+parallel M2 evaluation it calls `compact_m1_cache_for_m2()`, retaining only
+aligned training data, the fold template/metadata, and the generated M1
+train/test predictions. The complete artifact remains available for audit or
+resume, while workers receive only the M2 handoff and do not export the large
+M1 reference fits and alignment closures.
+
 Expansion is additive: it never drops old candidates, silently changes a
 specification identity, or treats a capped search as bracketed. A null/drop
 value (for example `k_e = 0`, `Kr = 1`, or `bias_alpha = 0`) is reported as
 `accept_null_drop`; other edge winners remain `expand_required`.
+
+At the M0 → M1 boundary, persist the complete M0 stage artifact (for example,
+`m0_frozen.rds`) for audit and use `compact_m0_artifact_for_m1(m0)` when a
+caller needs an explicit handoff. `build_m1()` reuses the aligned M0 output
+only when both its season set and data identity match the M1 input; otherwise
+it rebuilds alignment safely. Nested M1 tuning still rebuilds M0 inside each
+LOSO fold, because one global M0 alignment would violate fold isolation.
+
+M1 also checks each fold's aligned data before fitting the reference GAM. A
+candidate whose `k_ref` exceeds the number of supported unique aligned weeks
+fails with its specification and fold in the error message; it is never
+silently converted into an all-missing score. Use `n_weeks` in
+`expand_tuning_grid()` when the reference domain is not the default 52 weeks.
+
+M0 validates detector thresholds, ordered ignition windows, gate counts, and
+rolling-window lengths against the observed within-season weeks before scoring.
+M2 validates every enabled smooth basis against the finite, per-lead training
+values before calling `mgcv`; a failed candidate reports its specification and
+fold. These checks apply during initial tuning and every additive expansion.
 
 ## Holdout-safe tuning loop
 
@@ -87,7 +117,7 @@ value (for example `k_e = 0`, `Kr = 1`, or `bias_alpha = 0`) is reported as
 4. Inspect the full response profile, per-season scores, worst season, and
    early/late or phase-specific errors—not only the overall mean.
 5. For a winning boundary, add one valid level beyond that boundary using the
-   adjacent observed spacing. Retain the current winner, incumbent, and nearest
+   halved adjacent observed spacing. Retain the current winner, incumbent, and nearest
    interior neighbors.
 6. Prefer one-factor local neighbors first. Add targeted interactions only
    when results suggest that two parameters materially interact; avoid
@@ -113,7 +143,7 @@ Preserve a small table with every tuning result:
 | `selected_value` | Value chosen by the declared selection rule |
 | `boundary` | `lower`, `upper`, `none`, or `fixed` |
 | `proposed_next` | One new valid value, or `NA` |
-| `decision` | `expand`, `accept_constraint`, `accept_null`, or `stop_flat` |
+| `decision` | `expand_required`, `stop_small_gain`, `stop_hard_cap`, or `accept_null_drop` |
 | `reason` | Scientific/statistical justification |
 
 Fixed values are not boundary findings. Only axes with at least two distinct
@@ -174,11 +204,16 @@ for the next pre-holdout run, not a new result. The fresh slope-weight winner
 was interior (`12`), so do not add `slope_weight = 4` unless a later complete
 run again selects `8`.
 
-- `k_ref` controls reference-curve flexibility. If `25` remains the lower-edge
-  winner, a one-step extension using the adjacent spacing is `20`; if `50`
-  wins, the corresponding extension is `60`.
+- `k_ref` controls reference-curve flexibility. Governed tuning bounds it to
+  `10 <= k_ref <= 50`; use an explicit five-unit step when an edge winner
+  requires an expansion. If the upper cap is reached, compare inward values
+  and prefer the smallest candidate within `0.05` weeks of the best M1
+  Weibull MAE. If the lower cap is reached, record the hard lower constraint.
+  Do not generate `k_ref = 52` or `k_ref = 60` merely because the reference
+  domain has 52 weeks.
 - `slope_weight` is nonnegative. If `8` remains the lower-edge winner, the
-  adjacent spacing suggests testing `4`. `0` is a meaningful no-slope-weight
+  default halved-step expansion tests `6`; use an explicit `steps` value if
+  the planned `4` comparison is required. `0` is a meaningful no-slope-weight
   candidate and should be tested only as an intentional null comparison.
 - For `multi_temperature`, positive values near zero make template weighting
   increasingly sharp. Expand carefully—often multiplicatively—and inspect
@@ -202,6 +237,62 @@ the planned grid below. This distinction prevents an unverified historical
 boundary from silently changing the next search.
 
 ## M2: forecast tuning
+
+### Inspecting parameter-specific NLL gains
+
+Before choosing an M2 expansion threshold, inventory the observed NLL changes
+rather than treating every boundary as equally valuable:
+
+```r
+holdout_tuning <- list(
+  `2017-18` = readRDS(".../m2_tuning.rds"),
+  `2018-19` = readRDS(".../m2_tuning.rds")
+)
+sensitivity <- extract_nll_sensitivity(holdout_tuning)
+write.csv(sensitivity$matched_gains, "matched_adjacent_nll_gains.csv", row.names = FALSE)
+plot_nll_sensitivity(sensitivity)
+```
+
+`sensitivity$gains` is a marginal best-at-value envelope. For a
+parameter-specific gain cap, use `sensitivity$matched_gains`: each row compares
+two specifications that are identical on the other inspected axes and differ
+only in the named parameter. Positive `adjacent_gain` means the move reduced
+NLL; `gain_per_unit` normalizes that change by the parameter step. A sparse or
+non-factorial grid can have no matched comparison for an axis, which should be
+reported as insufficient evidence rather than treated as zero gain.
+
+The governed boundary gate can apply those caps without pretending that an
+unmatched edge is settled. Use a named vector so each parameter has its own
+scale (an unnamed scalar applies the same threshold to every axis):
+
+```r
+m2_gain_caps <- c(
+  alpha_state = 0.001, k_r = 0.0005, k_f = 0.00025,
+  k_e = 0.001, k_sp = 0.00025, k_de = 0.00005,
+  bias_alpha = 0.00005
+)
+report <- inspect_tuning_boundaries(
+  m2_tuning, stage = "M2", min_nll_gain = m2_gain_caps
+)
+validate_m2_tuning(
+  m2_tuning, check_boundaries = TRUE, min_nll_gain = m2_gain_caps
+)
+```
+
+`stop_small_gain` is emitted only when the selected edge is part of an exact
+matched adjacent comparison and the outward NLL gain is at or below its cap.
+An edge with no matched comparison remains `expand_required`. The thresholds
+are a stopping rule for practical gain, not a replacement for the holdout
+gate, and should be frozen before inspecting prospective holdout results.
+
+The package also provides a complete governed default via
+`default_m2_nll_gain_caps()`. It covers every tuned M2 axis; callers may supply
+a reviewed replacement vector, but governed workflows must not silently omit
+an axis. Zero is the explicit drop/null value for the optional smooth degrees
+of freedom `k_e`, `k_r`, `k_de`, and `k_sp`. The initial M2 plan includes those
+drop candidates, and later boundary expansion preserves them. A practical-gain
+stop therefore cannot settle a positive lower edge before its drop model has
+been scored.
 
 M2 has more axes and can produce a very large Cartesian grid. Prefer the
 bounded planner:

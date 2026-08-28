@@ -1,8 +1,8 @@
 setwd("C:/Users/lennon.li/Documents/claude/PAGe")
 suppressPackageStartupMessages({ library(dplyr); library(data.table) })
-source("R/m0_training.R")
-source("R/m2_spec_grid.R")
-source("R/m2_training.R")
+source("PAGe/R/m0_training.R")
+source("PAGe/R/m2_spec_grid.R")
+source("PAGe/R/m2_training.R")
 
 tuned2 <- readRDS("data/stage2_tuning.rds")
 

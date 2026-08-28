@@ -9,7 +9,9 @@ inspect_tuning_boundaries(
   stage = c("M0", "M1", "M2"),
   grid = NULL,
   warn = TRUE,
-  null_axes = NULL
+  null_axes = NULL,
+  hard_caps = NULL,
+  min_nll_gain = NULL
 )
 }
 \arguments{
@@ -25,6 +27,18 @@ is defined relative to the selected configuration.}
 
 \item{null_axes}{Optional names of axes whose zero value is an accepted
 drop/null. Stage defaults are used when omitted.}
+
+\item{hard_caps}{Optional named numeric vector or named list of lower/upper
+hard caps. An edge exactly at a declared cap is reported as
+`stop_hard_cap` rather than `expand_required`.}
+
+\item{min_nll_gain}{M2-only NLL improvement threshold. Defaults to
+\code{default_m2_nll_gain_caps()}; supply a named numeric vector for
+parameter-specific thresholds, or one unnamed number to apply the same
+threshold to every M2 axis. Omitted names use the governed defaults. When
+a selected edge has a matched adjacent NLL comparison and its outward
+gain is less than or equal to the threshold, it is reported as
+`stop_small_gain`.}
 }
 \value{
 A data frame with tested range, selected value, boundary, decision,

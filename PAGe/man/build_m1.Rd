@@ -40,5 +40,6 @@ A list with \code{ref}, \code{hyper}, \code{aligned_train},
 \description{
 Fits the epidemic reference curve via \code{estimateRef()} and learns
 alignment search bounds via \code{learn_alignment_hyperparams()}.
-Inherits \code{manual_labels} and \code{flag_args} from \code{m0}.
+Inherits \code{manual_labels} and \code{flag_args} from \code{m0}, and
+reuses its aligned output when the data identity and season set match.
 }

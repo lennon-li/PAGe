@@ -4,13 +4,20 @@
 \alias{validate_m2_tuning}
 \title{Validate an M2 tuning result}
 \usage{
-validate_m2_tuning(x, check_boundaries = FALSE, ...)
+validate_m2_tuning(x, check_boundaries = FALSE, min_nll_gain = NULL, ...)
 }
 \arguments{
 \item{x}{A \code{page_m2_tuning} object.}
 
 \item{check_boundaries}{Logical; require every genuinely tuned M2 axis to
 be bracketed or an explicitly accepted null/drop.}
+
+\item{min_nll_gain}{Named parameter-specific NLL gain threshold, or one
+scalar applied to every M2 axis. Defaults to
+\code{default_m2_nll_gain_caps()}; omitted names use the governed
+defaults. A boundary with matched outward gain at or below its threshold
+is accepted as `stop_small_gain`; a boundary without matched evidence
+remains unresolved.}
 
 \item{...}{Reserved.}
 }

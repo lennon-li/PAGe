@@ -19,14 +19,14 @@
 #' @param fit_obj A fitted mgcv GAM with a binomial response matrix as \code{model[[1]]}.
 #' @return A function \code{f(p)} mapping predicted probabilities through the soft cap.
 make_soft_cap_fn <- function(fit_obj) {
-  p_train  <- fit_obj$model[[1]][, 1L] / rowSums(fit_obj$model[[1]])
+  p_train <- fit_obj$model[[1]][, 1L] / rowSums(fit_obj$model[[1]])
   p_max_tr <- max(p_train, na.rm = TRUE)
   # Elbow at historical max (no compression within the observed training range);
   # ceiling at 110% of historical max (gentle compression only for extrapolation).
-  p_knee   <- p_max_tr
-  p_ceil   <- min(p_max_tr * 1.1, 1.0)
+  p_knee <- p_max_tr
+  p_ceil <- min(p_max_tr * 1.1, 1.0)
   function(p) {
-    above    <- p > p_knee
+    above <- p > p_knee
     p[above] <- p_knee + (p_ceil - p_knee) *
       tanh((p[above] - p_knee) / (p_ceil - p_knee))
     p
@@ -75,16 +75,15 @@ m2_predict_one <- function(fit,
                            anchorWeek,
                            logit_f_eff,
                            z_ema,
-                           dz_ema          = 0,
-                           logit_spread    = 0,
+                           dz_ema = 0,
+                           logit_spread = 0,
                            logN_now,
-                           season_label    = NULL,
-                           ex_terms        = NULL,
+                           season_label = NULL,
+                           ex_terms = NULL,
                            include_season_re = FALSE,
-                           soft_cap_fn     = NULL,
-                           return_ci       = FALSE,
-                           bias_logit      = 0) {
-
+                           soft_cap_fn = NULL,
+                           return_ci = FALSE,
+                           bias_logit = 0) {
   # --- Exclude terms ---
   ex <- ex_terms %||% character(0)
   if (!isTRUE(include_season_re)) {
@@ -96,7 +95,9 @@ m2_predict_one <- function(fit,
   lev_seas <- levels(fit$model$season)
 
   lead_val <- paste0("h", h)
-  if (!lead_val %in% lev_lead) return(NULL)
+  if (!lead_val %in% lev_lead) {
+    return(NULL)
+  }
 
   # Season factor: use season_label if it's a valid level (refit mode),
 
@@ -135,20 +136,24 @@ m2_predict_one <- function(fit,
 
   # --- Predict ---
   pr <- tryCatch(
-    stats::predict(fit, newdata = nd, type = "link",
-                   se.fit = return_ci, exclude = ex),
+    stats::predict(fit,
+      newdata = nd, type = "link",
+      se.fit = return_ci, exclude = ex
+    ),
     error = function(e) NULL
   )
-  if (is.null(pr)) return(NULL)
+  if (is.null(pr)) {
+    return(NULL)
+  }
 
   # --- Transform to probability scale ---
   cap <- soft_cap_fn %||% identity
   eps <- 1e-12
-  bl  <- as.numeric(bias_logit %||% 0)
+  bl <- as.numeric(bias_logit %||% 0)
 
   if (isTRUE(return_ci)) {
     eta <- as.numeric(pr$fit) + bl
-    se  <- as.numeric(pr$se.fit)
+    se <- as.numeric(pr$se.fit)
     list(
       m2_p  = cap(pmin(1 - eps, pmax(eps, stats::plogis(eta)))),
       m2_lo = cap(pmin(1 - eps, pmax(eps, stats::plogis(eta - 1.96 * se)))),
@@ -171,13 +176,13 @@ stage2_ramp_weight <- function(t_since, K = 3L) {
   # - K >  1 : linear ramp from 0 at ignition to 1 after K weeks
   K <- as.integer(K[1])
   if (is.na(K) || K < 1L) stop("K must be >= 1")
-  
+
   t_since <- as.numeric(t_since)
-  
+
   if (K <= 1L) {
     return(ifelse(t_since >= 0, 1, 0))
   }
-  
+
   w <- t_since / K
   pmin(1, pmax(0, w))
 }
@@ -185,6 +190,52 @@ stage2_ramp_weight <- function(t_since, K = 3L) {
 # =========================================================
 # Stage-2 prep
 # =========================================================
+
+.validate_m2_spec_support <- function(d_train, spec) {
+  if (!is.data.frame(d_train) || !nrow(d_train)) {
+    stop("M2 model has no post-ignition training rows.", call. = FALSE)
+  }
+  smooth_axes <- list(
+    logit_f_eff = if (identical(spec$T, "S")) spec$k_f else 0L,
+    newWeek = max(as.integer(spec$k_w %||% 0L), as.integer(spec$k_s %||% 0L)),
+    z_ema = spec$k_e %||% 0L,
+    z_resid = spec$k_r %||% 0L,
+    logN_now = spec$k_n %||% 0L,
+    dz_ema = spec$k_de %||% 0L,
+    logit_spread = spec$k_sp %||% 0L
+  )
+  lead_values <- unique(as.character(d_train$lead))
+  if (!length(lead_values)) {
+    stop("M2 model data has no usable forecast-horizon (`lead`) rows.", call. = FALSE)
+  }
+  for (parameter in names(smooth_axes)) {
+    k <- as.integer(smooth_axes[[parameter]])
+    if (is.na(k) || k <= 0L) next
+    if (!parameter %in% names(d_train)) {
+      stop("M2 model support check is missing smooth covariate `", parameter, "`.", call. = FALSE)
+    }
+    values <- d_train[[parameter]]
+    per_lead <- vapply(lead_values, function(lead) {
+      x <- values[as.character(d_train$lead) == lead]
+      if (is.numeric(x)) {
+        x <- x[is.finite(x)]
+      } else {
+        x <- x[!is.na(x)]
+      }
+      length(unique(x))
+    }, integer(1))
+    if (any(per_lead < k)) {
+      stop(
+        "M2 specification requests k_", parameter, "=", k,
+        " but the post-ignition training data has only ",
+        min(per_lead), " unique value(s) for at least one lead. Reduce the",
+        " basis or expand the pre-holdout data/grid before continuing.",
+        call. = FALSE
+      )
+    }
+  }
+  invisible(d_train)
+}
 
 #' Prepare Stage-2 joint stacked data using a spec or tuned row
 #'
@@ -215,37 +266,41 @@ prep_stage2_joint <- function(dat,
                               verbose = FALSE) {
   stopifnot(is.data.frame(dat))
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
-  
+
   if (is.null(template_df) || !is.data.frame(template_df)) stop("template_df must be provided.")
-  if (!all(c("newWeek","fit") %in% names(template_df))) stop("template_df must have columns newWeek, fit")
+  if (!all(c("newWeek", "fit") %in% names(template_df))) stop("template_df must have columns newWeek, fit")
   template_df <- template_df |> dplyr::select(.data$newWeek, fit_ref = .data$fit)
-  
-  need <- c("season","weekF","phase","newWeek","y","N")
+
+  need <- c("season", "weekF", "phase", "newWeek", "y", "N")
   miss <- setdiff(need, names(dat))
   if (length(miss)) stop("prep_stage2_joint: missing cols: ", paste(miss, collapse = ", "))
-  
+
   pre_buffer <- as.integer(pre_buffer)
   if (is.na(pre_buffer) || pre_buffer < 0L) stop("pre_buffer must be >= 0")
-  
+
   alpha_state <- as.numeric(alpha_state)
   if (!is.finite(alpha_state) || alpha_state <= 0 || alpha_state >= 1) stop("alpha_state must be in (0,1).")
-  
+
   get1 <- function(obj, nm, default = NULL) {
-    if (is.list(obj) && !is.data.frame(obj) && !is.null(obj[[nm]])) return(obj[[nm]])
-    if (is.data.frame(obj) && nm %in% names(obj)) return(obj[[nm]][1])
+    if (is.list(obj) && !is.data.frame(obj) && !is.null(obj[[nm]])) {
+      return(obj[[nm]])
+    }
+    if (is.data.frame(obj) && nm %in% names(obj)) {
+      return(obj[[nm]][1])
+    }
     default
   }
-  
+
   delta <- get1(best_mean_nll, "delta", 0L)
   delta <- as.integer(delta)
   K <- get1(best_mean_nll, "Kr", NULL) %||% get1(best_mean_nll, "K", 3L)
   K <- if (is.na(K)) NA_integer_ else as.integer(K)
-  
+
   # template can be disabled by delta=NA or K=NA
   template_on <- is.finite(delta) && !is.na(delta) && is.finite(K) && !is.na(K)
-  
+
   leads <- as.integer(leads)
-  
+
   # ---- ignition from phase==1 (fallback) ----
   ign_true <- dat |>
     dplyr::group_by(.data$season) |>
@@ -253,16 +308,16 @@ prep_stage2_joint <- function(dat,
       iWeek_true = suppressWarnings(min(.data$weekF[.data$phase == 1L], na.rm = TRUE)),
       .groups = "drop"
     )
-  
+
   d0 <- dat |>
     dplyr::left_join(ign_true, by = "season")
-  
+
   # ---- optional override ignition week used ----
   if (!is.null(ign_week_df)) {
-    stopifnot(all(c("season","iWeek_hat") %in% names(ign_week_df)))
+    stopifnot(all(c("season", "iWeek_hat") %in% names(ign_week_df)))
     ign_week_df <- ign_week_df |>
       dplyr::transmute(season = as.character(.data$season), iWeek_used = as.numeric(.data$iWeek_hat))
-    
+
     d0 <- d0 |>
       dplyr::mutate(season = as.character(.data$season)) |>
       dplyr::left_join(ign_week_df, by = "season") |>
@@ -270,31 +325,34 @@ prep_stage2_joint <- function(dat,
   } else {
     d0 <- d0 |> dplyr::mutate(iWeek_used = .data$iWeek_true)
   }
-  
+
   # ---- core covariates ----
   d0 <- d0 |>
     dplyr::filter(is.finite(.data$iWeek_used)) |>
     dplyr::arrange(.data$season, .data$weekF) |>
     dplyr::group_by(.data$season) |>
     dplyr::mutate(
-      post_ign  = (.data$weekF >= (.data$iWeek_used - pre_buffer)),
-      logN_now  = log(pmax(.data$N, 1L)),
-      p_now     = .data$y / pmax(.data$N, 1L),
-      z_now     = logit_stable(.data$p_now),
-      z0        = dplyr::coalesce(dplyr::first(.data$z_now[is.finite(.data$z_now)]), 0),
-      z_fill    = dplyr::coalesce(.data$z_now, .data$z0),
-      z_ema     = as.numeric(stats::filter(alpha_state * .data$z_fill,
-                                           filter = 1 - alpha_state,
-                                           method = "recursive",
-                                           init = .data$z_fill[1])),
-      dz_ema    = .data$z_ema - dplyr::lag(.data$z_ema, n = 1L,
-                                            default = dplyr::first(.data$z_ema)),
-      t_since   = as.numeric(.data$weekF - .data$iWeek_used)
+      post_ign = (.data$weekF >= (.data$iWeek_used - pre_buffer)),
+      logN_now = log(pmax(.data$N, 1L)),
+      p_now = .data$y / pmax(.data$N, 1L),
+      z_now = logit_stable(.data$p_now),
+      z0 = dplyr::coalesce(dplyr::first(.data$z_now[is.finite(.data$z_now)]), 0),
+      z_fill = dplyr::coalesce(.data$z_now, .data$z0),
+      z_ema = as.numeric(stats::filter(alpha_state * .data$z_fill,
+        filter = 1 - alpha_state,
+        method = "recursive",
+        init = .data$z_fill[1]
+      )),
+      dz_ema = .data$z_ema - dplyr::lag(.data$z_ema,
+        n = 1L,
+        default = dplyr::first(.data$z_ema)
+      ),
+      t_since = as.numeric(.data$weekF - .data$iWeek_used)
     ) |>
     dplyr::ungroup() |>
     dplyr::select(-.data$z0, -.data$z_fill) |>
     dplyr::left_join(template_df, by = "newWeek")
-  
+
   # ---- shift template by delta ----
   if (!is.na(delta) && delta != 0L) {
     n <- abs(delta)
@@ -312,10 +370,10 @@ prep_stage2_joint <- function(dat,
   } else {
     d0 <- d0 |> dplyr::mutate(fit_shift = .data$fit_ref)
   }
-  
+
   # ---- template covariate ----
   K_eff <- if (isTRUE(use_ramp)) as.integer(K) else 1L
-  
+
   # ---- template covariate ----
   d0 <- d0 |>
     dplyr::mutate(
@@ -336,9 +394,11 @@ prep_stage2_joint <- function(dat,
       d0 <- d0 |>
         dplyr::group_by(.data$season) |>
         dplyr::mutate(
-          z_ema  = pmin(fr_ze[2L], pmax(fr_ze[1L], .data$z_ema)),
-          dz_ema = .data$z_ema - dplyr::lag(.data$z_ema, n = 1L,
-                                             default = dplyr::first(.data$z_ema))
+          z_ema = pmin(fr_ze[2L], pmax(fr_ze[1L], .data$z_ema)),
+          dz_ema = .data$z_ema - dplyr::lag(.data$z_ema,
+            n = 1L,
+            default = dplyr::first(.data$z_ema)
+          )
         ) |>
         dplyr::ungroup()
     }
@@ -374,7 +434,7 @@ prep_stage2_joint <- function(dat,
       ) |>
       dplyr::filter(!is.na(.data$y_lead), !is.na(.data$N_lead), .data$N_lead > 0)
   })
-  
+
   d <- dplyr::bind_rows(out) |>
     dplyr::mutate(
       season = factor(.data$season),
@@ -389,7 +449,7 @@ prep_stage2_joint <- function(dat,
   # add logit_spread (weighted SD of logit template predictions -- alignment
   # uncertainty signal). High spread -> templates disagree -> M2 should lean
   # more on z_ema and less on logit_f_eff.
-  d$logit_spread <- 0  # default: zero spread (no uncertainty info)
+  d$logit_spread <- 0 # default: zero spread (no uncertainty info)
   if (!is.null(m1_preds)) {
     stopifnot(is.data.frame(m1_preds))
     stopifnot(all(c("season", "eval_weekF", "h", "m1_p_hat") %in% names(m1_preds)))
@@ -408,19 +468,21 @@ prep_stage2_joint <- function(dat,
 
     d <- d |>
       dplyr::mutate(season_chr = as.character(.data$season)) |>
-      dplyr::left_join(m1_join, by = c("season_chr" = "season",
-                                        "weekF" = "weekF",
-                                        ".h_int" = ".h_int")) |>
+      dplyr::left_join(m1_join, by = c(
+        "season_chr" = "season",
+        "weekF" = "weekF",
+        ".h_int" = ".h_int"
+      )) |>
       dplyr::mutate(
         logit_f_eff = dplyr::if_else(
           is.finite(.data$.m1_p_hat) & !is.na(.data$.m1_p_hat),
           logit_stable(.data$.m1_p_hat),
-          .data$logit_f_eff  # fallback to static template if M1 missing
+          .data$logit_f_eff # fallback to static template if M1 missing
         ),
         logit_spread = dplyr::if_else(
           is.finite(.data$.m1_logit_spread) & !is.na(.data$.m1_logit_spread),
           .data$.m1_logit_spread,
-          0  # fallback: zero spread when not available
+          0 # fallback: zero spread when not available
         ),
         z_resid = .data$z_ema - .data$logit_f_eff
       ) |>
@@ -428,21 +490,25 @@ prep_stage2_joint <- function(dat,
 
     if (isTRUE(verbose)) {
       n_spread <- sum(d$logit_spread > 0, na.rm = TRUE)
-      message("[prep_stage2_joint] M1 stacking mode: logit_f_eff replaced with M1 predictions",
-              sprintf(" | logit_spread populated for %d/%d rows", n_spread, nrow(d)))
+      message(
+        "[prep_stage2_joint] M1 stacking mode: logit_f_eff replaced with M1 predictions",
+        sprintf(" | logit_spread populated for %d/%d rows", n_spread, nrow(d))
+      )
     }
   }
-  
+
   if (isTRUE(verbose)) {
-    message("[prep_stage2_joint] delta=", delta, " K=", K,
-            " pre_buffer=", pre_buffer,
-            " use_ramp=", use_ramp,
-            " alpha_state=", signif(alpha_state, 3),
-            " leads={", paste(leads, collapse=","), "} rows=", nrow(d))
+    message(
+      "[prep_stage2_joint] delta=", delta, " K=", K,
+      " pre_buffer=", pre_buffer,
+      " use_ramp=", use_ramp,
+      " alpha_state=", signif(alpha_state, 3),
+      " leads={", paste(leads, collapse = ","), "} rows=", nrow(d)
+    )
   }
-  
+
   d <- as.data.frame(d)
-  attr(d, "dz_ema_sd") <- dze_sd  # carry scaling out for feature_ranges
+  attr(d, "dz_ema_sd") <- dze_sd # carry scaling out for feature_ranges
   d
 }
 
@@ -478,8 +544,7 @@ prep_stage2_joint <- function(dat,
 #' @return A list with \code{nll}, \code{mean_nll}, \code{brier}, and
 #'   \code{rmse_p}.
 #' @keywords internal
-score_stage2_metrics <- function(
-                                 fit,
+score_stage2_metrics <- function(fit,
                                  d_test,
                                  exclude_season_re = TRUE,
                                  exclude_terms = NULL,
@@ -525,25 +590,25 @@ score_stage2_metrics <- function(
   if (!is.null(eval_window) && "t_since" %in% names(nd)) {
     eval_mask <- is.finite(nd$t_since) & nd$t_since <= eval_window
   }
-  ll_eval   <- ll[eval_mask]
-  nd_eval   <- nd[eval_mask, , drop = FALSE]
+  ll_eval <- ll[eval_mask]
+  nd_eval <- nd[eval_mask, , drop = FALSE]
   p_hat_eval <- p_hat[eval_mask]
 
   # time-decay weights on the eval set, normalised so mean_nll is interpretable
   if (lambda_w > 0 && "t_since" %in% names(nd_eval) && any(eval_mask)) {
     raw_w <- exp(-lambda_w * as.numeric(nd_eval$t_since))
     raw_w[!is.finite(raw_w)] <- 0
-    w <- raw_w / mean(raw_w[raw_w > 0], na.rm = TRUE)  # normalise so mean(w)=1
+    w <- raw_w / mean(raw_w[raw_w > 0], na.rm = TRUE) # normalise so mean(w)=1
   } else {
     w <- rep(1, sum(eval_mask))
   }
 
-  nll      <- -sum(w * ll_eval, na.rm = TRUE)
+  nll <- -sum(w * ll_eval, na.rm = TRUE)
   mean_nll <- nll / max(sum(eval_mask), 1L)
 
   p_obs_eval <- nd_eval$y_lead / nd_eval$N_lead
-  brier   <- stats::weighted.mean((p_hat_eval - p_obs_eval)^2, w = w, na.rm = TRUE)
-  rmse_p  <- sqrt(brier)
+  brier <- stats::weighted.mean((p_hat_eval - p_obs_eval)^2, w = w, na.rm = TRUE)
+  rmse_p <- sqrt(brier)
 
   list(nll = nll, mean_nll = mean_nll, brier = brier, rmse_p = rmse_p)
 }
@@ -591,18 +656,22 @@ train_stage2_joint_prepped <- function(d_all,
                                        k_n = 6L,
                                        method = "REML",
                                        lambda_w = 0,
-                                       w_floor  = 0,
+                                       w_floor = 0,
                                        verbose = FALSE) {
   if (!requireNamespace("mgcv", quietly = TRUE)) stop("Please install mgcv.")
   stopifnot(is.data.frame(d_all))
-  
+
   get1 <- function(obj, nm, default = NULL) {
-    if (is.list(obj) && !is.data.frame(obj) && !is.null(obj[[nm]])) return(obj[[nm]])
-    if (is.data.frame(obj) && nm %in% names(obj)) return(obj[[nm]][1])
+    if (is.list(obj) && !is.data.frame(obj) && !is.null(obj[[nm]])) {
+      return(obj[[nm]])
+    }
+    if (is.data.frame(obj) && nm %in% names(obj)) {
+      return(obj[[nm]][1])
+    }
     default
   }
   k_f <- as.integer(get1(best_mean_nll, "k_f", 6L))
-  
+
   # DEFAULT: parsimonious model unless user supplies spec
   if (is.null(spec)) {
     spec <- stage2_make_spec(
@@ -619,7 +688,7 @@ train_stage2_joint_prepped <- function(d_all,
       use_season_re = TRUE
     )
   }
-  
+
   d_train <- d_all[d_all$post_ign, , drop = FALSE]
   if (nrow(d_train) == 0L) stop("train_stage2_joint_prepped: no post-ignition rows.")
 
@@ -629,7 +698,7 @@ train_stage2_joint_prepped <- function(d_all,
   # Stored as a column in d_train (.w) so mgcv::bam can find it via data-frame eval.
   t_floor_start <- as.numeric(spec$t_floor_start %||% 14)
   if (lambda_w > 0 && "t_since" %in% names(d_train)) {
-    t_s   <- as.numeric(d_train$t_since)
+    t_s <- as.numeric(d_train$t_since)
     raw_w <- exp(-lambda_w * t_s)
     if (w_floor > 0) raw_w <- ifelse(t_s > t_floor_start, pmax(raw_w, w_floor), raw_w)
     raw_w[!is.finite(raw_w)] <- w_floor
@@ -640,37 +709,41 @@ train_stage2_joint_prepped <- function(d_all,
     use_weights <- FALSE
   }
 
-  req <- c("post_ign","lead","y_lead","N_lead")
+  req <- c("post_ign", "lead", "y_lead", "N_lead")
   if (spec$template_mode != "none") req <- c(req, "logit_f_eff")
   if (!is.null(spec$k_sp) && spec$k_sp > 0L) req <- c(req, "logit_spread")
   if (spec$k_w > 0L || spec$k_s > 0L) req <- c(req, "newWeek")
   if (spec$use_season_re) req <- c(req, "season")
   if (spec$k_s > 0L) req <- c(req, "season_h")
   if (spec$k_e > 0L) req <- c(req, "z_ema")
-  if (!is.null(spec$k_r)  && spec$k_r  > 0L) req <- c(req, "z_resid")
+  if (!is.null(spec$k_r) && spec$k_r > 0L) req <- c(req, "z_resid")
   if (spec$k_n > 0L) req <- c(req, "logN_now")
   if (!is.null(spec$k_de) && spec$k_de > 0L) req <- c(req, "dz_ema")
-  
+
   miss <- setdiff(unique(req), names(d_train))
   if (length(miss)) stop("train_stage2_joint_prepped: missing cols: ", paste(miss, collapse = ", "))
-  
+
+  .validate_m2_spec_support(d_train, spec)
+
   form <- stage2_build_joint_formula(spec)
-  
+
   if (isTRUE(verbose)) {
-    message("[train_stage2_joint_prepped] rows=", nrow(d_train),
-            " | template_mode=", spec$template_mode,
-            " | k_f=", k_f,
-            " | k_w=", spec$k_w,
-            " | k_s=", spec$k_s,
-            " | k_de=", spec$k_de %||% 0L)
+    message(
+      "[train_stage2_joint_prepped] rows=", nrow(d_train),
+      " | template_mode=", spec$template_mode,
+      " | k_f=", k_f,
+      " | k_w=", spec$k_w,
+      " | k_s=", spec$k_s,
+      " | k_de=", spec$k_de %||% 0L
+    )
     message("[train_stage2_joint_prepped] formula: ", deparse(form))
   }
-  
+
   # NOTE: mgcv's discrete=TRUE path can be fragile with factor-smooth interactions (bs='fs').
   # If the fs term is enabled (k_s>0), fall back to discrete=FALSE for stability.
   use_discrete <- isTRUE(spec$k_s <= 0L)
   fit_method <- if (isTRUE(use_discrete) && identical(method, "REML")) "fREML" else method
-  
+
   # Pass weights via column in d_train to avoid mgcv NSE scoping issue
   if (isTRUE(use_weights)) {
     fit <- mgcv::bam(
@@ -695,13 +768,15 @@ train_stage2_joint_prepped <- function(d_all,
     )
   }
 
-  list(fit = fit, train_data = d_train, tuned = best_mean_nll, spec = spec,
-       lambda_w = lambda_w,
-       feature_ranges = list(
-         logit_f_eff = range(d_train$logit_f_eff, na.rm = TRUE),
-         z_ema       = range(d_train$z_ema,       na.rm = TRUE),
-         dz_ema_sd   = attr(d_train, "dz_ema_sd") %||% 1.0
-       ))
+  list(
+    fit = fit, train_data = d_train, tuned = best_mean_nll, spec = spec,
+    lambda_w = lambda_w,
+    feature_ranges = list(
+      logit_f_eff = range(d_train$logit_f_eff, na.rm = TRUE),
+      z_ema       = range(d_train$z_ema, na.rm = TRUE),
+      dz_ema_sd   = attr(d_train, "dz_ema_sd") %||% 1.0
+    )
+  )
 }
 
 #' Estimate season random effect causally from accumulated observations
@@ -720,7 +795,9 @@ train_stage2_joint_prepped <- function(d_all,
 #' @param lambda_re Shrinkage strength; default 1 (one pseudo-observation at 0).
 #' @return Numeric scalar (the shrinkage RE estimate on the logit scale).
 estimate_season_re_online <- function(fit, obs_df, ex_terms = NULL, lambda_re = 1) {
-  if (nrow(obs_df) == 0L) return(0)
+  if (nrow(obs_df) == 0L) {
+    return(0)
+  }
 
   # B3 fix: obs_df (current-season raw obs) is missing required GAM columns.
   # Populate them from the fitted model so predict() doesn't fail silently.
@@ -729,10 +806,11 @@ estimate_season_re_online <- function(fit, obs_df, ex_terms = NULL, lambda_re = 
   # separate prospective validation before promotion.
   nd <- obs_df
   if (!"lead" %in% names(nd) && "lead" %in% names(fit$model)) {
-    lev_lead <- if (is.factor(fit$model$lead))
+    lev_lead <- if (is.factor(fit$model$lead)) {
       levels(fit$model$lead)
-    else
+    } else {
       as.character(fit$var.summary$lead[[1L]])
+    }
     nd$lead <- factor(lev_lead[1L], levels = lev_lead)
   }
   if ("season" %in% names(fit$model) && is.factor(fit$model$season)) {
@@ -757,20 +835,27 @@ estimate_season_re_online <- function(fit, obs_df, ex_terms = NULL, lambda_re = 
   }
 
   eta_no_re <- tryCatch(
-    as.numeric(stats::predict(fit, newdata = nd, type = "link",
-                              exclude = unique(c(ex_terms, "s(season)")))),
+    as.numeric(stats::predict(fit,
+      newdata = nd, type = "link",
+      exclude = unique(c(ex_terms, "s(season)"))
+    )),
     error = function(e) {
       warning("[estimate_season_re_online] predict() failed: ", conditionMessage(e),
-              call. = FALSE)
+        call. = FALSE
+      )
       NULL
     }
   )
-  if (is.null(eta_no_re)) return(0)
-  p_obs     <- obs_df$y / pmax(obs_df$N, 1L)
+  if (is.null(eta_no_re)) {
+    return(0)
+  }
+  p_obs <- obs_df$y / pmax(obs_df$N, 1L)
   logit_obs <- stats::qlogis(pmin(pmax(p_obs, 1e-6), 1 - 1e-6))
-  resids    <- logit_obs - eta_no_re
-  n         <- sum(is.finite(resids))
-  if (n == 0L) return(0)
+  resids <- logit_obs - eta_no_re
+  n <- sum(is.finite(resids))
+  if (n == 0L) {
+    return(0)
+  }
   sum(resids[is.finite(resids)]) / (n + lambda_re)
 }
 
@@ -788,7 +873,7 @@ estimate_season_re_online <- function(fit, obs_df, ex_terms = NULL, lambda_re = 
 #' @return A spec list as returned by \code{stage2_make_spec()}.
 stage2_spec_from_tuning <- function(tuned2) {
   stopifnot(is.list(tuned2), !is.null(tuned2$best), !is.null(tuned2$by_spec_grid))
-  best_id  <- tuned2$best$spec_id[[1L]]
+  best_id <- tuned2$best$spec_id[[1L]]
   best_row <- tuned2$by_spec_grid[tuned2$by_spec_grid$spec_id == best_id, , drop = FALSE]
   if (nrow(best_row) == 0L) stop("spec_id '", best_id, "' not found in by_spec_grid")
   .pick <- function(nm, default) {
@@ -799,18 +884,18 @@ stage2_spec_from_tuning <- function(tuned2) {
     K              = best_row$Kr,
     k_f            = best_row$k_f,
     alpha_state    = best_row$alpha_state,
-    T              = .pick("T",    "S"),
-    k_e            = .pick("k_e",  6L),
-    k_n            = .pick("k_n",  6L),
-    k_r            = .pick("k_r",  0L),
+    T              = .pick("T", "S"),
+    k_e            = .pick("k_e", 6L),
+    k_n            = .pick("k_n", 6L),
+    k_r            = .pick("k_r", 0L),
     k_de           = .pick("k_de", 0L),
-    k_w            = .pick("k_w",  0L),
-    k_s            = .pick("k_s",  0L),
-    pre_buffer     = .pick("Kb",   0L),
-    bs_week        = .pick("bs_week",        "ts"),
+    k_w            = .pick("k_w", 0L),
+    k_s            = .pick("k_s", 0L),
+    pre_buffer     = .pick("Kb", 0L),
+    bs_week        = .pick("bs_week", "ts"),
     bs_fs_marginal = .pick("bs_fs_marginal", "tp"),
     lambda_w       = .pick("lambda_w", 0),
-    w_floor        = .pick("w_floor",  0)
+    w_floor        = .pick("w_floor", 0)
   )
 }
 
@@ -847,21 +932,21 @@ train_stage2_joint <- function(dat,
                                ign_week_df = NULL,
                                method = "REML",
                                lambda_w = 0,
-                               w_floor  = NULL,
+                               w_floor = NULL,
                                m1_preds = NULL,
                                verbose = TRUE) {
   if (!requireNamespace("mgcv", quietly = TRUE)) stop("Please install mgcv.")
 
   if (!is.null(spec)) {
     if (is.null(best_mean_nll)) best_mean_nll <- spec$best_row
-    if (is.null(pre_buffer))  pre_buffer  <- spec$pre_buffer
+    if (is.null(pre_buffer)) pre_buffer <- spec$pre_buffer
     if (is.null(alpha_state)) alpha_state <- spec$alpha_state
     if (lambda_w == 0 && !is.null(spec$lambda_w)) lambda_w <- spec$lambda_w
     if (is.null(w_floor) && !is.null(spec$w_floor)) w_floor <- spec$w_floor
   }
   w_floor <- as.numeric(w_floor %||% 0)
   if (is.null(best_mean_nll)) stop("Provide either spec=... or best_mean_nll=...")
-  
+
   # If spec is NULL and alpha_state was not provided, try to take it from best_mean_nll
   if (is.null(spec) && is.null(alpha_state)) {
     if (is.data.frame(best_mean_nll) && "alpha_state" %in% names(best_mean_nll)) {
@@ -871,8 +956,8 @@ train_stage2_joint <- function(dat,
     }
   }
   # ramp is controlled by K (K<=1 => no ramp)
-  leads    <- if (!is.null(spec)) spec$leads else c(1L, 2L)
-  
+  leads <- if (!is.null(spec)) spec$leads else c(1L, 2L)
+
   d_all <- prep_stage2_joint(
     dat,
     best_mean_nll = best_mean_nll,
@@ -884,7 +969,7 @@ train_stage2_joint <- function(dat,
     m1_preds      = m1_preds,
     verbose       = FALSE
   )
-  
+
   train_stage2_joint_prepped(
     d_all = d_all,
     best_mean_nll = best_mean_nll,
@@ -894,7 +979,7 @@ train_stage2_joint <- function(dat,
     k_n = k_n,
     method = method,
     lambda_w = lambda_w,
-    w_floor  = w_floor,
+    w_floor = w_floor,
     verbose = verbose
   )
 }
@@ -918,7 +1003,7 @@ train_stage2_joint <- function(dat,
 format_current_for_stage2 <- function(currentSeason,
                                       iWeek_used,
                                       template_df = NULL,
-                                      spec        = NULL,
+                                      spec = NULL,
                                       season_label = "current") {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   iWeek_used <- as.integer(iWeek_used[1L])
@@ -927,12 +1012,14 @@ format_current_for_stage2 <- function(currentSeason,
   )
 
   df <- currentSeason
-  if (!"neg" %in% names(df) && "N" %in% names(df) && "y" %in% names(df))
+  if (!"neg" %in% names(df) && "N" %in% names(df) && "y" %in% names(df)) {
     df$neg <- df$N - df$y
-  if (!"N" %in% names(df) && "neg" %in% names(df) && "y" %in% names(df))
+  }
+  if (!"N" %in% names(df) && "neg" %in% names(df) && "y" %in% names(df)) {
     df$N <- df$y + df$neg
-  df$season  <- as.character(season_label)
-  df$phase   <- as.integer(!is.na(df$weekF) & as.integer(df$weekF) >= iWeek_used)
+  }
+  df$season <- as.character(season_label)
+  df$phase <- as.integer(!is.na(df$weekF) & as.integer(df$weekF) >= iWeek_used)
   df$newWeek <- as.integer(df$weekF) - iWeek_used + anchorWeek
 
   as.data.frame(df)
@@ -965,7 +1052,7 @@ refit_stage2_weekly <- function(current_obs,
                                 hist_data,
                                 template_df,
                                 spec,
-                                m1_preds     = NULL,
+                                m1_preds = NULL,
                                 season_label = "current",
                                 addFS = NULL,
                                 verbose = TRUE) {

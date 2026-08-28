@@ -2,9 +2,9 @@
 #
 # Layout expected on server:
 #   test/
-#     R/m0_training.R
-#     R/m2_spec_grid.R
-#     R/m2_training.R
+#     PAGe/R/m0_training.R
+#     PAGe/R/m2_spec_grid.R
+#     PAGe/R/m2_training.R
 #     test.RData
 #     main.R          <- this file
 #
@@ -21,9 +21,9 @@ suppressPackageStartupMessages({
 })
 
 # ── source functions ─────────────────────────────────────────────────────────
-source("R/m0_training.R")
-source("R/m2_spec_grid.R")
-source("R/m2_training.R")   # wins for shared function names
+source("PAGe/R/m0_training.R")
+source("PAGe/R/m2_spec_grid.R")
+source("PAGe/R/m2_training.R")   # wins for shared function names
 
 # ── load data ────────────────────────────────────────────────────────────────
 load("test.RData")   # loads: alignedD, template_df, ignD
@@ -87,7 +87,7 @@ print(head(agg1, 10))
 
 cat("\n=== PATH 2: tune_stage2_loso_spec_grid_parallel ===\n")
 
-source("R/m2_spec_grid.R")   # restore module version of stage2_make_spec etc.
+source("PAGe/R/m2_spec_grid.R")   # restore module version of stage2_make_spec etc.
 
 sg <- expand_grid_specs(
   delta_grid  = -2:2,

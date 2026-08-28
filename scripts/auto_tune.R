@@ -23,7 +23,7 @@ cat("\n=== auto_from_rdata.R ===\n")
 cat("rdata: ", rdata_path, "\n")
 cat("out:   ", out_dir, "\n")
 cat("task:  ", task_name, "\n")
-cat("source R/: ", source_r, "\n\n", sep = "")
+cat("source PAGe/R/: ", source_r, "\n\n", sep = "")
 
 # --- 1) load .RData into a dedicated environment (avoid polluting global env) ---
 if (!file.exists(rdata_path)) stop("RData file not found: ", rdata_path)
@@ -34,12 +34,12 @@ loaded_names <- load(rdata_path, envir = inputs)
 cat("Loaded objects (", length(loaded_names), "):\n  - ",
     paste(loaded_names, collapse = "\n  - "), "\n\n", sep = "")
 
-# --- 2) source all functions under R/ (optional but recommended) ---
+# --- 2) source all functions under PAGe/R/ (optional but recommended) ---
 if (source_r) {
-  if (!dir.exists("R")) stop("Folder 'R/' not found in project root.")
+  if (!dir.exists("PAGe/R")) stop("Folder 'PAGe/R/' not found in project root.")
   
-  r_files <- list.files("R", pattern = "\\.R$", full.names = TRUE, recursive = TRUE)
-  if (length(r_files) == 0) stop("No .R files found under R/")
+  r_files <- list.files("PAGe/R", pattern = "\\.R$", full.names = TRUE, recursive = TRUE)
+  if (length(r_files) == 0) stop("No .R files found under PAGe/R/")
   
   base <- basename(r_files)
   ord <- order(!grepl("^00_", base), base)
@@ -51,7 +51,7 @@ if (source_r) {
     tryCatch(source(f, local = FALSE),
              error = function(e) stop("Error sourcing ", f, ":\n", e$message))
   }
-  cat("Sourced all R/ files successfully.\n\n")
+  cat("Sourced all PAGe/R/ files successfully.\n\n")
 }
 
 # --- 3) run entrypoint using inputs env ---
@@ -62,7 +62,7 @@ if (!exists(task_name, mode = "function")) {
   candidates <- grep("(^run_|^produce_|^prep_|^make_|^build_|^train_|^tune_)", all_funs, value = TRUE)
   stop(
     "Task function not found: ", task_name, "\n\n",
-    "Define it in R/*.R (or load it via your RData).\n",
+    "Define it in PAGe/R/*.R (or load it via your RData).\n",
     "Candidate functions in session:\n  - ",
     paste(head(candidates, 30), collapse = "\n  - ")
   )

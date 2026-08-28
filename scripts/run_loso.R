@@ -6,14 +6,14 @@ library(data.table)
 library(MMWRweek)
 library(PAGe)
 
-source("R/m0_retro.R")
-source("R/m0_training.R")
-source("R/m2_training.R")
-source("R/pipeline_runtime_helpers.R")
-source("R/m0_runtime.R")
-source("R/m2_runtime.R")
-source("R/pipeline_runtime.R")
-source("R/m2_spec_grid.R")
+source("PAGe/R/m0_retro.R")
+source("PAGe/R/m0_training.R")
+source("PAGe/R/m2_training.R")
+source("PAGe/R/pipeline_runtime_helpers.R")
+source("PAGe/R/m0_runtime.R")
+source("PAGe/R/m2_runtime.R")
+source("PAGe/R/pipeline_runtime.R")
+source("PAGe/R/m2_spec_grid.R")
 
 # ---- Settings (same as qmd) ----
 startWeek  <- 27

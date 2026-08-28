@@ -17,6 +17,36 @@
   )
 }
 
+.m2_optional_df_axes <- function() {
+  c("k_e", "k_r", "k_de", "k_sp")
+}
+
+#' Default parameter-specific M2 NLL gain caps
+#'
+#' The caps are applied to matched adjacent comparisons during governed M2
+#' boundary inspection. A value of zero means that only a non-improving move
+#' (an exact tie or a deterioration) is stopped by the practical-gain rule.
+#' Smoothing dimensions use the thresholds documented in the tuning playbook;
+#' structural axes use zero because their scales are discrete and not directly
+#' comparable to NLL changes on continuous axes.
+#'
+#' @return A named non-negative numeric vector covering every tuned M2 axis.
+#' @export
+default_m2_nll_gain_caps <- function() {
+  c(
+    delta = 0,
+    Kr = 0,
+    k_f = 0.00025,
+    k_e = 0.001,
+    alpha_state = 0.001,
+    k_r = 0.0005,
+    k_de = 0.00005,
+    k_sp = 0.00025,
+    bias_alpha = 0.00005,
+    bias_beta = 0.00005
+  )
+}
+
 .m2_locked_grid_row <- function() {
   data.frame(
     delta = 0L, Kr = 1L, k_f = 4L, k_e = 2L,
@@ -136,8 +166,8 @@
   provenance <- "incumbent:v16-corrected"
   changes <- list(
     delta = 1L, Kr = 2L, k_f = c(3L, 5L), k_e = c(0L, 3L),
-    alpha_state = c(0.10, 0.20), k_r = 2L, k_de = 2L,
-    k_sp = c(4L, 8L), bias_alpha = c(0, 0.10), bias_beta = 0.05
+    alpha_state = c(0.10, 0.20), k_r = c(0L, 2L), k_de = c(0L, 2L),
+    k_sp = c(0L, 4L, 8L), bias_alpha = c(0, 0.10), bias_beta = 0.05
   )
   for (nm in names(changes)) {
     for (value in changes[[nm]]) {
@@ -306,7 +336,7 @@
 #' results, the plan contains the current v16-corrected incumbent and one-factor
 #' neighbors. With prior results, it retains v16, greedily retains diverse
 #' high-performing finalists, adds one-factor neighbors around the prior
-#' winner, and expands grid boundaries reached by that winner using the
+#' winner, and expands grid boundaries reached by that winner using half the
 #' spacing adjacent to each reached boundary.
 #'
 #' Boundary expansion proposes only new configurations that pass the M2 grid
@@ -366,6 +396,7 @@ plan_m2_grid <- function(previous_results = NULL,
     delta = 1, Kr = 1, k_f = 1, k_e = 1, alpha_state = 0.05,
     k_r = 2, k_de = 2, k_sp = 2, bias_alpha = 0.05, bias_beta = 0.05
   )
+  integer_axes <- c("delta", "Kr", "k_f", "k_e", "k_r", "k_de", "k_sp")
   for (nm in .m2_parameter_names()) {
     observed <- sort(unique(previous_grid[[nm]]))
     current <- winner[[nm]]
@@ -377,13 +408,9 @@ plan_m2_grid <- function(previous_results = NULL,
       } else {
         default_steps[[nm]]
       }
+      step <- step / 2
+      if (nm %in% integer_axes) step <- max(1, ceiling(step))
       boundary_values <- c(boundary_values, current - step)
-      # k_e = 1 is not a valid mgcv basis size. When the smallest tested
-      # smooth is k_e = 2, the only valid lower comparison is the explicit
-      # drop/null model k_e = 0.
-      if (nm == "k_e" && current == 2L) {
-        boundary_values <- c(boundary_values, 0L)
-      }
     }
     if (current == max(observed)) {
       step <- if (length(observed) > 1L) {
@@ -391,15 +418,25 @@ plan_m2_grid <- function(previous_results = NULL,
       } else {
         default_steps[[nm]]
       }
+      step <- step / 2
+      if (nm %in% integer_axes) step <- max(1, ceiling(step))
       boundary_values <- c(boundary_values, current + step)
     }
+    # Optional smooths always have an explicit zero/drop candidate. Add it
+    # even when a later positive expansion has made the selected value appear
+    # interior; otherwise a practical-gain cap could settle without scoring
+    # the drop model.
+    if (nm %in% .m2_optional_df_axes() && !0L %in% observed) {
+      boundary_values <- c(boundary_values, 0L)
+    }
     for (value in unique(boundary_values)) {
+      if (nm %in% integer_axes) value <- as.integer(round(value))
       candidate <- winner
       candidate[[nm]] <- value
       if (.m2_candidate_is_valid(candidate) && !value %in% observed) {
         rows[[length(rows) + 1L]] <- candidate
-        label <- if (nm == "k_e" && value == 0L) {
-          "boundary:k_e:drop"
+        label <- if (nm %in% .m2_optional_df_axes() && value == 0L) {
+          paste0("boundary:", nm, ":drop")
         } else {
           paste0("boundary:", nm)
         }
@@ -556,6 +593,15 @@ plan_m2_grid <- function(previous_results = NULL,
 #' @param manual_labels,flag_args,m1_params Optional component settings. For a
 #'   released holdout, these are derived exclusively from verified promotion
 #'   evidence and explicit overrides are rejected.
+#' @param m1_min_gain Minimum M1 Weibull-MAE improvement, in weeks, required to
+#'   justify a more flexible `k_ref` candidate (default 0.05).
+#' @param m1_hard_caps Named M1 hard caps accepted by the boundary gate. The
+#'   default bounds `k_ref` to 10--50 on the 52-week reference domain.
+#' @param m2_min_nll_gain Named parameter-specific NLL gain thresholds passed to
+#'   the M2 boundary gate. Defaults to \code{default_m2_nll_gain_caps()} and
+#'   covers every M2 axis. A scalar applies to every M2 axis. An edge is
+#'   accepted only when its matched outward gain is at or below the threshold;
+#'   missing matched evidence still requires expansion.
 #' @param m0_params Optional M0 parameters for refresh mode. Defaults to the
 #'   deployed configuration when no holdout has been released. For a released
 #'   holdout it is derived exclusively from verified promotion evidence.
@@ -592,6 +638,9 @@ train_pipeline <- function(
   manual_labels = NULL,
   flag_args = NULL,
   m1_params = NULL,
+  m1_min_gain = 0.05,
+  m1_hard_caps = list(k_ref = c(lower = 10L, upper = 50L)),
+  m2_min_nll_gain = default_m2_nll_gain_caps(),
   m0_params = NULL,
   m2_spec_id = NULL
 ) {
@@ -760,7 +809,18 @@ train_pipeline <- function(
   )
   # M1 is a governed stage boundary: do not freeze an unresolved non-null
   # edge winner or spend M2 compute on a grid that must be expanded.
-  m1_tuning <- validate_m1_tuning(m1_tuning, check_boundaries = TRUE)
+  m1_tuning$hard_caps <- m1_hard_caps
+  m1_tuning <- validate_m1_tuning(
+    m1_tuning,
+    check_boundaries = TRUE, hard_caps = m1_hard_caps
+  )
+  m1_selection <- select_m1_candidate(
+    m1_tuning,
+    min_gain = m1_min_gain, prefer_simpler = TRUE,
+    hard_caps = m1_hard_caps
+  )
+  m1_tuning$best <- m1_selection$selected
+  m1_tuning$m1_selection <- m1_selection
   tuned_m1_params <- .m1_params_from_tuning(m1_params, m1_tuning)
   m1 <- freeze_m1(
     fit_m1(allD, selection, m0 = m0, config = tuned_m1_params),
@@ -806,7 +866,12 @@ train_pipeline <- function(
   # M2 is the final governed tuning stage: reject a genuinely tuned edge
   # before fitting/freezing a production configuration. Users can inspect
   # the warning and call expand_tuning_grid() to extend the same checkpoint.
-  m2_tuning <- validate_m2_tuning(m2_tuning, check_boundaries = TRUE)
+  m2_tuning$min_nll_gain <- m2_min_nll_gain
+  m2_tuning <- validate_m2_tuning(
+    m2_tuning,
+    check_boundaries = TRUE,
+    min_nll_gain = m2_min_nll_gain
+  )
   m2_selection <- select_m2_candidate(m2_tuning, method = selection_method)
   if (is.null(m2_selection$selected_spec)) {
     stop("Selected M2 specification could not be reconstructed from tuning results.")

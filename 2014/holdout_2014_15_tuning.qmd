@@ -1,0 +1,339 @@
+---
+title: "PAGe 2014–15 Holdout: Latest API End-to-End Cycle"
+format:
+  html:
+    toc: true
+    number-sections: true
+execute:
+  eval: false
+---
+
+This is the reproducible call record for the governed `2014-15` holdout cycle.
+Season labels are exchangeable identifiers: the holdout is excluded from every
+training fold, while all other valid seasons are eligible for training. The
+runner executes the same calls below in `run_2014_cycle.R` and writes private
+artifacts beneath:
+
+```text
+/home/yeli/PAGe-bcc-artifacts/seasonal-archive-20260818/2014-15/runs/
+  2014-15-latest-api-20260818/
+```
+
+The cycle is strictly sequential:
+
+```text
+validate season selection
+  -> M0 tune / inspect / expand / validate / fit / freeze
+  -> M1 tune / inspect / expand / validate / fit / freeze
+  -> M2 tune / inspect / expand / validate / fit / freeze
+  -> assemble_kit / validate_page_kit
+  -> replay_season_holdout(strict)
+```
+
+The `2014-15` holdout is not opened until the final replay call. Every tuning
+stage records its boundary report and retains resumable checkpoints.
+
+## 1. Setup and canonical data
+
+```{r}
+devtools::load_all("PAGe", quiet = TRUE)
+library(dplyr)
+library(MMWRweek)
+
+hist_path <- Sys.getenv("PAGE_FLU_HIST_FILE", "/home/yeli/FLU/flu_testing_data.csv")
+artifact_root <- Sys.getenv(
+  "PAGE_ARTIFACT_ROOT",
+  "/home/yeli/PAGe-bcc-artifacts/seasonal-archive-20260818/2014-15/runs"
+)
+run_id <- Sys.getenv("PAGE_RUN_ID", "2014-15-latest-api-20260818")
+run_dir <- file.path(artifact_root, run_id)
+artifact_dir <- file.path(run_dir, "artifacts")
+checkpoint_dir <- file.path(run_dir, "checkpoints")
+dir.create(artifact_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(checkpoint_dir, recursive = TRUE, showWarnings = FALSE)
+
+n_weeks_in_start_year <- function(start_year) {
+  52L + as.integer(MMWRweek::MMWRweek(
+    as.Date(paste0(as.integer(start_year), "-12-31"))
+  )$MMWRweek == 53L)
+}
+
+raw <- PAGe::load_flu_hist(hist_path)
+allD <- raw |>
+  mutate(
+    season = as.character(season), week = as.integer(week),
+    start_year = as.integer(seasonstart), y = as.numeric(pos_flua),
+    N = as.numeric(test_flu),
+    weekF = ((week - 27L) %% n_weeks_in_start_year(start_year)) + 1L
+  ) |>
+  select(season, weekF, y, N, everything()) |>
+  PAGe::prepare_surveillance_data()
+```
+
+## 2. Declare the exchangeable holdout split
+
+```{r}
+holdout <- "2014-15"
+permanent_exclusions <- c("2011-12", "2015-16", "2020-21", "2021-22")
+all_seasons <- sort(unique(as.character(allD$season)))
+training_seasons <- setdiff(all_seasons, c(permanent_exclusions, holdout))
+
+selection <- PAGe::validate_season_selection(
+  allD,
+  training_seasons = training_seasons,
+  exclude_seasons = permanent_exclusions,
+  holdout_seasons = holdout,
+  application_seasons = character(0)
+)
+
+manual_labels <- c(
+  "2012-13" = 18L, "2013-14" = 20L, "2014-15" = 20L,
+  "2015-16" = 24L, "2016-17" = 19L, "2017-18" = 20L,
+  "2018-19" = 19L, "2019-20" = 22L, "2022-23" = 15L,
+  "2023-24" = 20L, "2024-25" = 23L, "2025-26" = 19L
+)
+
+saveRDS(selection, file.path(artifact_dir, "season_selection.rds"))
+```
+
+`selection$training_seasons` is the only season set passed to LOSO tuning.
+The holdout label is retained in the selection object for the final replay and
+is not available to any candidate fit.
+
+## 3. M0: ignition detection
+
+M0 is completed and boundary-validated before M1 starts. The grid expansion is
+additive and reuses the same checkpoint directory.
+
+```{r}
+m0_seed <- list(
+  best_params = PAGe:::.default_m0_params(),
+  grid = PAGe:::.default_m0_grid()
+)
+m0_grid <- PAGe::expand_tuning_grid(m0_seed, stage = "M0")
+m0_checkpoint <- file.path(checkpoint_dir, "m0")
+
+m0_tuning <- PAGe::tune_m0(
+  allD,
+  grid = m0_grid,
+  manual_labels = manual_labels,
+  n_cores = parallel::detectCores(logical = TRUE),
+  selection = selection,
+  checkpoint_dir = m0_checkpoint,
+  verbose = TRUE
+)
+m0_boundary <- PAGe::inspect_tuning_boundaries(
+  m0_tuning, stage = "M0", warn = TRUE
+)
+write.csv(m0_boundary, file.path(artifact_dir, "m0_boundary_report.csv"),
+          row.names = FALSE)
+
+# If any genuinely tuned non-null axis is unresolved, expand and rerun tune_m0.
+m0_grid <- PAGe::expand_tuning_grid(m0_tuning, stage = "M0")
+m0_tuning <- PAGe::tune_m0(
+  allD, grid = m0_grid, manual_labels = manual_labels,
+  n_cores = parallel::detectCores(logical = TRUE), selection = selection,
+  checkpoint_dir = m0_checkpoint, previous_results = m0_tuning$tuning,
+  verbose = TRUE
+)
+m0_tuning <- PAGe::validate_m0_tuning(
+  m0_tuning, grid = m0_grid, check_boundaries = TRUE
+)
+m0 <- PAGe::freeze_m0(PAGe::fit_m0(
+  allD, selection, config = m0_tuning$best_params,
+  manual_labels = manual_labels, flag_args = PAGe:::.default_flag_args()
+), tuning = m0_tuning)
+saveRDS(m0_tuning, file.path(artifact_dir, "m0_tuning.rds"))
+saveRDS(m0, file.path(artifact_dir, "m0_frozen.rds"))
+```
+
+The runner repeats the inspect/expand loop until no `expand_required` decision
+remains (or a declared null/hard cap is reached), rather than assuming that
+one expansion is sufficient.
+
+## 4. M1: alignment, dependent on frozen M0
+
+M1 receives the frozen M0 identity. `k_ref` has the explicit valid-domain cap
+of 52 weeks; all other non-null edge winners are expanded before the stage is
+frozen. The practical-gain selector may back off to a simpler `k_ref` only
+after the full candidate grid has been scored.
+
+```{r}
+m1_grid <- PAGe::default_m1_grid()
+m1_hard_caps <- list(k_ref = c(lower = 10L, upper = 52L))
+m1_checkpoint <- file.path(checkpoint_dir, "m1")
+
+m1_tuning <- PAGe::tune_m1(
+  allD,
+  m0 = m0,
+  m1 = list(m1_params = PAGe:::.default_m1_params()),
+  grid = m1_grid,
+  n_cores = parallel::detectCores(logical = TRUE),
+  checkpoint_dir = m1_checkpoint,
+  selection = selection,
+  manual_labels = manual_labels,
+  verbose = TRUE
+)
+m1_boundary <- PAGe::inspect_tuning_boundaries(
+  m1_tuning, stage = "M1", warn = TRUE, hard_caps = m1_hard_caps
+)
+write.csv(m1_boundary, file.path(artifact_dir, "m1_boundary_report.csv"),
+          row.names = FALSE)
+
+# Repeat with additive neighbors while `expand_required` remains.
+m1_grid <- PAGe::expand_tuning_grid(
+  m1_tuning, stage = "M1", steps = c(k_ref = 5, slope_weight = 4),
+  m1_k_ref_bounds = c(lower = 10L, upper = 52L)
+)
+m1_tuning <- PAGe::tune_m1(
+  allD, m0 = m0,
+  m1 = list(m1_params = PAGe:::.default_m1_params()), grid = m1_grid,
+  n_cores = parallel::detectCores(logical = TRUE),
+  checkpoint_dir = m1_checkpoint, selection = selection,
+  manual_labels = manual_labels, verbose = TRUE
+)
+m1_tuning$hard_caps <- m1_hard_caps
+m1_tuning <- PAGe::validate_m1_tuning(
+  m1_tuning, check_boundaries = TRUE, hard_caps = m1_hard_caps
+)
+m1_selection <- PAGe::select_m1_candidate(
+  m1_tuning, min_gain = 0.05, prefer_simpler = TRUE,
+  hard_caps = m1_hard_caps
+)
+m1_tuning$best <- m1_selection$selected
+m1_tuning$m1_selection <- m1_selection
+m1_tuning <- PAGe::validate_m1_tuning(
+  m1_tuning, check_boundaries = TRUE, hard_caps = m1_hard_caps
+)
+m1_config <- PAGe:::.m1_params_from_tuning(
+  PAGe:::.default_m1_params(), m1_tuning
+)
+m1 <- PAGe::freeze_m1(PAGe::fit_m1(
+  allD, selection, m0 = m0, config = m1_config
+), tuning = m1_tuning)
+saveRDS(m1_tuning, file.path(artifact_dir, "m1_tuning.rds"))
+saveRDS(m1, file.path(artifact_dir, "m1_frozen.rds"))
+```
+
+## 5. M2: forecast model, dependent on frozen M0 and M1
+
+M2 uses a compact planned grid, evaluates complete fold scores, and expands
+only by adding adjacent values. The per-parameter minimum-gain vector is
+predeclared before the holdout is opened.
+
+```{r}
+m2_grid <- PAGe::plan_m2_grid(NULL, max_finalists = 6L, max_specs = 64L)
+m2_checkpoint <- file.path(checkpoint_dir, "m2")
+m2_min_nll_gain <- c(
+  delta = 0, Kr = 0, k_f = 0.00025, k_e = 0.001,
+  alpha_state = 0.001, k_r = 0.0005, k_de = 0.00005,
+  k_sp = 0.00025, bias_alpha = 0.00005, bias_beta = 0
+)
+
+m2_tuning <- PAGe::tune_m2(
+  allD, selection = selection, m0 = m0, m1 = m1,
+  grid = m2_grid, n_cores = parallel::detectCores(logical = TRUE),
+  checkpoint_dir = m2_checkpoint, verbose = TRUE
+)
+m2_boundary <- PAGe::inspect_tuning_boundaries(
+  m2_tuning, stage = "M2", warn = TRUE,
+  min_nll_gain = m2_min_nll_gain
+)
+write.csv(m2_boundary, file.path(artifact_dir, "m2_boundary_report.csv"),
+          row.names = FALSE)
+
+# Repeat this additive expansion/tune block until no non-null edge requires it.
+m2_grid <- PAGe::expand_tuning_grid(
+  m2_tuning, stage = "M2", max_specs = 96L
+)
+m2_tuning <- PAGe::tune_m2(
+  allD, selection = selection, m0 = m0, m1 = m1,
+  grid = m2_grid, n_cores = parallel::detectCores(logical = TRUE),
+  checkpoint_dir = m2_checkpoint, verbose = TRUE
+)
+m2_tuning$min_nll_gain <- m2_min_nll_gain
+m2_tuning <- PAGe::validate_m2_tuning(
+  m2_tuning, check_boundaries = TRUE, min_nll_gain = m2_min_nll_gain
+)
+m2_selection <- PAGe::select_m2_candidate(m2_tuning, method = "min_nll")
+m2 <- PAGe::freeze_m2(PAGe::fit_m2(
+  allD, selection, m0 = m0, m1 = m1,
+  config = m2_selection$selected_spec,
+  n_cores = parallel::detectCores(logical = TRUE), verbose = TRUE
+), tuning = PAGe:::.selected_m2_tuning(m2_tuning, m2_selection))
+saveRDS(m2_tuning, file.path(artifact_dir, "m2_tuning.rds"))
+saveRDS(m2, file.path(artifact_dir, "m2_frozen.rds"))
+```
+
+The runner repeats the M2 inspect/expand block up to the governed run limit,
+writing `m2_expanded_grid_round*.csv` for every expansion.
+
+## 6. Assemble, validate, and replay the untouched season
+
+```{r}
+kit <- PAGe::assemble_kit(
+  m0, m1, m2, best_spec_id = m2_selection$selected_spec_id
+)
+PAGe::validate_page_kit(kit)
+saveRDS(kit, file.path(artifact_dir, "candidate_pre_holdout.rds"))
+
+replay <- PAGe::replay_season_holdout(
+  kit, allD, season = "2014-15", kit_compatibility = "strict"
+)
+stopifnot(identical(as.character(replay$status), "unseen_replay_complete"))
+saveRDS(replay, file.path(artifact_dir, "holdout_2014_15_replay.rds"))
+saveRDS(replay$metrics, file.path(artifact_dir, "holdout_2014_15_metrics.rds"))
+write.csv(replay$predictions,
+          file.path(artifact_dir, "holdout_2014_15_predictions.csv"),
+          row.names = FALSE)
+write.csv(as.data.frame(replay$metrics$overall),
+          file.path(artifact_dir, "holdout_2014_15_metrics.csv"),
+          row.names = FALSE)
+```
+
+The final `run_summary.rds` records the selected M2 specification, all stage
+artifact identities, prediction count, metrics, training seasons, and the
+package checkout identity. A successful row in `status.tsv` is written only
+after strict replay and artifact serialization succeed.
+
+## 7. Compact artifact summaries
+
+The runner writes one machine-readable summary row after each settled stage,
+plus the final replay. This makes a bounded audit possible without reading the
+full tuning grids or run log.
+
+```{r}
+stage_summary <- read.delim(
+  file.path(artifact_dir, "stage_summaries.tsv"),
+  stringsAsFactors = FALSE, check.names = FALSE
+)
+stage_summary[, c(
+  "stage", "status", "specs", "boundary_decisions",
+  "detail", "artifacts"
+)]
+
+read.csv(file.path(artifact_dir, "m0_boundary_report.csv"))
+read.csv(file.path(artifact_dir, "m1_boundary_report.csv"))
+read.csv(file.path(artifact_dir, "m2_boundary_report.csv"))
+read.csv(file.path(artifact_dir, "holdout_2014_15_metrics.csv"))
+readRDS(file.path(artifact_dir, "run_summary.rds"))
+```
+
+The expected terminal replay status is `unseen_replay_complete`; any
+`expand_required` boundary decision must be resolved before freezing that
+stage.
+
+## 8. Detached execution
+
+The checked-in runner is launched without continuous AI supervision:
+
+```bash
+PAGE_ARTIFACT_ROOT=/home/yeli/PAGe-bcc-artifacts/seasonal-archive-20260818/2014-15/runs \
+PAGE_RUN_ID=2014-15-latest-api-20260818 \
+PAGE_N_CORES="$(nproc)" \
+nohup Rscript 2014/run_2014_cycle.R \
+  > /home/yeli/PAGe-bcc-artifacts/seasonal-archive-20260818/2014-15/runs/2014-15-latest-api-20260818/run.log 2>&1 &
+```
+
+Use the compact `status.tsv` and terminal artifacts for bounded audits. Do not
+stream the full run log or poll every minute.
