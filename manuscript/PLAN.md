@@ -6,9 +6,9 @@ Last updated: 2026-09-01
 
 - **Target journal:** *Epidemics*
 - **Article type:** Original methodological research
-- **Working title:** *PAGe: Phase-aligned gated forecasting for seasonal respiratory-virus epidemics*
+- **Working title:** *PAGe: A staged framework for epidemic ignition, phase alignment, and short-horizon respiratory-virus forecasting*
 - **Primary audience:** Infectious-disease modellers, epidemiologists, forecasting researchers, and public-health practitioners
-- **Internal drafting target:** 7,500--8,500 words, excluding references and supplementary material; reconcile with the current journal guide before submission
+- **Internal drafting target:** 7,500--8,400 words, excluding references and supplementary material; reconcile with the current journal guide before submission
 - **Language:** English
 - **Abstract drafting target:** Up to 250 words, subject to final journal verification
 - **Keywords drafting target:** Up to six, subject to final journal verification
@@ -21,7 +21,7 @@ Journal references:
 - [Epidemics: aims and scope](https://www.sciencedirect.com/journal/epidemics/about/aims-and-scope)
 - [Epidemics: guide for authors](https://www.sciencedirect.com/journal/epidemics/publish/guide-for-authors)
 
-Independent review status: **REVISE FIRST**. See [`REVIEW_LOG.md`](REVIEW_LOG.md) for Ming's 2026-09-01 review, prioritized gaps, decision criteria, and delegation audit record. The two-track literature synthesis is complete in [`LITERATURE_REVIEW.md`](LITERATURE_REVIEW.md) and [`LITERATURE_MATRIX.md`](LITERATURE_MATRIX.md); comparator approval and protocol freeze remain open.
+Independent review status: **REVISE FIRST**. See [`REVIEW_LOG.md`](REVIEW_LOG.md) for Ming's 2026-09-01 review, prioritized gaps, decision criteria, and delegation audit record. The two-track literature synthesis is complete in [`LITERATURE_REVIEW.md`](LITERATURE_REVIEW.md) and [`LITERATURE_MATRIX.md`](LITERATURE_MATRIX.md). A journal-specific scan and fillable drafting guide are recorded in [`EPIDEMICS_ARTICLE_SCAN.md`](EPIDEMICS_ARTICLE_SCAN.md) and [`SKELETON.md`](SKELETON.md). The comparator set, primary estimand, metric, uncertainty analysis, and RSV suitability gate are now frozen in [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md); dataset-specific governance and the ignition-label protocol remain open.
 
 ## Central research problem
 
@@ -98,19 +98,21 @@ This file is the authoritative manuscript plan. [`TODO.md`](TODO.md) is the oper
 8. Ontario influenza and RSV scores will not be pooled into one headline estimate without a prespecified and scientifically justified weighting model.
 9. The method will be described as designed for prospective deployment and evaluated by retrospective walk-forward replay; evidence of actual prospective deployment will not be implied.
 10. Ontario RSV is the selected second-pathogen dataset. This fixes the pathogen and jurisdiction, but not the source version, eligible seasons, holdout, access classification, or publication permissions.
+11. Training, tuning, fitting, and freezing occur once for each target season. The resulting seasonal kit is reused across weekly origins; weekly M0 decisions, M1 alignment, and adaptive correction are state updates rather than model retraining.
+12. The historical 2025--26 acceptance replay belongs to a different artifact lineage. It will be reported separately and excluded from the new governed, fully nested replay aggregate.
 
-### Headline statistical question and proposed primary comparison
+### Headline statistical question and frozen primary comparison
 
 The headline question is whether full PAGe improves two-week-ahead probabilistic forecasting of Ontario influenza positivity over a calendar-week binomial GAM that excludes ignition gating and phase alignment.
 
-The proposed primary contrast is full PAGe minus the calendar-week GAM on binomial negative log-likelihood at horizon two, evaluated across eligible Ontario seasonal replays. The sign convention, score normalization, handling of the binomial combinatorial term, aggregation across weeks, and season-level resampling interval must be frozen in a versioned analysis protocol before this comparison is run. A lower score must consistently indicate better performance. Horizon one, persistence, seasonal-naive forecasts, other ablations, phase-specific results, and worst-season results are secondary unless the protocol explicitly promotes one before analysis.
+The frozen primary contrast is full PAGe minus the calendar-week GAM on two-week-ahead per-trial binomial negative log-likelihood, evaluated across eligible Ontario seasonal replays. The model-independent combinatorial term is omitted, weeks are weighted by target test count within season, and seasons are weighted equally. A lower score indicates better performance, so a negative contrast favors PAGe. Paired season-bootstrap uncertainty and a sign-flip analysis are specified in [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md). Horizon one, other comparators and ablations, phase-specific results, and worst-season results are secondary.
 
 ### Stage-gated critical path
 
 | Phase | Objective | Dependencies | Accountable role | Required deliverables | Exit gate | Status |
 |---|---|---|---|---|---|---|
 | 0. Governance | Resolve inexpensive scientific and authorization blockers | None | Project lead and data steward | Publication authorization; ethics determination; season-exclusion rationale; Ontario revision/backfill rule; documented origin of the 0.02 NLL gate | Every governance decision is dated and traceable | In progress |
-| 1. Evidence protocol | Complete literature synthesis and freeze estimands, metrics, labels, comparators, season sets, and uncertainty methods | Phase 0 authorization can proceed in parallel, but must close before private results are released | Manuscript and analysis leads | Literature matrix; versioned analysis protocol; ignition-label protocol; comparator freeze; display plan | No outcome-driven analytical choices remain open | Pending |
+| 1. Evidence protocol | Complete literature synthesis and freeze estimands, metrics, labels, comparators, season sets, and uncertainty methods | Phase 0 authorization can proceed in parallel, but must close before private results are released | Manuscript and analysis leads | Literature matrix; versioned analysis protocol; ignition-label protocol; comparator freeze; display plan | No outcome-driven analytical choices remain open | In progress: core analysis frozen; labels and season declarations pending |
 | 2. Ontario reconstruction | Re-derive the headline M0 -> M1 -> M2 kit without holdout reuse | Phase 1 protocol | Analysis and software leads | Frozen stage artifacts and identities; boundary audit; package version; M1 recomputation; runtime records | Governed kit validates and every tuned boundary is resolved or justified | Pending |
 | 3. Ontario evaluation | Run replays, baselines, ablations, label sensitivity, and uncertainty analysis | Verified Phase 2 kit | Analysis lead | Canonical replay table; primary comparison; secondary analyses; disclosure-safe tables; artifact manifest | All eligible seasons reconcile to immutable outputs and independent checks pass | Pending |
 | 4. Journal go/no-go | Decide whether the Ontario evidence supports the intended contribution | Phase 3 evidence and authorization | Project lead with independent reviewer | Dated decision memo: proceed, narrow, redesign, or retarget | *Epidemics* path is explicitly approved or replaced | Pending |
@@ -125,15 +127,16 @@ The proposed primary contrast is full PAGe minus the calendar-week GAM on binomi
 |---|---|---|---|---|
 | Ontario publication authorization | Not yet assumed | Written custodian decision and disclosure limits | Data steward | Phase 2 outputs are used publicly |
 | Ethics or REB status | Determination required | Institutional or project-level determination | Project lead | Phase 2 |
-| Exclusion of 2011--12 and 2015--16 | Justify prospectively or include as sensitivity | Dated epidemiological/data-quality rationale | Scientific lead | Protocol freeze |
+| Treatment of 2011--12 | Provide a dated epidemiological/data-quality rationale for exclusion, or include it in the principal or a prespecified sensitivity analysis | Dated rationale and season declaration | Scientific lead | Protocol freeze |
+| Treatment of 2015--16 | Include in the principal analysis if the generic data-quality criteria pass; historical exclusion may be examined only as a prespecified sensitivity | Outcome-blind quality audit and season declaration | Scientific lead | Protocol freeze |
 | Ontario backfill and revisions | Use only information available at each replay origin where reconstructible; otherwise state the limitation | Source metadata and extraction history | Data lead | Protocol freeze |
-| Primary NLL definition | Binomial NLL at horizon two | Exact formula, normalization, and aggregation rule | Statistical lead | Protocol freeze |
-| Primary uncertainty analysis | Season-level resampling | Resampling unit, interval type, repetitions, seed, and small-season justification | Statistical lead | Protocol freeze |
-| Precision feasibility | Quantify what the available number of seasons can resolve | Expected interval width or detectable score difference under season-level resampling | Statistical lead | Protocol freeze |
-| Primary comparator | Calendar-week binomial GAM without M0/M1 | Literature matrix and fair prospective implementation | Scientific lead | Protocol freeze |
+| Primary NLL definition | Frozen: per-trial binomial NLL without the model-independent combinatorial term; trial-weighted within season and season-equal across seasons | [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md) | Statistical lead | Complete |
+| Primary uncertainty analysis | Frozen: 10,000 paired season bootstraps plus sign-flip analysis | [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md) | Statistical lead | Complete |
+| Precision feasibility | Frozen standardized warning; instantiate numerically after the eligible season count is locked | [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md) | Statistical lead | Complete for protocol; numeric instantiation pending season lock |
+| Primary comparator | Frozen: calendar-week binomial GAM without M0/M1 | Literature matrix and [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md) | Scientific lead | Complete |
 | Ignition labels | Reproducible protocol plus perturbation analysis | Labeling instructions, provenance, inter-rule or perturbation checks | Analysis lead | Phase 2 |
 | Historical 0.02 NLL gate | Preserve as historical only unless prespecification is documented | Dated provenance and rationale | Project lead | Results interpretation |
-| Final comparator set | Seven recommended standalone models plus explicit PAGe ablations, with optional additions time-boxed | Literature matrix and implementation feasibility | Scientific lead | Protocol freeze |
+| Final comparator set | Frozen: seven standalone models, four structural PAGe ablations, and three ignition-label sensitivities | [`LITERATURE_REVIEW.md`](LITERATURE_REVIEW.md) and [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md) | Scientific lead | Complete |
 | Second-pathogen dataset | Ontario RSV selected; no fitting before the Ontario influenza go/no-go | Source/version record, access and publication terms, denominators, season count, revisions, and missingness | Data lead | Phase 6 |
 | Manuscript package version | Pin the exact release or commit used for all final analyses | Package version, commit, lockfile/session information | Software lead | Phase 2 freeze |
 
@@ -183,6 +186,13 @@ Private observations must remain outside the public repository. The public relea
 
 ## Manuscript structure
 
+The operational section-by-section drafting guide is [`SKELETON.md`](SKELETON.md).
+It follows the verified patterns in
+[`EPIDEMICS_ARTICLE_SCAN.md`](EPIDEMICS_ARTICLE_SCAN.md) while retaining this
+plan's scientific gates. If wording or section status differs, this plan and the
+frozen analysis protocol control the scientific claim; the skeleton controls
+drafting order and placeholder discipline.
+
 ### Abstract -- up to 250 words
 
 State the forecasting problem, methodological contribution, validation design, main numerical findings from every completed application, and package availability. Do not write the final abstract until all headline results are frozen.
@@ -230,6 +240,7 @@ State the forecasting problem, methodological contribution, validation design, m
 
 - Show the sequential M0 -> M1 -> M2 weekly algorithm.
 - Separate offline tuning/fitting from online forecasting.
+- State explicitly that one seasonal training workflow produces one frozen kit that is reused for every weekly origin in that season.
 - Provide pseudocode in the main paper and implementation detail in the supplement.
 
 ### 4. Training and validation design -- approximately 900 words
@@ -241,7 +252,7 @@ State the forecasting problem, methodological contribution, validation design, m
 - Explain retrospective seasonal replay, confirmatory holdout replay, and promotion gates.
 - Define the primary and secondary metrics and their uncertainty estimates.
 
-### 5. Simulation study -- approximately 900 words
+### 5. Simulation design -- approximately 550 words
 
 Vary the following factors:
 
@@ -257,7 +268,7 @@ Vary the following factors:
 
 Compare the full method with the prespecified baselines and ablations. Report Monte Carlo uncertainty for every simulation summary.
 
-### 6. Respiratory-virus applications and results -- approximately 1,600 words
+### 6. Respiratory-virus applications and results -- approximately 1,850 words
 
 #### 6.1 Ontario influenza
 
@@ -266,7 +277,10 @@ Compare the full method with the prespecified baselines and ablations. Report Mo
 - Present M2 forecast performance by season, horizon, and epidemic phase.
 - Compare against all prespecified baselines.
 - Present historical replays in one canonical table.
-- Present the 2025--26 holdout result as confirmatory evidence.
+- Present the historical 2025--26 acceptance replay separately, identify its
+  different lineage, and exclude it from the new governed replay aggregate.
+- Report simulation results after the governed Ontario forecast comparison,
+  rather than mixing them into the simulation-design Methods section.
 
 #### 6.2 Ontario RSV, if authorized
 
@@ -283,7 +297,7 @@ Compare the full method with the prespecified baselines and ablations. Report Mo
 - Report atypical seasons and material failure cases rather than averaging them away.
 - Include training and replay runtimes.
 
-### 7. PAGe R package -- approximately 750 words
+### 7. PAGe R package -- approximately 500 words
 
 - Package architecture and the M0/M1/M2 API.
 - Generic `prepare_page_data()` interface and canonical data contract.
@@ -292,7 +306,7 @@ Compare the full method with the prespecified baselines and ablations. Report Mo
 - Synthetic and public-data workflows that readers can run without private Ontario data.
 - Package tests, platform information, installation, and versioned release.
 
-### 8. Discussion -- approximately 650 words
+### 8. Discussion -- approximately 800 words
 
 - Interpret the statistical and operational findings.
 - Explain when phase alignment appears useful and when it does not.
@@ -311,17 +325,21 @@ Compare the full method with the prespecified baselines and ablations. Report Mo
 
 ## Prespecified comparisons
 
-The final comparator set must be selected before generating the headline results. The literature-supported recommendation and rationale are recorded in [`LITERATURE_REVIEW.md`](LITERATURE_REVIEW.md). At minimum it should include:
+The final comparator set is frozen in [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md), based on the rationale in [`LITERATURE_REVIEW.md`](LITERATURE_REVIEW.md):
 
-1. Last-observation or persistence forecast.
-2. Seasonal-naive forecast using the corresponding historical week.
-3. Calendar-week binomial GAM without ignition gating or alignment.
-4. Forecast model with M0 but without M1 alignment.
-5. PAGe without adaptive bias correction.
-6. PAGe without alignment-uncertainty features.
+1. Persistence.
+2. Seasonal naive.
+3. Calendar-week binomial GAM.
+4. Lagged penalized binomial regression.
+5. Historical-analogue continuation.
+6. One regularized gradient-boosted tree.
 7. Full PAGe.
 
-The completed literature review recommends adding a low-dimensional lagged penalized binomial model, a prospective historical-analogue continuation model, and one regularized tree model to the core comparison. A Gaussian process, empirical-Bayes full-curve model, and SIR/SIRS ensemble-filter model are time-boxed optional additions. The scientific lead must approve the final set and freeze it in the analysis protocol; no model may be added in response to headline results.
+Required structural ablations remove the ignition gate, M1 alignment, alignment uncertainty, and adaptive bias correction. Required label sensitivities shift labels by one week in each direction and use fold-specific M0-generated labels without manual downstream overrides. SIR/SIRS filtering remains part of the mathematical-method review and may enter simulations, but is excluded from the empirical core because the available positivity target does not identify the required incidence-to-testing observation bridge. No model may be added in response to headline results.
+
+The confirmatory comparison estimates the effect of the assembled PAGe workflow;
+it cannot attribute any gain to phase alignment alone. The prespecified no-M1
+ablation is a descriptive attribution diagnostic and remains secondary.
 
 ## Outcome measures
 
@@ -343,14 +361,13 @@ Results must be stratified by horizon and relevant epidemic phase. Uncertainty s
 
 ## Planned figures
 
-1. Statistical and operational M0 -> M1 -> M2 workflow.
-2. Conditional-LOSO, replay, and holdout timeline showing information boundaries.
-3. Representative partial-curve alignment sequence for one season.
-4. Observed and forecast trajectories for Ontario influenza and, if completed, Ontario RSV.
-5. Forecast performance by horizon and epidemic phase.
-6. Simulation or ablation results across timing and shape mismatch.
-7. Influenza-versus-RSV comparison of component gains and failure modes.
-8. Calibration or forecast-error distribution, if supported by the final sample size.
+1. Statistical M0 -> M1 -> M2 dependency chain.
+2. One representative season with partial-curve alignment and peak estimate in
+   one panel and observed plus h1/h2 forecast trajectories in the second.
+3. Once-per-season training, weekly frozen-kit updates, replay, and holdout
+   information boundary.
+4. Governed primary h2 contrast with season-level uncertainty.
+5. Simulation operating conditions and failure modes, supplementary by default.
 
 All figures must remain interpretable in grayscale and use accessible colours.
 
@@ -360,16 +377,22 @@ Main text, subject to the journal's current limits:
 
 1. Data sources, pathogens, seasons, exclusions, and observation counts.
 2. M0, M1, and M2 components, frozen specifications, baselines, and ablations.
-3. Ontario stage-level and forecast comparisons, including the canonical replay summary.
-4. Simulation and, if completed, Ontario RSV synthesis.
+3. Governed Ontario primary h2 comparison and uncertainty only.
+
+The main-text planning target is four figures and three tables. This is an
+internal display-economy decision from independent review, not a measured
+*Epidemics* requirement. A conditional RSV synthesis table and simulation figure
+enter the main text only if necessary to the final claim and permitted by the
+current journal guide.
 
 Supplement:
 
 1. Full M0 and M1 stage-level validation results.
-2. Complete season-by-horizon replay table.
-3. Phase-specific, worst-season, and sensitivity results.
-4. Full simulation results.
-5. Ontario RSV validation details, if undertaken.
+2. Complete season-by-horizon replay and model-comparison tables, including the
+   historical 2025--26 result as a separately labelled lineage.
+3. Phase-specific, worst-season, calibration, ablation, and sensitivity results.
+4. Full simulation results and public-replication acceptance checks.
+5. Ontario RSV validation details and cross-application synthesis, if undertaken.
 6. Package validation, runtime, and reproducibility environment.
 
 ## Evidence that must be reconciled before drafting Results
@@ -398,7 +421,7 @@ Search and synthesize literature on:
 6. Forecast calibration and proper scoring rules for binomial surveillance data.
 7. Statistical software for infectious-disease forecasting.
 
-The literature review is complete in [`LITERATURE_REVIEW.md`](LITERATURE_REVIEW.md) and [`LITERATURE_MATRIX.md`](LITERATURE_MATRIX.md). It identifies existing implementations and compares their assumptions, data requirements, outputs, and relevance to PAGe. The resulting comparator set still requires scientific-lead approval and protocol freeze.
+The literature review is complete in [`LITERATURE_REVIEW.md`](LITERATURE_REVIEW.md) and [`LITERATURE_MATRIX.md`](LITERATURE_MATRIX.md). It identifies existing implementations and compares their assumptions, data requirements, outputs, and relevance to PAGe. The resulting comparator set is frozen in [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md); additions in response to headline results are prohibited.
 
 ## Reproducibility package
 
@@ -424,12 +447,15 @@ Draft in the order established by the consolidated critical path:
 2. Do not draft headline Results until the Ontario Phase 3 evidence gate passes.
 3. Draft Ontario Results directly from the immutable canonical replay inputs.
 4. Draft Simulation Results after the simulation completion gate.
-5. Add Ontario RSV Methods and Results only if Phase 6 is authorized and completed.
-6. Write the Introduction after the literature matrix and empirical contribution are stable.
-7. Write the Discussion after all included applications and sensitivity analyses are frozen.
-8. Write the abstract last, using only traceable numerical findings.
-9. Conduct citation, notation, data/code availability, numerical-claim, and writing-quality audits.
-10. Complete independent review, one major revision round, journal formatting, supplement, cover letter, and disclosure statements.
+5. Complete the dated Phase-4 go/no-go memo before drafting the Introduction,
+   Discussion, Conclusion, or Ontario RSV Results.
+6. Add Ontario RSV Methods and Results only if Phase 6 is authorized and completed.
+7. Write the Introduction after the literature matrix, empirical contribution,
+   and Phase-4 decision are stable.
+8. Write the Discussion after all included applications and sensitivity analyses are frozen.
+9. Write the abstract last, using only traceable numerical findings.
+10. Conduct citation, notation, data/code availability, numerical-claim, and writing-quality audits.
+11. Complete independent review, one major revision round, journal formatting, supplement, cover letter, and disclosure statements.
 
 Record all AI-assisted work and prepare a disclosure consistent with the Elsevier and journal policies in force at submission.
 

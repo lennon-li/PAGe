@@ -4,7 +4,13 @@ Last updated: 2026-09-01
 
 Authoritative consolidated plan: [`PLAN.md`](PLAN.md)
 
+Frozen core analysis protocol: [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md)
+
 Independent review record: [`REVIEW_LOG.md`](REVIEW_LOG.md)
+
+Journal article scan and drafting guide:
+[`EPIDEMICS_ARTICLE_SCAN.md`](EPIDEMICS_ARTICLE_SCAN.md) and
+[`SKELETON.md`](SKELETON.md)
 
 This file is the execution checklist. Section numbers below group related work but do not override the phase order and exit gates in `PLAN.md`. Every checked item must link to its supporting decision record or artifact.
 
@@ -20,17 +26,27 @@ Ming's 2026-09-01 independent review concluded **REVISE FIRST**. Complete this w
 - [ ] Resolve all genuinely tuned boundaries before freezing the manuscript kit.
 - [ ] Recompute M1 validation results and either resolve or retire the conflicting historical peak-MAE values.
 - [x] Complete the independent literature review and evidence matrix: [`LITERATURE_REVIEW.md`](LITERATURE_REVIEW.md) and [`LITERATURE_MATRIX.md`](LITERATURE_MATRIX.md).
-- [ ] Obtain scientific-lead approval and freeze the literature-supported comparator and ablation set in the versioned analysis protocol.
-- [ ] Prespecify one primary comparison, its horizon, metric, aggregation, uncertainty method, and interpretation threshold; classify all other comparisons as secondary or exploratory.
-- [ ] Freeze the exact binomial NLL formula, normalization, combinatorial-term handling, sign convention, and weekly/seasonal aggregation.
-- [ ] Record an expected interval width or detectable score difference under the planned season-level resampling method.
-- [ ] Evaluate all seven planned Ontario comparators and ablations across eligible seasons using season-level resampling.
+- [x] Scan comparable *Epidemics* articles and freeze a fillable, evidence-gated manuscript skeleton: [`EPIDEMICS_ARTICLE_SCAN.md`](EPIDEMICS_ARTICLE_SCAN.md) and [`SKELETON.md`](SKELETON.md).
+- [x] Revise the skeleton after independent Opus review, including the frozen
+  analysis details, claim boundaries, result branches, historical-holdout home,
+  display economy, and Phase-4 drafting gate recorded in [`REVIEW_LOG.md`](REVIEW_LOG.md).
+- [x] Freeze the literature-supported seven-model comparator set, four structural ablations, and label sensitivities in [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md).
+- [x] Prespecify the primary PAGe-versus-calendar-GAM comparison at horizon two, including aggregation, uncertainty, and the zero-difference interpretation threshold.
+- [x] Freeze the exact per-trial binomial NLL formula, normalization, omitted combinatorial term, sign convention, and weekly/seasonal aggregation.
+- [x] Record standardized precision limits for the planned season-level analysis; instantiate the numeric interval width after the eligible season count and outcome-blind planning variance are locked.
+- [x] Freeze the operational cadence: one training/tuning workflow and one frozen kit per target season, reused across all weekly origins.
+- [ ] Evaluate all seven core Ontario models, four structural ablations, and label sensitivities across eligible seasons using season-level resampling.
 - [ ] Produce the canonical Ontario replay table with consistent season, horizon, phase, metric, artifact identity, and runtime fields.
 - [ ] Write and version the ignition-labeling protocol; run label-perturbation and all-M0-label sensitivity analyses.
-- [ ] Add a dated rationale for excluding 2011--12 and 2015--16, or include them in a prespecified sensitivity analysis.
+- [ ] Resolve 2011--12 with a dated epidemiological/data-quality rationale for
+  exclusion or include it in the principal or a prespecified sensitivity analysis.
+- [ ] Include 2015--16 in the principal analysis if the generic data-quality
+  criteria pass; treat its historical exclusion only as a prespecified sensitivity.
 - [ ] Define Ontario backfill and reporting-revision handling.
 - [ ] Confirm data-custodian publication authorization and any research-ethics requirements.
 - [ ] Document the provenance and rationale of the historical 0.02 NLL gate; treat it as historical rather than prespecified if provenance cannot be established.
+- [ ] Report the historical 2025--26 acceptance replay in its own table with its
+  different artifact lineage, excluding it from the new governed replay aggregate.
 - [ ] Pin the package version, repository commit, dependencies, and runtime environment used for manuscript analyses.
 - [ ] Assign a named person to every accountable role before its phase begins.
 - [ ] Run at least one simulation data-generating process that is structurally unfavorable to PAGe's templates.
@@ -47,9 +63,9 @@ Ontario RSV is the selected second-pathogen application. After the Ontario influ
 - [x] State the RSV question: can the same PAGe workflow be retrained for Ontario RSV and evaluated with leakage-safe walk-forward replay?
 - [x] Explicitly exclude direct influenza-to-RSV model transfer from the primary claim.
 - [x] Hold jurisdiction constant and evaluate pathogen contrast: Ontario influenza versus Ontario RSV.
-- [ ] Freeze RSV dataset suitability criteria before data profiling or model fitting.
+- [x] Freeze RSV dataset suitability criteria before data profiling or model fitting in [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md).
 - [x] Record the Ontario RSV selection in the manuscript evidence log.
-- [ ] Record the scientific rationale for choosing Ontario RSV.
+- [x] Record the scientific rationale for choosing Ontario RSV: holding jurisdiction approximately constant isolates cross-pathogen workflow portability after pathogen-specific retraining.
 
 ## 2. Audit and document the selected Ontario RSV dataset
 
@@ -118,6 +134,7 @@ Selection deliverable:
 - [ ] Inspect M2 boundaries and apply prespecified stopping rules.
 - [ ] Assemble and validate the Ontario RSV PAGe kit.
 - [ ] Record stage and total runtimes from machine-readable status files.
+- [ ] Record seasonal training time separately from weekly state-update and forecast latency.
 - [ ] Preserve immutable tuning summaries, kit identity, selection, and manifests.
 
 ## 7. Evaluate without leakage
@@ -151,6 +168,8 @@ Selection deliverable:
 - [ ] Evaluate the full method, baselines, and ablations under the same scenarios.
 - [ ] Report Monte Carlo uncertainty and random seeds.
 - [ ] Identify conditions where phase alignment harms rather than helps forecasts.
+- [ ] Verify that the public replication entry point reproduces the frozen
+  simulation summaries from recorded seeds within manifest-defined tolerances.
 
 ## 10. Update the manuscript evidence package
 
@@ -161,6 +180,8 @@ Selection deliverable:
 - [ ] Add a cross-application synthesis without overstating generalizability.
 - [ ] Update limitations to cover surveillance-system heterogeneity and limited pathogen count.
 - [ ] Add public data, code, package, conflicts, funding, ethics, and AI-use statements.
+- [ ] Select and complete an applicable epidemic-forecast reporting checklist,
+  or document why none is suitable, before submission.
 - [ ] Verify the current *Epidemics* author guide immediately before formatting.
 
 ## 11. Ontario RSV completion gate
