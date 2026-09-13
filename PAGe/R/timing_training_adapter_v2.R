@@ -35,3 +35,22 @@ as_manual_labels_v2 <- function(labels) {
   }
   stop("`labels` must be a timing-v2 label object or list of label objects.", call. = FALSE)
 }
+
+.timing_v2_filter_holdout <- function(labels, holdout = NULL) {
+  if (is.null(labels) || is.null(holdout)) {
+    return(labels)
+  }
+  objects <- .timing_v2_as_objects(labels)
+  keep <- !vapply(objects, function(x) {
+    identical(as.character(x$season), as.character(holdout))
+  }, logical(1L))
+  objects <- objects[keep]
+  if (!length(objects)) {
+    return(NULL)
+  }
+  if (inherits(labels, "page_timing_labels_v2")) {
+    objects[[1L]]
+  } else {
+    unname(objects)
+  }
+}

@@ -942,6 +942,14 @@ select_m1_candidate <- function(x, min_gain = 0.05, prefer_simpler = TRUE,
 
 .m1_integer_axes <- function() c("k_ref", "slope_window")
 
+#' Return the governed M1 hard-cap defaults
+#'
+#' @return A named list of normalized lower and upper bounds.
+#' @export
+default_m1_hard_caps <- function() {
+  list(k_ref = c(lower = 10L, upper = 50L))
+}
+
 .m1_k_ref_bounds <- function() c(lower = 10L, upper = 50L)
 
 .validate_m1_k_ref_bounds <- function(bounds, n_weeks = 52L) {

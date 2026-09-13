@@ -692,6 +692,11 @@ train_pipeline <- function(
     m0_params <- .default_m0_params()
   }
   if (is.null(m1_params)) m1_params <- .default_m1_params()
+  supplied_timing_labels <- timing_labels
+  timing_labels <- .timing_v2_filter_holdout(
+    timing_labels,
+    if (holdout$present && !holdout$released) prospective_holdout else NULL
+  )
   if (!is.null(timing_labels)) manual_labels <- as_manual_labels_v2(timing_labels)
   if (is.null(manual_labels)) manual_labels <- .default_manual_labels()
   if (is.null(flag_args)) flag_args <- .default_flag_args()
@@ -758,7 +763,9 @@ train_pipeline <- function(
       ),
       tuning = NULL, grid = NULL, grid_provenance = NULL,
       selection = NULL, racing = NULL, holdout = holdout,
-      timing_labels_v2 = timing_labels, kit = kit
+      timing_labels_v2 = supplied_timing_labels,
+      timing_labels_v2_training = timing_labels,
+      kit = kit
     ), class = c("page_training_result", "list")))
   }
 
@@ -916,7 +923,8 @@ train_pipeline <- function(
     selection = m2_selection,
     racing = racing_result,
     holdout = holdout,
-    timing_labels_v2 = timing_labels,
+    timing_labels_v2 = supplied_timing_labels,
+    timing_labels_v2_training = timing_labels,
     kit = kit
   ), class = c("page_training_result", "list"))
 }
