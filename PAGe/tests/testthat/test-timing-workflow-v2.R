@@ -20,6 +20,8 @@ test_that("timing-v2 review and finalization preserve both labels", {
   expect_equal(labels$provenance$method, "finalize_season_timing_v2")
   expect_null(labels$review)
   expect_equal(labels$review_summary$season, "demo")
+  expect_equal(PAGe::as_manual_labels_v2(labels), c(demo = 2L))
+  expect_equal(PAGe::as_manual_labels_v2(list(named = labels)), c(demo = 2L))
 })
 
 test_that("timing-v2 review can select one season from combined data", {
@@ -77,4 +79,27 @@ test_that("timing-v2 application distinguishes unnamed and duplicate seasons", {
     data.frame(season = "a", weekF = 1:4, y = 1:4, N = rep(10L, 4)),
     unnamed
   ), "must have season names")
+})
+
+test_that("timing-v2 adapter rejects mixed input and preserves legacy isolation", {
+  labels <- PAGe:::label_season_timing(
+    season = "demo", ignition = c(2L, 3L), peak = c(3L, 4L), n_weeks = 4L
+  )
+  expect_error(
+    PAGe::as_manual_labels_v2(PAGe:::label_season_timing(
+      ignition = c(2L, 3L), peak = c(3L, 4L), n_weeks = 4L
+    )),
+    "season names"
+  )
+  expect_equal(labels$ignition$weeks, c(2L, 3L))
+  expect_equal(PAGe::as_manual_labels_v2(labels), c(demo = 2L))
+  expect_true("timing_labels" %in% names(formals(PAGe::train_pipeline)))
+  expect_error(
+    PAGe::train_pipeline(
+      data.frame(season = "demo", weekF = 1L, y = 1L, N = 2L),
+      manual_labels = c(demo = 2L), timing_labels = labels,
+      verbose = FALSE
+    ),
+    "either `manual_labels` or `timing_labels`"
+  )
 })

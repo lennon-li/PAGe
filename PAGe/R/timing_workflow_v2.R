@@ -102,14 +102,7 @@ finalize_season_timing_v2 <- function(review, ignition, peak,
 #' @export
 apply_timing_labels_v2 <- function(data, labels, anchor_week = NULL,
                                    n_weeks_col = NULL, require_all = TRUE) {
-  objects <- if (inherits(labels, "page_timing_labels_v2")) {
-    list(labels)
-  } else if (is.list(labels) && length(labels) > 0L &&
-    all(vapply(labels, inherits, logical(1L), what = "page_timing_labels_v2"))) {
-    labels
-  } else {
-    stop("`labels` must be a timing-v2 label object or list of label objects.", call. = FALSE)
-  }
+  objects <- .timing_v2_as_objects(labels)
 
   collect <- function(field) {
     values <- lapply(objects, `[[`, field)

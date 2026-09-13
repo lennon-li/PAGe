@@ -593,6 +593,10 @@ plan_m2_grid <- function(previous_results = NULL,
 #' @param manual_labels,flag_args,m1_params Optional component settings. For a
 #'   released holdout, these are derived exclusively from verified promotion
 #'   evidence and explicit overrides are rejected.
+#' @param timing_labels Optional timing-v2 label object or list of objects.
+#'   When supplied, the earlier ignition weeks are converted to the existing
+#'   M0/M1 training contract, while the complete timing-v2 object is retained
+#'   in the result for provenance. Cannot be combined with \code{manual_labels}.
 #' @param m1_min_gain Minimum M1 Weibull-MAE improvement, in weeks, required to
 #'   justify a more flexible `k_ref` candidate (default 0.05).
 #' @param m1_hard_caps Named M1 hard caps accepted by the boundary gate. The
@@ -612,7 +616,8 @@ plan_m2_grid <- function(previous_results = NULL,
 #'   \code{tuning} (NULL for refresh), \code{grid},
 #'   \code{grid_provenance}, full-result \code{selection}, optional
 #'   \code{racing} diagnostics, transparent \code{holdout} release state, and
-#'   deployment \code{kit}.
+#'   deployment \code{kit}. When supplied, \code{timing_labels_v2} preserves
+#'   the complete timing-v2 label object or list used for training.
 #' @export
 train_pipeline <- function(
   allD,
@@ -636,6 +641,7 @@ train_pipeline <- function(
   racing_stages = c(3L, 6L),
   racing_min_survivors = 3L,
   manual_labels = NULL,
+  timing_labels = NULL,
   flag_args = NULL,
   m1_params = NULL,
   m1_min_gain = 0.05,
@@ -646,6 +652,9 @@ train_pipeline <- function(
 ) {
   mode <- match.arg(mode)
   selection_method <- match.arg(selection_method)
+  if (!is.null(manual_labels) && !is.null(timing_labels)) {
+    stop("Supply either `manual_labels` or `timing_labels`, not both.", call. = FALSE)
+  }
   n_cores <- as.integer(max(1L, n_cores))
   allD <- prepare_surveillance_data(allD)
   if (!nrow(allD)) stop("`allD` must contain at least one surveillance row.")
@@ -662,7 +671,8 @@ train_pipeline <- function(
     supplied <- list(
       m0_params = m0_params, m1_params = m1_params,
       manual_labels = manual_labels, flag_args = flag_args,
-      previous_results = previous_results, m2_spec_id = m2_spec_id
+      timing_labels = timing_labels, previous_results = previous_results,
+      m2_spec_id = m2_spec_id
     )
     if (any(vapply(supplied, Negate(is.null), logical(1)))) {
       stop(
@@ -682,6 +692,7 @@ train_pipeline <- function(
     m0_params <- .default_m0_params()
   }
   if (is.null(m1_params)) m1_params <- .default_m1_params()
+  if (!is.null(timing_labels)) manual_labels <- as_manual_labels_v2(timing_labels)
   if (is.null(manual_labels)) manual_labels <- .default_manual_labels()
   if (is.null(flag_args)) flag_args <- .default_flag_args()
   effective_exclude <- unique(c(
@@ -746,7 +757,8 @@ train_pipeline <- function(
         m2 = .unwrap_stage_payload(m2_model)
       ),
       tuning = NULL, grid = NULL, grid_provenance = NULL,
-      selection = NULL, racing = NULL, holdout = holdout, kit = kit
+      selection = NULL, racing = NULL, holdout = holdout,
+      timing_labels_v2 = timing_labels, kit = kit
     ), class = c("page_training_result", "list")))
   }
 
@@ -904,6 +916,7 @@ train_pipeline <- function(
     selection = m2_selection,
     racing = racing_result,
     holdout = holdout,
+    timing_labels_v2 = timing_labels,
     kit = kit
   ), class = c("page_training_result", "list"))
 }

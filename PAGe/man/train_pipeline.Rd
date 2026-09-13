@@ -26,6 +26,7 @@ train_pipeline(
   racing_stages = c(3L, 6L),
   racing_min_survivors = 3L,
   manual_labels = NULL,
+  timing_labels = NULL,
   flag_args = NULL,
   m1_params = NULL,
   m1_min_gain = 0.05,
@@ -85,6 +86,11 @@ results only eliminate clear losers; surviving specs still run full LOSO.}
 released holdout, these are derived exclusively from verified promotion
 evidence and explicit overrides are rejected.}
 
+\item{timing_labels}{Optional timing-v2 label object or list of objects.
+When supplied, the earlier ignition weeks are converted to the existing
+M0/M1 training contract, while the complete timing-v2 object is retained
+in the result for provenance. Cannot be combined with \code{manual_labels}.}
+
 \item{m1_min_gain}{Minimum M1 Weibull-MAE improvement, in weeks, required to
 justify a more flexible `k_ref` candidate (default 0.05).}
 
@@ -109,7 +115,8 @@ A transparent list with \code{mode}, \code{components},
   \code{tuning} (NULL for refresh), \code{grid},
   \code{grid_provenance}, full-result \code{selection}, optional
   \code{racing} diagnostics, transparent \code{holdout} release state, and
-  deployment \code{kit}.
+  deployment \code{kit}. When supplied, \code{timing_labels_v2} preserves
+  the complete timing-v2 label object or list used for training.
 }
 \description{
 Runs either a locked production refresh or a full M0, M1, and M2 retune.
