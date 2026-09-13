@@ -33,7 +33,7 @@ test_that("invalid and out-of-season labels fail clearly", {
 })
 
 test_that("invalid season lengths fail before calendar comparison", {
-  calendar53 <- PAGe:::new_timing_calendar(n_weeks = 53L)
+  calendar53 <- PAGe:::new_timing_calendar(season = "demo", n_weeks = 53L)
 
   expect_error(
     PAGe:::validate_timing_labels(peak = 30L, n_weeks = 1.5, calendar = calendar53),
@@ -55,7 +55,7 @@ test_that("invalid season lengths fail before calendar comparison", {
 
 test_that("52- and 53-week calendars validate and preserve week boundaries", {
   calendar52 <- PAGe:::new_timing_calendar(n_weeks = 52L)
-  calendar53 <- PAGe:::new_timing_calendar(n_weeks = 53L)
+  calendar53 <- PAGe:::new_timing_calendar(season = "demo", n_weeks = 53L)
   inferred53 <- PAGe:::new_timing_calendar(
     week_starts = as.Date("2025-01-01") + 7 * 0:52
   )
@@ -71,6 +71,10 @@ test_that("52- and 53-week calendars validate and preserve week boundaries", {
   expect_error(
     PAGe:::label_season_timing(peak = 30L, n_weeks = 52L, calendar = calendar53),
     "agree"
+  )
+  expect_error(
+    PAGe:::label_season_timing(season = "other", peak = 30L, calendar = calendar53),
+    "calendar\\$season"
   )
 })
 
@@ -187,7 +191,7 @@ test_that("single-event evidence validates its input", {
 })
 
 test_that("timing labels reject unsafe integer conversions", {
-  expect_error(PAGe:::validate_timing_labels(peak = .Machine$integer.max + 1), "one integer")
-  expect_error(PAGe:::validate_timing_labels(peak = -(.Machine$integer.max + 1)), "one integer")
-  expect_error(PAGe:::validate_timing_labels(peak = 1e20), "one integer")
+  expect_error(PAGe:::validate_timing_labels(peak = .Machine$integer.max + 1), "weeks 1 through")
+  expect_error(PAGe:::validate_timing_labels(peak = -(.Machine$integer.max + 1)), "at least week 2")
+  expect_error(PAGe:::validate_timing_labels(peak = 1e20), "weeks 1 through")
 })

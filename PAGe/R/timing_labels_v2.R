@@ -15,20 +15,24 @@ normalize_timing_label <- function(label, event_type = c("ignition", "peak"),
                                    n_weeks = 52L) {
   event_type <- match.arg(event_type)
   n_weeks <- .timing_check_n_weeks(n_weeks)
-  safe_integer_min <- -.Machine$integer.max
-  safe_integer_max <- .Machine$integer.max
   if (is.logical(label) || !is.numeric(label) || length(label) < 1L || length(label) > 2L ||
-    anyNA(label) || any(!is.finite(label)) || any(label != floor(label)) ||
-    any(label < safe_integer_min | label > safe_integer_max)) {
+    anyNA(label) || any(!is.finite(label)) || any(label != trunc(label))) {
     stop("`", event_type, "` must be one integer week or two integer weeks.", call. = FALSE)
   }
-  original <- as.integer(label)
-  if (length(original) == 1L) {
-    normalized <- c(original - 1L, original)
-    if (normalized[1L] < 1L) {
+  if (length(label) == 1L) {
+    if (label < 2) {
       stop("A singleton `", event_type, "` label must be at least week 2 because it expands to w-1,w.", call. = FALSE)
     }
+    if (label > n_weeks) {
+      stop("`", event_type, "` label must fall within weeks 1 through ", n_weeks, ".", call. = FALSE)
+    }
+    original <- as.integer(label)
+    normalized <- c(original - 1L, original)
   } else {
+    if (any(label < 1 | label > n_weeks)) {
+      stop("`", event_type, "` label must fall within weeks 1 through ", n_weeks, ".", call. = FALSE)
+    }
+    original <- as.integer(label)
     if (length(unique(original)) != 2L || abs(diff(original)) != 1L) {
       stop("Two `", event_type, "` labels must be consecutive weeks.", call. = FALSE)
     }
@@ -91,6 +95,10 @@ validate_timing_labels <- function(ignition = NULL, peak = NULL, season = NULL,
       stop("`season` must be one non-empty identifier.", call. = FALSE)
     }
     season <- trimws(as.character(season))
+  }
+  if (!is.null(calendar) && !is.null(season) && !is.null(calendar$season) &&
+    !identical(season, calendar$season)) {
+    stop("`season` must agree with `calendar$season`.", call. = FALSE)
   }
 
   ignition_norm <- if (is.null(ignition)) NULL else normalize_timing_label(ignition, "ignition", n_weeks)
