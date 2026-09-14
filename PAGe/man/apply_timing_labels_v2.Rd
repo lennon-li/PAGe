@@ -27,12 +27,13 @@ When omitted, the count recorded with each timing label is used.}
 \item{require_all}{Logical; require an ignition label for every season.}
 }
 \value{
-A new data frame with \code{iWeek}, \code{phase}, \code{newWeek},
-  and \code{peak_weekF}, plus timing evidence attributes.
+A new data frame with legacy integer \code{iWeek}, numeric
+\code{iWeekF}, \code{phase}, numeric \code{newWeek}, and observed
+\code{peak_weekF}, plus timing evidence attributes.
 }
 \description{
-Applies the earlier ignition week as the alignment and phase reference,
-adds the earlier peak week when supplied, and attaches the complete timing
+Applies the numeric ignition midpoint as the alignment and phase reference,
+adds the observed peak week when supplied, and attaches the complete timing
 evidence to the returned data frame. A single finalized object or a list of
 finalized objects may be supplied for multiple seasons.
 }

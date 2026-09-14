@@ -19,6 +19,7 @@ tuneIgnitionGrid_M0v2(
   gamma = 25,
   gamma_late = 0,
   iWeek = TRUE,
+  timing_mode = c("legacy", "fractional"),
   ncores = 10L,
   verbose = TRUE,
   progress_every = 200L

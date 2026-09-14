@@ -15,6 +15,7 @@ test_that("timing-v2 review and finalization preserve both labels", {
   expect_equal(labels$peak$weeks, c(3L, 4L))
   expect_equal(labels$scoring_ignition_labels, c(demo = 2L))
   expect_equal(labels$scoring_peak_labels, c(demo = 3L))
+  expect_equal(labels$second_peak_labels, c(demo = 3L))
   expect_equal(labels$evidence$scoring_weekF, c(2L, 3L))
   expect_equal(labels$rationale$note, "two-week timing review")
   expect_equal(labels$provenance$method, "finalize_season_timing_v2")
@@ -54,7 +55,8 @@ test_that("timing-v2 application uses recorded season lengths and peak scores", 
   out <- PAGe::apply_timing_labels_v2(raw, labels, anchor_week = 2L)
 
   expect_equal(out$iWeek, c(2L, 2L, 2L, 2L, 1L, 1L, 1L, 1L))
-  expect_equal(out$peak_weekF, rep(c(3L, 2L), each = 4))
+  expect_equal(out$peak_weekF, rep(c(3L, 3L), each = 4))
+  expect_equal(out$peak_second_weekF, rep(c(4L, 2L), each = 4))
   expect_equal(out$y, raw$y)
   expect_equal(
     attr(out, "timing_evidence_v2")$event_type,

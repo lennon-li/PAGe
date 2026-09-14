@@ -31,6 +31,26 @@ training <- train_pipeline(allD, mode = "refresh")
 kit <- training$kit
 ```
 
+For another disease or surveillance source, map its data-frame columns before
+training:
+
+```r
+page_data <- prepare_page_data(
+  raw_data,
+  outcome_col = "positive_count",
+  week_col = "mmwr_week",
+  season_col = "season_id",
+  total_col = "tested_count",
+  week_type = "mmwr",
+  start_week = 27L,
+  start_year_col = "season_start_year"
+)
+training <- train_pipeline(page_data, mode = "refresh")
+```
+
+The input must already be weekly and aggregated to one row per season-week;
+`prepare_page_data()` maps and validates fields but does not fetch or aggregate.
+
 ## Guarded stages
 
 For explicit stage-by-stage training, declare mutually disjoint season sets and

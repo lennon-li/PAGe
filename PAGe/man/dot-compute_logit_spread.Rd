@@ -23,7 +23,8 @@ List with \code{spread} (numeric vector, length \code{nrow(logit_mat)})
 }
 \description{
 \code{"between"} computes the weighted between-template standard deviation.
-\code{"total"} adds weighted per-template SE\^2 (from \code{g_s_mu_se}) to
+\code{"total"} adds weighted squared per-template SE (from
+\code{g_s_mu_se}) to
 the between-template variance. When per-template SEs are all zero/missing for
 a forecast week, that week falls back to between-only and the fallback count
 is incremented.

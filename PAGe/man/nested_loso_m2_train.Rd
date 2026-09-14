@@ -10,7 +10,8 @@ nested_loso_m2_train(
   spec,
   method = "REML",
   verbose = TRUE,
-  fail_fast = FALSE
+  fail_fast = FALSE,
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{

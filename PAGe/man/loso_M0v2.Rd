@@ -21,7 +21,9 @@ loso_M0v2(
     iWeek = TRUE, ncores = 10L, verbose = FALSE, progress_every = 200L),
   verbose = TRUE,
   checkpoint_dir = NULL,
-  previous_results = NULL
+  previous_results = NULL,
+  timing_truth = NULL,
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{

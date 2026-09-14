@@ -10,7 +10,8 @@ build_m0(
   manual_labels = .default_manual_labels(),
   flag_args = .default_flag_args(),
   best_params = .default_m0_params(),
-  k_deriv = 10L
+  k_deriv = 10L,
+  timing_truth = NULL
 )
 }
 \arguments{

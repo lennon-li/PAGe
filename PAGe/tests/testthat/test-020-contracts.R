@@ -193,6 +193,49 @@ test_that("getCurrentD honors a requested season from a local CSV", {
   expect_false("2025-26" %in% result$season)
 })
 
+test_that("getCurrentD validates inputs and represents zero-test weeks safely", {
+  csv <- tempfile(fileext = ".csv")
+  on.exit(unlink(csv), add = TRUE)
+  utils::write.csv(
+    data.frame(
+      Surveillance.week = c(40L, 41L),
+      Surveillance.period = c("2024-25", "2024-25"),
+      Total...of.tests = c(0L, 10L),
+      X..of.positive.tests = c(0L, 2L),
+      Virus = c("Influenza A", "Influenza A")
+    ),
+    csv,
+    row.names = FALSE
+  )
+
+  result <- PAGe::getCurrentD(data = csv, season = "2024-25")
+  expect_true(any(is.na(result$p)))
+  expect_equal(result$p[result$N > 0], 0.2)
+  expect_error(
+    PAGe::getCurrentD(data = csv, season = "2024"),
+    "YYYY-YY"
+  )
+  expect_error(
+    PAGe::getCurrentD(data = csv, startWeek = 0L),
+    "startWeek"
+  )
+  expect_error(
+    PAGe::getCurrentD(data = csv, virus = "Influenza B"),
+    "no rows"
+  )
+  expect_error(
+    {
+      bad_csv <- tempfile(fileext = ".csv")
+      on.exit(unlink(bad_csv), add = TRUE)
+      bad <- read.csv(csv)
+      bad$X..of.positive.tests <- 11L
+      utils::write.csv(bad, bad_csv, row.names = FALSE)
+      PAGe::getCurrentD(data = bad_csv, season = "2024-25")
+    },
+    "y <= N"
+  )
+})
+
 test_that("functions used by the documented workflow are exported", {
   workflow_functions <- c(
     "load_flu_hist", "build_m0", "build_m1", "train_m2", "assemble_kit",

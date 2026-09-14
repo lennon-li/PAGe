@@ -29,7 +29,8 @@ align_multi_template(
   dynamic_temp = TRUE,
   dynamic_temp_pivot = 10L,
   gam_obj = NULL,
-  spread_method = c("between", "total")
+  spread_method = c("between", "total"),
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{
@@ -96,7 +97,7 @@ is inflated (default 10). Temperature is scaled by
 \item{spread_method}{Character; \code{"between"} (default) computes
 \code{logit_spread} as the weighted between-template standard deviation on
 the logit scale, preserving the incumbent behaviour. \code{"total"} adds
-weighted per-template GAM SE\^2 (from \code{g_s_mu_se}) to the
+weighted squared per-template GAM SE (from \code{g_s_mu_se}) to the
 between-template variance, yielding a total-variance spread. When per-template
 SEs are unavailable (zero or missing) the method falls back to between-only
 for that forecast week and increments \code{spread_fallback_count}.}

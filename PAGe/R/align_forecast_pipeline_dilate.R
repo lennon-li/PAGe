@@ -41,11 +41,11 @@ align_forecast_pipeline_dilate <- function(currentD,
   db  <- hyper$DELTA_BOUNDS
   wk  <- hyper$WEEK_THRESHOLD_DELTA
   lam <- hyper$LAMBDA_DELTA
-  
+
   # local safe wrapper around the passed-in g_ref_fun
   g_ref_safe <- function(u) g_ref_fun(pmin(pmax(u, 1), 52))
-  
-  # 1) Align (τ, δ, a, b)
+
+  # 1) Align (tau, delta, a, b)
   fit <- fit_tau_delta(
     currentD      = currentD,
     g_ref_fun     = g_ref_fun,
@@ -62,7 +62,7 @@ align_forecast_pipeline_dilate <- function(currentD,
     peak_decay    = peak_decay
   )
 
-  # 2) (a,b) at aligned (τ,δ)
+  # 2) (a,b) at aligned (tau,delta)
   t <- currentD$newWeek
   y <- currentD$y
   n <- currentD$y + currentD$neg
@@ -76,10 +76,10 @@ align_forecast_pipeline_dilate <- function(currentD,
     rep(1, length(n))
   }
   w <- w_n * w_t
-  
+
   u_hat  <- (t - fit$tau) / (1 + fit$delta)
   eta_of <- g_ref_safe(u_hat)
-  
+
   if (fit$allow_scale) {
     glm_hat <- glm(
       cbind(y, n - y) ~ eta_of,
@@ -99,13 +99,13 @@ align_forecast_pipeline_dilate <- function(currentD,
     a_hat <- coef(glm_hat)[1]
     b_hat <- 1
   }
-  
-  # 3) (τ,δ) covariance via 2D profile if δ is on
+
+  # 3) (tau,delta) covariance via 2D profile if delta is on
   prof2d <- if (fit$delta_on) cov_tau_delta_from_profile(fit) else list(V = diag(c(NA, NA), 2))
   V_td   <- prof2d$V
   cov_ok <- fit$delta_on && is_cov_ok(V_td)
-  
-  # Fallback if δ unstable
+
+  # Fallback if delta unstable
   fb_reason <- NA_character_
   if (fallback_when_unstable && fit$delta_on && !cov_ok) {
     fit <- fit_tau_delta(
@@ -124,7 +124,7 @@ align_forecast_pipeline_dilate <- function(currentD,
     )
     u_hat  <- (t - fit$tau) / (1 + fit$delta)
     eta_of <- g_ref_safe(u_hat)
-    
+
     if (fit$allow_scale) {
       glm_hat <- glm(
         cbind(y, n - y) ~ eta_of,
@@ -148,22 +148,22 @@ align_forecast_pipeline_dilate <- function(currentD,
     cov_ok    <- FALSE
     fb_reason <- "delta_unstable_profile"
   }
-  
+
   # 4) Predictions + PIs
   last_obs <- max(t)
   if (is.null(future_weeks)) {
     future_weeks <- if (last_obs < 52) (last_obs + 1):52 else integer(0)
   }
   z <- qnorm((1 + level) / 2)
-  
+
   make_block <- function(tt, kind, n_future = NULL, add_sampling_future = FALSE) {
     if (length(tt) == 0) return(tibble::tibble())
-    
+
     u   <- (tt - fit$tau) / (1 + fit$delta)
     g_mu <- g_ref_safe(u)
     eta  <- a_hat + b_hat * g_mu
     p    <- plogis(eta)
-    
+
     # (1) Var from (a,b) (quasi-binomial)
     if (fit$allow_scale) {
       Xab <- cbind(1, g_mu)
@@ -177,8 +177,8 @@ align_forecast_pipeline_dilate <- function(currentD,
       error = function(e) 1
     )
     var_eta_ab <- phi_hat * rowSums((Xab %*% Vab) * Xab)
-    
-    # (2) alignment variance (τ,δ), or τ-only fallback
+
+    # (2) alignment variance (tau,delta), or tau-only fallback
     var_eta_align <- 0
     if (!is.null(V_td) && is_cov_ok(V_td)) {
       gprime <- num_deriv(u, g_ref_safe)
@@ -200,16 +200,16 @@ align_forecast_pipeline_dilate <- function(currentD,
         var_eta_align <- (d_eta_d_tau^2) * (tp$se_tau^2)
       }
     }
-    
+
     # (3) template uncertainty from GAM
     g_se <- g_ref_mu_se(u)$se
     var_eta_template <- (b_hat^2) * (g_se^2)
-    
+
     se_eta <- sqrt(pmax(0, var_eta_ab + var_eta_align + var_eta_template))
-    
+
     p_lo <- plogis(eta - z * se_eta)
     p_hi <- plogis(eta + z * se_eta)
-    
+
     tibble::tibble(
       newWeek = tt,
       p_hat   = p,
@@ -218,7 +218,7 @@ align_forecast_pipeline_dilate <- function(currentD,
       kind    = kind
     )
   }
-  
+
   # Observed with Wilson CIs
   pred_obs <- if (include_observed) {
     ci <- wilson_ci(y, n, level = level)
@@ -232,9 +232,9 @@ align_forecast_pipeline_dilate <- function(currentD,
   } else {
     tibble::tibble()
   }
-  
+
   pred_fut <- make_block(future_weeks, "forecast")
-  
+
   peak <- peak_summary_from_fit(
     fit_obj   = list(tau = fit$tau, delta = fit$delta, a = a_hat, b = b_hat),
     g_ref_fun = g_ref_safe,
@@ -242,8 +242,8 @@ align_forecast_pipeline_dilate <- function(currentD,
     V_td      = if (!is.null(V_td) && is_cov_ok(V_td)) V_td else diag(NA_real_, 2),
     level     = level
   )
-  
-  # Fallback peak CI with τ-only profile if needed
+
+  # Fallback peak CI with tau-only profile if needed
   if (any(is.na(peak$t_peak_ci))) {
     tp <- tau_profile_se(
       currentD,
@@ -257,7 +257,7 @@ align_forecast_pipeline_dilate <- function(currentD,
       peak$t_peak_ci <- peak$t_peak + c(-1, 1) * z * tp$se_tau
     }
   }
-  
+
   list(
     tau             = fit$tau,
     delta           = fit$delta,

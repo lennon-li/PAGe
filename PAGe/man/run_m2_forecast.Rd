@@ -10,7 +10,8 @@ run_m2_forecast(
   current_data,
   m1_result,
   mode = c("frozen", "weekly_refit"),
-  verbose = TRUE
+  verbose = TRUE,
+  timing_mode = c("legacy", "fractional")
 )
 
 run_m2(kit, current_data, m1_result, ...)

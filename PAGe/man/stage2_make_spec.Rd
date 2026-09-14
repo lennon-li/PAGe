@@ -30,7 +30,8 @@ stage2_make_spec(
   bias_alpha = 0.05,
   bias_beta = 0,
   K = NULL,
-  pre_buffer = NULL
+  pre_buffer = NULL,
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{
@@ -76,6 +77,9 @@ Set any to 0L to disable the corresponding term.}
 \item{K}{Deprecated alias of \code{Kr}.}
 
 \item{pre_buffer}{Deprecated alias of \code{Kb}.}
+
+\item{timing_mode}{Character. Fractional mode preserves a numeric anchor;
+legacy mode retains the integer contract.}
 }
 \value{
 A list \code{spec} containing hyperparameters plus:

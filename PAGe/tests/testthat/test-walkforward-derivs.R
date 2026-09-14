@@ -53,7 +53,7 @@ test_that("estimateDerivs_walkforward: walk_end=10 yields d1 from data with max(
   full_res <- estimateDerivs(df, k = 6L)
 
   # At row 10 (walk_end=10), wf d1 should equal the value obtained from a fit
-  # on df[1:10, ] only — NOT the full-season fit.
+  # on df[1:10, ] only -- NOT the full-season fit.
   sub10 <- df[seq_len(10L), ]
   sub10_res <- estimateDerivs(sub10, k = 6L)
 

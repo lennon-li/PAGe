@@ -86,6 +86,24 @@ validate_page_kit <- function(kit, mode = c("frozen", "weekly_refit")) {
     stop("PAGe kit field `best_spec` must be a Stage-2 specification list.")
   }
   fit <- kit$m2_production$fit
+  family <- kit$m2_production$family %||% kit$best_spec$family %||% "legacy"
+  if (!family %in% c("legacy", m2_subset_family())) {
+    stop("Unsupported M2 model family: `", family, "`.")
+  }
+  if (identical(family, m2_subset_family())) {
+    if (identical(mode, "weekly_refit")) {
+      stop("M2 family `", m2_subset_family(), "` supports frozen mode only.")
+    }
+    config <- m2_subset_validate_config(kit$best_spec)
+    if (!is.list(fit) || !all(c("h1", "h2") %in% names(fit)) ||
+      !all(vapply(fit[c("h1", "h2")], is.list, logical(1)))) {
+      stop("M2 subset kit must contain frozen h1 and h2 fit objects.")
+    }
+    if (!identical(config$family, family)) {
+      stop("M2 subset kit family/config mismatch.")
+    }
+    return(kit)
+  }
   if (!inherits(fit, "gam")) {
     stop("PAGe kit field `m2_production$fit` must be a fitted GAM/BAM object.")
   }

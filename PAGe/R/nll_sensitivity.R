@@ -153,8 +153,10 @@
   split_data <- split(axis_data, list(axis_data$run, axis_data$parameter), drop = TRUE)
   rows <- lapply(split_data, function(d) {
     d <- d[order(d$value), , drop = FALSE]
-    d$previous_value <- c(NA_real_, head(d$value, -1L))
-    d$previous_best_metric <- c(NA_real_, head(d$best_metric, -1L))
+    d$previous_value <- c(NA_real_, utils::head(d$value, -1L))
+    d$previous_best_metric <- c(
+      NA_real_, utils::head(d$best_metric, -1L)
+    )
     d$step <- d$value - d$previous_value
     # Positive gain means that moving upward on the axis reduced the metric.
     d$adjacent_gain <- d$previous_best_metric - d$best_metric

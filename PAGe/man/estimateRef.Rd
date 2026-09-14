@@ -14,7 +14,8 @@ estimateRef(
     "gaussian_logit_fs"),
   trough_weight = 0.1,
   peak_weight_boost = 3,
-  agg = c("median", "mean")
+  agg = c("median", "mean"),
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{
@@ -57,6 +58,9 @@ rows. Only used by \code{"binomial_weighted"}. Default 3.}
 \item{agg}{Character. Aggregation method for the \code{"fs"} method's population curve:
 \code{"median"} (default) takes pointwise median across seasons on logit scale;
 \code{"mean"} takes the mean. Ignored for other methods.}
+
+\item{timing_mode}{Character. \code{"legacy"} preserves integer aligned
+coordinates; \code{"fractional"} retains numeric aligned coordinates.}
 }
 \value{
 A list with components: \code{mod2}, \code{g_ref_fun}, \code{g_ref_safe},

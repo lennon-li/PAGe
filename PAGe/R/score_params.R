@@ -81,63 +81,63 @@ score_params <- function(
   if (!all(c("season", "iWeek") %in% names(alignedD_prosp))) {
     stop("alignedD_prosp must have columns: season, iWeek")
   }
-  
+
   seasons <- unique(alignedD_prosp$season)
-  
+
   # single-row scorer (runs on workers)
   score_one_row <- function(row) {
     params <- as.list(row)
     err <- 0
-    
+
     for (s in seasons) {
       print(paste0("Scoring season ", s, " with params: ", paste(names(params), params, collapse = ", ")))
       df_s <- alignedD_prosp[alignedD_prosp$season == s, ]
       iw_true <- unique(df_s$iWeek)[1]
-      
+
       res <- detectIgnition4(
         df_one_season = df_s,
         models = models_all,
         params = params,
         verbose = FALSE
       )
-      
+
       err <- err + if (is.na(res$iWeek_hat)) penalty else abs(res$iWeek_hat - iw_true)
     }
-    
+
     err / length(seasons)
   }
-  
+
   # serial
   if (!parallel || nrow(grid) == 0L || ncores <= 1L) {
     if (verbose) message("[score_params] scoring grid serially: n=", nrow(grid))
     return(as.numeric(apply(grid, 1, score_one_row)))
   }
-  
+
   # Windows-safe parallel (PSOCK)
   if (verbose) message("[score_params] scoring grid in parallel (PSOCK): n=", nrow(grid),
                        " cores=", ncores, " chunked=", chunked)
-  
+
   cl <- parallel::makeCluster(ncores)
   on.exit(parallel::stopCluster(cl), add = TRUE)
-  
+
   parallel::clusterExport(
     cl,
     varlist = c("grid", "alignedD_prosp", "models_all", "detectIgnition4",
                 "penalty", "seasons", "score_one_row"),
     envir = environment()
   )
-  
+
   idx <- seq_len(nrow(grid))
-  
+
   if (!chunked) {
     out <- parallel::parLapply(cl, idx, function(i) score_one_row(grid[i, ]))
     return(as.numeric(unlist(out)))
   }
-  
+
   chunks <- split(idx, rep_len(seq_len(ncores), length(idx)))
   res <- parallel::parLapply(cl, chunks, function(ii) {
     vapply(ii, function(i) score_one_row(grid[i, ]), numeric(1))
   })
-  
+
   as.numeric(unlist(res))
 }

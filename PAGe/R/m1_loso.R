@@ -162,7 +162,11 @@ loso_walkforward <- function(allD,
                              dynamic_temp = FALSE,
                              dynamic_temp_pivot = 10L,
                              checkpoint_file = NULL,
-                             verbose = TRUE) {
+                             verbose = TRUE,
+                             timing_mode = c("legacy", "fractional"),
+                             timing_truth = NULL,
+                             checkpoint_identity = NULL) {
+  timing_mode <- match.arg(timing_mode)
   all_seasons <- sort(unique(as.character(allD$season)))
 
   # Exclude bad seasons from data and universe before any other logic
@@ -185,6 +189,53 @@ loso_walkforward <- function(allD,
     }
   }
 
+  if (!is.null(checkpoint_file) && is.null(checkpoint_identity)) {
+    checkpoint_identity <- list(
+      schema = "page_m1_walkforward_checkpoint",
+      version = 1L,
+      data_id = digest::digest(list(
+        data = allD,
+        test_seasons = test_seasons,
+        train_seasons = train_seasons,
+        exclude_seasons = exclude_seasons,
+        params = params,
+        manual_labels = manual_labels,
+        flag_args = flag_args,
+        k_deriv = k_deriv,
+        k_ref = k_ref,
+        n_weeks = n_weeks,
+        allow_scale = allow_scale,
+        level = level,
+        use_ci = use_ci,
+        buffer_weeks = buffer_weeks,
+        min_obs = min_obs,
+        curvature_ratio = curvature_ratio,
+        template_shift = template_shift,
+        peak_weight_boost = peak_weight_boost,
+        peak_weight_decay = peak_weight_decay,
+        align_trough_weight = align_trough_weight,
+        align_rise_weight = align_rise_weight,
+        align_peak_decay = align_peak_decay,
+        use_multi_template = use_multi_template,
+        ref_method = ref_method,
+        multi_temperature = multi_temperature,
+        multi_top_k = multi_top_k,
+        multi_blend_alpha = multi_blend_alpha,
+        slope_weight = slope_weight,
+        slope_window = slope_window,
+        dynamic_temp = dynamic_temp,
+        dynamic_temp_pivot = dynamic_temp_pivot,
+        n_cores = n_cores,
+        timing_mode = timing_mode,
+        timing_truth = timing_truth,
+        walk_start = walk_start,
+        walk_end = walk_end,
+        n_weeks = n_weeks,
+        ref_method = ref_method
+      ), algo = "sha256")
+    )
+  }
+
   # --- set up parallel plan; restore on exit ---
   n_workers <- max(1L, as.integer(n_cores))
   old_plan <- future::plan()
@@ -201,20 +252,27 @@ loso_walkforward <- function(allD,
   # --- Resume from checkpoint if available ---
   completed_seasons <- character(0)
   if (!is.null(checkpoint_file) && file.exists(checkpoint_file)) {
-    ckpt <- readRDS(checkpoint_file)
-    completed_seasons <- ckpt$completed_seasons %||% character(0)
-    for (s in intersect(completed_seasons, test_seasons)) {
-      params_list[[s]] <- ckpt$params_list[[s]]
-      forecast_list[[s]] <- ckpt$forecast_list[[s]]
-      ref_list[[s]] <- ckpt$ref_list[[s]]
+    ckpt <- tryCatch(readRDS(checkpoint_file), error = function(e) NULL)
+    usable <- is.list(ckpt) &&
+      identical(ckpt$schema, "page_m1_walkforward_checkpoint") &&
+      identical(ckpt$identity, checkpoint_identity)
+    if (isTRUE(usable)) {
+      completed_seasons <- ckpt$completed_seasons %||% character(0)
+      for (s in intersect(completed_seasons, test_seasons)) {
+        params_list[[s]] <- ckpt$params_list[[s]]
+        forecast_list[[s]] <- ckpt$forecast_list[[s]]
+        ref_list[[s]] <- ckpt$ref_list[[s]]
+      }
     }
-    if (verbose && length(completed_seasons)) {
+    if (verbose && isTRUE(usable) && length(completed_seasons)) {
       message(sprintf(
         "[loso_walkforward] Resuming from checkpoint: %d/%d seasons done (%s)",
         length(intersect(completed_seasons, test_seasons)),
         length(test_seasons),
         paste(intersect(completed_seasons, test_seasons), collapse = ", ")
       ))
+    } else if (verbose && !isTRUE(usable)) {
+      message("[loso_walkforward] Ignoring checkpoint with mismatched provenance.")
     }
   }
 
@@ -258,6 +316,37 @@ loso_walkforward <- function(allD,
 
     aligned_train <- alignIgnition(train_outs)
 
+    # In the fractional workflow, replace the integer manual-label anchor in
+    # the retrospective training seasons with the midpoint target used by M0.
+    # This keeps the reference curve and all downstream alignment coordinates
+    # on the same timing scale as the prospective detector.
+    if (timing_mode == "fractional" && !is.null(timing_truth)) {
+      if (!is.data.frame(timing_truth) ||
+        !all(c("season", "ignition_target_weekF") %in% names(timing_truth))) {
+        stop("`timing_truth` must contain season and ignition_target_weekF.", call. = FALSE)
+      }
+      tt <- timing_truth[, c("season", "ignition_target_weekF"), drop = FALSE]
+      tt$season <- as.character(tt$season)
+      if (anyDuplicated(tt$season) || any(!is.finite(tt$ignition_target_weekF))) {
+        stop("`timing_truth` must have one finite target per season.", call. = FALSE)
+      }
+      target <- stats::setNames(as.numeric(tt$ignition_target_weekF), tt$season)
+      aligned_train$season <- as.character(aligned_train$season)
+      aligned_train$iWeekF <- unname(target[aligned_train$season])
+      aligned_train$iWeek <- aligned_train$iWeekF
+      anchor <- stats::median(target[intersect(names(target), tr_seasons)], na.rm = TRUE)
+      if (!is.finite(anchor)) stop("Fractional timing truth has no training-season targets.", call. = FALSE)
+      n_w <- if ("nW_true" %in% names(aligned_train)) {
+        as.numeric(aligned_train$nW_true)
+      } else {
+        ave(aligned_train$weekF, aligned_train$season,
+          FUN = function(x) max(x, na.rm = TRUE))
+      }
+      aligned_train$phase <- as.integer(aligned_train$weekF >= aligned_train$iWeekF)
+      aligned_train$newWeek <- ((aligned_train$weekF - aligned_train$iWeekF + anchor - 1) %% n_w) + 1
+      attr(aligned_train, "anchorWeek") <- anchor
+    }
+
     # --- 2. Fit reference curve on aligned training data ---
     if (use_multi_template && ref_method != "fs") {
       warning(sprintf("[loso_walkforward] ref_method='%s' ignored when use_multi_template=TRUE; forcing 'fs' (required for eta_mat).", ref_method))
@@ -267,7 +356,8 @@ loso_walkforward <- function(allD,
       estimateRef(
         alignedD = aligned_train, exSeason = character(0),
         k = k_ref, n_weeks = n_weeks,
-        method = ref_meth
+        method = ref_meth,
+        timing_mode = timing_mode
       ),
       error = function(e) {
         stop(
@@ -294,7 +384,12 @@ loso_walkforward <- function(allD,
     ref_list[[test_s]] <- ref
 
     # iWeek_true from manual_labels (ground truth for diagnostics)
-    iWeek_true <- if (!is.null(manual_labels) && test_s %in% names(manual_labels)) {
+    iWeek_true <- if (timing_mode == "fractional" && !is.null(timing_truth) &&
+      test_s %in% as.character(timing_truth$season)) {
+      as.numeric(timing_truth$ignition_target_weekF[
+        match(test_s, as.character(timing_truth$season))
+      ])
+    } else if (!is.null(manual_labels) && test_s %in% names(manual_labels)) {
       as.integer(manual_labels[[test_s]])
     } else {
       NA_integer_
@@ -307,7 +402,8 @@ loso_walkforward <- function(allD,
       currentSeason  = raw_test_D,
       ign_fit_or_gam = NULL,
       params         = params,
-      start_week     = det_start
+      start_week     = det_start,
+      timing_mode    = timing_mode
     )
 
     # --- resolve walk_start for this season ---
@@ -352,6 +448,7 @@ loso_walkforward <- function(allD,
     .slope_window <- slope_window
     .dynamic_temp <- dynamic_temp
     .dynamic_temp_pivot <- dynamic_temp_pivot
+    .timing_mode <- timing_mode
 
     # --- 4. Walk-forward: parallelise over eval_weeks ---
     week_results <- furrr::future_map(eval_weeks_s, function(ew) {
@@ -381,6 +478,7 @@ loso_walkforward <- function(allD,
           slope_window       = .slope_window,
           dynamic_temp       = .dynamic_temp,
           dynamic_temp_pivot = .dynamic_temp_pivot
+          ,timing_mode = .timing_mode
         )
       } else {
         ap <- run_alignment_prospective(
@@ -398,6 +496,7 @@ loso_walkforward <- function(allD,
           trough_weight   = .trough_weight,
           rise_weight     = .rise_weight,
           peak_decay      = .peak_decay
+          ,timing_mode    = .timing_mode
         )
       }
 
@@ -411,7 +510,8 @@ loso_walkforward <- function(allD,
           "alignment_error"
         }
         iWeek_hat_ew <- if (!is.na(ign_locked_w) && ign_locked_w <= ew) {
-          as.integer(.ign_out$iWeek_hat_locked)
+          if (.timing_mode == "fractional") as.numeric(.ign_out$iWeek_hat_lockedF) else
+            as.integer(.ign_out$iWeek_hat_locked)
         } else {
           NA_integer_
         }
@@ -422,7 +522,7 @@ loso_walkforward <- function(allD,
           tau = NA_real_, delta = NA_real_, a = NA_real_, b = NA_real_,
           allow_scale = NA, delta_on = NA,
           t_peak = NA_real_, t_peak_median = NA_real_, t_peak_lo = NA_real_, t_peak_hi = NA_real_,
-          peak_weekF = NA_integer_, peak_passed = FALSE,
+          peak_weekF = if (.timing_mode == "fractional") NA_real_ else NA_integer_, peak_passed = FALSE,
           fallback_reason = reason,
           n_train = length(.tr_seasons), anchorWeek = .ref$anchorWeek
         )
@@ -472,6 +572,9 @@ loso_walkforward <- function(allD,
     if (!is.null(checkpoint_file)) {
       completed_seasons <- union(completed_seasons, test_s)
       saveRDS(list(
+        schema = "page_m1_walkforward_checkpoint",
+        version = 1L,
+        identity = checkpoint_identity,
         completed_seasons = completed_seasons,
         params_list       = params_list[completed_seasons],
         forecast_list     = forecast_list[completed_seasons],
@@ -583,6 +686,22 @@ tune_m1_alignment <- function(allD,
   }
 
   results_cache <- file.path(checkpoint_dir, "tune_m1_results.rds")
+  dots <- list(...)
+  timing_mode_cache <- dots$timing_mode %||% "legacy"
+  timing_mode_cache <- match.arg(timing_mode_cache, c("legacy", "fractional"))
+  timing_truth_cache <- dots$timing_truth %||% NULL
+  cache_identity <- list(
+    schema = "page_m1_tuning_checkpoint",
+    version = 1L,
+    data_id = digest::digest(allD, algo = "sha256"),
+    params = params,
+    manual_labels = manual_labels,
+    exclude_seasons = exclude_seasons,
+    n_weeks = n_weeks,
+    timing_mode = timing_mode_cache,
+    timing_truth = timing_truth_cache,
+    fixed_args = dots[setdiff(names(dots), c("timing_mode", "timing_truth"))]
+  )
 
   # Pre-filter excluded seasons once
   if (!is.null(exclude_seasons)) {
@@ -620,14 +739,25 @@ tune_m1_alignment <- function(allD,
 
   # Load previously completed specs
   if (file.exists(results_cache)) {
-    prev <- readRDS(results_cache)
-    done_ids <- prev$spec_id
-    score_rows <- split(prev, seq_len(nrow(prev)))
-    if (verbose) {
+    prev <- tryCatch(readRDS(results_cache), error = function(e) NULL)
+    usable <- is.list(prev) &&
+      identical(prev$schema, "page_m1_tuning_checkpoint") &&
+      identical(prev$identity, cache_identity) &&
+      is.data.frame(prev$scores)
+    if (isTRUE(usable)) {
+      done_ids <- as.character(prev$scores$spec_id)
+      score_rows <- split(prev$scores, seq_len(nrow(prev$scores)))
+    } else {
+      done_ids <- character(0)
+      score_rows <- list()
+    }
+    if (verbose && isTRUE(usable)) {
       message(sprintf(
         "[tune_m1] Resuming: %d / %d specs already done.",
         length(done_ids), n_specs
       ))
+    } else if (verbose && !isTRUE(usable)) {
+      message("[tune_m1] Ignoring checkpoint with mismatched provenance.")
     }
   } else {
     done_ids <- character(0)
@@ -680,6 +810,12 @@ tune_m1_alignment <- function(allD,
       checkpoint_dir,
       paste0("ckpt_", sid, ".rds")
     )
+    wf_args$checkpoint_identity <- list(
+      schema = "page_m1_walkforward_checkpoint",
+      version = 1L,
+      tuning = cache_identity,
+      spec = spec[setdiff(names(spec), "spec_id"), drop = FALSE]
+    )
 
     wf_error <- NULL
     wf <- tryCatch(
@@ -721,12 +857,24 @@ tune_m1_alignment <- function(allD,
       # Score using weighted mean peak
       score_mean <- base_df |>
         dplyr::filter(!is.na(t_peak)) |>
-        dplyr::mutate(error = abs(round(t_peak - anchorWeek + iWeek_hat) - true_peak_weekF))
+        dplyr::mutate(
+          error = abs((if (timing_mode_cache == "fractional") {
+            t_peak - as.numeric(anchorWeek) + as.numeric(iWeek_hat)
+          } else {
+            round(t_peak - anchorWeek + iWeek_hat)
+          }) - true_peak_weekF)
+        )
 
       # Score using weighted median peak
       score_med <- base_df |>
         dplyr::filter(!is.na(t_peak_median)) |>
-        dplyr::mutate(error = abs(round(t_peak_median - anchorWeek + iWeek_hat) - true_peak_weekF))
+        dplyr::mutate(
+          error = abs((if (timing_mode_cache == "fractional") {
+            t_peak_median - as.numeric(anchorWeek) + as.numeric(iWeek_hat)
+          } else {
+            round(t_peak_median - anchorWeek + as.numeric(iWeek_hat))
+          }) - true_peak_weekF)
+        )
 
       row <- tibble::tibble(
         spec_id          = sid,
@@ -746,7 +894,12 @@ tune_m1_alignment <- function(allD,
 
     # Checkpoint after every spec
     all_scores <- dplyr::bind_rows(score_rows)
-    saveRDS(all_scores, results_cache)
+    saveRDS(list(
+      schema = "page_m1_tuning_checkpoint",
+      version = 1L,
+      identity = cache_identity,
+      scores = all_scores
+    ), results_cache)
 
     if (verbose) {
       message(sprintf(

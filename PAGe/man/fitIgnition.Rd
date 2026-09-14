@@ -21,6 +21,7 @@ fitIgnition(
   fit_slope = FALSE,
   fit_fs = FALSE,
   select = FALSE,
+  timing_truth = NULL,
   verbose = TRUE
 )
 }
@@ -56,6 +57,11 @@ fitIgnition(
 \item{fit_fs}{Logical. Fit the factor-smooth (fs) model. Default \code{FALSE}.}
 
 \item{select}{Logical. Passed to \code{gamm4::gamm4(select=...)}. Default \code{FALSE}.}
+
+\item{timing_truth}{Optional data frame from \code{as_timing_targets_v2()}
+with \code{season} and \code{ignition_target_weekF}. When supplied, the
+fractional target is used for the training and event windows. The default
+\code{NULL} preserves the legacy phase-derived behavior.}
 
 \item{verbose}{Logical. Print progress messages. Default \code{TRUE}.}
 }

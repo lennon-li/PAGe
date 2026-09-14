@@ -3,7 +3,7 @@
 # Audit reference: code-audit-2026-04 B2.
 #
 # Training: prep_stage2_joint() divides dz_ema by dze_sd, stores dz_ema_sd in feature_ranges.
-# Inference (old): dz_ema_now = z_ema_now - z_ema_prev  (unscaled — the bug).
+# Inference (old): dz_ema_now = z_ema_now - z_ema_prev  (unscaled -- the bug).
 # Inference (fixed): dz_ema_now = (z_ema_now - z_ema_prev) / fr$dz_ema_sd.
 
 library(mgcv)
@@ -13,8 +13,8 @@ library(mgcv)
 make_toy_dz_gam <- function(dz_sd = 2.0, n = 80L) {
   set.seed(42L)
   half    <- n / 2L
-  dz_raw  <- rnorm(n, sd = dz_sd)          # raw dz, sd ≈ dz_sd
-  dz_scaled <- dz_raw / dz_sd              # scaled, sd ≈ 1
+  dz_raw  <- rnorm(n, sd = dz_sd)          # raw dz, sd ~ dz_sd
+  dz_scaled <- dz_raw / dz_sd              # scaled, sd ~ 1
   lead    <- factor(rep(c("h1", "h2"), each = half), levels = c("h1", "h2"))
   season  <- factor(rep(c("2022-23", "2023-24"), times = half))
   weekF   <- rep(seq_len(half), 2L)
@@ -23,7 +23,7 @@ make_toy_dz_gam <- function(dz_sd = 2.0, n = 80L) {
 
   d <- data.frame(lead, season, weekF, dz_ema = dz_scaled, y, N)
 
-  # Minimal formula: lead + s(dz_ema) — enough to test scaling.
+  # Minimal formula: lead + s(dz_ema) -- enough to test scaling.
   fit <- mgcv::bam(
     cbind(y, N - y) ~ lead + s(dz_ema, k = 3),
     data   = d,
@@ -33,9 +33,9 @@ make_toy_dz_gam <- function(dz_sd = 2.0, n = 80L) {
   list(fit = fit, dz_sd = dz_sd, d = d)
 }
 
-test_that("training dz_ema values are unit-scale (sd ≈ 1 after division)", {
+test_that("training dz_ema values are unit-scale (sd ~ 1 after division)", {
   obj <- make_toy_dz_gam(dz_sd = 2.5)
-  # The dz_ema column in training data should have sd ≈ 1 (divided by dz_sd=2.5)
+  # The dz_ema column in training data should have sd ~ 1 (divided by dz_sd=2.5)
   sd_dz <- sd(obj$d$dz_ema)
   expect_lt(abs(sd_dz - 1.0), 0.3,
     label = "Training dz_ema should be near unit-variance after scaling")

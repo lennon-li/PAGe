@@ -26,7 +26,8 @@ nested_loso_m1_train(
   blend_alpha = 1,
   spread_method = c("between", "total"),
   parallel = TRUE,
-  verbose = TRUE
+  verbose = TRUE,
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{
@@ -58,8 +59,8 @@ alignment-loss controls.}
 \item{top_k, blend_alpha}{Template filtering and blending controls.}
 
 \item{spread_method}{Character; \code{"between"} (default) or \code{"total"}.
-Passed to \code{m1_walkforward_multi()} to select the \code{logit_spread}
-computation method.}
+Passed to \code{m1_walkforward_multi()} and onward to
+\code{run_alignment_prospective_multi()}.}
 
 \item{parallel}{Logical; run M1 seasons in parallel (default TRUE).}
 

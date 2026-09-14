@@ -69,8 +69,10 @@ m1_walkforward_predictions <- function(seasonD,
                                        dynamic_temp_pivot = 10L,
                                        top_k = NULL,
                                        blend_alpha = 1.0,
-                                       spread_method = c("between", "total")) {
+                                       spread_method = c("between", "total"),
+                                       timing_mode = c("legacy", "fractional")) {
   spread_method <- match.arg(spread_method)
+  timing_mode <- match.arg(timing_mode)
   season_name <- unique(as.character(seasonD$season))[1]
   horizons <- as.integer(horizons)
   max_weekF <- max(seasonD$weekF, na.rm = TRUE)
@@ -84,7 +86,8 @@ m1_walkforward_predictions <- function(seasonD,
       currentSeason  = seasonD,
       ign_fit_or_gam = NULL,
       params         = params,
-      start_week     = 1L
+      start_week     = 1L,
+      timing_mode    = timing_mode
     )
   }
 
@@ -130,7 +133,8 @@ m1_walkforward_predictions <- function(seasonD,
         dynamic_temp_pivot = dynamic_temp_pivot,
         top_k              = top_k,
         blend_alpha        = blend_alpha,
-        spread_method      = spread_method
+        spread_method      = spread_method,
+        timing_mode        = timing_mode
       ),
       error = function(e) NULL
     )
@@ -153,20 +157,17 @@ m1_walkforward_predictions <- function(seasonD,
       # Interpolate M1's prediction and spread at target_newWeek.
       # logit_spread is the weighted SD of logit-scale template predictions --
       # high values indicate M1 ensemble disagreement (alignment uncertainty).
-      p_hat <- stats::approx(fdf$newWeek, fdf$p_hat,
-        xout = target_newWeek,
-        rule = 2
-      )$y
-      p_lo <- stats::approx(fdf$newWeek, fdf$p_lo,
-        xout = target_newWeek,
-        rule = 2
-      )$y
-      p_hi <- stats::approx(fdf$newWeek, fdf$p_hi,
-        xout = target_newWeek,
-        rule = 2
-      )$y
+      p_hat <- .approx_unique(fdf$newWeek, fdf$p_hat,
+        xout = target_newWeek, rule = 2
+      )
+      p_lo <- .approx_unique(fdf$newWeek, fdf$p_lo,
+        xout = target_newWeek, rule = 2
+      )
+      p_hi <- .approx_unique(fdf$newWeek, fdf$p_hi,
+        xout = target_newWeek, rule = 2
+      )
       spread <- if ("logit_spread" %in% names(fdf)) {
-        stats::approx(fdf$newWeek, fdf$logit_spread, xout = target_newWeek, rule = 2)$y
+        .approx_unique(fdf$newWeek, fdf$logit_spread, xout = target_newWeek, rule = 2)
       } else {
         NA_real_
       }
@@ -175,6 +176,7 @@ m1_walkforward_predictions <- function(seasonD,
         season           = season_name,
         eval_weekF       = ew,
         target_weekF     = target_weekF,
+        iWeek_hatF       = as.numeric(ap$iWeek_hatF %||% ap$iWeek_hat),
         h                = h,
         m1_p_hat         = p_hat,
         m1_p_lo          = p_lo,
@@ -250,8 +252,10 @@ m1_walkforward_multi <- function(allD,
                                  blend_alpha = 1.0,
                                  spread_method = c("between", "total"),
                                  parallel = TRUE,
-                                 verbose = TRUE) {
+                                 verbose = TRUE,
+                                 timing_mode = c("legacy", "fractional")) {
   spread_method <- match.arg(spread_method)
+  timing_mode <- match.arg(timing_mode)
   if (is.null(seasons)) seasons <- sort(unique(as.character(allD$season)))
 
   map_fn <- if (isTRUE(parallel) && requireNamespace("furrr", quietly = TRUE)) {
@@ -287,6 +291,7 @@ m1_walkforward_multi <- function(allD,
       top_k              = top_k,
       blend_alpha        = blend_alpha,
       spread_method      = spread_method
+      ,timing_mode       = timing_mode
     )
   })
 
@@ -300,6 +305,7 @@ m1_walkforward_multi <- function(allD,
     season           = character(0),
     eval_weekF       = integer(0),
     target_weekF     = integer(0),
+    iWeek_hatF       = numeric(0),
     h                = integer(0),
     m1_p_hat         = numeric(0),
     m1_p_lo          = numeric(0),
@@ -354,10 +360,9 @@ inject_m1_into_snapshots <- function(pp,
     target_weekF <- as.integer(snap$weekF) + h_int
     target_newWeek <- as.numeric(target_weekF - iWeek_hat + anchorWeek)
 
-    m1_p <- stats::approx(fdf$newWeek, fdf$p_hat,
-      xout = target_newWeek,
-      rule = 2
-    )$y
+    m1_p <- .approx_unique(fdf$newWeek, fdf$p_hat,
+      xout = target_newWeek, rule = 2
+    )
 
     has_m1 <- is.finite(m1_p) & !is.na(m1_p)
     m1_logit <- ifelse(has_m1, logit_stable(m1_p, eps = eps), snap$logit_f_eff)

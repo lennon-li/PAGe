@@ -22,7 +22,8 @@ test_that("the default M2 gain caps cover every tuned parameter", {
   caps <- PAGe::default_m2_nll_gain_caps()
   expect_named(caps, c(
     "delta", "Kr", "k_f", "k_e", "alpha_state",
-    "k_r", "k_de", "k_sp", "bias_alpha", "bias_beta"
+    "k_r", "k_de", "k_sp", "bias_alpha", "bias_beta",
+    "k_z", "k_u", "k_d", "intercept"
   ))
   expect_true(all(is.finite(caps)))
   expect_true(all(caps >= 0))
@@ -962,4 +963,125 @@ test_that("refresh governed path rejects overlapping season sets", {
     ),
     "at least one trainable season"
   )
+})
+
+test_that("retune routes offset subset M2 through its governed branch", {
+  calls <- new.env(parent = emptyenv())
+  subset_config <- PAGe:::m2_subset_config()
+  subset_grid <- PAGe:::m2_subset_grid()
+  selection <- structure(list(
+    training_seasons = "2024-25", exclude_seasons = character(),
+    holdout_seasons = character(), application_seasons = character(),
+    data_seasons = "2024-25"
+  ), class = "page_season_selection")
+
+  local_mocked_bindings(
+    preflight_support_audit = function(..., m2_grid = NULL) {
+      if (!is.null(m2_grid)) stop("M2 preflight must not run for subset family.")
+      calls$static_preflight <- TRUE
+      list(static = TRUE)
+    },
+    tune_m0 = function(...) structure(list(best_params = list(ok = TRUE)),
+      class = "page_m0_tuning"),
+    validate_m0_tuning = function(x, ...) invisible(x),
+    boundary_action_plan = function(tuning, stage, ...) {
+      if (identical(stage, "M2")) stop("M2 boundary machinery must not run.")
+      list(stage = stage)
+    },
+    fit_m0 = function(data, selection, config, ...) list(status = "draft"),
+    freeze_m0 = function(fit, ...) {
+      fit$status <- "frozen"
+      fit
+    },
+    tune_m1 = function(...) structure(list(best = data.frame(
+      k_ref = 25L, multi_temperature = .25, align_rise_weight = 1,
+      slope_window = 6L, slope_weight = 8
+    )), class = "page_m1_tuning"),
+    validate_m1_tuning = function(x, ...) invisible(x),
+    select_m1_candidate = function(...) list(selected = data.frame(
+      k_ref = 25L, multi_temperature = .25, align_rise_weight = 1,
+      slope_window = 6L, slope_weight = 8
+    )),
+    fit_m1 = function(data, selection, m0, config, ...) list(status = "draft"),
+    freeze_m1 = function(fit, ...) {
+      fit$status <- "frozen"
+      fit
+    },
+    plan_m2_grid = function(...) stop("Legacy M2 planner must not run."),
+    select_m2_candidate = function(...) stop("Legacy M2 selector must not run."),
+    tune_m2 = function(data, selection, m0, m1, grid, family, ...) {
+      calls$m2_grid <- grid
+      calls$m2_family <- family
+      calls$tuning_preds <- data.frame(
+        season = selection$training_seasons, eval_weekF = 1L,
+        target_weekF = 2L, h = 1L, m1_p_hat = 0.2
+      )
+      mock_scores <- expand.grid(
+        spec_id = grid$id, season = selection$training_seasons, horizon = 1:2,
+        stringsAsFactors = FALSE
+      )
+      mock_scores$bernoulli_nll <- 0.4
+      mock_scores$mae <- 0.1
+      mock_scores$rows <- 1
+      mock_scores$trials <- 10
+      mock_scores$status <- "ok"
+      mock_summary <- expand.grid(
+        spec_id = grid$id, horizon = 1:2, stringsAsFactors = FALSE
+      )
+      mock_summary$bernoulli_nll <- 0.4
+      mock_summary$n_seasons <- length(selection$training_seasons)
+      mock_training_rows <- data.frame(
+        season = selection$training_seasons, eval_weekF = 1L,
+        target_weekF = 2L, h = 1L,
+        lead = factor("h1", levels = c("h1", "h2")), m1_p = 0.2,
+        m1_logit = 0, z = 0, u = 1, d = 0, y_lead = 1, N_lead = 10
+      )
+      structure(list(
+        family = family, grid = grid, selected = list(subset_grid[1L, ], subset_grid[1L, ]),
+        selected_config = subset_config,
+        best_spec_id = "h1:i0_kz0_ku0_kd0|h2:i0_kz0_ku0_kd0",
+        m1_train_preds = calls$tuning_preds,
+        summary = mock_summary, scores = mock_scores,
+        selection = selection, data_id = "mock-data-id",
+        training_rows = mock_training_rows,
+        declaration_provenance = "mock prefix-safe declarations",
+        alpha_state = subset_config$alpha_state
+      ), class = c("page_m2_subset_tuning", "page_m2_tuning", "list"))
+    },
+    fit_m2 = function(data, selection, m0, m1, config, family,
+                      m1_train_preds = NULL, ...) {
+      calls$m2_config <- config
+      calls$fit_family <- family
+      calls$fit_preds <- m1_train_preds
+      list(status = "draft", config = config)
+    },
+    freeze_m2 = function(fit, ...) {
+      calls$frozen <- TRUE
+      fit$status <- "frozen"
+      fit
+    },
+    assemble_kit = function(...) {
+      calls$assembled <- TRUE
+      list(ready = TRUE)
+    },
+    .package = "PAGe"
+  )
+
+  result <- PAGe::train_pipeline(
+    data.frame(season = "2024-25", weekF = 1L, y = 1L, N = 10L),
+    mode = "retune", m2_family = "offset_subset_v1", prospective_holdout = NULL,
+    n_cores = 1L, verbose = FALSE
+  )
+
+  expect_identical(calls$m2_family, "offset_subset_v1")
+  expect_identical(calls$m2_grid, subset_grid)
+  expect_identical(calls$m2_config, subset_config)
+  expect_identical(calls$fit_family, "offset_subset_v1")
+  expect_identical(calls$fit_preds, calls$tuning_preds)
+  expect_true(calls$static_preflight)
+  expect_true(calls$frozen)
+  expect_true(calls$assembled)
+  expect_true(result$kit$ready)
+  expect_null(result$preflight$m2)
+  expect_null(result$boundary_actions$m2)
 })

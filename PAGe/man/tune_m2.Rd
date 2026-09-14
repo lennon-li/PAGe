@@ -4,7 +4,15 @@
 \alias{tune_m2}
 \title{Tune M2 with an explicit governed season selection}
 \usage{
-tune_m2(data, selection, m0, m1, grid, ...)
+tune_m2(
+  data,
+  selection,
+  m0,
+  m1,
+  grid,
+  family = c("legacy", "offset_subset_v1"),
+  ...
+)
 }
 \arguments{
 \item{data}{Canonical surveillance data frame.}
@@ -16,6 +24,10 @@ tune_m2(data, selection, m0, m1, grid, ...)
 \item{m1}{A frozen \code{page_m1_fit}.}
 
 \item{grid}{M2 candidate grid.}
+
+\item{family}{Model family. The default \code{"legacy"} preserves the
+existing Stage-2 GAM; \code{"offset_subset_v1"} enables the governed
+short-horizon offset correction pathway.}
 
 \item{...}{Additional arguments passed to \code{build_m2()}.}
 }

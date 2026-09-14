@@ -9,7 +9,8 @@ validate_timing_labels(
   peak = NULL,
   season = NULL,
   n_weeks = NULL,
-  calendar = NULL
+  calendar = NULL,
+  peak_observed = NULL
 )
 }
 \arguments{
@@ -23,6 +24,8 @@ validate_timing_labels(
 
 \item{calendar}{Optional timing calendar. Its week count must agree with
 \code{n_weeks}.}
+
+\item{peak_observed}{Optional observed peak week selected from \code{peak}.}
 }
 \value{
 A class \code{page_timing_labels_v2} object.
@@ -31,7 +34,8 @@ A class \code{page_timing_labels_v2} object.
 Users may provide either event independently. Each supplied event accepts
 one integer week or exactly two consecutive integer weeks. A singleton is
 expanded to the preceding pair, for example \code{18 -> c(17, 18)}.
-The normalized pair is uncertainty metadata; the earlier week is retained
-as the scalar scoring reference.
+The normalized pair is retained as uncertainty metadata. Ignition uses the
+pair midpoint as its numeric target. Peak uses the observed peak week as its
+evaluation truth; the adjacent second label is retained as provenance.
 }
 \keyword{internal}

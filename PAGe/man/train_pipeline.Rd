@@ -18,6 +18,7 @@ train_pipeline(
   m0_grid = .default_m0_grid(),
   m1_grid = default_m1_grid(),
   m2_grid = NULL,
+  m2_family = c("legacy", "offset_subset_v1"),
   max_m2_finalists = 6L,
   max_m2_specs = 64L,
   selection_method = c("min_nll", "one_se", "pareto"),
@@ -27,11 +28,17 @@ train_pipeline(
   racing_min_survivors = 3L,
   manual_labels = NULL,
   timing_labels = NULL,
+  timing_mode = c("legacy", "fractional"),
   flag_args = NULL,
   m1_params = NULL,
   m1_min_gain = 0.05,
-  m1_hard_caps = list(k_ref = c(lower = 10L, upper = 50L)),
+  m1_hard_caps = default_m1_hard_caps(),
   m2_min_nll_gain = default_m2_nll_gain_caps(),
+  early_weight = 2,
+  early_max_t_since = 12,
+  pre_ignition_weight = 0,
+  late_weight = 1,
+  score_scale = c("equal_week", "test_count"),
   m0_params = NULL,
   m2_spec_id = NULL
 )
@@ -69,6 +76,10 @@ candidate, and incumbent artifacts is the safety boundary.}
 \item{m2_grid}{Optional explicit M2 grid; \code{NULL} uses
 \code{plan_m2_grid(previous_results)}.}
 
+\item{m2_family}{M2 model family. The default \code{"legacy"} preserves
+existing behavior; \code{"offset_subset_v1"} opts into the governed
+subset family.}
+
 \item{max_m2_finalists, max_m2_specs}{Adaptive M2 plan caps.}
 
 \item{selection_method}{Final full-LOSO selection rule passed to
@@ -95,13 +106,28 @@ in the result for provenance. Cannot be combined with \code{manual_labels}.}
 justify a more flexible `k_ref` candidate (default 0.05).}
 
 \item{m1_hard_caps}{Named M1 hard caps accepted by the boundary gate. The
-default bounds `k_ref` to 10--50 on the 52-week reference domain.}
+default is returned by \code{default_m1_hard_caps()} and bounds `k_ref`
+to 10--50 on the 52-week reference domain.}
 
 \item{m2_min_nll_gain}{Named parameter-specific NLL gain thresholds passed to
 the M2 boundary gate. Defaults to \code{default_m2_nll_gain_caps()} and
 covers every M2 axis. A scalar applies to every M2 axis. An edge is
 accepted only when its matched outward gain is at or below the threshold;
 missing matched evidence still requires expansion.}
+
+\item{early_weight}{Weight for target-relative weeks zero through
+\code{early_max_t_since} in subset-M2 tuning (default 2).}
+
+\item{early_max_t_since}{Last target-relative week receiving
+\code{early_weight} (default 12).}
+
+\item{pre_ignition_weight}{Weight for pre-ignition targets (default 0).}
+
+\item{late_weight}{Weight for targets after \code{early_max_t_since}
+(default 1).}
+
+\item{score_scale}{Primary subset-M2 score denominator, either
+\code{"equal_week"} (default) or \code{"test_count"}.}
 
 \item{m0_params}{Optional M0 parameters for refresh mode. Defaults to the
 deployed configuration when no holdout has been released. For a released
@@ -114,7 +140,8 @@ it is derived from promotion evidence after holdout acceptance.}
 A transparent list with \code{mode}, \code{components},
   \code{tuning} (NULL for refresh), \code{grid},
   \code{grid_provenance}, full-result \code{selection}, optional
-  \code{racing} diagnostics, transparent \code{holdout} release state, and
+  \code{racing} diagnostics, transparent \code{holdout} release state,
+  attached \code{preflight} and \code{boundary_actions} reports, and
   deployment \code{kit}. When supplied, \code{timing_labels_v2} preserves
   the complete timing-v2 label object or list used for training.
 }

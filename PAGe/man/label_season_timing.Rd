@@ -9,7 +9,8 @@ label_season_timing(
   ignition = NULL,
   peak = NULL,
   n_weeks = NULL,
-  calendar = NULL
+  calendar = NULL,
+  peak_observed = NULL
 )
 }
 \arguments{
@@ -23,6 +24,8 @@ label_season_timing(
 
 \item{calendar}{Optional timing calendar. Its week count must agree with
 \code{n_weeks}.}
+
+\item{peak_observed}{Optional observed peak week selected from \code{peak}.}
 }
 \value{
 A validated \code{page_timing_labels_v2} object.

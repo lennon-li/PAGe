@@ -59,6 +59,10 @@
 #' @param fit_slope Logical. Fit the random-slope model. Default \code{FALSE}.
 #' @param fit_fs Logical. Fit the factor-smooth (fs) model. Default \code{FALSE}.
 #' @param select Logical. Passed to \code{gamm4::gamm4(select=...)}. Default \code{FALSE}.
+#' @param timing_truth Optional data frame from \code{as_timing_targets_v2()}
+#'   with \code{season} and \code{ignition_target_weekF}. When supplied, the
+#'   fractional target is used for the training and event windows. The default
+#'   \code{NULL} preserves the legacy phase-derived behavior.
 #' @param verbose Logical. Print progress messages. Default \code{TRUE}.
 #'
 #' @return A list with:
@@ -95,6 +99,7 @@ fitIgnition <- function(
   fit_slope = FALSE,
   fit_fs = FALSE,
   select = FALSE,
+  timing_truth = NULL,
   verbose = TRUE
 ) {
   stopifnot(is.data.frame(dat))
@@ -112,11 +117,28 @@ fitIgnition <- function(
   DT_all[, (season_col) := as.factor(get(season_col))]
   DT_all[, (week_col) := as.integer(get(week_col))]
 
-  # truth ignition week
-  iWeek_dt <- DT_all[get(phase_col) == 1L,
-    .(iWeek_true = suppressWarnings(min(get(week_col), na.rm = TRUE))),
-    by = season_col
-  ]
+  # Truth ignition week. The opt-in timing-v2 path supplies a numeric midpoint;
+  # NULL preserves the legacy phase-derived contract.
+  if (!is.null(timing_truth)) {
+    if (!is.data.frame(timing_truth) ||
+      !all(c("season", "ignition_target_weekF") %in% names(timing_truth))) {
+      stop("`timing_truth` must contain season and ignition_target_weekF.", call. = FALSE)
+    }
+    timing_truth <- timing_truth[, c("season", "ignition_target_weekF"), drop = FALSE]
+    timing_truth$season <- as.character(timing_truth$season)
+    if (anyDuplicated(timing_truth$season) ||
+      any(!is.finite(timing_truth$ignition_target_weekF))) {
+      stop("`timing_truth` must have one finite target per season.", call. = FALSE)
+    }
+    data.table::setnames(timing_truth, c("season", "ignition_target_weekF"),
+                         c(season_col, "iWeek_true"))
+    iWeek_dt <- data.table::as.data.table(timing_truth)
+  } else {
+    iWeek_dt <- DT_all[get(phase_col) == 1L,
+      .(iWeek_true = suppressWarnings(min(get(week_col), na.rm = TRUE))),
+      by = season_col
+    ]
+  }
   if (nrow(iWeek_dt) == 0L) stop("fitIgnition: no phase==1 rows found; cannot infer iWeek_true.")
 
   # training window + labeling
@@ -782,11 +804,13 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
                                   gamma = 25,
                                   gamma_late = 0,
                                   iWeek = TRUE,
+                                  timing_mode = c("legacy", "fractional"),
                                   ncores = 10L,
                                   verbose = TRUE,
                                   progress_every = 200L) {
   start_time <- Sys.time()
   pt0 <- proc.time()
+  timing_mode <- match.arg(timing_mode)
 
   stopifnot(is.data.frame(grid))
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Need package: data.table")
@@ -862,18 +886,26 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
       paste0("row", i)
     }
 
+    detector <- if (timing_mode == "fractional") {
+      detectIgnitionBySeason_M0v2_timing
+    } else {
+      detectIgnitionBySeason_M0v2
+    }
     det <- tryCatch(
-      detectIgnitionBySeason_M0v2(
-        ign_fit = DT_base,
-        params = params,
-        score_col = score_col,
-        week_col = week_col,
-        season_col = season_col,
-        keep_signals = FALSE,
-        verbose = FALSE,
-        iWeek = FALSE,
-        copy_data = FALSE
-      )$by_season,
+      if (timing_mode == "fractional") {
+        detector(
+          ign_fit = DT_base, params = params, score_col = score_col,
+          week_col = week_col, season_col = season_col,
+          verbose = FALSE, iWeek = FALSE, copy_data = FALSE
+        )$by_season
+      } else {
+        detector(
+          ign_fit = DT_base, params = params, score_col = score_col,
+          week_col = week_col, season_col = season_col,
+          keep_signals = FALSE, verbose = FALSE, iWeek = FALSE,
+          copy_data = FALSE
+        )$by_season
+      },
       error = function(e) {
         stop(
           "M0 specification `", spec_label, "` is unsupported: ",
@@ -888,7 +920,12 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
 
     joined <- merge(truth_tune, pred, by = season_col, all.x = TRUE, sort = FALSE)
 
-    joined[, diff := iWeek_hat - iWeek_true]
+    estimate_col <- if (timing_mode == "fractional" && "iWeek_hatF" %in% names(joined)) {
+      "iWeek_hatF"
+    } else {
+      "iWeek_hat"
+    }
+    joined[, diff := get(estimate_col) - iWeek_true]
     joined[, abs_diff := abs(diff)]
     # -1 wiggle room: diff in {-1, 0} both score as 0
     joined[, adj_diff := pmax(diff, 0) + pmax(-1 - diff, 0)]
@@ -978,23 +1015,31 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
   ), drop = FALSE])
 
   # evaluate on all seasons (including excluded)
-  det_all <- detectIgnitionBySeason_M0v2(
-    ign_fit = DT_all,
-    params = best_params,
-    score_col = score_col,
-    week_col = week_col,
-    season_col = season_col,
-    keep_signals = FALSE,
-    verbose = FALSE,
-    iWeek = FALSE,
-    copy_data = FALSE
-  )$by_season
+  det_all <- if (timing_mode == "fractional") {
+    detectIgnitionBySeason_M0v2_timing(
+      ign_fit = DT_all, params = best_params, score_col = score_col,
+      week_col = week_col, season_col = season_col,
+      verbose = FALSE, iWeek = FALSE, copy_data = FALSE
+    )$by_season
+  } else {
+    detectIgnitionBySeason_M0v2(
+      ign_fit = DT_all, params = best_params, score_col = score_col,
+      week_col = week_col, season_col = season_col,
+      keep_signals = FALSE, verbose = FALSE, iWeek = FALSE,
+      copy_data = FALSE
+    )$by_season
+  }
 
   pred_all <- data.table::as.data.table(det_all)
   if (!(season_col %in% names(pred_all)) && "season" %in% names(pred_all)) data.table::setnames(pred_all, "season", season_col)
 
   eval_all <- merge(truth_all, pred_all, by = season_col, all.x = TRUE, sort = FALSE)
-  eval_all[, diff := iWeek_hat - iWeek_true]
+  estimate_col <- if (timing_mode == "fractional" && "iWeek_hatF" %in% names(eval_all)) {
+    "iWeek_hatF"
+  } else {
+    "iWeek_hat"
+  }
+  eval_all[, diff := get(estimate_col) - iWeek_true]
 
   eval_tune <- eval_all[get(season_col) %in% seasons_tune]
   eval_excl <- if (length(exSeason)) eval_all[get(season_col) %in% exSeason] else eval_all[0]
@@ -1116,7 +1161,10 @@ loso_M0v2 <- function(dat,
                       ),
                       verbose = TRUE,
                       checkpoint_dir = NULL,
-                      previous_results = NULL) {
+                      previous_results = NULL,
+                      timing_truth = NULL,
+                      timing_mode = c("legacy", "fractional")) {
+  timing_mode <- match.arg(timing_mode)
   `%||%` <- function(x, y) if (!is.null(x)) x else y
   mode1 <- function(x) {
     x <- x[!is.na(x)]
@@ -1145,7 +1193,8 @@ loso_M0v2 <- function(dat,
       data = dat, season_col = season_col, week_col = week_col,
       phase_col = phase_col, p_col = p_col, score_col = score_col,
       drop_seasons = drop_seasons, exSeason_tune = exSeason_tune,
-      fit_args = fit_args, tune_args = tune_args
+      fit_args = fit_args, tune_args = tune_args,
+      timing_truth = timing_truth, timing_mode = timing_mode
     ),
     algo = "sha256"
   )
@@ -1221,6 +1270,15 @@ loso_M0v2 <- function(dat,
       phase_col = phase_col,
       p_col = p_col
     ), fit_args)
+    if (timing_mode == "fractional") {
+      if (is.null(timing_truth)) {
+        stop("Fractional M0 LOSO requires `timing_truth`.", call. = FALSE)
+      }
+      fit_call$timing_truth <- timing_truth[
+        as.character(timing_truth$season) %in% as.character(DT_train[[season_col]]),
+        , drop = FALSE
+      ]
+    }
     ign_fit <- tryCatch(
       do.call(fitIgnition, fit_call),
       error = function(e) {
@@ -1258,7 +1316,8 @@ loso_M0v2 <- function(dat,
       season_col = season_col,
       phase_col  = phase_col,
       truth_col  = tune_args$truth_col %||% "iWeek",
-      exSeason   = exSeason_tune
+      exSeason   = exSeason_tune,
+      timing_mode = timing_mode
     ), tune_args)
 
     prior_fold <- previous_folds[[ss]]
@@ -1295,18 +1354,22 @@ loso_M0v2 <- function(dat,
     # ---- 4) apply detector to heldout season ----
     t_det0 <- proc.time()
     det <- tryCatch(
-      detectIgnitionBySeason_M0v2(
-        ign_fit = as.data.frame(DT_test_scored),
-        params = best_params,
-        score_col = score_col,
-        week_col = week_col,
-        season_col = season_col,
-        phase_col = phase_col,
-        keep_signals = FALSE,
-        verbose = FALSE,
-        iWeek = TRUE,
-        copy_data = TRUE
-      ),
+      if (timing_mode == "fractional") {
+        detectIgnitionBySeason_M0v2_timing(
+          ign_fit = as.data.frame(DT_test_scored), params = best_params,
+          score_col = score_col, week_col = week_col,
+          season_col = season_col, phase_col = phase_col,
+          verbose = FALSE, iWeek = TRUE, copy_data = TRUE
+        )
+      } else {
+        detectIgnitionBySeason_M0v2(
+          ign_fit = as.data.frame(DT_test_scored), params = best_params,
+          score_col = score_col, week_col = week_col,
+          season_col = season_col, phase_col = phase_col,
+          keep_signals = FALSE, verbose = FALSE, iWeek = TRUE,
+          copy_data = TRUE
+        )
+      },
       error = function(e) {
         stop(
           "M0 LOSO fold `", ss, "` held-out detection failed: ",
@@ -1319,6 +1382,12 @@ loso_M0v2 <- function(dat,
 
     comp <- det$compare
     comp <- comp[match(ss, comp[[season_col]]), , drop = FALSE]
+    if (timing_mode == "fractional" && "diffF" %in% names(comp)) {
+      comp$diff <- comp$diffF
+      comp$iWeek_hatF <- det$by_season$iWeek_hatF[
+        match(ss, det$by_season[[season_col]])
+      ]
+    }
 
     fold_out[[ss]] <- list(
       season = ss,

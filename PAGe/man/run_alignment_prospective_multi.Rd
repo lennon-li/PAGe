@@ -25,7 +25,8 @@ run_alignment_prospective_multi(
   slope_window = 6L,
   dynamic_temp = TRUE,
   dynamic_temp_pivot = 10L,
-  spread_method = c("between", "total")
+  spread_method = c("between", "total"),
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{

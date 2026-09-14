@@ -5,17 +5,16 @@
 \title{Fetch and tidy current-season PHO respiratory surveillance data}
 \usage{
 getCurrentD(
-  data =
-    "https://ws1.publichealthontario.ca/appdata/powerbi/ORVT/ORVT_Lab_Testing_Data_2024-25_2025-26.csv",
+  data = NULL,
   startWeek = 27L,
-  lastWeek = NA,
+  lastWeek = NA_integer_,
   virus = "Influenza A",
   season = "2025-26"
 )
 }
 \arguments{
 \item{data}{URL or local file path to the PHO lab-testing CSV. Defaults to
-the 2024-25 / 2025-26 ORVT public feed.}
+the current PHO 2024-25 / 2025-26 ORVT feed.}
 
 \item{startWeek}{Integer MMWR week used as the epidemic-year origin for
 computing \code{weekF} (default 27L, early July).}

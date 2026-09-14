@@ -18,7 +18,8 @@ train_stage2_joint(
   lambda_w = 0,
   w_floor = NULL,
   m1_preds = NULL,
-  verbose = TRUE
+  verbose = TRUE,
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{

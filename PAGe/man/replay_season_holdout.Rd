@@ -10,6 +10,7 @@ replay_season_holdout(
   season = "2025-26",
   runner = run_prospective_pipeline,
   kit_compatibility = c("strict", "legacy_m2"),
+  timing_mode = c("legacy", "fractional"),
   ...
 )
 }
@@ -33,6 +34,13 @@ legacy \code{m2} field with a warning.}
 Replay predictions, standardized metrics, and explicit workflow
   fields. The holdout is not eligible to join training until separately
   compared with an incumbent using check_promotion().
+  Also retains a \code{forecast_ledger} of expected weekly origins and both
+  horizons, including missing targets and forecasts, and \code{stages} with
+  detector output, M1 parameters/curves and raw M2 predictions. The legacy
+  \code{predictions} table contains only scorable rows. A replay with no
+  scorable rows has status \code{unseen_replay_failed}, a failure code, and
+  NULL metrics/diagnostics. Emitted intervals are conditional fitted-mean
+  bands, not validated full predictive intervals.
 }
 \description{
 Replay a season that was unseen by a pre-trained kit

@@ -37,6 +37,8 @@ An object of class \code{page_season_timing_v2} containing normalized
 }
 \description{
 Each event accepts one week or two consecutive weeks. A singleton is
-expanded to the preceding pair. The earlier week is stored as the scoring
-reference, while both weeks remain available as uncertainty metadata.
+expanded to the preceding pair. Ignition is scored at the pair midpoint.
+For peak, the observed week is selected from the supplied pair by the
+larger observed positivity (ties select the earlier week); the other week
+remains second-label provenance.
 }

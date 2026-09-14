@@ -43,7 +43,7 @@
 #' @param spread_method Character; \code{"between"} (default) computes
 #'   \code{logit_spread} as the weighted between-template standard deviation on
 #'   the logit scale, preserving the incumbent behaviour. \code{"total"} adds
-#'   weighted per-template GAM SE\^2 (from \code{g_s_mu_se}) to the
+#'   weighted squared per-template GAM SE (from \code{g_s_mu_se}) to the
 #'   between-template variance, yielding a total-variance spread. When per-template
 #'   SEs are unavailable (zero or missing) the method falls back to between-only
 #'   for that forecast week and increments \code{spread_fallback_count}.
@@ -83,8 +83,10 @@ align_multi_template <- function(currentD,
                                  dynamic_temp = TRUE,
                                  dynamic_temp_pivot = 10L,
                                  gam_obj = NULL,
-                                 spread_method = c("between", "total")) {
+                                 spread_method = c("between", "total"),
+                                 timing_mode = c("legacy", "fractional")) {
   spread_method <- match.arg(spread_method)
+  timing_mode <- match.arg(timing_mode)
   stopifnot(is.matrix(eta_mat), ncol(eta_mat) >= 2)
   n_weeks <- nrow(eta_mat)
   seas_names <- colnames(eta_mat)
@@ -107,7 +109,11 @@ align_multi_template <- function(currentD,
     if (!is.null(gam_obj)) {
       g_s_mu_se <- (function(gam, sn, levs, n_wk) {
         function(u) {
-          u_cl <- pmin(pmax(round(u), 1L), n_wk)
+          u_cl <- if (timing_mode == "fractional") {
+            pmin(pmax(as.numeric(u), 1), n_wk)
+          } else {
+            pmin(pmax(round(u), 1L), n_wk)
+          }
           nd <- data.frame(
             newWeek = u_cl,
             season = factor(sn, levels = levs)
@@ -449,9 +455,11 @@ run_alignment_prospective_multi <- function(
   slope_window = 6L,
   dynamic_temp = TRUE,
   dynamic_temp_pivot = 10L,
-  spread_method = c("between", "total")
+  spread_method = c("between", "total"),
+  timing_mode = c("legacy", "fractional")
 ) {
   spread_method <- match.arg(spread_method)
+  timing_mode <- match.arg(timing_mode)
 
   # Helper: early return in pre-ignition state
   pre_ign <- function() {
@@ -486,13 +494,19 @@ run_alignment_prospective_multi <- function(
     return(pre_ign())
   }
 
-  iWeek_hat <- as.integer(ign_out$iWeek_hat_locked)
+  iWeek_hat <- if (timing_mode == "fractional") {
+    as.numeric(ign_out$iWeek_hat_lockedF %||% ign_out$iWeek_hat_locked)
+  } else as.integer(ign_out$iWeek_hat_locked)
   ign_week_locked <- as.integer(ign_out$ign_week_locked)
 
   # Re-anchor to alignment space
 
   currentD <- currentSeason |>
-    dplyr::mutate(newWeek = as.integer(.data$weekF) - iWeek_hat + ref$anchorWeek)
+    dplyr::mutate(newWeek = if (timing_mode == "fractional") {
+      as.numeric(.data$weekF) - iWeek_hat + ref$anchorWeek
+    } else {
+      as.integer(.data$weekF) - iWeek_hat + as.integer(ref$anchorWeek)
+    })
 
   if (nrow(currentD) < as.integer(min_obs)) {
     return(pre_ign())
@@ -533,7 +547,8 @@ run_alignment_prospective_multi <- function(
       dynamic_temp           = dynamic_temp,
       dynamic_temp_pivot     = dynamic_temp_pivot,
       gam_obj                = if (!is.null(ref$mod2$gam)) ref$mod2$gam else NULL,
-      spread_method          = spread_method
+      spread_method          = spread_method,
+      timing_mode            = timing_mode
     ),
     error = function(e) NULL
   )
@@ -575,9 +590,11 @@ run_alignment_prospective_multi <- function(
     t_peak_ci = t_peak_ci_use,
     t_peak_raw = res$peak$t_peak,
     t_peak_ci_raw = res$peak$t_peak_ci,
-    peak_weekF = as.integer(peak_weekF),
-    peak_weekF_lo = as.integer(peak_weekF_lo),
-    peak_weekF_hi = as.integer(peak_weekF_hi),
+    peak_weekF = if (timing_mode == "fractional") as.numeric(t_peak_use - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF),
+    peak_weekF_lo = if (timing_mode == "fractional") as.numeric(t_peak_ci_use[1] - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF_lo),
+    peak_weekF_hi = if (timing_mode == "fractional") as.numeric(t_peak_ci_use[2] - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF_hi),
+    iWeek_hatF = as.numeric(iWeek_hat),
+    iWeek_hat_bracket = ign_out$iWeek_hat_bracket %||% NULL,
     peak_passed = pk$peak_passed,
     fallback_reason = res$fallback_reason,
     forecast_df = res$pred_df,
@@ -626,7 +643,8 @@ run_alignment_prospective_multi <- function(
 #' Compute weighted logit-scale spread (internal helper)
 #'
 #' \code{"between"} computes the weighted between-template standard deviation.
-#' \code{"total"} adds weighted per-template SE\^2 (from \code{g_s_mu_se}) to
+#' \code{"total"} adds weighted squared per-template SE (from
+#' \code{g_s_mu_se}) to
 #' the between-template variance. When per-template SEs are all zero/missing for
 #' a forecast week, that week falls back to between-only and the fallback count
 #' is incremented.

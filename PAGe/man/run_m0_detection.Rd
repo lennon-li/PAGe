@@ -9,7 +9,8 @@ run_m0_detection(
   kit,
   current_data,
   manual_ign_week = NA_integer_,
-  verbose = TRUE
+  verbose = TRUE,
+  timing_mode = c("legacy", "fractional")
 )
 
 run_m0(kit, current_data, ...)

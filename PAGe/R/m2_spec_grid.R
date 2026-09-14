@@ -41,6 +41,8 @@
 #' @param use_season_re Back-compat flag (season RE is always included).
 #' @param lambda_w,w_floor Training time-decay rate and minimum weight.
 #' @param anchorWeek Reference-curve ignition anchor week.
+#' @param timing_mode Character. Fractional mode preserves a numeric anchor;
+#'   legacy mode retains the integer contract.
 #' @param bias_alpha,bias_beta Holt level and trend correction rates.
 #'
 #' @param K Deprecated alias of \code{Kr}.
@@ -80,8 +82,10 @@ stage2_make_spec <- function(
   bias_beta = 0.0, # Holt trend EMA (0 = level-only; trend confirmed uninformative)
   # --- deprecated aliases ---
   K = NULL,
-  pre_buffer = NULL
+  pre_buffer = NULL,
+  timing_mode = c("legacy", "fractional")
 ) {
+  timing_mode <- match.arg(timing_mode)
   if (!is.null(K)) {
     .Deprecated(old = "K", new = "Kr", msg = "Argument 'K' is deprecated; use 'Kr' instead.")
     Kr <- K
@@ -131,7 +135,12 @@ stage2_make_spec <- function(
     use_season_re = TRUE,
     lambda_w = as.numeric(lambda_w),
     w_floor = as.numeric(w_floor),
-    anchorWeek = as.integer(anchorWeek),
+    anchorWeek = if (timing_mode == "fractional") {
+      as.numeric(anchorWeek)
+    } else {
+      as.integer(anchorWeek)
+    },
+    timing_mode = timing_mode,
     bias_alpha = as.numeric(bias_alpha),
     bias_beta = as.numeric(bias_beta)
   )

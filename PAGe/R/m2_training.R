@@ -44,8 +44,9 @@ make_soft_cap_fn <- function(fit_obj) {
 #' @param fit A fitted \code{mgcv::bam}/\code{gam} object.
 #' @param ew Integer. Current evaluation week (weekF).
 #' @param h Integer. Forecast horizon (1 or 2).
-#' @param iWeek Integer. Locked ignition week.
-#' @param anchorWeek Integer. Reference-curve anchor week.
+#' @param iWeek Numeric. Locked ignition week; fractional in the opt-in
+#'   fractional timing mode.
+#' @param anchorWeek Numeric. Reference-curve anchor week.
 #' @param logit_f_eff Numeric. logit(M1 predicted positivity at target week).
 #' @param z_ema Numeric. EWMA of logit-observed positivity.
 #' @param dz_ema Numeric. Rate of change of z_ema (z_ema[t] - z_ema[t-1]).
@@ -65,9 +66,13 @@ make_soft_cap_fn <- function(fit_obj) {
 #' @param return_ci Logical. If \code{TRUE}, returns \code{m2_lo} and
 #'   \code{m2_hi} (+/-1.96 SE on the link scale).
 #' @param bias_logit Numeric online bias adjustment on the logit scale.
+#' @param timing_mode Character. \code{"legacy"} uses integer aligned weeks;
+#'   \code{"fractional"} preserves numeric aligned weeks.
 #'
 #' @return A named list with \code{m2_p} (and \code{m2_lo}, \code{m2_hi}
-#'   if \code{return_ci = TRUE}), or \code{NULL} on prediction failure.
+#'   if \code{return_ci = TRUE}), and \code{m2_eta_raw}, the GAM linear
+#'   predictor before online correction or probability capping; or \code{NULL}
+#'   on prediction failure. Bounds describe the conditional fitted mean.
 m2_predict_one <- function(fit,
                            ew,
                            h,
@@ -83,7 +88,9 @@ m2_predict_one <- function(fit,
                            include_season_re = FALSE,
                            soft_cap_fn = NULL,
                            return_ci = FALSE,
-                           bias_logit = 0) {
+                           bias_logit = 0,
+                           timing_mode = c("legacy", "fractional")) {
+  timing_mode <- match.arg(timing_mode)
   # --- Exclude terms ---
   ex <- ex_terms %||% character(0)
   if (!isTRUE(include_season_re)) {
@@ -110,7 +117,11 @@ m2_predict_one <- function(fit,
 
   nd <- tibble::tibble(
     weekF        = as.integer(ew),
-    newWeek      = as.integer(ew) - as.integer(iWeek) + as.integer(anchorWeek),
+    newWeek      = if (timing_mode == "fractional") {
+      as.numeric(ew) - as.numeric(iWeek) + as.numeric(anchorWeek)
+    } else {
+      as.integer(ew) - as.integer(iWeek) + as.integer(anchorWeek)
+    },
     lead         = factor(lead_val, levels = lev_lead),
     season       = nd_season,
     logit_f_eff  = as.numeric(logit_f_eff),
@@ -155,16 +166,23 @@ m2_predict_one <- function(fit,
     eta <- as.numeric(pr$fit) + bl
     se <- as.numeric(pr$se.fit)
     list(
-      m2_p  = cap(pmin(1 - eps, pmax(eps, stats::plogis(eta)))),
+      m2_eta_raw = as.numeric(pr$fit),
+      m2_p = cap(pmin(1 - eps, pmax(eps, stats::plogis(eta)))),
       m2_lo = cap(pmin(1 - eps, pmax(eps, stats::plogis(eta - 1.96 * se)))),
       m2_hi = cap(pmin(1 - eps, pmax(eps, stats::plogis(eta + 1.96 * se))))
     )
   } else {
     eta <- as.numeric(pr) + bl
     list(
+      m2_eta_raw = as.numeric(pr),
       m2_p = cap(pmin(1 - eps, pmax(eps, stats::plogis(eta))))
     )
   }
+}
+
+.m2_prediction_log <- function(prediction, target_weekF, h) {
+  list(target_weekF = target_weekF, m2_p = prediction$m2_p,
+       m2_eta_raw = prediction$m2_eta_raw, h = h)
 }
 
 
@@ -263,13 +281,15 @@ prep_stage2_joint <- function(dat,
                               alpha_state = 0.30,
                               m1_preds = NULL,
                               feature_ranges = NULL,
-                              verbose = FALSE) {
+                              verbose = FALSE,
+                              timing_mode = c("legacy", "fractional")) {
+  timing_mode <- match.arg(timing_mode)
   stopifnot(is.data.frame(dat))
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
 
   if (is.null(template_df) || !is.data.frame(template_df)) stop("template_df must be provided.")
   if (!all(c("newWeek", "fit") %in% names(template_df))) stop("template_df must have columns newWeek, fit")
-  template_df <- template_df |> dplyr::select(.data$newWeek, fit_ref = .data$fit)
+  template_df <- template_df |> dplyr::select("newWeek", fit_ref = "fit")
 
   need <- c("season", "weekF", "phase", "newWeek", "y", "N")
   miss <- setdiff(need, names(dat))
@@ -350,11 +370,26 @@ prep_stage2_joint <- function(dat,
       t_since = as.numeric(.data$weekF - .data$iWeek_used)
     ) |>
     dplyr::ungroup() |>
-    dplyr::select(-.data$z0, -.data$z_fill) |>
-    dplyr::left_join(template_df, by = "newWeek")
+    dplyr::select(-"z0", -"z_fill")
+  if (timing_mode == "fractional") {
+    d0$fit_ref <- stats::approx(
+      as.numeric(template_df$newWeek), as.numeric(template_df$fit_ref),
+      xout = as.numeric(d0$newWeek), rule = 2
+    )$y
+  } else {
+    d0 <- dplyr::left_join(d0, template_df, by = "newWeek")
+  }
 
   # ---- shift template by delta ----
-  if (!is.na(delta) && delta != 0L) {
+  if (timing_mode == "fractional" && !is.na(delta) && delta != 0L) {
+    d0 <- d0 |>
+      dplyr::group_by(.data$season) |>
+      dplyr::mutate(fit_shift = stats::approx(
+        as.numeric(.data$newWeek), as.numeric(.data$fit_ref),
+        xout = as.numeric(.data$newWeek) - delta, rule = 2
+      )$y) |>
+      dplyr::ungroup()
+  } else if (!is.na(delta) && delta != 0L) {
     n <- abs(delta)
     if (delta > 0L) {
       d0 <- d0 |>
@@ -934,7 +969,9 @@ train_stage2_joint <- function(dat,
                                lambda_w = 0,
                                w_floor = NULL,
                                m1_preds = NULL,
-                               verbose = TRUE) {
+                               verbose = TRUE,
+                               timing_mode = c("legacy", "fractional")) {
+  timing_mode <- match.arg(timing_mode)
   if (!requireNamespace("mgcv", quietly = TRUE)) stop("Please install mgcv.")
 
   if (!is.null(spec)) {
@@ -967,6 +1004,7 @@ train_stage2_joint <- function(dat,
     pre_buffer    = as.integer(pre_buffer %||% 0L),
     alpha_state   = as.numeric(alpha_state %||% 0.30),
     m1_preds      = m1_preds,
+    timing_mode   = timing_mode,
     verbose       = FALSE
   )
 
@@ -1004,12 +1042,16 @@ format_current_for_stage2 <- function(currentSeason,
                                       iWeek_used,
                                       template_df = NULL,
                                       spec = NULL,
-                                      season_label = "current") {
+                                      season_label = "current",
+                                      timing_mode = c("legacy", "fractional")) {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
-  iWeek_used <- as.integer(iWeek_used[1L])
-  anchorWeek <- as.integer(
-    if (!is.null(spec) && !is.null(spec$anchorWeek)) spec$anchorWeek else 20L
-  )
+  timing_mode <- match.arg(timing_mode)
+  iWeek_used <- if (timing_mode == "fractional") as.numeric(iWeek_used[1L]) else as.integer(iWeek_used[1L])
+  anchorWeek <- if (timing_mode == "fractional") {
+    as.numeric(if (!is.null(spec) && !is.null(spec$anchorWeek)) spec$anchorWeek else 20)
+  } else {
+    as.integer(if (!is.null(spec) && !is.null(spec$anchorWeek)) spec$anchorWeek else 20L)
+  }
 
   df <- currentSeason
   if (!"neg" %in% names(df) && "N" %in% names(df) && "y" %in% names(df)) {
@@ -1019,8 +1061,13 @@ format_current_for_stage2 <- function(currentSeason,
     df$N <- df$y + df$neg
   }
   df$season <- as.character(season_label)
-  df$phase <- as.integer(!is.na(df$weekF) & as.integer(df$weekF) >= iWeek_used)
-  df$newWeek <- as.integer(df$weekF) - iWeek_used + anchorWeek
+  df$phase <- as.integer(!is.na(df$weekF) & as.numeric(df$weekF) >= iWeek_used)
+  df$newWeek <- if (timing_mode == "fractional") {
+    as.numeric(df$weekF) - iWeek_used + anchorWeek
+  } else {
+    as.integer(df$weekF) - iWeek_used + anchorWeek
+  }
+  if (timing_mode == "fractional") df$iWeek_usedF <- iWeek_used
 
   as.data.frame(df)
 }
@@ -1055,7 +1102,9 @@ refit_stage2_weekly <- function(current_obs,
                                 m1_preds = NULL,
                                 season_label = "current",
                                 addFS = NULL,
-                                verbose = TRUE) {
+                                verbose = TRUE,
+                                timing_mode = c("legacy", "fractional")) {
+  timing_mode <- match.arg(timing_mode)
   refit_spec <- spec
   fit_method <- "REML"
   addFS <- if (is.null(addFS)) NULL else as.integer(addFS[1L])
@@ -1066,7 +1115,7 @@ refit_stage2_weekly <- function(current_obs,
   # dropping the fs term here preserves the intended prediction target while
   # avoiding multi-minute/hour refits on only a handful of current-season rows.
   if (!season_label %in% unique(hist_data$season) && isTRUE(refit_spec$k_s > 0L)) {
-    post_ign_weeks <- sum(unique(current_obs$weekF) >= as.integer(iWeek_used), na.rm = TRUE)
+    post_ign_weeks <- sum(unique(current_obs$weekF) >= as.numeric(iWeek_used), na.rm = TRUE)
     keep_fs <- !is.null(addFS) && is.finite(addFS) && post_ign_weeks >= addFS
     if (!isTRUE(keep_fs)) {
       refit_spec$k_s <- 0L
@@ -1079,7 +1128,8 @@ refit_stage2_weekly <- function(current_obs,
     iWeek_used    = iWeek_used,
     template_df   = template_df,
     spec          = refit_spec,
-    season_label  = season_label
+    season_label  = season_label,
+    timing_mode   = timing_mode
   )
   dat_refit <- dplyr::bind_rows(hist_data, cur_fmt)
   # m1_preds: M1 walk-forward predictions for historical training seasons.
@@ -1092,7 +1142,8 @@ refit_stage2_weekly <- function(current_obs,
     spec        = refit_spec,
     m1_preds    = m1_preds,
     method      = fit_method,
-    verbose     = verbose
+    verbose     = verbose,
+    timing_mode = timing_mode
   )
 }
 

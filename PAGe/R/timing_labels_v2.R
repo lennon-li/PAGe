@@ -1,18 +1,20 @@
 #' Normalize one user timing label
 #'
 #' A timing-v2 label is one integer week or two consecutive integer weeks.
-#' A singleton \code{w} is normalized to \code{c(w - 1, w)} so that the
-#' earlier week is always available for scoring and operational use. The
-#' original input is preserved separately. This function does not modify any
-#' legacy label vector.
+#' A singleton \code{w} is normalized to \code{c(w - 1, w)}. The original
+#' input and normalized pair are retained, and their midpoint is exposed as
+#' the numeric timing target. This function does not modify any legacy label
+#' vector.
 #'
 #' @param label One or two integer week numbers.
 #' @param event_type Either \code{"ignition"} or \code{"peak"}.
 #' @param n_weeks Number of weeks in the season.
+#' @param observed_weekF Optional observed peak week. It must be one of the
+#'   supplied peak weeks; omit it only before review-based peak resolution.
 #' @return A normalized timing label object.
 #' @keywords internal
 normalize_timing_label <- function(label, event_type = c("ignition", "peak"),
-                                   n_weeks = 52L) {
+                                   n_weeks = 52L, observed_weekF = NULL) {
   event_type <- match.arg(event_type)
   n_weeks <- .timing_check_n_weeks(n_weeks)
   if (is.logical(label) || !is.numeric(label) || length(label) < 1L || length(label) > 2L ||
@@ -41,6 +43,24 @@ normalize_timing_label <- function(label, event_type = c("ignition", "peak"),
   if (any(normalized < 1L | normalized > n_weeks)) {
     stop("`", event_type, "` label must fall within weeks 1 through ", n_weeks, ".", call. = FALSE)
   }
+  if (event_type == "peak" && !is.null(observed_weekF)) {
+    if (length(observed_weekF) != 1L || !is.numeric(observed_weekF) ||
+      !is.finite(observed_weekF) || observed_weekF != trunc(observed_weekF) ||
+      !observed_weekF %in% normalized) {
+      stop("`observed_weekF` must be one of the supplied peak weeks.", call. = FALSE)
+    }
+    observed_weekF <- as.integer(observed_weekF)
+  }
+  observed <- if (event_type == "peak") {
+    if (is.null(observed_weekF)) NA_integer_ else observed_weekF
+  } else {
+    NA_integer_
+  }
+  second <- if (event_type == "peak" && !is.null(observed) && is.finite(observed)) {
+    normalized[normalized != observed][1L]
+  } else {
+    NA_integer_
+  }
 
   structure(
     list(
@@ -50,6 +70,9 @@ normalize_timing_label <- function(label, event_type = c("ignition", "peak"),
       lower_weekF = normalized[1L],
       upper_weekF = normalized[2L],
       scoring_weekF = normalized[1L],
+      target_weekF = mean(normalized),
+      observed_weekF = observed,
+      second_weekF = second,
       input_length = length(original)
     ),
     class = "page_timing_label_v2"
@@ -61,8 +84,9 @@ normalize_timing_label <- function(label, event_type = c("ignition", "peak"),
 #' Users may provide either event independently. Each supplied event accepts
 #' one integer week or exactly two consecutive integer weeks. A singleton is
 #' expanded to the preceding pair, for example \code{18 -> c(17, 18)}.
-#' The normalized pair is uncertainty metadata; the earlier week is retained
-#' as the scalar scoring reference.
+#' The normalized pair is retained as uncertainty metadata. Ignition uses the
+#' pair midpoint as its numeric target. Peak uses the observed peak week as its
+#' evaluation truth; the adjacent second label is retained as provenance.
 #'
 #' @param ignition Optional ignition label.
 #' @param peak Optional peak label.
@@ -70,10 +94,12 @@ normalize_timing_label <- function(label, event_type = c("ignition", "peak"),
 #' @param n_weeks Number of weeks in the season.
 #' @param calendar Optional timing calendar. Its week count must agree with
 #'   \code{n_weeks}.
+#' @param peak_observed Optional observed peak week selected from \code{peak}.
 #' @return A class \code{page_timing_labels_v2} object.
 #' @keywords internal
 validate_timing_labels <- function(ignition = NULL, peak = NULL, season = NULL,
-                                   n_weeks = NULL, calendar = NULL) {
+                                   n_weeks = NULL, calendar = NULL,
+                                   peak_observed = NULL) {
   if (is.null(ignition) && is.null(peak)) {
     stop("Supply at least one of `ignition` or `peak`.", call. = FALSE)
   }
@@ -102,7 +128,12 @@ validate_timing_labels <- function(ignition = NULL, peak = NULL, season = NULL,
   }
 
   ignition_norm <- if (is.null(ignition)) NULL else normalize_timing_label(ignition, "ignition", n_weeks)
-  peak_norm <- if (is.null(peak)) NULL else normalize_timing_label(peak, "peak", n_weeks)
+  if (!is.null(peak_observed) && is.null(peak)) {
+    stop("`peak_observed` requires a supplied `peak` label.", call. = FALSE)
+  }
+  peak_norm <- if (is.null(peak)) NULL else normalize_timing_label(
+    peak, "peak", n_weeks, observed_weekF = peak_observed
+  )
   scalar_ignition <- if (is.null(ignition_norm)) {
     NULL
   } else {
@@ -131,6 +162,18 @@ validate_timing_labels <- function(ignition = NULL, peak = NULL, season = NULL,
       peak = peak_norm,
       scoring_ignition_labels = scalar_ignition,
       scoring_peak_labels = scalar_peak,
+      target_ignition_labels = if (is.null(ignition_norm)) NULL else {
+        value <- ignition_norm$target_weekF
+        if (is.null(season)) value else stats::setNames(value, season)
+      },
+      target_peak_labels = if (is.null(peak_norm)) NULL else {
+        value <- peak_norm$observed_weekF
+        if (is.null(season)) value else stats::setNames(value, season)
+      },
+      second_peak_labels = if (is.null(peak_norm)) NULL else {
+        value <- peak_norm$second_weekF
+        if (is.null(season)) value else stats::setNames(value, season)
+      },
       legacy_scalar_labels = list(ignition = scalar_ignition, peak = scalar_peak),
       provenance = list(method = "validate_timing_labels", normalized = TRUE)
     ),
@@ -144,10 +187,12 @@ validate_timing_labels <- function(ignition = NULL, peak = NULL, season = NULL,
 #' @return A validated \code{page_timing_labels_v2} object.
 #' @keywords internal
 label_season_timing <- function(season = NULL, ignition = NULL, peak = NULL,
-                                n_weeks = NULL, calendar = NULL) {
+                                n_weeks = NULL, calendar = NULL,
+                                peak_observed = NULL) {
   validate_timing_labels(
     ignition = ignition, peak = peak, season = season,
-    n_weeks = n_weeks, calendar = calendar
+    n_weeks = n_weeks, calendar = calendar,
+    peak_observed = peak_observed
   )
 }
 
@@ -174,6 +219,9 @@ compile_timing_evidence <- function(labels) {
     lower_weekF = vapply(events, function(x) labels[[x]]$lower_weekF, integer(1L)),
     upper_weekF = vapply(events, function(x) labels[[x]]$upper_weekF, integer(1L)),
     scoring_weekF = vapply(events, function(x) labels[[x]]$scoring_weekF, integer(1L)),
+    target_weekF = vapply(events, function(x) labels[[x]]$target_weekF, numeric(1L)),
+    observed_weekF = vapply(events, function(x) labels[[x]]$observed_weekF, numeric(1L)),
+    second_weekF = vapply(events, function(x) labels[[x]]$second_weekF, numeric(1L)),
     stringsAsFactors = FALSE
   )
 }

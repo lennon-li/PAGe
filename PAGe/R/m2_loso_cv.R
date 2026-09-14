@@ -745,7 +745,7 @@ plot_nested_loso_predictions <- function(cv_result,
       caption = paste0(
         "Dots = observed positivity.  Lines = LOSO out-of-sample predictions ",
         "(GAM trained on other 9 seasons + Holt bias correction).\n",
-        "Shaded bands = approx. 95% CI from binomial SE (p\u0302\u00b11.96\u00d7SE, N=lead-week tests).",
+        "Shaded bands = approx. 95% CI from binomial SE (p\u0302\u00b11.96xSE, N=lead-week tests).",
         "\nx = 0 is ignition week; evaluation window is ignition to ignition + 12 weeks."
       )
     ) +

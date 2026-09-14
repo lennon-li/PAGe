@@ -68,6 +68,8 @@
 #' @param agg Character. Aggregation method for the \code{"fs"} method's population curve:
 #'   \code{"median"} (default) takes pointwise median across seasons on logit scale;
 #'   \code{"mean"} takes the mean. Ignored for other methods.
+#' @param timing_mode Character. \code{"legacy"} preserves integer aligned
+#'   coordinates; \code{"fractional"} retains numeric aligned coordinates.
 #'
 #' @return A list with components: \code{mod2}, \code{g_ref_fun}, \code{g_ref_safe},
 #'   \code{g_ref_mu_se}, \code{ref_df}, \code{pred_df}, \code{dat}, \code{anchorWeek},
@@ -85,9 +87,11 @@ estimateRef <- function(alignedD,
                         ),
                         trough_weight = 0.1,
                         peak_weight_boost = 3,
-                        agg = c("median", "mean")) {
+                        agg = c("median", "mean"),
+                        timing_mode = c("legacy", "fractional")) {
   method <- match.arg(method)
   agg <- match.arg(agg)
+  timing_mode <- match.arg(timing_mode)
 
   if (!requireNamespace("gamm4", quietly = TRUE)) stop("Need 'gamm4'.")
   if (!requireNamespace("mgcv", quietly = TRUE)) stop("Need 'mgcv'.")
@@ -107,11 +111,16 @@ estimateRef <- function(alignedD,
       return(wt)
     }
     wt[dat$phase == 0L] <- trough_weight
-    if (peak_weight_boost > 1 && "iWeek" %in% names(dat) && "weekF" %in% names(dat)) {
+    if (peak_weight_boost > 1 &&
+      any(c("iWeek", "iWeekF") %in% names(dat)) && "weekF" %in% names(dat)) {
       for (s in unique(dat$season)) {
         idx <- which(dat$season == s & dat$phase == 1L)
         if (length(idx) == 0) next
-        iw <- dat$iWeek[idx[1]]
+        iw <- if (timing_mode == "fractional" && "iWeekF" %in% names(dat)) {
+          dat$iWeekF[idx[1L]]
+        } else {
+          dat$iWeek[idx[1L]]
+        }
         wk <- dat$weekF[idx]
         p_obs <- dat$fit[idx]
         pk <- wk[which.max(p_obs)]
@@ -132,7 +141,11 @@ estimateRef <- function(alignedD,
     dat <- dplyr::filter(dat, !(.data$season %in% exSeason))
   }
   .validate_m1_reference_support(dat, k = k, n_weeks = n_weeks)
-  dat <- dplyr::mutate(dat, newWeek = pmin(as.integer(.data$newWeek), as.integer(n_weeks)))
+  dat <- dplyr::mutate(dat, newWeek = if (timing_mode == "fractional") {
+    pmin(as.numeric(.data$newWeek), as.numeric(n_weeks))
+  } else {
+    pmin(as.integer(.data$newWeek), as.integer(n_weeks))
+  })
 
   # ---------- helpers for re-smooth models ----------
   # gaussian_logit: s(season, bs="re") -- exclude="s(season)" for population curve
@@ -397,6 +410,9 @@ estimateRef <- function(alignedD,
 
   if (uses_fs) {
     g_ref_mu_se <- (function(gam_obj, seas_levs, agg_method) {
+      force(gam_obj)
+      force(seas_levs)
+      force(agg_method)
       function(u) {
         eta_mat <- sapply(seas_levs, function(s) {
           nd <- data.frame(newWeek = u, season = factor(s, levels = seas_levs))
@@ -417,6 +433,9 @@ estimateRef <- function(alignedD,
   } else if (uses_fs_combo) {
     # Ensemble: average gaussian_logit + fs population curves
     g_ref_mu_se <- (function(gam_gl, gam_fs, seas_levs) {
+      force(gam_gl)
+      force(gam_fs)
+      force(seas_levs)
       function(u) {
         # gaussian_logit population curve
         nd_gl <- data.frame(newWeek = u, season = factor(seas_levs[1L], levels = seas_levs))
@@ -437,6 +456,9 @@ estimateRef <- function(alignedD,
     })(mod2$gam, mod2$gam_fs, levels(dat$season))
   } else {
     g_ref_mu_se <- (function(gam_obj, excl, season_lev) {
+      force(gam_obj)
+      force(excl)
+      force(season_lev)
       function(u) {
         nd <- if (!is.null(season_lev)) {
           data.frame(newWeek = u, season = factor(season_lev[1L], levels = season_lev))

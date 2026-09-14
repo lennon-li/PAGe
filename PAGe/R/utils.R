@@ -134,6 +134,7 @@ make_g_ref_fun <- function(gam_obj, week_grid = 1:52) {
 #'
 #' @return a function f(u) that returns list(mu = ..., se = ...) on link scale
 make_g_ref_mu_se <- function(gam_obj) {
+  force(gam_obj)
   function(u) {
     nd <- data.frame(newWeek = u)
     pr <- stats::predict(gam_obj, newdata = nd, type = "link", se.fit = TRUE)
@@ -189,13 +190,13 @@ makeTable <-function(res){
 #'
 mark_season_weeks <- function(res, threshold = 0.05, min_run = 1L) {
   df <- res$pred_df
-  
+
   # Use fitted p_hat curve to define season
   wk  <- df$newWeek
   ph  <- df$p_hat
-  
+
   above <- ph >= threshold
-  
+
   # run-length encoding to enforce min_run consecutive weeks
   r <- rle(above)
   idx <- which(r$values & r$lengths >= min_run)
@@ -206,24 +207,24 @@ mark_season_weeks <- function(res, threshold = 0.05, min_run = 1L) {
       in_season  = rep(FALSE, length(wk))
     ))
   }
-  
+
   # first run of "TRUE" with sufficient length
   first_run_start <- sum(r$lengths[seq_len(idx[1] - 1)]) + 1L
   start_week <- wk[first_run_start]
-  
+
   # end: first week **after the peak** dropping below threshold
   peak_week <- floor(res$peak$t_peak)
   after_peak <- wk >= peak_week
   below_after <- (!above) & after_peak
-  
+
   if (!any(below_after)) {
     end_week <- max(wk)
   } else {
     end_week <- wk[which(below_after)[1]]
   }
-  
+
   in_season <- wk >= start_week & wk < end_week
-  
+
   list(
     start_week = start_week,
     end_week   = end_week-1,
@@ -239,7 +240,7 @@ mark_season_weeks <- function(res, threshold = 0.05, min_run = 1L) {
 get_newWeek_from_week <- function(season_df, week_vec) {
   key <- season_df |>
     dplyr::distinct(week, newWeek)
-  
+
   idx <- match(week_vec, key$week)
   key$newWeek[idx]
 }

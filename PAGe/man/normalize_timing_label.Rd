@@ -7,7 +7,8 @@
 normalize_timing_label(
   label,
   event_type = c("ignition", "peak"),
-  n_weeks = 52L
+  n_weeks = 52L,
+  observed_weekF = NULL
 )
 }
 \arguments{
@@ -16,15 +17,18 @@ normalize_timing_label(
 \item{event_type}{Either \code{"ignition"} or \code{"peak"}.}
 
 \item{n_weeks}{Number of weeks in the season.}
+
+\item{observed_weekF}{Optional observed peak week. It must be one of the
+supplied peak weeks; omit it only before review-based peak resolution.}
 }
 \value{
 A normalized timing label object.
 }
 \description{
 A timing-v2 label is one integer week or two consecutive integer weeks.
-A singleton \code{w} is normalized to \code{c(w - 1, w)} so that the
-earlier week is always available for scoring and operational use. The
-original input is preserved separately. This function does not modify any
-legacy label vector.
+A singleton \code{w} is normalized to \code{c(w - 1, w)}. The original
+input and normalized pair are retained, and their midpoint is exposed as
+the numeric timing target. This function does not modify any legacy label
+vector.
 }
 \keyword{internal}

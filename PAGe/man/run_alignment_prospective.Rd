@@ -20,7 +20,8 @@ run_alignment_prospective(
   time_weights = NULL,
   trough_weight = 0.1,
   rise_weight = 1,
-  peak_decay = 0.3
+  peak_decay = 0.3,
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{

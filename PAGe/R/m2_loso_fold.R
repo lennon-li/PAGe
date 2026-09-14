@@ -53,7 +53,10 @@ nested_loso_build_fold <- function(allD,
                                      w_max      = 21L,
                                      d2_relax   = -0.01
                                    ),
-                                   verbose = TRUE) {
+                                   verbose = TRUE,
+                                   timing_mode = c("legacy", "fractional"),
+                                   timing_truth = NULL) {
+  timing_mode <- match.arg(timing_mode)
   all_seasons <- sort(unique(as.character(allD$season)))
   if (!is.null(exclude_seasons)) {
     allD <- dplyr::filter(allD, !.data$season %in% exclude_seasons)
@@ -89,11 +92,30 @@ nested_loso_build_fold <- function(allD,
     ))
 
   aligned_train <- alignIgnition(train_outs)
+  if (timing_mode == "fractional" && !is.null(timing_truth)) {
+    tt <- timing_truth[timing_truth$season %in% tr_seasons,
+      c("season", "ignition_target_weekF"), drop = FALSE]
+    if (nrow(tt) != length(tr_seasons) || anyDuplicated(as.character(tt$season)) ||
+      any(!is.finite(tt$ignition_target_weekF))) {
+      stop("Fractional timing truth must contain one finite target per training season.", call. = FALSE)
+    }
+    target <- stats::setNames(as.numeric(tt$ignition_target_weekF), as.character(tt$season))
+    aligned_train$season <- as.character(aligned_train$season)
+    aligned_train$iWeekF <- unname(target[aligned_train$season])
+    aligned_train$iWeek <- aligned_train$iWeekF
+    anchor <- stats::median(target, na.rm = TRUE)
+    n_w <- if ("nW_true" %in% names(aligned_train)) as.numeric(aligned_train$nW_true) else
+      ave(aligned_train$weekF, aligned_train$season, FUN = function(x) max(x, na.rm = TRUE))
+    aligned_train$phase <- as.integer(aligned_train$weekF >= aligned_train$iWeekF)
+    aligned_train$newWeek <- ((aligned_train$weekF - aligned_train$iWeekF + anchor - 1) %% n_w) + 1
+    attr(aligned_train, "anchorWeek") <- anchor
+  }
 
   # Reference curve (leakage-free: test season excluded)
   ref <- estimateRef(
     alignedD = aligned_train, exSeason = character(0),
-    k = k_ref, n_weeks = n_weeks, method = ref_method
+    k = k_ref, n_weeks = n_weeks, method = ref_method,
+    timing_mode = timing_mode
   )
   hyper <- learn_alignment_hyperparams(ref$dat, ref$g_ref_fun)
 
@@ -164,8 +186,10 @@ nested_loso_m1_train <- function(allD,
                                  blend_alpha = 1.0,
                                  spread_method = c("between", "total"),
                                  parallel = TRUE,
-                                 verbose = TRUE) {
+                                 verbose = TRUE,
+                                 timing_mode = c("legacy", "fractional")) {
   spread_method <- match.arg(spread_method)
+  timing_mode <- match.arg(timing_mode)
   if (isTRUE(verbose)) {
     message(
       "[m1_train] Running M1 walk-forward on ",
@@ -196,6 +220,7 @@ nested_loso_m1_train <- function(allD,
     top_k              = top_k,
     blend_alpha        = blend_alpha,
     spread_method      = spread_method,
+    timing_mode        = timing_mode,
     parallel           = parallel,
     verbose            = FALSE
   )
@@ -228,7 +253,9 @@ nested_loso_m2_train <- function(fold,
                                  spec,
                                  method = "REML",
                                  verbose = TRUE,
-                                 fail_fast = FALSE) {
+                                 fail_fast = FALSE,
+                                 timing_mode = c("legacy", "fractional")) {
+  timing_mode <- match.arg(timing_mode)
   if (isTRUE(verbose)) {
     message("[m2_train] Training M2 on fold (test=", fold$test_season, ")")
   }
@@ -246,15 +273,29 @@ nested_loso_m2_train <- function(fold,
     NULL
   }
 
+  spec_use <- spec
+  if (timing_mode == "fractional") {
+    anchor <- attr(fold$aligned_train, "anchorWeek") %||%
+      fold$anchorWeek %||% fold$ref$anchorWeek %||% spec$anchorWeek
+    anchor <- as.numeric(anchor)[1L]
+    if (length(anchor) == 1L && is.finite(anchor)) {
+      spec_use$anchorWeek <- anchor
+      spec_use$timing_mode <- "fractional"
+    }
+  }
+
+  train_args <- list(
+    dat         = alignedD_prosp,
+    template_df = fold$template_df,
+    spec        = spec_use,
+    method      = method,
+    m1_preds    = m1_preds_use,
+    verbose     = FALSE
+  )
+  if (timing_mode == "fractional") train_args$timing_mode <- timing_mode
+
   tryCatch(
-    train_stage2_joint(
-      dat         = alignedD_prosp,
-      template_df = fold$template_df,
-      spec        = spec,
-      method      = method,
-      m1_preds    = m1_preds_use,
-      verbose     = FALSE
-    ),
+    do.call(train_stage2_joint, train_args),
     error = function(e) {
       if (isTRUE(fail_fast)) {
         stop(conditionMessage(e), call. = FALSE)
@@ -318,8 +359,10 @@ nested_loso_m1_test <- function(allD,
                                 top_k = NULL,
                                 blend_alpha = 1.0,
                                 spread_method = c("between", "total"),
-                                verbose = TRUE) {
+                                verbose = TRUE,
+                                timing_mode = c("legacy", "fractional")) {
   spread_method <- match.arg(spread_method)
+  timing_mode <- match.arg(timing_mode)
   if (isTRUE(verbose)) {
     message("[m1_test] Running M1 walk-forward on test season ", fold$test_season)
   }
@@ -347,6 +390,7 @@ nested_loso_m1_test <- function(allD,
     dynamic_temp_pivot = dynamic_temp_pivot,
     top_k              = top_k,
     blend_alpha        = blend_alpha,
-    spread_method      = spread_method
+    spread_method      = spread_method,
+    timing_mode        = timing_mode
   )
 }

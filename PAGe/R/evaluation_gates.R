@@ -672,13 +672,22 @@ race_m2_candidates <- function(grid,
 #' @return Replay predictions, standardized metrics, and explicit workflow
 #'   fields. The holdout is not eligible to join training until separately
 #'   compared with an incumbent using check_promotion().
+#'   Also retains a \code{forecast_ledger} of expected weekly origins and both
+#'   horizons, including missing targets and forecasts, and \code{stages} with
+#'   detector output, M1 parameters/curves and raw M2 predictions. The legacy
+#'   \code{predictions} table contains only scorable rows. A replay with no
+#'   scorable rows has status \code{unseen_replay_failed}, a failure code, and
+#'   NULL metrics/diagnostics. Emitted intervals are conditional fitted-mean
+#'   bands, not validated full predictive intervals.
 #' @export
 replay_season_holdout <- function(kit,
                                   allD,
                                   season = "2025-26",
                                   runner = run_prospective_pipeline,
                                   kit_compatibility = c("strict", "legacy_m2"),
+                                  timing_mode = c("legacy", "fractional"),
                                   ...) {
+  timing_mode <- match.arg(timing_mode)
   m2 <- .resolve_kit_m2_identity(kit, kit_compatibility)
   training_seasons <- as.character(m2$training_seasons %||% character(0))
   if (season %in% training_seasons) {
@@ -687,19 +696,47 @@ replay_season_holdout <- function(kit,
   allD <- prepare_surveillance_data(allD)
   current_data <- allD[as.character(allD$season) == season, , drop = FALSE]
   if (!nrow(current_data)) stop("Holdout season `", season, "` is absent from `allD`.")
-  replay <- runner(kit, current_data, mode = "frozen", verbose = FALSE, ...)
-  predictions <- .standardize_replay_predictions(replay, current_data, season)
-  runtime_ignition <- replay$ign_out$ign_week_locked %||%
-    replay$ign_out$iWeek_hat_locked %||% NA_real_
+  runner_args <- c(
+    list(kit, current_data, mode = "frozen", verbose = FALSE),
+    list(...)
+  )
+  runner_formals <- tryCatch(names(formals(runner)), error = function(e) character())
+  if ("timing_mode" %in% runner_formals || "..." %in% runner_formals) {
+    runner_args$timing_mode <- timing_mode
+  }
+  replay <- do.call(runner, runner_args)
+  all_predictions <- .standardize_replay_predictions(replay, current_data, season,
+    keep_unscored = TRUE)
+  p_obs <- if ("p_obs" %in% names(all_predictions)) all_predictions$p_obs else
+    all_predictions$y_lead / all_predictions$N_lead
+  weights <- if ("N_lead" %in% names(all_predictions)) all_predictions$N_lead else
+    rep(1, nrow(all_predictions))
+  scored <- is.finite(all_predictions$p_hat) & is.finite(p_obs) &
+    is.finite(weights) & weights > 0
+  predictions <- all_predictions[scored, , drop = FALSE]
+  runtime_ignition <- if (timing_mode == "fractional") {
+    replay$ign_out$ign_week_lockedF %||% replay$ign_out$iWeek_hat_lockedF %||%
+      replay$ign_out$ign_week_locked %||% NA_real_
+  } else {
+    replay$ign_out$ign_week_locked %||% replay$ign_out$iWeek_hat_locked %||% NA_real_
+  }
   ignition_week <- if (is.finite(runtime_ignition)) as.numeric(runtime_ignition) else NA_real_
   ignition_status <- replay$ign_out$status %||% replay$ign_out$ignition_status %||%
     if (is.finite(ignition_week)) "locked" else "not_available"
+  failure_code <- if (nrow(predictions)) NA_character_ else if (!is.finite(ignition_week))
+    "ignition_unavailable" else "no_scorable_forecasts"
   list(
     season = season,
-    status = "unseen_replay_complete",
+    status = if (nrow(predictions)) "unseen_replay_complete" else "unseen_replay_failed",
+    failure_code = failure_code,
     predictions = predictions,
-    metrics = summarize_forecast_metrics(predictions),
-    diagnostics = summarize_replay_diagnostics(predictions),
+    forecast_ledger = .replay_forecast_ledger(all_predictions, current_data, season,
+      ignition_week),
+    stages = list(m0 = replay$ign_out, m1_parameters = replay$params_df,
+      m1_curves = replay$m1_curves, m2_predictions = replay$m2_preds),
+    interval_interpretation = "conditional_fitted_mean",
+    metrics = if (nrow(predictions)) summarize_forecast_metrics(predictions) else NULL,
+    diagnostics = if (nrow(predictions)) summarize_replay_diagnostics(predictions) else NULL,
     ignition_week = ignition_week,
     ignition_status = as.character(ignition_status)[1L],
     eligible_for_refresh = FALSE,
@@ -753,7 +790,8 @@ replay_season_holdout <- function(kit,
   kit
 }
 
-.standardize_replay_predictions <- function(replay, current_data, season) {
+.standardize_replay_predictions <- function(replay, current_data, season,
+                                           keep_unscored = FALSE) {
   standardized <- replay$predictions
   metric_columns <- c("p_hat", "lead", "t_since")
   observed_columns <- c("p_obs", "y_lead", "N_lead")
@@ -766,6 +804,10 @@ replay_season_holdout <- function(kit,
 
   raw <- replay$m2_preds
   required <- c("eval_week", "h", "target_weekF", "m2_p")
+  if (is.data.frame(raw) && !nrow(raw)) {
+    raw <- data.frame(eval_week = integer(), h = integer(),
+      target_weekF = integer(), m2_p = numeric())
+  }
   if (!is.data.frame(raw) || !all(required %in% names(raw))) {
     stop(
       "Replay runner must return standardized `predictions` or prospective ",
@@ -794,12 +836,10 @@ replay_season_holdout <- function(kit,
   }
   ignition <- replay$ign_out$ign_week_locked %||%
     replay$ign_out$iWeek_hat_locked %||% NA_integer_
-  if (!is.finite(ignition)) {
-    stop("Prospective replay did not return a finite locked ignition week.")
-  }
   out <- data.frame(
-    season = season,
+    season = rep(season, nrow(raw)),
     weekF = as.integer(raw$eval_week),
+    target_weekF = raw$target_weekF,
     lead = raw$h,
     t_since = as.numeric(raw$eval_week) - as.numeric(ignition),
     p_hat = as.numeric(raw$m2_p),
@@ -807,8 +847,41 @@ replay_season_holdout <- function(kit,
     y_lead = positives,
     N_lead = n_trials
   )
+  optional <- c(p_lo = "m2_lo", p_hi = "m2_hi", m2_eta_raw = "m2_eta_raw",
+    forecast_action = "forecast_action")
+  for (column in names(optional)) {
+    if (optional[[column]] %in% names(raw)) out[[column]] <- raw[[optional[[column]]]]
+  }
+  if (isTRUE(keep_unscored)) return(out)
   out[is.finite(out$p_hat) & is.finite(out$p_obs) &
     is.finite(out$N_lead) & out$N_lead > 0, , drop = FALSE]
+}
+
+.replay_forecast_ledger <- function(predictions, current_data, season, ignition_week) {
+  ledger <- expand.grid(weekF = seq.int(min(current_data$weekF), max(current_data$weekF)),
+    lead = 1:2)
+  ledger <- ledger[order(ledger$weekF, ledger$lead), , drop = FALSE]
+  ledger$season <- season
+  ledger$target_weekF <- ledger$weekF + ledger$lead
+  ledger$t_since <- ledger$weekF - ignition_week
+  pred_h <- as.integer(sub("^h", "", as.character(predictions$lead)))
+  index <- match(paste(ledger$weekF, ledger$lead), paste(predictions$weekF, pred_h))
+  target <- match(ledger$target_weekF, current_data$weekF)
+  ledger$y_lead <- current_data$y[target]
+  ledger$N_lead <- current_data$N[target]
+  ledger$p_obs <- ledger$y_lead / ledger$N_lead
+  ledger$p_hat <- predictions$p_hat[index]
+  for (column in intersect(c("p_lo", "p_hi", "m2_eta_raw", "forecast_action"),
+    names(predictions))) ledger[[column]] <- predictions[[column]][index]
+  ledger$emitted <- !is.na(index)
+  ledger$target_available <- is.finite(ledger$p_obs) &
+    is.finite(ledger$N_lead) & ledger$N_lead > 0
+  ledger$forecast_status <- ifelse(!ledger$emitted, "not_emitted",
+    ifelse(!is.finite(ledger$p_hat), "prediction_failed",
+      ifelse(!ledger$target_available, "target_unavailable", "scored")))
+  ledger$scorable <- ledger$forecast_status == "scored"
+  rownames(ledger) <- NULL
+  ledger
 }
 
 .result_manifest_schema <- function() "page_result_manifest"

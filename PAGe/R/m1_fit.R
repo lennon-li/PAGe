@@ -170,7 +170,7 @@ fit_tau_delta <- function(currentD, g_ref_fun,
   }
   w <- w_n * w_t
 
-  # if we haven’t seen far enough into the season, don’t try scale yet
+  # if we haven't seen far enough into the season, don't try scale yet
   if (is.null(allow_scale)) allow_scale <- max(t, na.rm = TRUE) >= 28
 
   # ------- Quick 1-D tau scan (profile over a, b at delta = 0) -------
@@ -239,8 +239,8 @@ fit_tau_delta <- function(currentD, g_ref_fun,
   # Delta (dilation) and tau (shift) are confounded on the rising edge of the
   # curve. We only allow delta to vary when:
   #   (1) enough time has passed (existing time gate), AND
-  #   (2) the data actually constrains delta — d²NLL/dδ² at the tau-optimal
-  #       point (unweighted) exceeds curvature_ratio × lam_eff. Both are now
+  #   (2) the data actually constrains delta -- d2NLL/ddelta2 at the tau-optimal
+  #       point (unweighted) exceeds curvature_ratio x lam_eff. Both are now
   #       in the same per-observation scale. Computing at tau_opt is critical:
   #       at the wrong tau, the NLL surface is flat in delta regardless of
   #       how much data exists.
@@ -269,7 +269,7 @@ fit_tau_delta <- function(currentD, g_ref_fun,
   }
 
   del0 <- if (delta_on) median(c(0, delta_bounds[1] + 1e-4, delta_bounds[2] - 1e-4)) else 0
-  
+
   if (allow_scale && delta_on) {
     x0 <- c(tau0, a0, b0, del0)
     lb <- c(tau_bounds[1], -10, 0.2,  delta_bounds[1])
@@ -287,7 +287,7 @@ fit_tau_delta <- function(currentD, g_ref_fun,
     lb <- c(tau_bounds[1], -10, 0)
     ub <- c(tau_bounds[2],  10, 0)
   }
-  
+
   obj <- function(par) {
     safe_obj(
       par,
@@ -300,7 +300,7 @@ fit_tau_delta <- function(currentD, g_ref_fun,
       w    = w
     )
   }
-  
+
   # make sure starting point is finite
   if (!is.finite(obj(x0))) {
     for (sc in c(0, 0.25, 0.5, 1)) {
@@ -314,7 +314,7 @@ fit_tau_delta <- function(currentD, g_ref_fun,
       }
     }
   }
-  
+
   opt <- nloptr::sbplx(
     x0     = x0,
     fn     = obj,
@@ -322,7 +322,7 @@ fit_tau_delta <- function(currentD, g_ref_fun,
     upper  = ub,
     control = list(xtol_rel = 1e-7, maxeval = 3000)
   )
-  
+
   par <- opt$par
   tau_hat <- par[1]
   a_hat   <- par[2]
@@ -333,12 +333,12 @@ fit_tau_delta <- function(currentD, g_ref_fun,
     b_hat   <- 1
     del_hat <- par[3]
   }
-  
+
   predict_prob <- function(tt) {
     u <- (tt - tau_hat) / (1 + del_hat)
     plogis(a_hat + b_hat * g_ref_safe(u))
   }
-  
+
   list(
     tau   = tau_hat,
     a     = a_hat,
@@ -359,7 +359,7 @@ fit_tau_delta <- function(currentD, g_ref_fun,
 #' Compute 2x2 profile-likelihood covariance for (tau, delta)
 #'
 #' Estimates the joint covariance matrix of the alignment parameters
-#' \eqn{(\hat\tau, \hat\delta)} via a numerical 2×2 Hessian of the profile
+#' \eqn{(\hat\tau, \hat\delta)} via a numerical 2x2 Hessian of the profile
 #' NLL (marginalised over the intercept \code{a} and scale \code{b} using
 #' Nelder-Mead at each grid point). Uses nine NLL evaluations via central
 #' differences.
@@ -373,7 +373,7 @@ fit_tau_delta <- function(currentD, g_ref_fun,
 #' @param h_del Numeric step size for the \code{delta} derivative (default
 #'   0.005).
 #'
-#' @return A list with \code{V} (2×2 covariance matrix, \code{NA}-filled when
+#' @return A list with \code{V} (2x2 covariance matrix, \code{NA}-filled when
 #'   the Hessian is singular) and \code{center} (\code{c(tau_hat, delta_hat)}).
 #' @keywords internal
 cov_tau_delta_from_profile <- function(fit, h_tau = 0.1, h_del = 0.005) {

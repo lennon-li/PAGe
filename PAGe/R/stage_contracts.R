@@ -152,20 +152,147 @@ season_selection.default <- function(x, ...) {
 # Artifact identity and provenance (internal)
 # ============================================================
 
+.stage_identity_value <- function(x, state) {
+  identity_attributes <- function(x) {
+    attrs <- attributes(x)
+    if (is.null(attrs)) {
+      return(NULL)
+    }
+    lapply(attrs, .stage_identity_value, state = state)
+  }
+
+  identity_environment <- function(env) {
+    if (identical(env, emptyenv())) {
+      return(list(kind = "external_environment", name = "R_EmptyEnv"))
+    }
+    if (identical(env, globalenv())) {
+      return(list(kind = "external_environment", name = "R_GlobalEnv"))
+    }
+    if (identical(env, baseenv())) {
+      return(list(kind = "external_environment", name = "R_BaseEnv"))
+    }
+    if (isNamespace(env)) {
+      return(list(
+        kind = "external_environment",
+        name = paste0("namespace:", environmentName(env))
+      ))
+    }
+
+    # An environment's display name is an attribute and can be spoofed on an
+    # ordinary captured environment.  Only a package environment that is
+    # actually attached on the search path is external to an M1 closure.
+    attached_packages <- grep("^package:", search(), value = TRUE)
+    for (path in attached_packages) {
+      attached_env <- tryCatch(as.environment(path), error = function(e) NULL)
+      if (!is.null(attached_env) && identical(env, attached_env)) {
+        return(list(kind = "external_environment", name = path))
+      }
+    }
+
+    key <- format(env)
+    if (exists(key, envir = state$environments, inherits = FALSE)) {
+      return(list(kind = "environment_reference", id = get(key, envir = state$environments)))
+    }
+    id <- state$next_environment_id
+    state$next_environment_id <- id + 1L
+    assign(key, id, envir = state$environments)
+
+    bindings <- sort(ls(env, all.names = TRUE))
+    values <- lapply(bindings, function(name) {
+      .stage_identity_value(get(name, envir = env, inherits = FALSE), state)
+    })
+    names(values) <- bindings
+    list(
+      kind = "environment",
+      id = id,
+      bindings = values,
+      parent = identity_environment(parent.env(env))
+    )
+  }
+
+  if (is.null(x)) {
+    return(list(kind = "null"))
+  }
+  if (is.environment(x)) {
+    return(identity_environment(x))
+  }
+  if (is.function(x)) {
+    if (is.primitive(x)) {
+      return(list(kind = "primitive", body = paste(deparse(x), collapse = "\n")))
+    }
+    return(list(
+      kind = "closure",
+      formals = .stage_identity_value(formals(x), state),
+      body = paste(deparse(body(x), control = "niceNames"), collapse = "\n"),
+      environment = identity_environment(environment(x))
+    ))
+  }
+  if (isS4(x)) {
+    slots <- methods::slotNames(x)
+    values <- lapply(slots, function(name) {
+      .stage_identity_value(methods::slot(x, name), state)
+    })
+    names(values) <- slots
+    return(list(kind = "S4", class = class(x), slots = values))
+  }
+  if (is.pairlist(x)) {
+    values <- lapply(as.list(x), .stage_identity_value, state = state)
+    return(list(kind = "pairlist", values = values))
+  }
+  if (is.language(x)) {
+    return(list(
+      kind = "language",
+      value = paste(deparse(x, control = "niceNames"), collapse = "\n"),
+      attributes = identity_attributes(x)
+    ))
+  }
+  if (is.list(x)) {
+    return(list(
+      kind = "list",
+      values = lapply(x, .stage_identity_value, state = state),
+      attributes = identity_attributes(x)
+    ))
+  }
+  list(kind = typeof(x), value = x, attributes = identity_attributes(x))
+}
+
+.stage_identity_payload <- function(payload) {
+  state <- new.env(parent = emptyenv())
+  state$environments <- new.env(parent = emptyenv())
+  state$next_environment_id <- 1L
+  .stage_identity_value(payload, state)
+}
+
 .stage_artifact_id <- function(stage,
                                selection,
                                config,
                                upstream_ids = NULL,
                                data_id = NULL,
                                payload) {
-  payload <- list(
-    stage = stage,
-    selection = unclass(selection),
-    config = config,
-    upstream = upstream_ids,
-    data_id = data_id,
-    fitted_payload = payload
-  )
+  # M1 generated reference closures are not stable under ordinary R
+  # serialization/JIT. Semantic v3 retains their formals, body, and captured
+  # binding graph, including ordinary named environments. Other stages retain
+  # their established raw-payload format.
+  payload <- if (identical(stage, "m1")) {
+    list(
+      stage = stage,
+      identity_format = "m1_semantic_v3",
+      selection = unclass(selection),
+      config = config,
+      upstream = upstream_ids,
+      data_id = data_id,
+      fitted_payload = .stage_identity_payload(payload)
+    )
+  } else {
+    list(
+      stage = stage,
+      selection = unclass(selection),
+      config = config,
+      upstream = upstream_ids,
+      data_id = data_id,
+      fitted_payload = payload
+    )
+  }
   paste0(stage, "_", digest::digest(payload, algo = "sha256"))
 }
 
@@ -179,6 +306,11 @@ season_selection.default <- function(x, ...) {
   list(
     stage = stage,
     status = status,
+    identity_format = if (identical(stage, "m1")) {
+      "m1_semantic_v3"
+    } else {
+      "raw_payload_v1"
+    },
     selection = selection,
     config = config,
     upstream_ids = upstream_ids,
@@ -254,7 +386,7 @@ season_selection.default <- function(x, ...) {
   }
   reserved <- c(
     "stage", "status", "selection", "config", "upstream_ids",
-    "data_id", "artifact_id"
+    "data_id", "artifact_id", "identity_format"
   )
   collision <- intersect(names(payload), reserved)
   if (length(collision)) {
@@ -291,6 +423,15 @@ season_selection.default <- function(x, ...) {
     stop(
       "Stage `", stage, "` artifact must be frozen. ",
       "Got status: ", x$status %||% "absent", ".",
+      call. = FALSE
+    )
+  }
+  if (identical(stage, "m1") &&
+    !identical(x$identity_format, "m1_semantic_v3")) {
+    stop(
+      "M1 artifact uses a legacy raw or superseded semantic identity format. ",
+      "Legacy M1 closure serialization is not verifiable; refit and freeze ",
+      "the artifact under `m1_semantic_v3` rather than resealing its ID.",
       call. = FALSE
     )
   }
@@ -361,7 +502,7 @@ season_selection.default <- function(x, ...) {
 .stage_fit_payload <- function(fit) {
   reserved <- c(
     "stage", "status", "selection", "config", "upstream_ids",
-    "data_id", "artifact_id"
+    "data_id", "artifact_id", "identity_format"
   )
   fit[setdiff(names(fit), reserved)]
 }
@@ -618,8 +759,32 @@ inspect_tuning_boundaries <- function(x,
                                       warn = TRUE,
                                       null_axes = NULL,
                                       hard_caps = NULL,
-                                      min_nll_gain = NULL) {
+                                       min_nll_gain = NULL) {
   stage <- toupper(match.arg(stage))
+  if (stage == "M2" && inherits(x, "page_m2_subset_tuning")) {
+    if (is.null(min_nll_gain)) {
+      min_nll_gain <- x$min_nll_gain %||% default_m2_nll_gain_caps()
+    }
+    report <- .m2_subset_boundary_report(
+      x, min_nll_gain = min_nll_gain, hard_caps = hard_caps
+    )
+    unresolved <- report[report$decision == "expand_required", , drop = FALSE]
+    if (isTRUE(warn) && nrow(unresolved)) {
+      message <- paste0(
+        "M2 subset tuning winner is on an unresolved non-null boundary (",
+        paste(unresolved$horizon, unresolved$parameter, sep = ":", collapse = ", "),
+        "). Call expand_tuning_grid() and rerun the stage with the same ",
+        "checkpoint_dir to score only the added specifications."
+      )
+      condition <- structure(
+        simpleWarning(message),
+        class = c("page_boundary_warning", "warning", "condition")
+      )
+      warning(condition)
+    }
+    class(report) <- c("page_boundary_report", class(report))
+    return(report)
+  }
   if (is.data.frame(x) && is.null(grid)) grid <- x
   if (is.null(grid)) grid <- x$grid
   selected <- switch(stage,
@@ -637,6 +802,9 @@ inspect_tuning_boundaries <- function(x,
     null_axes = null_axes,
     null_values = .stage_null_values(stage)
   )
+  if (stage == "M1" && !is.null(hard_caps)) {
+    hard_caps <- .normalize_m1_hard_caps(hard_caps)
+  }
   if (!is.null(hard_caps) && nrow(report)) {
     cap_names <- names(hard_caps)
     for (parameter in intersect(cap_names, report$parameter)) {
@@ -741,6 +909,11 @@ inspect_tuning_boundaries <- function(x,
       .m2_parameter_names()
     } else {
       character(0)
+    },
+    if (exists("default_m2_nll_gain_caps", mode = "function")) {
+      names(default_m2_nll_gain_caps())
+    } else {
+      character(0)
     }
   ))
   unknown <- setdiff(supplied_names, known_parameters)
@@ -822,6 +995,7 @@ select_m1_candidate <- function(x, min_gain = 0.05, prefer_simpler = TRUE,
     !is.finite(min_gain) || min_gain < 0) {
     stop("`min_gain` must be one finite non-negative number.", call. = FALSE)
   }
+  hard_caps <- .normalize_m1_hard_caps(hard_caps)
   scores <- x$scores
   if (!is.data.frame(scores) || !nrow(scores) ||
     !"mae_weibull" %in% names(scores)) {
@@ -940,7 +1114,19 @@ select_m1_candidate <- function(x, min_gain = 0.05, prefer_simpler = TRUE,
 
 .m1_integer_axes <- function() c("k_ref", "slope_window")
 
-.m1_k_ref_bounds <- function() c(lower = 10L, upper = 50L)
+#' Return the governed M1 hard-cap defaults
+#'
+#' The reference basis cap is an explicit complexity policy, separate from
+#' the 52-week support domain. Callers may override it deliberately, but all
+#' governed entry points use this object when no override is supplied.
+#'
+#' @return A named list of normalized lower/upper bounds.
+#' @export
+default_m1_hard_caps <- function() {
+  list(k_ref = c(lower = 10L, upper = 50L))
+}
+
+.m1_k_ref_bounds <- function() default_m1_hard_caps()$k_ref
 
 .validate_m1_k_ref_bounds <- function(bounds, n_weeks = 52L) {
   if (is.null(bounds)) {
@@ -967,6 +1153,90 @@ select_m1_candidate <- function(x, min_gain = 0.05, prefer_simpler = TRUE,
 
 .m0_integer_axes <- function() {
   c("n_consec", "L", "K_sum", "N_req", "w_min", "w_max")
+}
+
+.normalize_m1_hard_caps <- function(hard_caps, n_weeks = 52L) {
+  if (is.null(hard_caps)) {
+    return(NULL)
+  }
+  if (!is.list(hard_caps) && !is.numeric(hard_caps)) {
+    stop(
+      "`hard_caps` must be NULL, a named list, or a named numeric vector.",
+      call. = FALSE
+    )
+  }
+  if (is.numeric(hard_caps)) {
+    if (is.null(names(hard_caps)) || any(!nzchar(names(hard_caps)))) {
+      stop("`hard_caps` numeric vector must be named.", call. = FALSE)
+    }
+    hard_caps <- lapply(stats::setNames(as.list(hard_caps), names(hard_caps)), function(v) {
+      c(upper = as.numeric(v))
+    })
+  }
+  if (!length(hard_caps)) {
+    return(NULL)
+  }
+  cap_names <- names(hard_caps)
+  if (is.null(cap_names) || any(!nzchar(cap_names)) || anyDuplicated(cap_names)) {
+    stop("`hard_caps` must be a uniquely named list.", call. = FALSE)
+  }
+  canonical <- lapply(hard_caps, function(cap) {
+    if (is.list(cap)) {
+      cap <- unlist(cap)
+    }
+    cap <- suppressWarnings(as.numeric(cap))
+    cap_names_inner <- names(cap)
+    if (is.null(cap_names_inner)) {
+      if (length(cap) == 1L) {
+        cap <- c(upper = cap)
+      } else if (length(cap) == 2L) {
+        names(cap) <- c("lower", "upper")
+      } else {
+        stop(
+          "Each `hard_caps` entry must be a scalar or have `lower`/`upper` names.",
+          call. = FALSE
+        )
+      }
+    } else {
+      unknown_inner <- setdiff(cap_names_inner, c("lower", "upper"))
+      if (length(unknown_inner)) {
+        stop(
+          "Unknown hard_cap bound name(s): ",
+          paste(unknown_inner, collapse = ", "),
+          call. = FALSE
+        )
+      }
+    }
+    if (any(!is.finite(cap))) {
+      stop("Hard cap bounds must be finite numeric values.", call. = FALSE)
+    }
+    out <- c(
+      lower = if ("lower" %in% names(cap)) cap[["lower"]] else NA_real_,
+      upper = if ("upper" %in% names(cap)) cap[["upper"]] else NA_real_
+    )
+    if (is.finite(out[["lower"]]) && is.finite(out[["upper"]]) &&
+      out[["lower"]] > out[["upper"]]) {
+      stop("Hard cap `lower` must not exceed `upper`.", call. = FALSE)
+    }
+    out
+  })
+  names(canonical) <- cap_names
+  if ("k_ref" %in% names(canonical)) {
+    k_ref <- canonical$k_ref
+    if (is.finite(k_ref[["lower"]]) &&
+      (k_ref[["lower"]] < 2L || k_ref[["lower"]] != round(k_ref[["lower"]]))) {
+      stop("M1 `k_ref` lower hard cap must be an integer >= 2.", call. = FALSE)
+    }
+    if (is.finite(k_ref[["upper"]]) &&
+      (k_ref[["upper"]] > n_weeks || k_ref[["upper"]] != round(k_ref[["upper"]]))) {
+      stop(
+        "M1 `k_ref` upper hard cap must be an integer <= `n_weeks` (",
+        n_weeks, ").",
+        call. = FALSE
+      )
+    }
+  }
+  canonical
 }
 
 .validate_m0_grid_support <- function(grid, data = NULL,
@@ -1144,15 +1414,22 @@ expand_tuning_grid <- function(x,
                                max_specs = NULL,
                                n_weeks = 52L,
                                data = NULL,
-                               m1_k_ref_bounds = .m1_k_ref_bounds()) {
+                                m1_k_ref_bounds = .m1_k_ref_bounds()) {
   stage <- toupper(match.arg(stage))
+  if (stage == "M2" && inherits(x, "page_m2_subset_tuning")) {
+    return(.m2_subset_expand_grid(x, max_specs = max_specs, steps = steps))
+  }
   if (is.null(grid)) grid <- x$grid %||% x
   grid <- as.data.frame(grid, stringsAsFactors = FALSE)
   if (!nrow(grid)) stop("Cannot expand an empty tuning grid.", call. = FALSE)
   if (stage == "M0") .validate_m0_grid_support(grid, data = data)
   if (stage == "M1") {
     .validate_m1_grid_support(grid, n_weeks = n_weeks)
-    bounds <- .validate_m1_k_ref_bounds(m1_k_ref_bounds, n_weeks)
+    bounds <- .normalize_m1_hard_caps(
+      list(k_ref = m1_k_ref_bounds),
+      n_weeks = n_weeks
+    )$k_ref
+    bounds <- .validate_m1_k_ref_bounds(bounds, n_weeks)
     if ("k_ref" %in% names(grid) &&
       any(as.numeric(grid$k_ref) < bounds[["lower"]] |
         as.numeric(grid$k_ref) > bounds[["upper"]])) {
@@ -1530,6 +1807,8 @@ validate_m1_tuning <- function(x,
   }
   if (isTRUE(check_boundaries)) {
     hard_caps <- hard_caps %||% x$hard_caps
+    hard_caps <- .normalize_m1_hard_caps(hard_caps)
+    if (!is.null(hard_caps)) x$hard_caps <- hard_caps
     report <- inspect_tuning_boundaries(
       x,
       stage = "M1", warn = TRUE, hard_caps = hard_caps
@@ -1554,11 +1833,31 @@ validate_m1_tuning <- function(x,
 #' @param m0 A frozen \code{page_m0_fit}.
 #' @param m1 A frozen \code{page_m1_fit}.
 #' @param grid M2 candidate grid.
+#' @param family Model family. The default \code{"legacy"} preserves the
+#'   existing Stage-2 GAM; \code{"offset_subset_v1"} enables the governed
+#'   short-horizon offset correction pathway.
 #' @param ... Additional arguments passed to \code{build_m2()}.
 #'
 #' @return A governed \code{page_m2_tuning} result.
 #' @export
-tune_m2 <- function(data, selection, m0, m1, grid, ...) {
+tune_m2 <- function(data, selection, m0, m1, grid,
+                    family = c("legacy", "offset_subset_v1"), ...) {
+  family <- match.arg(family)
+  if (identical(family, m2_subset_family())) {
+    .require_frozen_stage(m0, "m0")
+    .require_frozen_stage(m1, "m1")
+    .check_selection_match(selection, m0$selection)
+    .check_selection_match(selection, m1$selection)
+    .check_upstream_identity(m1, m0, "m0")
+    training_data <- .selected_training_data(data, selection)
+    out <- m2_subset_tune(
+      training_data,
+      selection = selection, m0 = m0, m1 = m1,
+      grid = grid, ...
+    )
+    out$upstream_ids <- list(m0 = m0$artifact_id, m1 = m1$artifact_id)
+    return(out)
+  }
   .require_frozen_stage(m0, "m0")
   .require_frozen_stage(m1, "m1")
   .check_selection_match(selection, m0$selection)
@@ -1591,11 +1890,37 @@ tune_m2 <- function(data, selection, m0, m1, grid, ...) {
 #' @param m0 A frozen \code{page_m0_fit}.
 #' @param m1 A frozen \code{page_m1_fit}.
 #' @param config Named list of M2 specification parameters.
+#' @param family Optional explicit model-family discriminator. When omitted it
+#'   is read from \code{config$family}; legacy behavior remains the default.
 #' @param ... Reserved.
 #'
 #' @return A \code{page_m2_fit} list in \code{draft} state.
 #' @export
-fit_m2 <- function(data, selection, m0, m1, config, ...) {
+fit_m2 <- function(data, selection, m0, m1, config, family = NULL, ...) {
+  family <- family %||% config$family %||% "legacy"
+  if (!is.character(family) || length(family) != 1L ||
+    !family %in% c("legacy", m2_subset_family())) {
+    stop("Unsupported M2 model family: `", family, ".", call. = FALSE)
+  }
+  if (identical(family, m2_subset_family())) {
+    .require_frozen_stage(m0, "m0")
+    .require_frozen_stage(m1, "m1")
+    .check_selection_match(selection, m0$selection)
+    .check_selection_match(selection, m1$selection)
+    .check_upstream_identity(m1, m0, "m0")
+    .validate_stage_config(config)
+    training_data <- .selected_training_data(data, selection)
+    payload <- m2_subset_train(
+      training_data,
+      m0 = m0, m1 = m1, config = config, ...
+    )
+    return(.new_stage_fit(
+      stage = "m2", selection = selection, config = config,
+      payload = payload,
+      upstream_ids = list(m0 = m0$artifact_id, m1 = m1$artifact_id),
+      data_id = .stage_training_data_id(training_data)
+    ))
+  }
   .require_frozen_stage(m0, "m0")
   .require_frozen_stage(m1, "m1")
   .check_selection_match(selection, m0$selection)
@@ -1631,6 +1956,23 @@ fit_m2 <- function(data, selection, m0, m1, config, ...) {
 #' @return The \code{page_m2_fit} in \code{frozen} state.
 #' @export
 freeze_m2 <- function(fit, tuning = NULL, ...) {
+  is_subset_fit <- identical(
+    fit$family %||% fit$config$family,
+    m2_subset_family()
+  )
+  if (isTRUE(is_subset_fit)) {
+    if (!is.null(tuning) && !inherits(tuning, "page_m2_subset_tuning")) {
+      stop(
+        "M2 subset fits accept only `page_m2_subset_tuning` evidence;",
+        " supplied tuning has the wrong class.",
+        call. = FALSE
+      )
+    }
+    if (!is.null(tuning)) {
+      m2_subset_check_tuning_match(fit, tuning)
+    }
+    return(.freeze_stage(fit, NULL, "m2"))
+  }
   if (inherits(tuning, "page_m2_tuning") && !is.null(tuning$selection)) {
     tuning <- validate_m2_tuning(
       tuning,
@@ -1663,6 +2005,20 @@ validate_m2_tuning <- function(x,
                                check_boundaries = FALSE,
                                min_nll_gain = NULL,
                                ...) {
+  if (inherits(x, "page_m2_subset_tuning")) {
+    x <- m2_subset_validate_tuning(x)
+    if (isTRUE(check_boundaries)) {
+      report <- inspect_tuning_boundaries(
+        x,
+        stage = "M2", warn = TRUE,
+        min_nll_gain = min_nll_gain %||% x$min_nll_gain %||%
+          default_m2_nll_gain_caps()
+      )
+      x$boundary_report <- report
+      .enforce_stage_boundaries("M2", report)
+    }
+    return(invisible(x))
+  }
   if (!inherits(x, "page_m2_tuning")) {
     stop("`x` must be a `page_m2_tuning` object.", call. = FALSE)
   }

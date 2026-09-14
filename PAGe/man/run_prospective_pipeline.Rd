@@ -12,10 +12,11 @@ run_prospective_pipeline(
   manual_ign_week = NA_integer_,
   mode = c("frozen", "weekly_refit"),
   season = NULL,
-  verbose = TRUE
+  verbose = TRUE,
+  timing_mode = c("legacy", "fractional")
 )
 
-run_pipeline(kit, current_data, ...)
+run_pipeline(kit, current_data, timing_mode = c("legacy", "fractional"), ...)
 }
 \arguments{
 \item{kit}{A kit list returned by \code{load_prospective_kit()}.}
@@ -34,6 +35,9 @@ production GAM; \code{"weekly_refit"} refits using kit history.}
 \code{kit$current_season} or \code{kit$forecast_season} is also accepted.}
 
 \item{verbose}{Logical. Emit progress messages (default \code{TRUE}).}
+
+\item{timing_mode}{Character. \code{"legacy"} preserves integer timing;
+\code{"fractional"} carries numeric ignition and aligned-week coordinates.}
 
 \item{...}{Additional arguments passed by the \code{run_pipeline()} alias.}
 }

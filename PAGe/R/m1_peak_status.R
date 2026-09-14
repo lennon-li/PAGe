@@ -26,12 +26,12 @@ peak_status_from_align <- function(res,
                                    buffer_weeks = 0L) {
   # last observed week in alignment scale
   last_obs <- max(currentD$newWeek, na.rm = TRUE)
-  
+
   # pull peak info
   peak <- res$peak
   t_peak <- peak$t_peak
   ci     <- peak$t_peak_ci
-  
+
   # sanity
   if (!is.finite(t_peak)) {
     return(list(
@@ -42,16 +42,16 @@ peak_status_from_align <- function(res,
       threshold_week = NA_real_
     ))
   }
-  
+
   # threshold: use upper CI or point estimate, plus buffer
   if (use_ci && length(ci) == 2L && all(is.finite(ci))) {
     thresh <- ci[2] + buffer_weeks
   } else {
     thresh <- t_peak + buffer_weeks
   }
-  
+
   peak_passed <- is.finite(thresh) && last_obs >= thresh
-  
+
   list(
     peak_passed    = peak_passed,
     last_obs_week  = last_obs,

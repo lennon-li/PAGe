@@ -107,8 +107,10 @@ run_alignment_prospective <- function(
   time_weights    = NULL,
   trough_weight   = 0.1,
   rise_weight     = 1.0,
-  peak_decay      = 0.3
+  peak_decay      = 0.3,
+  timing_mode     = c("legacy", "fractional")
 ) {
+  timing_mode <- match.arg(timing_mode)
 
   # Helper: early return in pre-ignition state
   pre_ign <- function(ign_out_val = ign_out) {
@@ -142,7 +144,8 @@ run_alignment_prospective <- function(
       currentSeason  = currentSeason,
       ign_fit_or_gam = NULL,
       params         = params,
-      start_week     = 1L
+      start_week     = 1L,
+      timing_mode    = timing_mode
     )
   }
 
@@ -152,12 +155,18 @@ run_alignment_prospective <- function(
   if (is.na(ign_out$ign_week_locked) || ign_out$ign_week_locked > max_weekF_available)
     return(pre_ign(ign_out))
 
-  iWeek_hat       <- as.integer(ign_out$iWeek_hat_locked)
+  iWeek_hat       <- if (timing_mode == "fractional") {
+    as.numeric(ign_out$iWeek_hat_lockedF %||% ign_out$iWeek_hat_locked)
+  } else as.integer(ign_out$iWeek_hat_locked)
   ign_week_locked <- as.integer(ign_out$ign_week_locked)
 
   # --- Step 3: Re-anchor data to alignment (newWeek) space ---
   currentD <- currentSeason |>
-    dplyr::mutate(newWeek = as.integer(.data$weekF) - iWeek_hat + ref$anchorWeek)
+    dplyr::mutate(newWeek = if (timing_mode == "fractional") {
+      as.numeric(.data$weekF) - iWeek_hat + ref$anchorWeek
+    } else {
+      as.integer(.data$weekF) - iWeek_hat + as.integer(ref$anchorWeek)
+    })
 
   # --- Step 4: Guard minimum observations ---
   if (nrow(currentD) < as.integer(min_obs))
@@ -245,9 +254,10 @@ run_alignment_prospective <- function(
     t_peak_ci       = t_peak_ci_use,
     t_peak_raw      = res$peak$t_peak,
     t_peak_ci_raw   = res$peak$t_peak_ci,
-    peak_weekF      = as.integer(peak_weekF),
-    peak_weekF_lo   = as.integer(peak_weekF_lo),
-    peak_weekF_hi   = as.integer(peak_weekF_hi),
+    peak_weekF      = if (timing_mode == "fractional") as.numeric(t_peak_use - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF),
+    peak_weekF_lo   = if (timing_mode == "fractional") as.numeric(t_peak_ci_use[1] - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF_lo),
+    peak_weekF_hi   = if (timing_mode == "fractional") as.numeric(t_peak_ci_use[2] - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF_hi),
+    iWeek_hatF      = as.numeric(iWeek_hat),
     peak_passed     = pk$peak_passed,
     fallback_reason = res$fallback_reason,
     forecast_df     = res$pred_df,

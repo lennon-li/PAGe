@@ -27,7 +27,8 @@ m1_walkforward_predictions(
   dynamic_temp_pivot = 10L,
   top_k = NULL,
   blend_alpha = 1,
-  spread_method = c("between", "total")
+  spread_method = c("between", "total"),
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{

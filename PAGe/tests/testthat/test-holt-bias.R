@@ -6,7 +6,7 @@
 # Fixed formula: lev_new = (lev+trn) + alpha*(err - (lev+trn))
 # where err = logit_obs - eta_raw (eta_raw = GAM linear pred BEFORE bias addition).
 
-# Internal Holt step helper — mirrors the production update formula.
+# Internal Holt step helper -- mirrors the production update formula.
 # Both the test and the production code use this same formula.
 .holt_update_step_fixed <- function(lev_prev, trn_prev, err, alpha, beta = 0) {
   lev_new <- (lev_prev + trn_prev) + alpha * (err - (lev_prev + trn_prev))
@@ -14,7 +14,7 @@
   list(lev = lev_new, trn = trn_new)
 }
 
-# The old (buggy) formula — for the negative-control test.
+# The old (buggy) formula -- for the negative-control test.
 # resid = logit_obs - (eta_raw + lev_prev)  [post-correction error]
 # lev_new = alpha*resid + (1-alpha)*(lev+trn)
 # Steady state: lev* = B/2  (bug documented here for posterity).

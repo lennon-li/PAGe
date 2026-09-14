@@ -32,17 +32,17 @@ forecast_post_peak_gam <- function(currentSeason,
     stop("currentSeason is missing columns: ",
          paste(miss, collapse = ", "))
   }
-  
+
   df_obs <- currentSeason |>
     dplyr::mutate(
       newWeek = as.integer(.data$newWeek),
       n       = .data$y + .data$neg
     )
-  
+
   if (is.null(max_newWeek)) {
     max_newWeek <- max(df_obs$newWeek, na.rm = TRUE)
   }
-  
+
   # optional template on link scale
   if (!is.null(g_ref_fun)) {
     g_ref_safe <- function(u) g_ref_fun(pmin(pmax(u, 1), 52))
@@ -58,9 +58,9 @@ forecast_post_peak_gam <- function(currentSeason,
       "cbind(y, neg) ~ s(newWeek, k = k_smooth)"
     )
   }
-  
+
   wts <- if (use_weights) df_obs$n else rep(1, nrow(df_obs))
-  
+
   # fit GAM on link scale
   gam_fit <- mgcv::gam(
     formula = gam_formula,
@@ -69,21 +69,21 @@ forecast_post_peak_gam <- function(currentSeason,
     weights = wts,
     method  = "REML"
   )
-  
+
   # prediction grid from first obs week to max_newWeek
   grid <- tibble::tibble(
     newWeek = seq(min(df_obs$newWeek, na.rm = TRUE),
                   max_newWeek,
                   by = 1L)
   )
-  
+
   if (!is.null(g_ref_fun)) {
     grid <- grid |>
       dplyr::mutate(
         eta_ref = g_ref_safe(.data$newWeek)
       )
   }
-  
+
   # get link-scale fit + se, then transform to probability
   pred_link <- stats::predict(
     gam_fit,
@@ -91,11 +91,11 @@ forecast_post_peak_gam <- function(currentSeason,
     type    = "link",
     se.fit  = TRUE
   )
-  
+
   eta_hat <- as.numeric(pred_link$fit)
   se_eta  <- as.numeric(pred_link$se.fit)
   z       <- stats::qnorm((1 + level) / 2)
-  
+
   grid <- grid |>
     dplyr::mutate(
       p_hat = plogis(eta_hat),
@@ -107,7 +107,7 @@ forecast_post_peak_gam <- function(currentSeason,
       )
     ) |>
     dplyr::arrange(.data$newWeek)
-  
+
   # simple peak summary on the smoothed curve
   idx_peak <- which.max(grid$p_hat)
   peak <- list(
@@ -115,9 +115,9 @@ forecast_post_peak_gam <- function(currentSeason,
     t_peak_ci = c(NA_real_, NA_real_),
     p_peak    = grid$p_hat[idx_peak]
   )
-  
+
   last_obs <- max(df_obs$newWeek, na.rm = TRUE)
-  
+
   # return in the same structure your plotRes() expects
   list(
     tau            = NA_real_,

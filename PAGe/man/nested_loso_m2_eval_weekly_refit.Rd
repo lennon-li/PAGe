@@ -17,7 +17,8 @@ nested_loso_m2_eval_weekly_refit(
   manual_labels_test = NULL,
   flag_args = list(p_thresh = 0.01, k1 = 0.4, k_c = 0.01, n_consec = 2L, min_window =
     10L, w_min = 21L, w_max = 21L, d2_relax = -0.01),
-  verbose = TRUE
+  verbose = TRUE,
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{
@@ -35,15 +36,15 @@ nested_loso_m2_eval_weekly_refit(
 
 \item{horizons}{Forecast horizons.}
 
-\item{manual_labels}{Optional named ignition labels (deprecated; use
-\code{manual_labels_train} and \code{manual_labels_test}).}
+\item{manual_labels}{Optional named ignition labels
+(deprecated; use \code{manual_labels_train} and \code{manual_labels_test}).}
 
 \item{manual_labels_train}{Optional named integer vector of manual ignition
 labels for training seasons only. Should exclude the held-out test season.}
 
 \item{manual_labels_test}{Optional named integer vector of manual ignition
-labels for the test season. Default \code{NULL} uses prospective
-\code{flagIgnition()} without override.}
+labels for the test season. Default \code{NULL} = use prospective
+\code{flagIgnition()} without override (no retrospective label leakage).}
 
 \item{flag_args}{Named list forwarded to \code{flagIgnition()}.}
 

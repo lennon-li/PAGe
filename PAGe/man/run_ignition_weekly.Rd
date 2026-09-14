@@ -9,7 +9,8 @@ run_ignition_weekly(
   ign_fit_or_gam = NULL,
   params,
   start_week = 5L,
-  week_col = "weekF"
+  week_col = "weekF",
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{

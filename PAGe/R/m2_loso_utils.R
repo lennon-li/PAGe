@@ -1,5 +1,5 @@
 # ============================================================
-# Nested M1 → M2 LOSO: Shared utilities
+# Nested M1 -> M2 LOSO: Shared utilities
 #
 # Derivative helpers used across the LOSO evaluation pipeline.
 # ============================================================
@@ -75,7 +75,7 @@ add_prospective_derivs_link <- function(alignedD,
 #' For each week \code{w} in \code{season_df}, fits \code{estimateDerivs} on
 #' the subset of rows with \code{weekF <= w} and records the derivative values
 #' for row \code{w} only.  This prevents future weeks from influencing the GAM
-#' smoother at earlier time points — a requirement for honest LOSO evaluation.
+#' smoother at earlier time points -- a requirement for honest LOSO evaluation.
 #'
 #' Results are memoised by \code{walk_end} inside each call: each unique
 #' \code{walk_end} value triggers exactly one \code{estimateDerivs} fit.
