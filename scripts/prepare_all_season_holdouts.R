@@ -102,9 +102,12 @@ if (!length(holdouts) || any(!holdouts %in% eligible)) {
 }
 
 manual_ignition <- PAGe::page_manual_ignition_labels()
-missing_ignition <- setdiff(holdouts, names(manual_ignition))
+# Labels are generated for every eligible season, not only the requested
+# holdouts, so a `--holdouts` subset still yields complete training labels.
+missing_ignition <- setdiff(eligible, names(manual_ignition))
 if (length(missing_ignition)) {
-  stop("Missing ignition labels for: ", paste(missing_ignition, collapse = ", "),
+  stop("Missing ignition labels for eligible season(s): ",
+    paste(missing_ignition, collapse = ", "),
     call. = FALSE
   )
 }
@@ -114,7 +117,7 @@ make_pair <- function(value, n_weeks) {
   if (value < n_weeks) c(value, value + 1L) else c(value - 1L, value)
 }
 
-timing_labels <- setNames(vector("list", length(holdouts)), holdouts)
+timing_labels <- setNames(vector("list", length(eligible)), eligible)
 season_rows <- lapply(all_seasons, function(season) {
   season_data <- prepared[as.character(prepared$season) == season, , drop = FALSE]
   review <- PAGe::review_season_timing_v2(
@@ -127,12 +130,12 @@ season_rows <- lapply(all_seasons, function(season) {
   )
   n_weeks <- max(52L, max(season_data$weekF, na.rm = TRUE))
   peak <- as.integer(review$peak_summary$peak_weekF[[1L]])
-  if (season %in% holdouts && !is.finite(peak)) {
-    stop("No finite observed peak label for holdout season: ", season,
+  if (season %in% eligible && !is.finite(peak)) {
+    stop("No finite observed peak label for eligible season: ", season,
       call. = FALSE
     )
   }
-  if (season %in% holdouts) {
+  if (season %in% eligible) {
     timing_labels[[season]] <- PAGe::finalize_season_timing_v2(
       review,
       ignition = make_pair(manual_ignition[[season]], n_weeks),
@@ -187,13 +190,44 @@ utils::write.csv(season_manifest, file.path(output_dir, "season_manifest.csv"), 
 utils::write.csv(holdout_manifest, file.path(output_dir, "outer_holdout_manifest.csv"), row.names = FALSE)
 
 hash_file <- function(path) unname(tools::md5sum(path))
+git_identity <- function(args) {
+  out <- suppressWarnings(system2(
+    "git", c("-C", repo_root, args),
+    stdout = TRUE, stderr = FALSE
+  ))
+  status <- attr(out, "status")
+  if (!is.null(status) && status != 0L) {
+    return(NA_character_)
+  }
+  if (!length(out)) NA_character_ else paste(trimws(out), collapse = "\n")
+}
+generated_files <- list.files(output_dir, recursive = TRUE, full.names = TRUE)
+generated_files <- generated_files[
+  !file.info(generated_files)$isdir &
+    !basename(generated_files) %in% c("manifest.rds", "README.md")
+]
+generated_hashes <- stats::setNames(
+  vapply(
+    generated_files,
+    function(path) digest::digest(file = path, algo = "sha256", serialize = FALSE),
+    character(1L)
+  ),
+  sub(paste0("^", output_dir, "/?"), "", generated_files)
+)
 manifest <- list(
   schema = "page_all_season_holdout_preparation",
   prepared_at_utc = format(Sys.time(), tz = "UTC", usetz = TRUE),
   repository = repo_root,
+  source_identity = list(
+    git_revision = git_identity(c("rev-parse", "HEAD")),
+    git_branch = git_identity(c("rev-parse", "--abbrev-ref", "HEAD")),
+    git_status_porcelain = git_identity(c("status", "--porcelain")),
+    package_version = as.character(utils::packageVersion("PAGe"))
+  ),
   input_path = input_path,
   input_md5 = hash_file(input_path),
   output_dir = output_dir,
+  generated_output_sha256 = generated_hashes,
   start_week = start_week,
   review = list(
     smooth_window = smooth_window,
@@ -220,6 +254,9 @@ readme <- c(
   "",
   paste0("- Input: `", input_path, "`"),
   paste0("- Input MD5: `", manifest$input_md5, "`"),
+  paste0("- Source revision: `", manifest$source_identity$git_revision, "`"),
+  paste0("- PAGe version: `", manifest$source_identity$package_version, "`"),
+  paste0("- Hashed generated outputs: `", length(manifest$generated_output_sha256), "`"),
   paste0("- Eligible holdouts: `", paste(holdouts, collapse = ", "), "`"),
   paste0("- Fixed exclusions: `", paste(exclude, collapse = ", "), "`"),
   paste0("- Prepared rows: `", nrow(prepared), "`"),

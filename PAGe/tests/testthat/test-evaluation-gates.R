@@ -1,7 +1,7 @@
 make_metric_predictions <- function(scale = 1, spec_id = NULL) {
   out <- data.frame(
-    season = rep(c("2022-23", "2023-24"), each = 4),
-    weekF = rep(1:4, 2),
+    season = rep("2025-26", 8),
+    weekF = 1:8,
     lead = rep(c(1L, 2L), 4),
     t_since = rep(c(-1, 1, 5, 8), 2),
     p_hat = c(.10, .20, .30, .40, .12, .22, .32, .42) * scale,
@@ -122,7 +122,7 @@ test_that("racing retains uncertainty-overlapping candidates and requires full e
 
 test_that("unseen replay rejects leakage and returns standardized metrics", {
   allD <- workflow_surveillance(
-    c("2024-25", "2025-26", "2025-26"), c(1L, 1L, 2L)
+    c("2024-25", rep("2025-26", 8)), c(1L, 1:8)
   )
   leaking <- list(m2_production = list(training_seasons = c("2024-25", "2025-26")))
   expect_error(PAGe::replay_season_holdout(leaking, allD), "leakage")
@@ -130,7 +130,11 @@ test_that("unseen replay rejects leakage and returns standardized metrics", {
   clean <- list(m2_production = list(training_seasons = "2024-25"))
   runner <- function(kit, current_data, mode, verbose) {
     expect_identical(mode, "frozen")
-    list(predictions = make_metric_predictions())
+    predictions <- make_metric_predictions()
+    list(
+      predictions = predictions,
+      params_df = data.frame(eval_week = predictions$weekF, h = predictions$lead)
+    )
   }
   replay <- PAGe::replay_season_holdout(clean, allD, runner = runner)
   expect_identical(replay$season, "2025-26")
@@ -145,7 +149,8 @@ test_that("unseen replay rejects leakage and returns standardized metrics", {
       m2_preds = data.frame(
         eval_week = 1L, h = 1L, target_weekF = 2L, m2_p = .2
       ),
-      ign_out = list(ign_week_locked = 1L)
+      ign_out = list(ign_week_locked = 1L),
+      params_df = data.frame(eval_week = 1L, h = 1L)
     )
   }
   raw_data <- data.frame(
@@ -160,7 +165,7 @@ test_that("unseen replay rejects leakage and returns standardized metrics", {
 })
 
 test_that("holdout replay rejects conflicting identity and gates legacy M2 explicitly", {
-  allD <- workflow_surveillance("2025-26", 1L)
+  allD <- workflow_surveillance("2025-26", 1:8)
   canonical <- list(training_seasons = "2024-25")
   conflicting <- list(
     m2_production = canonical,
@@ -168,7 +173,13 @@ test_that("holdout replay rejects conflicting identity and gates legacy M2 expli
   )
   expect_error(PAGe::replay_season_holdout(conflicting, allD), "conflicting")
 
-  runner <- function(...) list(predictions = make_metric_predictions())
+  runner <- function(...) {
+    predictions <- make_metric_predictions()
+    list(
+      predictions = predictions,
+      params_df = data.frame(eval_week = predictions$weekF, h = predictions$lead)
+    )
+  }
   expect_error(
     PAGe::replay_season_holdout(list(m2 = canonical), allD, runner = runner),
     "compatibility"

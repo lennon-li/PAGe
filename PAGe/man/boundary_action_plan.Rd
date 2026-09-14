@@ -10,7 +10,9 @@ boundary_action_plan(
   hard_caps = NULL,
   selection_method = c("min_nll", "one_se", "pareto"),
   steps = NULL,
-  max_specs = NULL
+  max_specs = NULL,
+  m1_min_gain = 0.05,
+  m1_prefer_simpler = TRUE
 )
 }
 \arguments{
@@ -19,13 +21,18 @@ boundary_action_plan(
 \item{stage}{One of `"M0"`, `"M1"`, or `"M2"`.}
 
 \item{hard_caps}{M1 hard-cap policy. Defaults to `default_m1_hard_caps()`.}
-
 \item{selection_method}{M2 selection rule.}
 
 \item{steps}{Optional adjacent expansion steps passed to
 `expand_tuning_grid()`.}
 
 \item{max_specs}{Optional expanded-grid row cap.}
+
+\item{m1_min_gain}{Practical-gain backoff for M1 boundary planning, in weeks.
+Forwarded to `select_m1_candidate()`.}
+
+\item{m1_prefer_simpler}{Logical; prefer the simplest boundary-safe M1
+candidate within `m1_min_gain`. Forwarded to `select_m1_candidate()`.}
 }
 \value{
 A `page_boundary_action_plan` containing raw/final selections,

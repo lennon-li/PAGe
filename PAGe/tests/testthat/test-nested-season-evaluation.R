@@ -21,6 +21,19 @@ nested_test_predictions <- function(season, m2 = 0.1) {
   )
 }
 
+nested_test_replay_predictions <- function(season, m2 = 0.1) {
+  data.frame(
+    season = season,
+    weekF = c(1L, 1L, 2L, 2L),
+    target_weekF = c(2L, 3L, 3L, 4L),
+    lead = c(1L, 2L, 1L, 2L),
+    p_obs = 0.2,
+    p_hat = m2,
+    t_since = c(0, 0, 1, 1),
+    N_lead = 10
+  )
+}
+
 test_that("nested evaluation rotates outer holdouts and aggregates seasons", {
   calls <- character()
   protocol <- list(
@@ -265,7 +278,11 @@ test_that("train_outer_fold forwards every control override and derives the fall
     boundary_action_plan = function(tuning, stage, ...) {
       extra <- list(...)
       if (stage == "M0") calls$m0_steps <- extra$steps
-      if (stage == "M1") calls$m1_steps <- extra$steps
+      if (stage == "M1") {
+        calls$m1_steps <- extra$steps
+        calls$m1_boundary_min_gain <- extra$m1_min_gain
+        calls$m1_boundary_prefer_simpler <- extra$m1_prefer_simpler
+      }
       if (stage == "M2") {
         calls$m2_steps <- extra$steps
         calls$m2_max_specs <- extra$max_specs
@@ -352,6 +369,7 @@ test_that("train_outer_fold forwards every control override and derives the fall
     m1_prefer_simpler = FALSE,
     m0_expansion_steps = c(p_thr = 0.001),
     m1_expansion_steps = c(k_ref = 7, slope_weight = 2),
+    m1_min_gain = 0.125,
     m2_expansion_steps = c(k_z = 1),
     m2_expansion_increment = 3L,
     max_boundary_rounds = c(M0 = 1L, M1 = 1L, M2 = 1L),
@@ -365,6 +383,8 @@ test_that("train_outer_fold forwards every control override and derives the fall
   expect_equal(calls$fit_m1_params, list(k_ref = 25L, slope_weight = 8))
   expect_equal(calls$m0_steps, c(p_thr = 0.001))
   expect_equal(calls$m1_steps, c(k_ref = 7, slope_weight = 2))
+  expect_equal(calls$m1_boundary_min_gain, 0.125)
+  expect_false(calls$m1_boundary_prefer_simpler)
   expect_equal(calls$m2_steps, c(k_z = 1))
   expect_equal(calls$m2_max_specs, 5L)
   expect_equal(calls$tune_m2_family, PAGe:::m2_subset_family())
@@ -446,7 +466,7 @@ test_that("run_outer_fold enforces strict compatibility and protocol weights", {
           season = season,
           lead = c("h1", "h2"),
           weekF = c(1L, 2L),
-          target_weekF = c(2L, 3L),
+          target_weekF = c(2L, 4L),
           p_obs = 0.1,
           p_hat = 0.2,
           t_since = c(1, 2),
@@ -454,7 +474,8 @@ test_that("run_outer_fold enforces strict compatibility and protocol weights", {
         ),
         stages = list(
           m2_predictions = data.frame(
-            h = c("h1", "h2"), eval_week = c(1L, 2L), m1_p = 0.15
+            h = c("h1", "h2"), eval_week = c(1L, 2L),
+            target_weekF = c(2L, 4L), m1_p = 0.15
           )
         )
       )
@@ -599,4 +620,64 @@ test_that("timing-v2 is explicit on every nested training entry point", {
   expect_true("timing_labels" %in% names(formals(PAGe::train_outer_fold)))
   expect_true("timing_labels" %in% names(formals(PAGe::run_outer_fold)))
   expect_true("timing_labels" %in% names(formals(PAGe::nested_season_evaluation)))
+})
+
+test_that("replay paths reject missing, duplicated, and unmatched forecast keys", {
+  predictions <- nested_test_replay_predictions("C")
+  m2_predictions <- data.frame(
+    eval_week = predictions$weekF,
+    h = predictions$lead,
+    target_weekF = predictions$target_weekF,
+    m1_p = 0.15
+  )
+  replay <- function(preds = predictions, m1 = m2_predictions,
+                     ledger = NULL) {
+    list(
+      predictions = preds,
+      stages = list(m2_predictions = m1),
+      forecast_ledger = ledger
+    )
+  }
+
+  expect_silent(PAGe:::.nested_replay_rows(replay()))
+
+  duplicated_predictions <- rbind(predictions, predictions[1L, , drop = FALSE])
+  expect_error(
+    PAGe:::.nested_replay_rows(replay(preds = duplicated_predictions)),
+    "duplicated forecast keys"
+  )
+
+  unmatched_m1 <- m2_predictions
+  unmatched_m1$eval_week <- unmatched_m1$eval_week + 100L
+  unmatched_m1$target_weekF <- unmatched_m1$target_weekF + 100L
+  expect_error(
+    PAGe:::.nested_replay_rows(replay(m1 = unmatched_m1)),
+    "no matched M1 prediction"
+  )
+
+  ledger <- data.frame(
+    weekF = c(predictions$origin, 99L),
+    lead = c(predictions$horizon, 1L),
+    scorable = TRUE
+  )
+  expect_error(
+    PAGe:::.nested_replay_rows(replay(ledger = ledger)),
+    "missing .* expected forecast key"
+  )
+
+  current_data <- data.frame(weekF = 1:4, y = c(0, 1, 2, 3), N = 10)
+  expect_error(
+    PAGe:::.replay_forecast_ledger(
+      data.frame(weekF = c(1L, 1L), lead = c(1L, 1L), p_hat = c(0.1, 0.2)),
+      current_data, "C", 1
+    ),
+    "duplicated forecast keys"
+  )
+  expect_error(
+    PAGe:::.replay_forecast_ledger(
+      data.frame(weekF = 99L, lead = 1L, p_hat = 0.1),
+      current_data, "C", 1
+    ),
+    "outside the expected season ledger"
+  )
 })

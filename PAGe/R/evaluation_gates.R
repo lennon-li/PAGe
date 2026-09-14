@@ -707,6 +707,25 @@ replay_season_holdout <- function(kit,
   replay <- do.call(runner, runner_args)
   all_predictions <- .standardize_replay_predictions(replay, current_data, season,
     keep_unscored = TRUE)
+  expected_keys <- .replay_expected_forecast_keys(
+    replay, include_target = "target_weekF" %in% names(all_predictions)
+  )
+  if (nrow(all_predictions) && is.null(expected_keys)) {
+    stop(
+      "Replay runner returned forecasts without an independent evaluation schedule. ",
+      "Return `params_df$eval_week` (and optionally `params_df$h`) with the replay.",
+      call. = FALSE
+    )
+  }
+  if (!is.null(expected_keys)) {
+    actual_keys <- .assert_unique_forecast_keys(
+      all_predictions$weekF, all_predictions$lead, "Replay predictions",
+      target = all_predictions$target_weekF %||% NULL
+    )
+    .assert_forecast_key_match(
+      actual_keys, expected_keys, "Replay predictions", "M1 evaluation schedule"
+    )
+  }
   p_obs <- if ("p_obs" %in% names(all_predictions)) all_predictions$p_obs else
     all_predictions$y_lead / all_predictions$N_lead
   weights <- if ("N_lead" %in% names(all_predictions)) all_predictions$N_lead else
@@ -795,10 +814,47 @@ replay_season_holdout <- function(kit,
   standardized <- replay$predictions
   metric_columns <- c("p_hat", "lead", "t_since")
   observed_columns <- c("p_obs", "y_lead", "N_lead")
+  validate_season <- function(x, label) {
+    if (is.data.frame(x) && "season" %in% names(x) &&
+      any(as.character(x$season) != as.character(season), na.rm = TRUE)) {
+      stop(label, " contains rows from a season other than `", season, "`.",
+        call. = FALSE
+      )
+    }
+  }
+  validate_season(standardized, "Replay predictions")
+  validate_season(replay$m2_preds, "Replay m2_preds")
   if (is.data.frame(standardized) &&
-    all(metric_columns %in% names(standardized)) &&
+    all(c(metric_columns, "weekF") %in% names(standardized)) &&
     ("p_obs" %in% names(standardized) ||
       all(c("y_lead", "N_lead") %in% names(standardized)))) {
+    standardized_horizon <- as.integer(sub("^h", "", as.character(standardized$lead)))
+    standardized_target <- standardized$target_weekF %||%
+      (as.numeric(standardized$weekF) + standardized_horizon)
+    standardized_key <- .assert_unique_forecast_keys(
+      standardized$weekF, standardized_horizon, "Replay predictions",
+      target = standardized_target
+    )
+    .assert_forecast_target_consistency(
+      standardized$weekF, standardized_horizon, standardized_target,
+      "Replay predictions"
+    )
+    raw_keys <- replay$m2_preds
+    if (is.data.frame(raw_keys) && all(c("eval_week", "h") %in% names(raw_keys))) {
+      raw_horizon <- as.integer(sub("^h", "", as.character(raw_keys$h)))
+      raw_target <- raw_keys$target_weekF %||%
+        (as.numeric(raw_keys$eval_week) + raw_horizon)
+      raw_key <- .assert_unique_forecast_keys(
+        raw_keys$eval_week, raw_horizon, "Replay m2_preds",
+        target = raw_target
+      )
+      .assert_forecast_target_consistency(
+        raw_keys$eval_week, raw_horizon, raw_target, "Replay m2_preds"
+      )
+      .assert_forecast_key_match(
+        standardized_key, raw_key, "Replay predictions", "Replay m2_preds"
+      )
+    }
     return(standardized)
   }
 
@@ -810,10 +866,16 @@ replay_season_holdout <- function(kit,
   }
   if (!is.data.frame(raw) || !all(required %in% names(raw))) {
     stop(
-      "Replay runner must return standardized `predictions` or prospective ",
-      "`m2_preds` with eval_week, h, target_weekF, and m2_p."
+      "Replay runner must return standardized `predictions` (with weekF) or ",
+      "prospective `m2_preds` with eval_week, h, target_weekF, and m2_p."
     )
   }
+  .assert_unique_forecast_keys(
+    raw$eval_week, raw$h, "Replay m2_preds", target = raw$target_weekF
+  )
+  .assert_forecast_target_consistency(
+    raw$eval_week, raw$h, raw$target_weekF, "Replay m2_preds"
+  )
   if (!all(c("weekF", "y", "N") %in% names(current_data)) &&
     !all(c("weekF", "p") %in% names(current_data))) {
     stop("Current holdout data need `weekF` plus `y`/`N` or `p` for scoring.")
@@ -857,6 +919,33 @@ replay_season_holdout <- function(kit,
     is.finite(out$N_lead) & out$N_lead > 0, , drop = FALSE]
 }
 
+.replay_expected_forecast_keys <- function(replay, include_target = TRUE) {
+  params <- replay$params_df
+  if (!is.data.frame(params) || !"eval_week" %in% names(params) ||
+    !nrow(params)) {
+    return(NULL)
+  }
+  # The prospective contract emits both one- and two-week forecasts. When a
+  # runner supplies an explicit horizon column, use that independent schedule;
+  # never infer the expected set from emitted prediction rows.
+  if ("h" %in% names(params)) {
+    schedule <- params[, c("eval_week", "h"), drop = FALSE]
+  } else {
+    schedule <- expand.grid(
+      eval_week = unique(params$eval_week), h = c(1L, 2L),
+      KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE
+    )
+  }
+  schedule <- unique(schedule)
+  schedule <- schedule[is.finite(schedule$eval_week), , drop = FALSE]
+  target <- if (isTRUE(include_target)) {
+    schedule$eval_week + as.numeric(.forecast_key_column(schedule$h))
+  } else {
+    NULL
+  }
+  .forecast_key(schedule$eval_week, schedule$h, target)
+}
+
 .replay_forecast_ledger <- function(predictions, current_data, season, ignition_week) {
   ledger <- expand.grid(weekF = seq.int(min(current_data$weekF), max(current_data$weekF)),
     lead = 1:2)
@@ -864,8 +953,19 @@ replay_season_holdout <- function(kit,
   ledger$season <- season
   ledger$target_weekF <- ledger$weekF + ledger$lead
   ledger$t_since <- ledger$weekF - ignition_week
-  pred_h <- as.integer(sub("^h", "", as.character(predictions$lead)))
-  index <- match(paste(ledger$weekF, ledger$lead), paste(predictions$weekF, pred_h))
+  pred_key <- .assert_unique_forecast_keys(
+    predictions$weekF, predictions$lead, "Replay predictions"
+  )
+  ledger_key <- .forecast_key(ledger$weekF, ledger$lead)
+  unmatched <- setdiff(pred_key, ledger_key)
+  if (length(unmatched)) {
+    stop(
+      "Replay predictions contain forecast key(s) outside the expected season ",
+      "ledger: ", paste(utils::head(unmatched, 3L), collapse = ", "), ".",
+      call. = FALSE
+    )
+  }
+  index <- match(ledger_key, pred_key)
   target <- match(ledger$target_weekF, current_data$weekF)
   ledger$y_lead <- current_data$y[target]
   ledger$N_lead <- current_data$N[target]

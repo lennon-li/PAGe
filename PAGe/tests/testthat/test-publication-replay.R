@@ -25,23 +25,26 @@ test_that("raw GAM predictor survives correction, capping and post-peak substitu
 })
 
 test_that("replay retains bounds, stages, missing targets and failed predictions", {
-  d <- data.frame(season = "2025-26", weekF = 1:3, y = c(10, 20, 30), N = 100)
+  d <- data.frame(season = "2025-26", weekF = 1:4, y = c(10, 20, 30, 40), N = 100)
   runner <- function(...) list(
-    m2_preds = data.frame(eval_week = c(1, 2, 3), h = 1,
-      target_weekF = 2:4, m2_p = c(.2, NA, .4),
-      m2_lo = c(.1, NA, .3), m2_hi = c(.3, NA, .5)),
+    m2_preds = data.frame(
+      eval_week = rep(1:3, each = 2), h = rep(c(1, 2), 3),
+      target_weekF = rep(1:3, each = 2) + rep(c(1, 2), 3),
+      m2_p = c(.2, .25, NA, .35, .4, .45),
+      m2_lo = c(.1, .15, NA, .25, .3, .35),
+      m2_hi = c(.3, .35, NA, .45, .5, .55)),
     ign_out = list(ign_week_locked = 1L),
     params_df = data.frame(eval_week = 1:3, peak_weekF = c(3, 3, 3)),
     m1_curves = data.frame(newWeek = 1:3, p_hat = c(.1, .2, .3)))
   out <- PAGe::replay_season_holdout(
     list(m2_production = list(training_seasons = "2024-25")), d, runner = runner)
-  expect_equal(out$predictions$p_lo, .1)
-  expect_equal(out$predictions$p_hi, .3)
-  expect_equal(nrow(out$forecast_ledger), 6)
+  expect_equal(out$predictions$p_lo, c(.1, .15, .25, .3))
+  expect_equal(out$predictions$p_hi, c(.3, .35, .45, .5))
+  expect_equal(nrow(out$forecast_ledger), 8)
   expect_true(all(c("scored", "prediction_failed", "target_unavailable", "not_emitted") %in%
     out$forecast_ledger$forecast_status))
   expect_equal(out$stages$m1_parameters$peak_weekF, rep(3, 3))
-  expect_equal(nrow(out$stages$m2_predictions), 3)
+  expect_equal(nrow(out$stages$m2_predictions), 6)
   expect_identical(out$diagnostics$overall$interval_status, "ok")
 })
 

@@ -1039,7 +1039,6 @@ build_m2 <- function(allD,
   }
   old_future_plan <- future::plan()
   on.exit(future::plan(old_future_plan), add = TRUE)
-  future::plan(future::multisession, workers = as.integer(max(1L, n_cores)))
 
   m1_cache <- NULL
   if (!is.null(phase1_artifact_path) && file.exists(phase1_artifact_path)) {
@@ -1060,6 +1059,10 @@ build_m2 <- function(allD,
   }
 
   if (is.null(m1_cache)) {
+    # Validate/reject any supplied Phase-1 artifact before opening a worker
+    # cluster. This keeps contract errors deterministic in constrained
+    # environments and avoids spawning workers for a request that cannot run.
+    future::plan(future::multisession, workers = as.integer(max(1L, n_cores)))
     m1_cache <- list()
     for (test_s in test_seasons) {
       if (verbose) message(sprintf("  [%s] build_fold + M1...", test_s))

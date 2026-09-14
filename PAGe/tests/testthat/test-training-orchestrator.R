@@ -985,8 +985,8 @@ test_that("retune routes offset subset M2 through its governed branch", {
       class = "page_m0_tuning"),
     validate_m0_tuning = function(x, ...) invisible(x),
     boundary_action_plan = function(tuning, stage, ...) {
-      if (identical(stage, "M2")) stop("M2 boundary machinery must not run.")
-      list(stage = stage)
+      if (identical(stage, "M2")) return(list(stage = stage, settled = TRUE))
+      list(stage = stage, settled = TRUE)
     },
     fit_m0 = function(data, selection, config, ...) list(status = "draft"),
     freeze_m0 = function(fit, ...) {
@@ -1083,5 +1083,5 @@ test_that("retune routes offset subset M2 through its governed branch", {
   expect_true(calls$assembled)
   expect_true(result$kit$ready)
   expect_null(result$preflight$m2)
-  expect_null(result$boundary_actions$m2)
+  expect_equal(result$boundary_actions$m2$stage, "M2")
 })

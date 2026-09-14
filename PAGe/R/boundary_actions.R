@@ -13,6 +13,10 @@
 #' @param steps Optional adjacent expansion steps passed to
 #'   `expand_tuning_grid()`.
 #' @param max_specs Optional expanded-grid row cap.
+#' @param m1_min_gain Practical-gain backoff for M1 boundary planning, in weeks.
+#'   Forwarded to `select_m1_candidate()`.
+#' @param m1_prefer_simpler Logical; prefer the simplest boundary-safe M1
+#'   candidate within `m1_min_gain`. Forwarded to `select_m1_candidate()`.
 #'
 #' @return A `page_boundary_action_plan` containing raw/final selections,
 #'   reports, unresolved axes, and `next_grid` (or `NULL` when settled).
@@ -23,7 +27,9 @@ boundary_action_plan <- function(
   hard_caps = NULL,
   selection_method = c("min_nll", "one_se", "pareto"),
   steps = NULL,
-  max_specs = NULL
+  max_specs = NULL,
+  m1_min_gain = 0.05,
+  m1_prefer_simpler = TRUE
 ) {
   stage <- toupper(match.arg(stage))
   selection_method <- match.arg(selection_method)
@@ -33,6 +39,16 @@ boundary_action_plan <- function(
   if (stage == "M1") {
     hard_caps <- .normalize_m1_hard_caps(hard_caps %||% tuning$hard_caps %||%
       default_m1_hard_caps())
+    if (!is.numeric(m1_min_gain) || length(m1_min_gain) != 1L ||
+      !is.finite(m1_min_gain) || m1_min_gain < 0) {
+      stop("`m1_min_gain` must be one finite non-negative number.",
+        call. = FALSE
+      )
+    }
+    if (!is.logical(m1_prefer_simpler) || length(m1_prefer_simpler) != 1L ||
+      is.na(m1_prefer_simpler)) {
+      stop("`m1_prefer_simpler` must be TRUE or FALSE.", call. = FALSE)
+    }
   }
   if (stage == "M2" && inherits(tuning, "page_m2_subset_tuning")) {
     report <- inspect_tuning_boundaries(
@@ -102,7 +118,9 @@ boundary_action_plan <- function(
   if (stage == "M1") {
     selection <- select_m1_candidate(
       tuning,
-      hard_caps = hard_caps, prefer_simpler = TRUE
+      min_gain = m1_min_gain,
+      hard_caps = hard_caps,
+      prefer_simpler = m1_prefer_simpler
     )
     final <- selection$selected[1L, , drop = FALSE]
     reason <- if (isTRUE(selection$backed_off)) {

@@ -374,6 +374,78 @@ season_selection.default <- function(x, ...) {
   )
 }
 
+# ============================================================
+# Forecast-key integrity (internal)
+# ============================================================
+
+.forecast_key_column <- function(x) {
+  sub("^h", "", as.character(x))
+}
+
+.forecast_key <- function(origin, horizon, target = NULL) {
+  key <- paste(.forecast_key_column(origin), .forecast_key_column(horizon), sep = "\r")
+  if (!is.null(target)) key <- paste(key, .forecast_key_column(target), sep = "\r")
+  key
+}
+
+.assert_unique_forecast_keys <- function(origin, horizon, label, target = NULL) {
+  key <- .forecast_key(origin, horizon, target)
+  malformed <- is.na(origin) | is.na(horizon) |
+    !nzchar(.forecast_key_column(origin)) | !nzchar(.forecast_key_column(horizon))
+  if (!is.null(target)) {
+    malformed <- malformed | is.na(target) | !nzchar(.forecast_key_column(target))
+  }
+  if (any(malformed)) {
+    stop(label, " contains malformed forecast key values.", call. = FALSE)
+  }
+  if (anyDuplicated(key)) {
+    duplicates <- unique(key[duplicated(key)])
+    stop(
+      label, " contains duplicated forecast keys: ",
+      paste(utils::head(duplicates, 3L), collapse = ", "), ".",
+      call. = FALSE
+    )
+  }
+  key
+}
+
+.assert_forecast_key_match <- function(actual, expected, actual_label, expected_label) {
+  missing <- setdiff(expected, actual)
+  if (length(missing)) {
+    stop(
+      actual_label, " is missing ", length(missing),
+      " expected forecast key(s) from ", expected_label, ": ",
+      paste(utils::head(missing, 3L), collapse = ", "), ".",
+      call. = FALSE
+    )
+  }
+  unmatched <- setdiff(actual, expected)
+  if (length(unmatched)) {
+    stop(
+      actual_label, " contains ", length(unmatched),
+      " unmatched forecast key(s) outside ", expected_label, ": ",
+      paste(utils::head(unmatched, 3L), collapse = ", "), ".",
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
+.assert_forecast_target_consistency <- function(origin, horizon, target, label) {
+  if (is.null(target)) return(invisible(TRUE))
+  origin_num <- suppressWarnings(as.numeric(.forecast_key_column(origin)))
+  horizon_num <- suppressWarnings(as.numeric(.forecast_key_column(horizon)))
+  target_num <- suppressWarnings(as.numeric(.forecast_key_column(target)))
+  invalid <- !is.finite(origin_num) | !is.finite(horizon_num) |
+    !is.finite(target_num) | target_num != origin_num + horizon_num
+  if (any(invalid)) {
+    stop(label, " contains inconsistent origin, horizon, and target weeks.",
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
 .new_stage_fit <- function(stage,
                            selection,
                            config,

@@ -554,6 +554,8 @@ train_outer_fold <- function(
       m1_tuning,
       stage = "M1",
       hard_caps = m1_hard_caps,
+      m1_min_gain = m1_min_gain,
+      m1_prefer_simpler = m1_prefer_simpler,
       steps = m1_expansion_steps
     )
     m1_history[[attempt]] <- plan
@@ -790,14 +792,51 @@ fit_final_pipeline <- function(data,
   } else {
     as.integer(sub("^h", "", as.character(m2_predictions$lead)))
   }
-  index <- match(
-    paste(predictions$weekF, horizon),
-    paste(m2_predictions$eval_week, m2_horizon)
+  pred_target <- predictions$target_weekF %||%
+    (as.numeric(predictions$weekF) + horizon)
+  m2_target <- m2_predictions$target_weekF %||%
+    (as.numeric(m2_predictions$eval_week) + m2_horizon)
+  pred_key <- .assert_unique_forecast_keys(
+    predictions$weekF, horizon, "Replay predictions",
+    target = pred_target
   )
+  .assert_forecast_target_consistency(
+    predictions$weekF, horizon, pred_target, "Replay predictions"
+  )
+  m2_key <- .assert_unique_forecast_keys(
+    m2_predictions$eval_week, m2_horizon, "Replay M1 predictions",
+    target = m2_target
+  )
+  .assert_forecast_target_consistency(
+    m2_predictions$eval_week, m2_horizon, m2_target,
+    "Replay M1 predictions"
+  )
+  index <- match(pred_key, m2_key)
+  unmatched <- which(is.na(index))
+  if (length(unmatched)) {
+    stop(
+      "Replay predictions contain ", length(unmatched),
+      " forecast key(s) with no matched M1 prediction: ",
+      paste(utils::head(pred_key[unmatched], 3L), collapse = ", "), ".",
+      call. = FALSE
+    )
+  }
+  ledger <- replay$forecast_ledger
+  if (is.data.frame(ledger) &&
+    all(c("weekF", "lead", "scorable") %in% names(ledger))) {
+    scorable <- which(as.logical(ledger$scorable))
+    ledger_key <- .forecast_key(
+      ledger$weekF[scorable], ledger$lead[scorable],
+      ledger$target_weekF[scorable] %||% NULL
+    )
+    .assert_forecast_key_match(
+      pred_key, ledger_key, "Replay predictions", "scorable replay ledger"
+    )
+  }
   out <- data.frame(
     season = as.character(predictions$season),
     origin = predictions$weekF,
-    target = predictions$target_weekF,
+    target = pred_target,
     horizon = horizon,
     outcome = predictions$p_obs,
     m1_prediction = m2_predictions$m1_p[index],
@@ -806,10 +845,16 @@ fit_final_pipeline <- function(data,
     N_lead = predictions$N_lead,
     stringsAsFactors = FALSE
   )
-  keep <- stats::complete.cases(out[c(
+  complete <- stats::complete.cases(out[c(
     "outcome", "m1_prediction", "m2_prediction", "t_since_target"
   )])
-  out <- out[keep, , drop = FALSE]
+  if (any(!complete)) {
+    stop(
+      "Replay comparison contains ", sum(!complete),
+      " matched forecast row(s) with missing M1/M2 values or timing.",
+      call. = FALSE
+    )
+  }
   if (!nrow(out)) stop("No matched M1/M2 rows were produced by replay.", call. = FALSE)
   rownames(out) <- NULL
   out
