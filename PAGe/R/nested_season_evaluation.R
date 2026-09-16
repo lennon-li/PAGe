@@ -539,7 +539,8 @@
                                        expansion = NULL,
                                        alpha_state = NULL,
                                        gamma = NULL,
-                                       scored_seasons_by_horizon = NULL) {
+                                       scored_seasons_by_horizon = NULL,
+                                       n_cores = 1L) {
   training_rows <- as.data.frame(training_rows)
   if (!nrow(training_rows)) {
     stop("Fully nested M2 gate has no training rows.", call. = FALSE)
@@ -642,6 +643,7 @@
         scored_seasons_by_horizon = scored_seasons_by_horizon,
         nll_primary = nll_primary, mae_primary = mae_primary,
         alpha_state = alpha_state, gamma = gamma,
+        n_cores = n_cores,
         label = "Nested gate M2 selection",
         evaluation_label = "nested"
       )
@@ -862,7 +864,8 @@
       expansion = m2_expansion,
       alpha_state = tuning$alpha_state,
       gamma = tuning$selected_config$gamma,
-      scored_seasons_by_horizon = gate_scored_by_h
+      scored_seasons_by_horizon = gate_scored_by_h,
+      n_cores = n_cores
     )
     selected_ids[[season]] <- selected$selected_ids
     horizons <- sort(unique(as.integer(test$h)))
