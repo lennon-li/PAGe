@@ -1882,12 +1882,19 @@ m2_subset_validate_tuning <- function(x) {
 
 m2_subset_train <- function(data, m0, m1, config, m1_train_preds = NULL,
                             detector = run_ignition_weekly,
-                            timing_mode = c("legacy", "fractional"), ...) {
+                            timing_mode = c("legacy", "fractional"),
+                            timing_truth = NULL, ...) {
+  # `fit_m2()`/`train_outer_fold()` pass `timing_truth` through `...`
+  # (it isn't a named formal of `fit_m2()` either); without a matching
+  # formal here it was silently dropped, so m2_subset_tune() selected
+  # the winning spec on truth-ignition rows while this fit the deployed
+  # GAM on detected-ignition rows -- different features for selection
+  # and deployment under timing_mode = "fractional".
   timing_mode <- match.arg(timing_mode)
   config <- m2_subset_validate_config(config)
   training <- m2_subset_make_rows(data, m0, m1, m1_train_preds,
     detector = detector, alpha_state = config$alpha_state,
-    timing_mode = timing_mode
+    timing_mode = timing_mode, timing_truth = timing_truth
   )
   fit_data <- if ("forecast_available" %in% names(training$data)) {
     training$data[!is.na(training$data$forecast_available) &

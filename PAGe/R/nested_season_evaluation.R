@@ -541,6 +541,18 @@
                                        gamma = NULL,
                                        scored_seasons_by_horizon = NULL,
                                        n_cores = 1L) {
+  # .m2_subset_select_core() parallelizes its spec-grid scan with
+  # furrr::future_map(), which obeys the active future plan, not an
+  # argument -- n_cores alone does nothing without this (the gap that
+  # made the earlier n_cores-threading fix silently inert here).
+  if (length(n_cores) != 1L || !is.numeric(n_cores) || !is.finite(n_cores) ||
+    n_cores < 1 || n_cores != as.integer(n_cores)) {
+    stop("`n_cores` must be one positive integer.", call. = FALSE)
+  }
+  if (n_cores > 1L) {
+    old_plan <- .page_set_parallel_plan(n_cores)
+    on.exit(future::plan(old_plan), add = TRUE)
+  }
   training_rows <- as.data.frame(training_rows)
   if (!nrow(training_rows)) {
     stop("Fully nested M2 gate has no training rows.", call. = FALSE)

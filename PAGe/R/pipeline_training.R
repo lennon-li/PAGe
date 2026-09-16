@@ -1480,7 +1480,7 @@ train_m2 <- function(allD,
     return(m2_subset_train(
       allD_prod,
       m0 = m0, m1 = m1, config = best_spec,
-      timing_mode = timing_mode
+      timing_mode = timing_mode, timing_truth = timing_truth
     ))
   }
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
