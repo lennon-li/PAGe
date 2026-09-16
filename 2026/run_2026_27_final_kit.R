@@ -84,6 +84,9 @@ if (!requireNamespace("PAGe", quietly = TRUE) ||
   stop("PAGe must be loaded from PAGE_PACKAGE_LIBRARY.")
 }
 suppressPackageStartupMessages(library(dplyr))
+# Permanent exclusions plus the incomplete current season: a season without a
+# full calendar of observed weeks has no observed peak, so it cannot be scored
+# or supply timing truth. Coverage is checked against the MMWR calendar below.
 EXCLUDE <- c("2011-12", "2015-16", "2020-21", "2021-22")
 EXPECTED_TRAINING <- c(
   "2012-13", "2013-14", "2014-15", "2016-17", "2017-18", "2018-19",
@@ -179,7 +182,22 @@ allD <- raw |>
   PAGe::prepare_surveillance_data()
 
 all_seasons <- sort(unique(as.character(allD$season)))
-training_seasons <- setdiff(all_seasons, EXCLUDE)
+# Drop seasons whose observed weeks do not cover the MMWR calendar (the current
+# partial season): no observed peak, so they cannot be scored or supply timing truth.
+season_coverage <- allD |>
+  dplyr::group_by(.data$season) |>
+  dplyr::summarise(
+    observed = dplyr::n_distinct(.data$weekF),
+    expected = dplyr::first(PAGe::page_season_calendar(
+      mmwr_year = as.integer(substr(.data$season[1], 1L, 4L)), week = 27L
+    )$nW_true),
+    .groups = "drop"
+  )
+INCOMPLETE <- season_coverage$season[season_coverage$observed < season_coverage$expected]
+if (length(INCOMPLETE)) {
+  cat(sprintf("excluding incomplete seasons: %s\n", paste(INCOMPLETE, collapse = ", ")))
+}
+training_seasons <- setdiff(all_seasons, c(EXCLUDE, INCOMPLETE))
 season_week_counts <- allD |>
   dplyr::group_by(.data$season) |>
   dplyr::summarise(
@@ -195,7 +213,7 @@ if (!setequal(training_seasons, EXPECTED_TRAINING)) {
 selection <- PAGe::validate_season_selection(
   allD,
   training_seasons = training_seasons,
-  exclude_seasons = intersect(EXCLUDE, all_seasons),
+  exclude_seasons = intersect(c(EXCLUDE, INCOMPLETE), all_seasons),
   holdout_seasons = character(0), application_seasons = character(0)
 )
 cat("season/week counts:\n")

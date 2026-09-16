@@ -45,6 +45,9 @@ suppressPackageStartupMessages({
 
 # ---- Predeclared protocol (policy inputs, all explicit) ----
 HOLDOUT <- "2025-26"
+# Permanent exclusions plus the incomplete current season: a season without a
+# full calendar of observed weeks has no observed peak, so it cannot be scored
+# or supply timing truth. Coverage is checked against the MMWR calendar below.
 EXCLUDE <- c("2011-12", "2015-16", "2020-21", "2021-22")
 EXPECTED_TRAINING <- c(
   "2012-13", "2013-14", "2014-15", "2016-17", "2017-18",
@@ -172,7 +175,32 @@ allD <- raw |>
 # ---- Preflight validation (no model fitting) ----
 all_seasons <- sort(unique(as.character(allD$season)))
 if (!(HOLDOUT %in% all_seasons)) stop("Holdout season absent from data: ", HOLDOUT)
-training_seasons <- setdiff(all_seasons, c(EXCLUDE, HOLDOUT))
+# Drop seasons whose observed weeks do not cover the MMWR calendar (the current
+# partial season). They have no observed peak and cannot be scored.
+season_coverage <- allD |>
+  dplyr::group_by(.data$season) |>
+  dplyr::summarise(
+    observed = dplyr::n_distinct(.data$weekF),
+    expected = dplyr::first(PAGe::page_season_calendar(
+      mmwr_year = as.integer(substr(.data$season[1], 1L, 4L)), week = 27L
+    )$nW_true),
+    .groups = "drop"
+  )
+INCOMPLETE <- season_coverage$season[season_coverage$observed < season_coverage$expected]
+if (length(INCOMPLETE)) {
+  cat(sprintf(
+    "excluding incomplete seasons: %s\n",
+    paste(sprintf(
+      "%s (%d/%d weeks)", INCOMPLETE,
+      season_coverage$observed[match(INCOMPLETE, season_coverage$season)],
+      season_coverage$expected[match(INCOMPLETE, season_coverage$season)]
+    ), collapse = ", ")
+  ))
+}
+if (HOLDOUT %in% INCOMPLETE) {
+  stop("Holdout season is incomplete: ", HOLDOUT)
+}
+training_seasons <- setdiff(all_seasons, c(EXCLUDE, INCOMPLETE, HOLDOUT))
 if (!setequal(training_seasons, EXPECTED_TRAINING)) {
   stop(
     "Season contract mismatch. Got training: ",
