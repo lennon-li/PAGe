@@ -1884,17 +1884,20 @@ m2_subset_train <- function(data, m0, m1, config, m1_train_preds = NULL,
                             detector = run_ignition_weekly,
                             timing_mode = c("legacy", "fractional"),
                             timing_truth = NULL, ...) {
-  # `fit_m2()`/`train_outer_fold()` pass `timing_truth` through `...`
-  # (it isn't a named formal of `fit_m2()` either); without a matching
-  # formal here it was silently dropped, so m2_subset_tune() selected
-  # the winning spec on truth-ignition rows while this fit the deployed
-  # GAM on detected-ignition rows -- different features for selection
-  # and deployment under timing_mode = "fractional".
+  # `timing_truth` is accepted (so `fit_m2()`/`train_outer_fold()` passing it
+  # through `...` doesn't silently vanish) but deliberately NOT forwarded to
+  # row construction below. m2_subset_tune() uses truth-ignition rows on
+  # purpose, to keep spec selection isolated from M0 detector noise -- but
+  # the deployed GAM fit here must be built the same way runtime builds its
+  # rows (via the M0 detector, m2_subset_prefix_declaration()), or its s(u)
+  # smooth and feature_ranges are calibrated against a timing distribution
+  # the model will never see in production. See ANALYSIS_DEVIATIONS for the
+  # tune-vs-train asymmetry this intentionally preserves.
   timing_mode <- match.arg(timing_mode)
   config <- m2_subset_validate_config(config)
   training <- m2_subset_make_rows(data, m0, m1, m1_train_preds,
     detector = detector, alpha_state = config$alpha_state,
-    timing_mode = timing_mode, timing_truth = timing_truth
+    timing_mode = timing_mode, timing_truth = NULL
   )
   fit_data <- if ("forecast_available" %in% names(training$data)) {
     training$data[!is.na(training$data$forecast_available) &

@@ -1,14 +1,16 @@
 # m2_subset_train() previously had no `timing_truth` formal; fit_m2()/
 # train_outer_fold() pass it through `...`, which m2_subset_train()'s own
-# `...` silently discarded. Consequence: m2_subset_tune() selects the
-# winning spec on rows built with the true ignition week (timing_truth
-# supplied), but m2_subset_train() fit the deployed GAM on rows built with
-# the detected ignition week (timing_truth dropped) -- different features
-# for selection and deployment under timing_mode = "fractional", with
-# nothing catching the mismatch (m2_subset_check_tuning_match() only
-# compares data_id/config/upstream_ids, not row construction).
+# `...` silently discarded. A first fix (later reverted after independent
+# review) forwarded it into row construction, but that made the deployed
+# fit's rows use truth-ignition timing while runtime necessarily uses
+# M0-detector timing -- a train/serve skew in the GAM's s(u) smooth and
+# feature_ranges. The correct fix: accept the formal (so it doesn't
+# silently vanish and trip up callers), but never forward it to
+# m2_subset_make_rows() -- the deployed fit must always be built the same
+# way runtime builds its rows (M0 detector), regardless of what timing
+# truth is available for these already-known training seasons.
 
-test_that("m2_subset_train forwards timing_truth into m2_subset_make_rows", {
+test_that("m2_subset_train accepts timing_truth but never forwards it to row construction", {
   recorded <- new.env()
   fake_make_rows <- function(data, m0, m1, m1_train_preds = NULL,
                              seasons = unique(as.character(data$season)),
@@ -37,8 +39,9 @@ test_that("m2_subset_train forwards timing_truth into m2_subset_make_rows", {
   config <- m2_subset_config()
   truth <- data.frame(season = "A", ignition_target_weekF = 5.5, stringsAsFactors = FALSE)
 
+  recorded$timing_truth <- "unset"
   PAGe:::m2_subset_train(data, m0 = list(), m1 = list(), config = config, timing_truth = truth)
-  expect_identical(recorded$timing_truth, truth)
+  expect_null(recorded$timing_truth)
 
   recorded$timing_truth <- "unset"
   PAGe:::m2_subset_train(data, m0 = list(), m1 = list(), config = config)
