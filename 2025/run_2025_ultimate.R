@@ -15,6 +15,18 @@ if (is.null(script_file) || !nzchar(script_file)) {
 repo_root <- normalizePath(file.path(dirname(script_file), ".."), mustWork = TRUE)
 setwd(repo_root)
 
+# Use a recorded deterministic seed for every new run; callers may override it.
+seed_text <- Sys.getenv("PAGE_RUN_SEED", "20260915")
+if (nzchar(seed_text)) {
+  seed <- suppressWarnings(as.integer(seed_text))
+  if (is.na(seed) || !grepl("^[0-9]+$", seed_text)) stop("PAGE_RUN_SEED must be a nonnegative integer.")
+  set.seed(seed)
+  options(page.run_seed = seed)
+}
+if (!exists(".Random.seed", .GlobalEnv, inherits = FALSE)) invisible(stats::runif(1L))
+run_rng_start <- list(kind = RNGkind(), state = .Random.seed, seed = getOption("page.run_seed"))
+
+
 args <- commandArgs(trailingOnly = TRUE)
 preflight_only <- "--preflight" %in% args
 
@@ -43,12 +55,43 @@ if (!is.finite(N_CORES) || N_CORES < 1L) {
   stop("PAGE_N_CORES must be a positive integer.")
 }
 
+# ---- Decided new-cycle recipe (declared explicitly; never package defaults) ----
+# PROTOCOL v2.0, recorded 2026-09-15: M0 grid unchanged; M1 fixed at
+# k_ref = 30, slope_weight = 16; M2 stage A is the 192-row intercept x
+# k_z {0,3,4,5} x k_u {0,7,8,9} x k_d {0,3,4,5,6,7} grid; stage B (k_tau
+# {0,3,4,5} x conf_scale {none, peak_ci}) is built by the package as
+# implemented; gate_nesting = "full"; scoring = page_v2.
+M0_GRID <- PAGe:::.default_m0_grid()
+M1_GRID <- data.frame(
+  k_ref = 30L, multi_temperature = 0.25, template_shift = 0L,
+  align_rise_weight = 1.0, slope_window = 6L, slope_weight = 16.0
+)
+M1_PARAMS <- list(
+  k_ref = 30L, ref_method = "fs", temperature = 0.25, rise_weight = 1.0,
+  trough_weight = 0.1, peak_decay = 0.3, slope_weight = 16.0,
+  slope_window = 6L, dynamic_temp = FALSE, dynamic_temp_pivot = 10L,
+  spread_method = "between"
+)
+M2_STAGE_A_GRID <- PAGe::m2_subset_grid(
+  k_z_values = c(0L, 3L, 4L, 5L),
+  k_u_values = c(0L, 7L, 8L, 9L),
+  k_d_values = c(0L, 3L, 4L, 5L, 6L, 7L),
+  k_tau_values = 0L, conf_scale = "none",
+  alpha_state = 0.2, gamma = 1.4
+)
+GATE_NESTING <- "full"
+RECIPE <- list(
+  m0_grid = M0_GRID, m1_grid = M1_GRID, m1_params = M1_PARAMS,
+  m2_grid = M2_STAGE_A_GRID, gate_nesting = GATE_NESTING
+)
+
 PROTOCOL_ARGS <- list(
   timing_mode = "fractional",
   pre_ignition_weight = 0,
   early_weight = 2,
   early_max_t_since = 12,
   late_weight = 1,
+  scoring = "page_v2",
   score_scale = "equal_week",
   min_gain = 0.0012,
   min_gain_by_horizon = c("2" = 0.002),
@@ -59,6 +102,11 @@ PROTOCOL_ARGS <- list(
   m0_expansion_steps = c(p_thr = 0.001, prev_thr = 0.001, p_sum_thr = 0.01),
   m1_expansion_steps = c(k_ref = 5, slope_weight = 4),
   m2_expansion_increment = 12L,
+  m0_grid = M0_GRID,
+  m1_grid = M1_GRID,
+  m1_params = M1_PARAMS,
+  m2_grid = M2_STAGE_A_GRID,
+  gate_nesting = GATE_NESTING,
   n_cores = N_CORES
 )
 
@@ -74,7 +122,9 @@ run_dir <- if (nzchar(run_id)) file.path(run_root, run_id) else NA_character_
 status_path <- NA_character_ # set only after the refuse-overwrite check passes
 
 write_status <- function(status, detail = "") {
-  if (is.na(status_path)) return(invisible(NULL))
+  if (is.na(status_path)) {
+    return(invisible(NULL))
+  }
   row <- data.frame(
     timestamp_utc = format(Sys.time(), tz = "UTC", usetz = TRUE),
     status = status, detail = detail, stringsAsFactors = FALSE
@@ -104,12 +154,17 @@ n_weeks_in_start_year <- function(start_year) {
 }
 
 raw <- PAGe::load_flu_hist(hist_path)
+calendar <- PAGe::page_season_calendar(
+  dates = as.Date(raw$week_start_date), start_week = 27L
+)
 allD <- raw |>
   mutate(
-    season = as.character(season), week = as.integer(week),
-    start_year = as.integer(seasonstart), y = as.numeric(pos_flua),
+    pho_season = as.character(season),
+    season = calendar$season, week = calendar$week,
+    start_year = calendar$start_year, weekS = calendar$weekS,
+    y = as.numeric(pos_flua),
     N = as.numeric(test_flu),
-    weekF = ((week - 27L) %% n_weeks_in_start_year(start_year)) + 1L
+    weekF = calendar$weekF
   ) |>
   select(season, weekF, y, N, everything()) |>
   PAGe::prepare_surveillance_data()
@@ -126,11 +181,55 @@ if (!setequal(training_seasons, EXPECTED_TRAINING)) {
 }
 manual_labels_default <- PAGe:::.default_manual_labels()
 holdout_rows <- sum(as.character(allD$season) == HOLDOUT)
+season_week_counts <- allD |>
+  dplyr::group_by(.data$season) |>
+  dplyr::summarise(
+    rows = dplyr::n(),
+    weeks = dplyr::n_distinct(.data$weekF),
+    min_weekF = min(.data$weekF, na.rm = TRUE),
+    max_weekF = max(.data$weekF, na.rm = TRUE),
+    .groups = "drop"
+  )
 cat(sprintf(
   "preflight ok: %d seasons, %d training, %d excluded, holdout %s (%d rows isolated)\n",
   length(all_seasons), length(training_seasons),
   sum(EXCLUDE %in% all_seasons), HOLDOUT, holdout_rows
 ))
+cat("season/week counts:\n")
+print(season_week_counts, row.names = FALSE)
+
+# ---- Recipe preflight: the decided recipe must be exactly in force ----
+preflight_recipe <- function(recipe) {
+  m1_rows <- nrow(recipe$m1_grid)
+  m2_rows <- nrow(recipe$m2_grid)
+  m0_rows <- nrow(recipe$m0_grid)
+  nesting <- recipe$gate_nesting
+  cat(sprintf(
+    "recipe: M0 rows = %d; M1 rows = %d; M2 stage-A rows = %d; gate_nesting = %s\n",
+    m0_rows, m1_rows, m2_rows, nesting
+  ))
+  cat(sprintf(
+    "recipe: M1 k_ref = %s; M1 slope_weight = %s; M2 k_z = %s; M2 k_u = %s; M2 k_d = %s; M2 k_tau = %s; M2 conf_scale = %s\n",
+    paste(unique(recipe$m1_grid$k_ref), collapse = ","),
+    paste(unique(recipe$m1_grid$slope_weight), collapse = ","),
+    paste(sort(unique(recipe$m2_grid$k_z)), collapse = ","),
+    paste(sort(unique(recipe$m2_grid$k_u)), collapse = ","),
+    paste(sort(unique(recipe$m2_grid$k_d)), collapse = ","),
+    paste(sort(unique(recipe$m2_grid$k_tau)), collapse = ","),
+    paste(sort(unique(recipe$m2_grid$conf_scale)), collapse = ",")
+  ))
+  if (m1_rows != 1L) {
+    stop("Recipe preflight failed: M1 grid rows = ", m1_rows, ", expected 1.")
+  }
+  if (m2_rows != 192L) {
+    stop("Recipe preflight failed: M2 stage-A rows = ", m2_rows, ", expected 192.")
+  }
+  if (!identical(nesting, "full")) {
+    stop("Recipe preflight failed: gate_nesting = ", nesting, ", expected full.")
+  }
+  invisible(TRUE)
+}
+preflight_recipe(RECIPE)
 
 if (preflight_only) {
   cat("preflight-only mode: data and season selection validated; no fit started\n")
@@ -213,10 +312,20 @@ provenance <- list(
   training_seasons = sort(training_seasons),
   n_training_seasons = length(training_seasons),
   timing_label_input = "timing-v2",
+  recipe = RECIPE,
+  recipe_summary = c(
+    m0_rows = nrow(M0_GRID), m1_rows = nrow(M1_GRID),
+    m2_stage_a_rows = nrow(M2_STAGE_A_GRID),
+    m1_k_ref = unique(M1_GRID$k_ref),
+    m1_slope_weight = unique(M1_GRID$slope_weight),
+    gate_nesting = GATE_NESTING, scoring = "page_v2"
+  ),
   protocol_args = PROTOCOL_ARGS,
   r_version = R.version.string,
   session_pid = page_main_pid
 )
+provenance$rng_start <- run_rng_start
+provenance$package_versions <- PAGe:::.page_dependency_versions()
 saveRDS(provenance, file.path(run_dir, "provenance.rds"))
 
 source_files <- c(
@@ -256,7 +365,7 @@ write_status("training", paste0(
 ))
 
 t0 <- Sys.time()
-result <- do.call(PAGe::run_outer_fold, c(
+result <- PAGe:::.page_training_audit(do.call(PAGe::run_outer_fold, c(
   list(
     data = allD,
     holdout = HOLDOUT,
@@ -267,7 +376,7 @@ result <- do.call(PAGe::run_outer_fold, c(
     verbose = TRUE
   ),
   PROTOCOL_ARGS
-))
+)), directory = run_dir)
 elapsed_s <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
 
 saveRDS(list(

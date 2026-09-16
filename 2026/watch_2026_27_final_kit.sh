@@ -1,16 +1,30 @@
 #!/usr/bin/env bash
-# Detached zero-token watchdog for the 2025-26 ultimate outer-fold run.
+# Detached zero-token watchdog for the 2026-27 final-kit run.
 # Records compact hourly health rows and a bounded repair packet on failure.
 set -uo pipefail
-run_root="${PAGE_RUN_ROOT:-/home/yeli/repos/PAGe/results/manuscript/nested-outer-2025-26-ultimate-20260911}"
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+repo_root="${PAGE_REPO_ROOT:-$(dirname -- "$script_dir")}"
+run_root="${PAGE_RUN_ROOT:-$repo_root/results/final-kit-2026-27}"
 run_id="${PAGE_RUN_ID:?PAGE_RUN_ID must be set}"
 run_dir="$run_root/$run_id"
+once=0
+case "${1:-}" in
+  --once) once=1 ;;
+  "") ;;
+  *) echo "usage: $0 [--once]" >&2; exit 2 ;;
+esac
+[[ $# -le 1 ]] || exit 2
+[[ -d "$run_dir" && -s "$run_dir/runner_identity.tsv" ]] || {
+  echo "existing run directory and runner identity required" >&2; exit 1;
+}
 id_file="$run_dir/runner_identity.tsv"
 interval="${PAGE_WATCH_INTERVAL:-3600}"
 stale_after="${PAGE_WATCH_STALE_SECONDS:-7200}"
 watch_file="$run_dir/watch.tsv"
 log_file="$run_dir/run.log"
-mkdir -p "$run_dir"
+[[ "$interval" =~ ^[1-9][0-9]*$ && "$stale_after" =~ ^[1-9][0-9]*$ ]] || {
+  echo "watch intervals must be positive integer seconds" >&2; exit 2;
+}
 if [[ ! -f "$watch_file" ]]; then
   printf 'timestamp_utc\tstate\tpid\tworkers\tcpu_pct\trss_mb\tstage\tlog_age_s\tlog_bytes\tckpt_count\tartifact_count\tpid_alive\tidentity_ok\tckpt_age_s\n' > "$watch_file"
 fi
@@ -78,7 +92,7 @@ while true; do
     log_mtime=$(stat -c %Y "$log_file" 2>/dev/null || echo "$now_s")
     log_age=$(( now_s - log_mtime ))
   fi
-  ckpt_times=$(find "$run_dir/checkpoints/m1" "$run_dir/checkpoints/m2" \
+  ckpt_times=$(find "$run_dir/checkpoints" \
     -type f -name '*.rds' -printf '%T@\n' 2>/dev/null || true)
   ckpt=$(awk 'NF { n++ } END { print n+0 }' <<< "$ckpt_times")
   newest=$(awk '$1 > newest { newest=$1 } END { if (newest) printf "%.0f", int(newest) }' <<< "$ckpt_times")
@@ -108,5 +122,6 @@ while true; do
     fi
     break
   fi
+  [[ "$once" -eq 0 ]] || break
   sleep "$interval"
 done
