@@ -64,6 +64,7 @@ test_that(".nested_gate_select_config actually installs a parallel future plan f
   # installed around the call. Capture the plan class live during the
   # mocked core call, not just the n_cores value.
   seen_plan_class <- NULL
+  seen_workers <- NULL
   before_class <- class(future::plan())[[1]]
 
   fake_core <- function(training_data, row_weights, grid, training_seasons,
@@ -71,6 +72,7 @@ test_that(".nested_gate_select_config actually installs a parallel future plan f
                         alpha_state, gamma, n_cores = 1L, ckpt_dir = NULL,
                         label = "M2 subset tuning", evaluation_label = "cross-fitted") {
     seen_plan_class <<- class(future::plan())[[1]]
+    seen_workers <<- future::nbrOfWorkers()
     list(
       grid = grid,
       scores = data.frame(
@@ -107,6 +109,9 @@ test_that(".nested_gate_select_config actually installs a parallel future plan f
     n_cores = 2L
   )
   expect_false(identical(seen_plan_class, "sequential"))
+  # Not just "a plan" -- the plan must actually be sized to n_cores, or
+  # this test would pass identically for a hardcoded worker count.
+  expect_equal(seen_workers, 2L)
   # Plan is restored on exit, same as m2_subset_tune()'s own on.exit pattern.
   expect_identical(class(future::plan())[[1]], before_class)
 })
