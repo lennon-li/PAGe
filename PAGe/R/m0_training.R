@@ -5,6 +5,80 @@
 # allowing governed configurations to opt in with `use_cls = TRUE`.
 .m0_use_cls <- function(params) isTRUE(params$use_cls)
 
+# A positivity smooth can be confounded with the season random intercept when
+# the event window contributes only one distinct p value per training season.
+# In that geometry, using a basis whose rank is one less than the number of
+# event-supported p values leaves the GAMM covariance inversion at a numerical
+# rank boundary (gamm4::getVb() fails in backsolve()). This is a data-support
+# adjustment, not a protocol/grid change: the requested value is retained in
+# the recorded support audit and only the effective basis used for this fit is
+# reduced when the event support is no larger than the requested k.
+.m0_rank_aware_basis <- function(dat, week_col, p_col, event_col,
+                                 k_week, k_p) {
+  finite_unique <- function(x) length(unique(x[is.finite(x)]))
+  n_week <- finite_unique(dat[[week_col]])
+  n_p <- finite_unique(dat[[p_col]])
+  event <- dat[[event_col]] == 1L
+  n_event_p <- finite_unique(dat[[p_col]][event])
+
+  effective_week <- min(as.integer(k_week), n_week)
+  if (effective_week < 3L) {
+    stop(
+      "fitIgnition: week smooth has fewer than 3 distinct finite values in the training window.",
+      call. = FALSE
+    )
+  }
+  if (n_event_p < 3L) {
+    stop(
+      "fitIgnition: positivity smooth has fewer than 3 distinct event-supported p values.",
+      call. = FALSE
+    )
+  }
+
+  event_support_limit <- n_event_p - 1L
+  effective_p <- min(as.integer(k_p), n_p, event_support_limit)
+  if (effective_p < 3L) {
+    stop(
+      "fitIgnition: positivity smooth cannot retain a rank-aware basis of at least 3.",
+      call. = FALSE
+    )
+  }
+
+  adjustments <- data.frame(
+    term = c(week_col, p_col),
+    requested_k = c(as.integer(k_week), as.integer(k_p)),
+    effective_k = c(effective_week, effective_p),
+    finite_unique_values = c(n_week, n_p),
+    event_supported_unique_values = c(
+      finite_unique(dat[[week_col]][event]), n_event_p
+    ),
+    reason = c(
+      if (effective_week < as.integer(k_week)) {
+        "capped by distinct finite training-window weeks"
+      } else {
+        "requested basis supported"
+      },
+      if (effective_p < as.integer(k_p)) {
+        paste0(
+          "capped below event-supported p rank boundary (",
+          n_event_p, " distinct event values; max effective k = ",
+          event_support_limit, ")"
+        )
+      } else {
+        "requested basis supported"
+      }
+    ),
+    stringsAsFactors = FALSE
+  )
+
+  list(
+    requested = c(k_week = as.integer(k_week), k_p = as.integer(k_p)),
+    effective = c(k_week = effective_week, k_p = effective_p),
+    n_event_p = n_event_p,
+    adjustments = adjustments
+  )
+}
+
 # ============================================================
 # Prospective ignition detection (M0)
 #   Stage-1: ignition classifier scores (fitIgnition)
@@ -76,6 +150,8 @@
 #'   \item{train_data}{Training subset with \code{event} label and per-row bounds.}
 #'   \item{iWeek_by_season}{Season-level truth ignition week table.}
 #'   \item{fits}{List of fitted objects for each enabled model.}
+#'   \item{basis_support}{Requested and effective basis dimensions with the
+#'     explicit support-based adjustment reason.}
 #' }
 #'
 #' \strong{Added score columns (in \code{$data}).}
@@ -169,6 +245,14 @@ fitIgnition <- function(
   DT_tr <- DT_tr[get(week_col) >= w_lo_train & get(week_col) <= w_hi_train]
   DT_tr[, event := as.integer(get(week_col) >= lo_event & get(week_col) <= hi_event)]
 
+  basis_support <- .m0_rank_aware_basis(
+    DT_tr,
+    week_col = week_col, p_col = p_col, event_col = "event",
+    k_week = k_week, k_p = k_p
+  )
+  k_week_effective <- basis_support$effective[["k_week"]]
+  k_p_effective <- basis_support$effective[["k_p"]]
+
   if (isTRUE(verbose)) {
     n_pos <- sum(DT_tr$event == 1L, na.rm = TRUE)
     n_all <- nrow(DT_tr)
@@ -177,13 +261,14 @@ fitIgnition <- function(
     message(
       "[fitIgnition] train rows=", n_all,
       " seasons=", data.table::uniqueN(DT_tr[[season_col]]),
-      " event==1 count=", n_pos, " prevalence=", signif(n_pos / n_all, 3)
+      " event==1 count=", n_pos, " prevalence=", signif(n_pos / n_all, 3),
+      " basis k_week=", k_week_effective, " k_p=", k_p_effective
     )
   }
 
   rhs_fixed <- paste0(
-    "s(", week_col, ", bs='ts', k=", as.integer(k_week), ") + ",
-    "s(", p_col,    ", bs='ts', k=", as.integer(k_p),    ")"
+    "s(", week_col, ", bs='ts', k=", k_week_effective, ") + ",
+    "s(", p_col,    ", bs='ts', k=", k_p_effective,    ")"
   )
   form_fixed <- stats::as.formula(paste0("event ~ ", rhs_fixed))
 
@@ -233,8 +318,8 @@ fitIgnition <- function(
     term_fs <- paste0("s(", week_col, ",", season_col, ", bs='fs', k=", as.integer(k_fs), ")")
     form_fs <- stats::as.formula(paste0(
       "event ~ ",
-      "s(", week_col, ", bs='ts', k=", as.integer(k_week), ") + ",
-      "s(", p_col,    ", bs='ts', k=", as.integer(k_p),    ") + ",
+      "s(", week_col, ", bs='ts', k=", k_week_effective, ") + ",
+      "s(", p_col,    ", bs='ts', k=", k_p_effective,    ") + ",
       term_fs
     ))
 
@@ -267,7 +352,8 @@ fitIgnition <- function(
     data = as.data.frame(DT_all),
     train_data = as.data.frame(DT_tr),
     iWeek_by_season = as.data.frame(iWeek_dt),
-    fits = fits
+    fits = fits,
+    basis_support = basis_support
   )
 }
 
