@@ -596,7 +596,7 @@ run_alignment_prospective_multi <- function(
       as.integer(.data$weekF) - iWeek_hat + as.integer(ref$anchorWeek)
     }) |>
     dplyr::mutate(
-      alignment_in_domain = .data$newWeek >= 1 & .data$newWeek <= 52,
+      alignment_in_domain = .data$newWeek >= 1 & .data$newWeek <= .page_template_weeks(),
       alignment_out_of_domain = !.data$alignment_in_domain
     )
 
@@ -625,7 +625,7 @@ run_alignment_prospective_multi <- function(
       hyper                  = hyper,
       allow_scale            = scale_rec,
       level                  = level,
-      future_weeks           = seq(1, 52, by = 0.5),
+      future_weeks           = seq(1, .page_template_weeks(), by = 0.5),
       include_observed       = TRUE,
       curvature_ratio        = curvature_ratio,
       temperature            = temperature,
@@ -794,7 +794,7 @@ run_alignment_prospective_multi_weights <- function(
       as.integer(.data$weekF) - iWeek_hat + as.integer(ref$anchorWeek)
     }) |>
     dplyr::mutate(
-      alignment_in_domain = .data$newWeek >= 1 & .data$newWeek <= 52,
+      alignment_in_domain = .data$newWeek >= 1 & .data$newWeek <= .page_template_weeks(),
       alignment_out_of_domain = !.data$alignment_in_domain
     )
 
@@ -820,7 +820,7 @@ run_alignment_prospective_multi_weights <- function(
     hyper                  = hyper,
     allow_scale            = scale_rec,
     level                  = level,
-    future_weeks           = seq(1, 52, by = 0.5),
+    future_weeks           = seq(1, .page_template_weeks(), by = 0.5),
     include_observed       = TRUE,
     curvature_ratio        = curvature_ratio,
     top_k                  = top_k,

@@ -1,7 +1,7 @@
 # Shared forecast-target availability contract.
 
 .page_forecast_availability <- function(target_weekF, target_newWeek,
-                                        nW_true = 52L, template_weeks = 52L) {
+                                        nW_true = 52L, template_weeks = .page_template_weeks()) {
   target_weekF <- as.numeric(target_weekF)
   target_newWeek <- as.numeric(target_newWeek)
   nW_true <- rep(as.numeric(nW_true), length.out = length(target_weekF))

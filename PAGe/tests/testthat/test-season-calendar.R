@@ -72,3 +72,59 @@ test_that("dated adapter ignores a conflicting source season label", {
   expect_equal(out$pho_season, c("wrong-label", "wrong-label"))
   expect_equal(out$weekF, c(2L, 28L))
 })
+
+test_that("calendar helpers agree on every start year", {
+  years <- 2012:2026
+  for (year in years) {
+    df <- data.frame(season = sprintf("%d-%02d", year, (year + 1) %% 100))
+    expected <- PAGe::page_season_calendar(mmwr_year = year, week = 27L)$nW_true
+    expect_equal(PAGe:::.season_calendar_weeks(df), expected)
+    if (year %in% c(2014, 2020, 2025)) {
+      expect_equal(expected, 53L)
+    } else {
+      expect_equal(expected, 52L)
+    }
+  }
+})
+
+test_that("the template domain is the declared width, not the season length", {
+  outs <- list(
+    list(
+      data = data.frame(season = "2014-15", weekF = 1:53),
+      ignition = data.frame(season = "2014-15", weekF = 20L)
+    ),
+    list(
+      data = data.frame(season = "2020-21", weekF = 1:53),
+      ignition = data.frame(season = "2020-21", weekF = 20L)
+    )
+  )
+  aligned <- PAGe:::alignIgnition(outs)
+  expect_true(all(aligned$alignment_out_of_domain[aligned$weekF == 53L]))
+  expect_equal(aligned$nW_true[aligned$season == "2014-15" & aligned$weekF == 53L], 53L)
+  expect_equal(aligned$nW_true[aligned$season == "2020-21" & aligned$weekF == 53L], 53L)
+
+  aligned_wide <- PAGe:::alignIgnition(outs, template_weeks = 53L)
+  expect_false(any(aligned_wide$alignment_out_of_domain[aligned_wide$weekF == 53L]))
+})
+
+test_that("52-week seasons are unchanged", {
+  outs <- list(
+    list(
+      data = data.frame(season = "2015-16", weekF = 1:52),
+      ignition = data.frame(season = "2015-16", weekF = 20L)
+    ),
+    list(
+      data = data.frame(season = "2016-17", weekF = 1:52),
+      ignition = data.frame(season = "2016-17", weekF = 20L)
+    )
+  )
+  aligned <- PAGe:::alignIgnition(outs)
+  expect_false(any(aligned$alignment_out_of_domain))
+})
+
+test_that(".page_alignment_domain treats non-finite input as out of domain", {
+  expect_equal(
+    PAGe:::.page_alignment_domain(c(1, NA, Inf, 30), 52L)$in_domain,
+    c(TRUE, FALSE, FALSE, TRUE)
+  )
+})

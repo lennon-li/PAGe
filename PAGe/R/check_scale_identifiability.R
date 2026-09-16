@@ -31,7 +31,7 @@ check_scale_identifiability <- function(currentD,
     ))
   }
 
-  g_ref_safe <- function(u) .page_alignment_eval(g_ref_fun, u, n_weeks = 52L)
+  g_ref_safe <- function(u) .page_alignment_eval(g_ref_fun, u, n_weeks = .page_template_weeks())
 
   # 1) get tau-hat from a tau-only fit (delta fixed at 0, no scaling)
   tb <- hyper$TAU_BOUNDS

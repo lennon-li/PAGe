@@ -199,8 +199,9 @@ apply_timing_labels_v2 <- function(data, labels, anchor_week = NULL,
     }
   }
   out$newWeek <- .page_shift_week(out$weekF, out$iWeekF, anchor_week)
-  out$alignment_in_domain <- out$newWeek >= 1 & out$newWeek <= 52
-  out$alignment_out_of_domain <- !out$alignment_in_domain
+  .dom <- .page_alignment_domain(out$newWeek, .page_template_weeks())
+  out$alignment_in_domain <- .dom$in_domain
+  out$alignment_out_of_domain <- .dom$out_of_domain
   out$target_weekF <- out$iWeekF
   if (".page_timing_n_weeks" %in% names(out)) out$.page_timing_n_weeks <- NULL
   if (!is.null(peak)) {

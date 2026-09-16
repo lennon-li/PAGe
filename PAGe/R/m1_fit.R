@@ -1,11 +1,11 @@
 # M1 online alignment support is the fixed 1:52 template domain.  Evaluation
 # outside this domain is unavailable; it is never clamped to an endpoint.
-.page_alignment_admissible <- function(t, tau, delta, n_weeks = 52L) {
+.page_alignment_admissible <- function(t, tau, delta, n_weeks = .page_template_weeks()) {
   u <- (as.numeric(t) - as.numeric(tau)) / (1 + as.numeric(delta))
   is.finite(u) & u >= 1 & u <= as.numeric(n_weeks)
 }
 
-.page_alignment_eval <- function(g_ref_fun, u, n_weeks = 52L) {
+.page_alignment_eval <- function(g_ref_fun, u, n_weeks = .page_template_weeks()) {
   u <- as.numeric(u)
   out <- rep(NA_real_, length(u))
   ok <- is.finite(u) & u >= 1 & u <= as.numeric(n_weeks)
@@ -23,7 +23,7 @@
 # window, so no candidate can improve its score by discarding an inconvenient
 # observation that another candidate retains.
 .page_alignment_common_support <- function(t, n, tau_bounds, delta_bounds,
-                                           n_weeks = 52L) {
+                                           n_weeks = .page_template_weeks()) {
   t <- as.numeric(t)
   n <- as.numeric(n)
   tau_bounds <- sort(as.numeric(tau_bounds)[1:2])
@@ -113,7 +113,7 @@ tau_profile_se <- function(currentD, g_ref, allow_scale = FALSE,
   n_rows <- nrow(dat)
   support <- support %||% .page_alignment_common_support(
     dat$newWeek, dat$n, tau_bounds, c(0, 0),
-    n_weeks = 52L
+    n_weeks = .page_template_weeks()
   )
   if (length(support) != n_rows) {
     stop("Alignment profile support length does not match currentD.", call. = FALSE)
@@ -205,7 +205,7 @@ compute_align_weights <- function(t,
                                   trough_weight = 0.1,
                                   rise_weight = 3.0,
                                   peak_decay = 0.3,
-                                  n_weeks = 52L) {
+                                  n_weeks = .page_template_weeks()) {
   # Find peak of the reference curve (probability scale)
   grid_u <- seq_len(n_weeks)
   g_vals <- g_ref_fun(grid_u)
@@ -286,7 +286,7 @@ fit_tau_delta <- function(currentD, g_ref_fun,
   # inferred from the length of the optimiser vector.
   support_delta_bounds <- if (time_ok) sort(as.numeric(delta_bounds)[1:2]) else c(0, 0)
   alignment_support <- .page_alignment_common_support(
-    t, n, tau_bounds, support_delta_bounds, 52L
+    t, n, tau_bounds, support_delta_bounds, .page_template_weeks()
   )
   if (sum(alignment_support) < min_support) {
     stop("M1 alignment has insufficient common support in the optimizer window.",
@@ -509,7 +509,7 @@ fit_tau_delta <- function(currentD, g_ref_fun,
     min_support = min_support,
     support = alignment_support,
     support_delta_bounds = support_delta_bounds,
-    n_admissible = sum(.page_alignment_admissible(t, tau_hat, del_hat, 52L) & n > 0),
+    n_admissible = sum(.page_alignment_admissible(t, tau_hat, del_hat, .page_template_weeks()) & n > 0),
     predict_prob = predict_prob,
     # store data for profiling t_peak, etc.
     t = t, y = y, n = n, w = w,

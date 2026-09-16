@@ -77,7 +77,7 @@
 estimateRef <- function(alignedD,
                         exSeason = NULL,
                         k = 10,
-                        n_weeks = 52L,
+                        n_weeks = .page_template_weeks(),
                         nAGQ = 1,
                         method = c(
                           "binomial", "binomial_weighted",
@@ -507,7 +507,8 @@ estimateRef <- function(alignedD,
     out_of_domain_by_season = out_of_domain_by_season,
     anchorWeek = anchorWeek,
     method = method,
-    agg = agg
+    agg = agg,
+    n_weeks = as.integer(n_weeks)
   )
   # For fs method: include per-season logit predictions for diagnostics
   if (uses_fs) out$eta_mat <- eta_mat
@@ -762,7 +763,7 @@ alignIgnition <- function(outs,
                           season_col = "season",
                           week_col = "weekF",
                           nweek_col = "nW_true",
-                          template_weeks = 52L) {
+                          template_weeks = .page_template_weeks()) {
   stopifnot(is.list(outs), length(outs) > 0)
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Need 'data.table'.")
   if (!requireNamespace("purrr", quietly = TRUE)) stop("Need 'purrr'.")

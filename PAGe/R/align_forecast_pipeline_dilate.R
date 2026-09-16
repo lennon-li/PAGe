@@ -42,8 +42,8 @@ align_forecast_pipeline_dilate <- function(currentD,
   wk <- hyper$WEEK_THRESHOLD_DELTA
   lam <- hyper$LAMBDA_DELTA
 
-  # Template support is explicit: outside 1:52 is unavailable, never clamped.
-  g_ref_safe <- function(u) .page_alignment_eval(g_ref_fun, u, n_weeks = 52L)
+  # Template support is explicit: outside 1:.page_template_weeks() is unavailable, never clamped.
+  g_ref_safe <- function(u) .page_alignment_eval(g_ref_fun, u, n_weeks = .page_template_weeks())
 
   # 1) Align (tau, delta, a, b)
   fit <- tryCatch(fit_tau_delta(
@@ -101,7 +101,7 @@ align_forecast_pipeline_dilate <- function(currentD,
   # Reuse the fit's candidate-independent support for every downstream GLM
   # and uncertainty calculation. Recomputing support at the fitted candidate
   # would let the amplitude model silently change rows relative to the fit.
-  fit_support <- fit$support %||% .page_alignment_admissible(t, fit$tau, fit$delta, 52L)
+  fit_support <- fit$support %||% .page_alignment_admissible(t, fit$tau, fit$delta, .page_template_weeks())
   if (length(fit_support) != length(t)) {
     stop("Alignment fit support length does not match currentD.", call. = FALSE)
   }
@@ -171,7 +171,7 @@ align_forecast_pipeline_dilate <- function(currentD,
     )
     # The delta-off refit can recover additional common-support rows. Refresh
     # all downstream masks and weights before refitting amplitudes and profiling.
-    fit_support <- fit$support %||% .page_alignment_admissible(t, fit$tau, fit$delta, 52L)
+    fit_support <- fit$support %||% .page_alignment_admissible(t, fit$tau, fit$delta, .page_template_weeks())
     if (length(fit_support) != length(t)) {
       stop("Alignment fallback support length does not match currentD.", call. = FALSE)
     }
@@ -213,7 +213,7 @@ align_forecast_pipeline_dilate <- function(currentD,
   # 4) Predictions + PIs
   last_obs <- max(t)
   if (is.null(future_weeks)) {
-    future_weeks <- if (last_obs < 52) (last_obs + 1):52 else integer(0)
+    future_weeks <- if (last_obs < .page_template_weeks()) (last_obs + 1):.page_template_weeks() else integer(0)
   }
   z <- qnorm((1 + level) / 2)
 
@@ -223,7 +223,7 @@ align_forecast_pipeline_dilate <- function(currentD,
     }
 
     u <- (tt - fit$tau) / (1 + fit$delta)
-    in_domain <- is.finite(u) & u >= 1 & u <= 52
+    in_domain <- is.finite(u) & u >= 1 & u <= .page_template_weeks()
     g_mu <- g_ref_safe(u)
     g_mu_model <- g_mu
     g_mu_model[!in_domain] <- 0

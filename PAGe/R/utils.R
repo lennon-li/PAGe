@@ -111,7 +111,7 @@ n_weeks_in_start_year <- function(start_year) {
 #' @keywords internal
 logit <- function(p) qlogis(pmin(pmax(p, 1e-6), 1 - 1e-6))
 
-g_ref_safe <- function(u) g_ref_fun(pmin(pmax(u, 1), 52))
+
 
 
 

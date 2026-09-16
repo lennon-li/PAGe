@@ -353,26 +353,14 @@ apply_ignition_labels <- function(data, labels, anchor_week = NULL,
   out <- canonical
   out$iWeek <- as.integer(unname(label_vec[match(out$season, names(label_vec))]))
   out$phase <- as.integer(!is.na(out$iWeek) & out$weekF >= out$iWeek)
-  n_weeks <- if (!is.null(n_weeks_col)) {
-    if (length(n_weeks_col) != 1L || !n_weeks_col %in% names(out)) {
-      stop("`n_weeks_col` must name a column in `data`.", call. = FALSE)
-    }
-    as.numeric(out[[n_weeks_col]])
-  } else {
-    rep(NA_real_, nrow(out))
-  }
-  by_season <- split(seq_len(nrow(out)), out$season)
-  for (idx in by_season) {
-    if (all(is.na(n_weeks[idx]))) n_weeks[idx] <- max(out$weekF[idx], na.rm = TRUE)
-  }
   offset <- anchor_week - out$iWeek
   out$newWeek <- ifelse(
     is.na(out$iWeek), NA_real_,
     .page_shift_week(out$weekF, out$iWeek, anchor_week)
   )
-  out$alignment_in_domain <- is.finite(out$newWeek) & out$newWeek >= 1 &
-    out$newWeek <= 52
-  out$alignment_out_of_domain <- !out$alignment_in_domain
+  .dom <- .page_alignment_domain(out$newWeek, .page_template_weeks())
+  out$alignment_in_domain <- .dom$in_domain
+  out$alignment_out_of_domain <- .dom$out_of_domain
   attr(out, "anchorWeek") <- anchor_week
   attr(out, "ignition_labels") <- label_vec
   out

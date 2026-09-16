@@ -858,8 +858,9 @@ m2_subset_logit <- function(p, eps = 1e-6) {
     if (timing_mode == "legacy") anchor <- as.integer(anchor)
     train$nW_true <- .season_calendar_weeks(train)
     train$newWeek <- .page_shift_week(train$weekF, train$iWeek, anchor)
-    train$alignment_in_domain <- train$newWeek >= 1 & train$newWeek <= 52
-    train$alignment_out_of_domain <- !train$alignment_in_domain
+    .dom <- .page_alignment_domain(train$newWeek, .page_template_weeks())
+    train$alignment_in_domain <- .dom$in_domain
+    train$alignment_out_of_domain <- .dom$out_of_domain
     attr(train, "anchorWeek") <- anchor
     attr(train, "ignD") <- ignition
     available_k <- length(unique(train$newWeek[
@@ -871,7 +872,7 @@ m2_subset_logit <- function(p, eps = 1e-6) {
     }
     ref <- estimateRef(train,
       exSeason = character(0),
-      k = k_ref, n_weeks = 52L,
+      k = k_ref, n_weeks = .page_template_weeks(),
       method = p$ref_method %||% "fs", timing_mode = timing_mode
     )
     if (any(as.character(ref$dat$season) %in% excluded)) {

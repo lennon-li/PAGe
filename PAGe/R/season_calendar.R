@@ -82,7 +82,14 @@ page_season_calendar <- function(dates = NULL, mmwr_year = NULL, week = NULL,
   as.numeric(weekF) - as.numeric(iWeek) + as.numeric(anchorWeek)
 }
 
-.page_alignment_domain <- function(newWeek, n_weeks = 52L) {
+# The declared width of the shared aligned template coordinate used by every
+# M1 reference fit. This is NOT a season's calendar length (that is nW_true /
+# .season_calendar_weeks()) - it is one fixed constant for the whole package.
+.page_template_weeks <- function() {
+  52L
+}
+
+.page_alignment_domain <- function(newWeek, n_weeks = .page_template_weeks()) {
   in_domain <- is.finite(newWeek) & newWeek >= 1 & newWeek <= as.numeric(n_weeks)
   list(newWeek = newWeek, in_domain = in_domain, out_of_domain = !in_domain)
 }

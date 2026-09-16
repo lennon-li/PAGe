@@ -106,14 +106,13 @@ nested_loso_build_fold <- function(allD,
     aligned_train$iWeekF <- unname(target[aligned_train$season])
     aligned_train$iWeek <- aligned_train$iWeekF
     anchor <- stats::median(target, na.rm = TRUE)
-    n_w <- .season_calendar_weeks(aligned_train)
     aligned_train$phase <- as.integer(aligned_train$weekF >= aligned_train$iWeekF)
     aligned_train$newWeek <- .page_shift_week(
       aligned_train$weekF, aligned_train$iWeekF, anchor
     )
-    aligned_train$alignment_in_domain <- aligned_train$newWeek >= 1 &
-      aligned_train$newWeek <= 52
-    aligned_train$alignment_out_of_domain <- !aligned_train$alignment_in_domain
+    .dom <- .page_alignment_domain(aligned_train$newWeek, .page_template_weeks())
+    aligned_train$alignment_in_domain <- .dom$in_domain
+    aligned_train$alignment_out_of_domain <- .dom$out_of_domain
     attr(aligned_train, "anchorWeek") <- anchor
   }
 
