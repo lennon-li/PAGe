@@ -1361,7 +1361,19 @@ loso_M0v2 <- function(dat,
     "K_sum", "p_sum_thr", "N_req", "w_min", "w_max", "use_cls"
   )
 
-  for (ss in seasons) {
+  # Folds are independent given a fixed grid/data, but only the per-fold
+  # threshold grid scan was parallel; the per-fold GAM refit (fitIgnition),
+  # the dominant cost, ran one fold at a time. Dispatch folds themselves
+  # across `ncores` and drop each fold's own grid scan to a single core to
+  # avoid n^2 oversubscription. Windows keeps the original serial loop --
+  # PSOCK export of this closure's environment is not worth the risk for a
+  # non-production host.
+  ncores_fold <- max(1L, as.integer(tune_args$ncores %||% 1L))
+  fold_parallel <- ncores_fold > 1L && !identical(.Platform$OS.type, "windows")
+  tune_args_inner <- tune_args
+  if (fold_parallel) tune_args_inner$ncores <- 1L
+
+  run_one_fold <- function(ss) {
     if (verbose) message("[loso_M0v2] fold holdout=", ss)
 
     DT_train <- DT[get(season_col) != ss]
@@ -1421,10 +1433,10 @@ loso_M0v2 <- function(dat,
       week_col = week_col,
       season_col = season_col,
       phase_col = phase_col,
-      truth_col = tune_args$truth_col %||% "iWeek",
+      truth_col = tune_args_inner$truth_col %||% "iWeek",
       exSeason = exSeason_tune,
       timing_mode = timing_mode
-    ), tune_args)
+    ), tune_args_inner)
 
     prior_fold <- previous_folds[[ss]]
     prior_scores <- prior_fold$tuning_results %||% NULL
@@ -1495,7 +1507,7 @@ loso_M0v2 <- function(dat,
       ]
     }
 
-    fold_out[[ss]] <- list(
+    list(
       season = ss,
       best_params = best_params,
       tuning_grid = grid,
@@ -1507,6 +1519,25 @@ loso_M0v2 <- function(dat,
         detect_seconds = t_det
       )
     )
+  }
+
+  chunk_size <- if (fold_parallel) ncores_fold else 1L
+  season_chunks <- split(seasons, ceiling(seq_along(seasons) / chunk_size))
+  for (chunk in season_chunks) {
+    chunk_results <- if (fold_parallel) {
+      parallel::mclapply(
+        chunk,
+        function(ss) tryCatch(run_one_fold(ss), error = function(e) e),
+        mc.cores = ncores_fold
+      )
+    } else {
+      lapply(chunk, function(ss) tryCatch(run_one_fold(ss), error = function(e) e))
+    }
+    for (i in seq_along(chunk)) {
+      res <- chunk_results[[i]]
+      if (inherits(res, "error")) stop(conditionMessage(res), call. = FALSE)
+      fold_out[[chunk[[i]]]] <- res
+    }
     if (!is.null(checkpoint_file)) {
       saveRDS(
         list(folds = fold_out, grid = grid, context_id = context_id),
