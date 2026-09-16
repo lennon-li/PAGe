@@ -1,3 +1,12 @@
+m2_subset_score <- PAGe:::m2_subset_score
+m2_subset_spec <- PAGe:::m2_subset_spec
+m2_subset_family <- PAGe:::m2_subset_family
+m2_subset_grid <- PAGe:::m2_subset_grid
+m2_subset_config <- PAGe:::m2_subset_config
+default_m2_nll_gain_caps <- PAGe:::default_m2_nll_gain_caps
+inspect_tuning_boundaries <- PAGe:::inspect_tuning_boundaries
+expand_tuning_grid <- PAGe:::expand_tuning_grid
+
 make_subset_scores <- function(grid, seasons, nll_fun) {
   rows <- list()
   for (i in seq_len(nrow(grid))) {

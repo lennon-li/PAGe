@@ -28,7 +28,7 @@ A data frame with the same rows as \code{season_df} augmented
 For each week \code{w} in \code{season_df}, fits \code{estimateDerivs} on
 the subset of rows with \code{weekF <= w} and records the derivative values
 for row \code{w} only.  This prevents future weeks from influencing the GAM
-smoother at earlier time points — a requirement for honest LOSO evaluation.
+smoother at earlier time points -- a requirement for honest LOSO evaluation.
 }
 \details{
 Results are memoised by \code{walk_end} inside each call: each unique

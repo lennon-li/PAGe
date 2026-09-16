@@ -23,7 +23,9 @@ decide_m2_vs_m1(
   min_gain_by_horizon = NULL,
   confidence = 0.95,
   max_season_degradation = 0,
-  eps = 1e-12
+  eps = 1e-12,
+  scoring = c("page_v2", "legacy_0_12"),
+  score_weight_col = NULL
 )
 }
 \arguments{
@@ -72,6 +74,14 @@ for any season after combining horizons. The default zero is a strict
 historical non-degradation rule.}
 
 \item{eps}{Probability clipping value used in the NLL calculation.}
+
+\item{scoring}{Scoring contract: code{"page_v2"} uses the retrospective
+phase weights (default), while code{"legacy_0_12"} retains the old
+post-ignition 0:12 weighting.}
+
+\item{score_weight_col}{Optional precomputed row-weight column. When
+omitted, code{weight_page_v2} or code{weight_legacy} is used when
+available for the selected contract.}
 }
 \value{
 A \code{page_m2_baseline_decision} list with \code{decision},

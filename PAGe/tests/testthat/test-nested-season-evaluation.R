@@ -1,9 +1,31 @@
+local_mocked_bindings <- function(..., .package = "PAGe") {
+  bindings <- rlang::list2(...)
+  frame <- parent.frame()
+  ns_env <- rlang::ns_env(.package)
+  if (!all(rlang::env_has(ns_env, names(bindings)))) {
+    stop("Can't find binding for ", paste(names(bindings)[!rlang::env_has(ns_env, names(bindings))], collapse = ", "), call. = FALSE)
+  }
+  old_bindings <- mget(names(bindings), ns_env, inherits = FALSE)
+  was_locked <- vapply(names(bindings), bindingIsLocked, logical(1), env = ns_env)
+  unlock_names <- names(bindings)[was_locked]
+  for (name in unlock_names) unlockBinding(name, ns_env)
+  list2env(bindings, envir = ns_env)
+  for (name in unlock_names) lockBinding(name, ns_env)
+  restore <- function() {
+    for (name in unlock_names) unlockBinding(name, ns_env)
+    list2env(old_bindings, envir = ns_env)
+    for (name in unlock_names) lockBinding(name, ns_env)
+  }
+  withr::defer(restore(), envir = frame)
+  invisible(NULL)
+}
+
 nested_test_data <- function(seasons = c("A", "B", "C")) {
   data.frame(
     season = rep(seasons, each = 4L),
     weekF = rep(seq_len(4L), length(seasons)),
     y = rep(c(1, 2, 3, 4), length(seasons)),
-    N = 10
+    N = 10, nW_true = 4L
   )
 }
 
@@ -39,7 +61,7 @@ test_that("nested evaluation rotates outer holdouts and aggregates seasons", {
   protocol <- list(
     weighting = list(
       early = 2, early_max_t_since = 12,
-      pre_ignition = 0, late = 1
+      pre_ignition = 0, late = 1, scoring = "legacy_0_12"
     ),
     adoption = list(
       min_gain = 0,

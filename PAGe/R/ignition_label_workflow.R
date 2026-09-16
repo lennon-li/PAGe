@@ -367,10 +367,12 @@ apply_ignition_labels <- function(data, labels, anchor_week = NULL,
   }
   offset <- anchor_week - out$iWeek
   out$newWeek <- ifelse(
-    is.na(out$iWeek), NA_integer_,
-    ((out$weekF + offset - 1L) %% n_weeks) + 1L
+    is.na(out$iWeek), NA_real_,
+    .page_shift_week(out$weekF, out$iWeek, anchor_week)
   )
-  out$newWeek <- as.integer(out$newWeek)
+  out$alignment_in_domain <- is.finite(out$newWeek) & out$newWeek >= 1 &
+    out$newWeek <= 52
+  out$alignment_out_of_domain <- !out$alignment_in_domain
   attr(out, "anchorWeek") <- anchor_week
   attr(out, "ignition_labels") <- label_vec
   out

@@ -7,25 +7,31 @@
 .timing_v2_crossing <- function(signals, raw_week, threshold, score_col = "p_cls_p",
                                 gate_col = "ignite_ok") {
   if (!is.data.frame(signals) || !nrow(signals)) {
-    return(list(estimate = as.numeric(raw_week), bracket = c(raw_week, raw_week),
-                method = "integer_fallback"))
+    return(list(
+      estimate = as.numeric(raw_week), bracket = c(raw_week, raw_week),
+      method = "integer_fallback"
+    ))
   }
   w <- as.numeric(signals$weekF)
   score <- as.numeric(signals[[score_col]])
   gate <- as.logical(signals[[gate_col]])
   hit <- which(gate %in% TRUE)[1L]
   if (is.na(hit) || !is.finite(raw_week)) {
-    return(list(estimate = as.numeric(raw_week),
-                bracket = c(as.numeric(raw_week), as.numeric(raw_week)),
-                method = "integer_fallback"))
+    return(list(
+      estimate = as.numeric(raw_week),
+      bracket = c(as.numeric(raw_week), as.numeric(raw_week)),
+      method = "integer_fallback"
+    ))
   }
   prev <- which(seq_along(w) < hit & is.finite(w) & is.finite(score) & score < threshold)
   prev <- if (length(prev)) prev[length(prev)] else NA_integer_
   if (is.na(prev) || !is.finite(score[hit]) || score[hit] <= score[prev] ||
     score[prev] >= threshold || score[hit] < threshold) {
-    return(list(estimate = as.numeric(w[hit]),
-                bracket = c(as.numeric(w[hit]), as.numeric(w[hit])),
-                method = "integer_fallback"))
+    return(list(
+      estimate = as.numeric(w[hit]),
+      bracket = c(as.numeric(w[hit]), as.numeric(w[hit])),
+      method = "integer_fallback"
+    ))
   }
   estimate <- w[prev] + (threshold - score[prev]) /
     (score[hit] - score[prev]) * (w[hit] - w[prev])
@@ -55,9 +61,12 @@ detectIgnitionBySeason_M0v2_timing <- function(ign_fit, params, ...) {
     ign_fit = ign_fit, params = params, ...
   )
   by <- det$by_season
-  if (!nrow(by)) return(det)
+  if (!nrow(by)) {
+    return(det)
+  }
   score_specs <- list()
-  if (isTRUE(params$use_cls)) {
+  use_cls <- .m0_use_cls(params)
+  if (use_cls) {
     score_specs <- c(score_specs, list(
       list(column = "p_cls_p", threshold = as.numeric(params$cls_thr %||% 0.2))
     ))
@@ -74,7 +83,9 @@ detectIgnitionBySeason_M0v2_timing <- function(ign_fit, params, ...) {
     season <- as.character(by$season[i])
     signals <- det$data[as.character(det$data$season) == season, , drop = FALSE]
     attempted <- lapply(score_specs, function(spec) {
-      if (!spec$column %in% names(signals)) return(NULL)
+      if (!spec$column %in% names(signals)) {
+        return(NULL)
+      }
       .timing_v2_crossing(
         signals, by$iWeek_hat[i], spec$threshold,
         score_col = spec$column
@@ -121,7 +132,8 @@ detectIgnitionBySeason_M0v2_timing <- function(ign_fit, params, ...) {
 #' @export
 detectIgnition_oneSeason_timing_v2 <- function(d_now, params) {
   det <- detectIgnitionBySeason_M0v2_timing(
-    d_now, params = params,
+    d_now,
+    params = params,
     verbose = FALSE, validate_support = FALSE
   )
   if (is.null(det$data) || !nrow(det$data)) {
@@ -137,8 +149,19 @@ detectIgnition_oneSeason_timing_v2 <- function(d_now, params) {
     cond_prev = last$cond_prev, cond_inc = last$cond_inc,
     ignite_ok_now = last$ignite_ok, stringsAsFactors = FALSE
   )
-  list(now = now, iWeek_hat = as.integer(det$by_season$iWeek_hat[1L]),
-       iWeek_hatF = as.numeric(det$by_season$iWeek_hatF[1L]))
+  i_week <- as.integer(det$by_season$iWeek_hat[1L])
+  detection_failed <- is.na(i_week)
+  fallback_week <- as.integer(params$w_max %||% 30L)
+  list(
+    now = now,
+    iWeek_hat = if (detection_failed) fallback_week else i_week,
+    iWeek_hatF = if (detection_failed) {
+      as.numeric(fallback_week)
+    } else {
+      as.numeric(det$by_season$iWeek_hatF[1L])
+    },
+    detection_failed = detection_failed
+  )
 }
 
 #' Run prospective M0 with fractional ignition timing
@@ -164,25 +187,34 @@ run_ignition_weekly_timing_v2 <- function(currentSeason, params, start_week = 5L
     dplyr::arrange(.data$weekF)
   eval_weeks <- sort(unique(d0$weekF[d0$weekF >= as.integer(start_week)]))
   if (!length(eval_weeks)) {
-    return(list(df = tibble::tibble(weekF = integer(), iWeek_hat_dynamic = integer(),
-                                    iWeek_hat_dynamicF = numeric()),
-                iWeek_hat_dynamic_last = NA_real_, iWeek_hat_locked = NA_integer_,
-                iWeek_hat_lockedF = NA_real_, ign_week_locked = NA_integer_,
-                ign_week_lockedF = NA_real_, timing = list(mode = "fractional")))
+    return(list(
+      df = tibble::tibble(
+        weekF = integer(), iWeek_hat_dynamic = integer(),
+        iWeek_hat_dynamicF = numeric()
+      ),
+      iWeek_hat_dynamic_last = NA_real_, iWeek_hat_locked = NA_integer_,
+      iWeek_hat_lockedF = NA_real_, ign_week_locked = NA_integer_,
+      ign_week_lockedF = NA_real_, timing = list(mode = "fractional")
+    ))
   }
   rows <- lapply(eval_weeks, function(w) {
     d_now <- d0[d0$weekF <= w, , drop = FALSE]
     det <- detectIgnitionBySeason_M0v2_timing(
-      d_now, params = params, validate_support = FALSE, verbose = FALSE
+      d_now,
+      params = params, validate_support = FALSE, verbose = FALSE
     )
     now <- det$data[nrow(det$data), , drop = FALSE]
     hat <- det$by_season$iWeek_hat[1L]
     hatF <- det$by_season$iWeek_hatF[1L]
+    detection_failed <- is.na(hat) || isTRUE(det$detection_failed)
+    fallback_week <- as.integer(params$w_max %||% 30L)
     tibble::tibble(
       weekF = as.integer(w), p_now = now$p[nrow(now)],
       n_hit_now = as.numeric(now$n_hit[nrow(now)]),
       ignite_ok_now = as.logical(now$ignite_ok[nrow(now)]),
-      iWeek_hat_dynamic = as.integer(hat), iWeek_hat_dynamicF = as.numeric(hatF)
+      detection_failed = detection_failed,
+      iWeek_hat_dynamic = if (detection_failed) fallback_week else as.integer(hat),
+      iWeek_hat_dynamicF = if (detection_failed) as.numeric(fallback_week) else as.numeric(hatF)
     )
   })
   df <- dplyr::bind_rows(rows)
@@ -197,8 +229,11 @@ run_ignition_weekly_timing_v2 <- function(currentSeason, params, start_week = 5L
     iWeek_hat_lockedF = if (any(valid_hat)) min(df$iWeek_hat_dynamicF[valid_hat]) else NA_real_,
     ign_week_locked = locked_week,
     ign_week_lockedF = if (is.na(locked)) NA_real_ else df$iWeek_hat_dynamicF[locked],
-    timing = list(mode = "fractional", raw_integer_field = "iWeek_hat_dynamic",
-                  fractional_field = "iWeek_hat_dynamicF")
+    detection_failed = isTRUE(tail(df$detection_failed, 1L)),
+    timing = list(
+      mode = "fractional", raw_integer_field = "iWeek_hat_dynamic",
+      fractional_field = "iWeek_hat_dynamicF"
+    )
   )
 }
 
@@ -233,7 +268,8 @@ prepare_timing_training_data_v2 <- function(data, labels) {
 fitIgnition_timing_v2 <- function(data, labels, ...) {
   targets <- as_timing_targets_v2(labels)
   fit <- fitIgnition(
-    prepare_timing_training_data_v2(data, labels), timing_truth = targets, ...
+    prepare_timing_training_data_v2(data, labels),
+    timing_truth = targets, ...
   )
   fit$timing <- list(
     mode = "fractional",
@@ -263,8 +299,10 @@ score_ignition_timing_v2 <- function(detection, labels) {
       estimate_weekF = as.numeric(.data$iWeek_hatF)
     )
   dplyr::left_join(truth, estimate, by = "season") |>
-    dplyr::mutate(error = .data$estimate_weekF - .data$true_weekF,
-                  abs_error = abs(.data$error))
+    dplyr::mutate(
+      error = .data$estimate_weekF - .data$true_weekF,
+      abs_error = abs(.data$error)
+    )
 }
 
 #' Score peak timing against the observed peak week
@@ -280,13 +318,19 @@ score_peak_timing_v2 <- function(predictions, labels, prediction_col = "peak_wee
     stop("`predictions` must contain season and `prediction_col`.", call. = FALSE)
   }
   truth <- as_timing_targets_v2(labels) |>
-    dplyr::select(.data$season, true_peak_weekF = .data$peak_observed_weekF,
-                  peak_second_weekF = .data$peak_second_weekF)
-  pred <- dplyr::transmute(predictions, season = as.character(.data$season),
-                            estimate_peak_weekF = as.numeric(.data[[prediction_col]]))
+    dplyr::select(.data$season,
+      true_peak_weekF = .data$peak_observed_weekF,
+      peak_second_weekF = .data$peak_second_weekF
+    )
+  pred <- dplyr::transmute(predictions,
+    season = as.character(.data$season),
+    estimate_peak_weekF = as.numeric(.data[[prediction_col]])
+  )
   dplyr::left_join(truth, pred, by = "season") |>
-    dplyr::mutate(error = .data$estimate_peak_weekF - .data$true_peak_weekF,
-                  abs_error = abs(.data$error))
+    dplyr::mutate(
+      error = .data$estimate_peak_weekF - .data$true_peak_weekF,
+      abs_error = abs(.data$error)
+    )
 }
 
 #' Apply fractional timing to an M1 alignment result
@@ -311,6 +355,8 @@ fractional_alignment_coordinates_v2 <- function(current_data, m0_result,
       iWeekF = i_week,
       phase = as.integer(.data$weekF >= i_week)
     )
-  list(iWeek_hatF = i_week, currentD = out,
-       raw_integer_bracket = m0_result$df$iWeek_hat_dynamic[1L] %||% NA_integer_)
+  list(
+    iWeek_hatF = i_week, currentD = out,
+    raw_integer_bracket = m0_result$df$iWeek_hat_dynamic[1L] %||% NA_integer_
+  )
 }

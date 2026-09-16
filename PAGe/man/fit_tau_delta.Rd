@@ -17,7 +17,8 @@ fit_tau_delta(
   time_weights = NULL,
   trough_weight = 0.1,
   rise_weight = 1,
-  peak_decay = 0.3
+  peak_decay = 0.3,
+  min_support = 4L
 )
 }
 \description{

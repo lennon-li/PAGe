@@ -152,7 +152,9 @@ apply_timing_labels_v2 <- function(data, labels, anchor_week = NULL,
   missing_ignition <- setdiff(matched_seasons, names(ignition))
   if (isTRUE(require_all) && length(missing_ignition)) {
     stop("Missing timing-v2 ignition label(s) for: ",
-         paste(missing_ignition, collapse = ", "), ".", call. = FALSE)
+      paste(missing_ignition, collapse = ", "), ".",
+      call. = FALSE
+    )
   }
   if (!length(intersect(matched_seasons, names(ignition)))) {
     stop("No supplied timing-v2 labels match the data seasons.", call. = FALSE)
@@ -196,7 +198,9 @@ apply_timing_labels_v2 <- function(data, labels, anchor_week = NULL,
       if (all(is.na(n_weeks[idx]))) n_weeks[idx] <- max(out$weekF[idx], na.rm = TRUE)
     }
   }
-  out$newWeek <- ((as.numeric(out$weekF) + anchor_week - out$iWeekF - 1) %% n_weeks) + 1
+  out$newWeek <- .page_shift_week(out$weekF, out$iWeekF, anchor_week)
+  out$alignment_in_domain <- out$newWeek >= 1 & out$newWeek <= 52
+  out$alignment_out_of_domain <- !out$alignment_in_domain
   out$target_weekF <- out$iWeekF
   if (".page_timing_n_weeks" %in% names(out)) out$.page_timing_n_weeks <- NULL
   if (!is.null(peak)) {
@@ -205,7 +209,9 @@ apply_timing_labels_v2 <- function(data, labels, anchor_week = NULL,
     second <- collect("second_peak_labels")
     out$peak_second_weekF <- if (!is.null(second)) {
       as.numeric(unname(second[match(out$season, names(second))]))
-    } else NA_real_
+    } else {
+      NA_real_
+    }
   }
   attr(out, "timing_labels_v2") <- labels
   attr(out, "timing_evidence_v2") <- do.call(rbind, lapply(objects, function(x) x$evidence))

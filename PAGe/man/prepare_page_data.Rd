@@ -15,6 +15,8 @@ prepare_page_data(
   week_type = c("within_season", "mmwr"),
   start_week = 27L,
   start_year_col = NULL,
+  date_col = NULL,
+  mmwr_year_col = NULL,
   tolerance = 1e-08
 )
 }

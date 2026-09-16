@@ -31,9 +31,13 @@ testthat::test_that("disabled intercept is absent and disabling terms removes de
       has_term <- grepl(sprintf("s\\(%s,", nm), ftxt)
       testthat::expect_identical(has_term, g[[paste0("k_", nm)]][i] > 0)
     }
-    has_intercept <- grepl("(^|[+ ])lead([+ ]|$)", ftxt)
+    has_intercept <- grepl(
+      "offset\\(m1_logit\\) \\+ (lead_h1_c \\+\\s+lead_h2_c|lead)", ftxt
+    )
     testthat::expect_identical(has_intercept, isTRUE(g$intercept[i]))
-    if (!isTRUE(g$intercept[i])) testthat::expect_false(grepl("~.*\\+ lead", ftxt))
+    if (!isTRUE(g$intercept[i])) {
+      testthat::expect_false(grepl("offset\\(m1_logit\\) \\+ lead_h", ftxt))
+    }
   }
 })
 

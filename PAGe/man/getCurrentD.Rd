@@ -6,37 +6,61 @@
 \usage{
 getCurrentD(
   data = NULL,
+  base_url = NULL,
+  file_name = NULL,
+  cache_dir = NULL,
   startWeek = 27L,
   lastWeek = NA_integer_,
   virus = "Influenza A",
-  season = "2025-26"
+  season = NULL,
+  include_predecessor = TRUE,
+  source_calendar = NULL
 )
 }
 \arguments{
-\item{data}{URL or local file path to the PHO lab-testing CSV. Defaults to
-the current PHO 2024-25 / 2025-26 ORVT feed.}
+\item{data}{URL or local file path to an ORVT CSV, or code{NULL} for default
+feed resolution.}
 
-\item{startWeek}{Integer MMWR week used as the epidemic-year origin for
-computing \code{weekF} (default 27L, early July).}
+\item{base_url}{Base ORVT URL for default feed resolution. The
+code{PAGe.orvt_base_url} option overrides the package default.}
 
-\item{lastWeek}{Integer or \code{NA}. When non-\code{NA}, rows with MMWR
-\code{week > lastWeek} are dropped before returning.}
+\item{file_name}{Optional ORVT filename replacing the two default candidates;
+code{PAGe.orvt_file_name} is also supported.}
 
-\item{virus}{Character string matching the \code{Virus} column of the CSV
-(default \code{"Influenza A"}).}
+\item{cache_dir}{Optional directory for timestamped downloaded raw CSV files.}
 
-\item{season}{Character season identifier in \code{"YYYY-YY"} format
-(default \code{"2025-26"}).}
+\item{startWeek}{Integer MMWR week used as the PAGe season origin (default 27).}
+
+\item{lastWeek}{Integer or code{NA}; drop rows with MMWR week greater than it.}
+
+\item{virus}{Character string matching the PHO code{Virus} column.}
+
+\item{season}{Character season in code{"YYYY-YY"}; defaults to the season
+containing code{Sys.Date()} under the PAGe origin.}
+
+\item{include_predecessor}{Logical; also return the derived predecessor
+season. Defaults to code{TRUE} for backward compatibility.}
+
+\item{source_calendar}{Optional explicit calendar for undated sources. It
+must be a data frame, Date vector, or function mapping source season/week
+rows to week-start dates (or MMWR years); labels alone are never used to
+guess dates.}
 }
 \value{
-A data frame with one row per MMWR week containing: \code{season},
-  \code{week}, \code{N} (total tests), \code{y} (positives), \code{neg},
-  \code{p} (positivity), \code{weekS}, \code{weekF}, \code{cYear},
-  \code{newWeek}, and \code{date}.
+A data frame with code{season}, code{week}, code{N}, code{y},
+  code{neg}, code{p}, code{weekS}, code{weekF}, code{cYear},
+  code{newWeek}, and code{date}, plus PHO audit columns. The PHU-only
+  totals and the exact-Ontario-row provenance are retained in
+  code{phu_N}, code{phu_y}, code{source_has_ontario},
+  code{source_ontario_consistent}, and code{provincial_value_source}.
+  Attributes record
+  code{source_url_or_path}, code{retrieved_utc}, code{sha256},
+  code{pho_layout}, code{n_weeks}, and code{last_week_end_date}.
 }
 \description{
-Downloads (or reads a local copy of) the Public Health Ontario lab-testing
-CSV, filters to one virus and the requested season plus its predecessor,
-aggregates weekly totals across all PHUs, and returns a tidy data frame
-ready for the M0/M1/M2 pipeline.
+Reads a Public Health Ontario ORVT lab-testing CSV from a URL or local path,
+maps seasons from dated MMWR weeks rather than the PHO label, aggregates the
+selected virus across public health units, and returns data ready for PAGe.
+With no code{data}, the previous/current and current/next feed names are
+tried in that order. PHO labels and source dates are retained for audit.
 }

@@ -90,6 +90,12 @@ validate_page_kit <- function(kit, mode = c("frozen", "weekly_refit")) {
   if (!family %in% c("legacy", m2_subset_family())) {
     stop("Unsupported M2 model family: `", family, "`.")
   }
+  if (any(governed_present) && identical(family, "legacy") &&
+    !isTRUE(kit$m2_production$legacy_compatibility$allow_legacy)) {
+    stop(
+      "Governed legacy M2 kits require recorded allow_legacy = TRUE."
+    )
+  }
   if (identical(family, m2_subset_family())) {
     if (identical(mode, "weekly_refit")) {
       stop("M2 family `", m2_subset_family(), "` supports frozen mode only.")
@@ -155,6 +161,55 @@ print.page_training_result <- function(x, ...) {
   holdout <- x$holdout$status %||% "not recorded"
   cat("  holdout: ", holdout, "\n", sep = "")
   cat("  deployment kit: ", if (is.null(x$kit)) "absent" else "ready", "\n", sep = "")
+  invisible(x)
+}
+
+.nested_print_nesting <- function(x) {
+  nesting <- x$protocol$gate_nesting %||%
+    x$gate_nesting %||%
+    (if ("folds" %in% names(x) && length(x$folds)) {
+      x$folds[[1L]]$gate_nesting %||% x$folds[[1L]]$training$protocol$gate_nesting
+    } else {
+      NULL
+    })
+  label <- x$protocol$gate_nesting_label %||%
+    (if (!is.null(nesting) && identical(nesting, "conditional")) {
+      "conditional on upstream selection"
+    } else if (!is.null(nesting)) {
+      "fully nested upstream selection"
+    } else {
+      "not recorded"
+    })
+  if (!is.null(nesting)) {
+    cat("  gate nesting: ", nesting, " (", label, ")\n", sep = "")
+  }
+  invisible(nesting)
+}
+
+#' @export
+print.page_outer_training <- function(x, ...) {
+  cat("<PAGe outer-fold training>\n")
+  holdout <- x$protocol$holdout
+  if (!length(holdout) || !nzchar(as.character(holdout))) holdout <- "final fit"
+  cat("  holdout: ", holdout, "\n", sep = "")
+  .nested_print_nesting(x)
+  cat("  deployment kit: ", if (is.null(x$kit)) "absent" else "ready", "\n", sep = "")
+  invisible(x)
+}
+
+#' @export
+print.page_outer_fold_result <- function(x, ...) {
+  cat("<PAGe outer-fold result>\n")
+  cat("  holdout: ", x$holdout %||% "unknown", "\n", sep = "")
+  .nested_print_nesting(x)
+  invisible(x)
+}
+
+#' @export
+print.page_nested_season_evaluation <- function(x, ...) {
+  cat("<PAGe nested season evaluation>\n")
+  cat("  folds: ", length(x$folds %||% list()), "\n", sep = "")
+  .nested_print_nesting(x)
   invisible(x)
 }
 

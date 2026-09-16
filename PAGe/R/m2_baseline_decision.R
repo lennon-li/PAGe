@@ -45,6 +45,12 @@
 #'   for any season after combining horizons. The default zero is a strict
 #'   historical non-degradation rule.
 #' @param eps Probability clipping value used in the NLL calculation.
+#' @param scoring Scoring contract: code{"page_v2"} uses the retrospective
+#'   phase weights (default), while code{"legacy_0_12"} retains the old
+#'   post-ignition 0:12 weighting.
+#' @param score_weight_col Optional precomputed row-weight column. When
+#'   omitted, code{weight_page_v2} or code{weight_legacy} is used when
+#'   available for the selected contract.
 #'
 #' @return A \code{page_m2_baseline_decision} list with \code{decision},
 #'   \code{reasons}, \code{rule}, \code{overall}, \code{by_horizon},
@@ -69,8 +75,11 @@ decide_m2_vs_m1 <- function(
   min_gain_by_horizon = NULL,
   confidence = 0.95,
   max_season_degradation = 0,
-  eps = 1e-12
+  eps = 1e-12,
+  scoring = c("page_v2", "legacy_0_12"),
+  score_weight_col = NULL
 ) {
+  scoring <- match.arg(scoring)
   forecasts <- .m2_decision_validate_frame(forecasts)
   mappings <- c(
     outcome = outcome_col, m1 = m1_col, m2 = m2_col,
@@ -121,10 +130,32 @@ decide_m2_vs_m1 <- function(
   } else {
     phase <- rep("all", nrow(forecasts))
   }
-  phase_weight <- .m2_decision_resolve_weights(
-    phase, phase_weights, "phase",
-    default = 1
-  )
+  preferred_weight_col <- if (scoring == "page_v2") "weight_page_v2" else "weight_legacy"
+  selected_weight_col <- score_weight_col %||% if (preferred_weight_col %in% names(forecasts)) preferred_weight_col else NULL
+  if (!is.null(selected_weight_col)) {
+    .m2_decision_validate_mappings(c(score_weight = selected_weight_col), forecasts)
+    supplied <- as.numeric(forecasts[[selected_weight_col]])
+    if (any(!is.na(supplied) & (!is.finite(supplied) | supplied < 0))) {
+      stop("`", selected_weight_col, "` must contain finite non-negative weights or NA.", call. = FALSE)
+    }
+    phase_weight <- supplied
+  } else {
+    phase_weight <- .m2_decision_resolve_weights(phase, phase_weights, "phase", default = 1)
+  }
+  if (is.null(selected_weight_col) && scoring == "page_v2") {
+    if (all(c("ignition_weekF", "observed_peak_weekF") %in% names(forecasts))) {
+      scored <- page_phase_weights(
+        forecasts, page_scoring_weights(),
+        season_col = season_col, target_col = target_col,
+        ignition_col = "ignition_weekF", peak_col = "observed_peak_weekF",
+        allow_censored = TRUE
+      )
+      phase <- scored$phase
+      phase_weight <- scored$weight
+    } else {
+      stop("page_v2 scoring requires `weight_page_v2` or retrospective ignition/peak columns.", call. = FALSE)
+    }
+  }
   denominator <- .m2_decision_resolve_denominator(denominator_col, forecasts)
   horizon_labels <- sort(unique(as.character(horizon)))
   horizon_weight <- .m2_decision_validate_horizon_weights(
@@ -174,6 +205,8 @@ decide_m2_vs_m1 <- function(
   } else {
     phase_weights
   }
+  result$rule$scoring <- scoring
+  result$rule$score_weight_col <- selected_weight_col
   result$rule$horizon_weights <- horizon_weight
   result
 }

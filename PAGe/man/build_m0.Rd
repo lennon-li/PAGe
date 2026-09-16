@@ -11,7 +11,9 @@ build_m0(
   flag_args = .default_flag_args(),
   best_params = .default_m0_params(),
   k_deriv = 10L,
-  timing_truth = NULL
+  timing_truth = NULL,
+  peak_weight_boost = 1,
+  peak_weight_decay = 0.3
 )
 }
 \arguments{
@@ -31,6 +33,8 @@ fresh-run values and is returned for downstream M1/M2 training.}
 
 \item{k_deriv}{Integer. GAM basis functions for derivative smoothing (default
 \code{10L}).}
+
+\item{peak_weight_boost, peak_weight_decay}{Derivative smoothing rise boost and decay.}
 }
 \value{
 A list with \code{aligned} (aligned data frame), \code{seasons_used},

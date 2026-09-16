@@ -1,0 +1,6 @@
+Public health unit,Virus,Week start date,Week end date,Surveillance period,Surveillance week,# of positive tests,Total # of tests,Percent positivity (%)
+A,Influenza A,29JUN2025,05JUL2025,mislabel-1,27,2,20,10
+B,Influenza A,29JUN2025,05JUL2025,2025-26,27,3,30,10
+A,Influenza A,06JUL2025,12JUL2025,2025-26,28,1,10,10
+A,Influenza A,28DEC2025,03JAN2026,2025-26,53,4,40,10
+A,Influenza A,04JAN2026,10JAN2026,2025-26,1,5,50,10

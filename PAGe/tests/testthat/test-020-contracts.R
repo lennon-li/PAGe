@@ -187,7 +187,13 @@ test_that("getCurrentD honors a requested season from a local CSV", {
     row.names = FALSE
   )
 
-  result <- PAGe::getCurrentD(data = csv, season = "2024-25")
+  source_calendar <- data.frame(
+    pho_season = c("2024-25", "2025-26"), week = c(40L, 40L),
+    mmwr_year = c(2024L, 2025L)
+  )
+  result <- PAGe::getCurrentD(
+    data = csv, season = "2024-25", source_calendar = source_calendar
+  )
 
   expect_true("2024-25" %in% result$season)
   expect_false("2025-26" %in% result$season)
@@ -208,7 +214,13 @@ test_that("getCurrentD validates inputs and represents zero-test weeks safely", 
     row.names = FALSE
   )
 
-  result <- PAGe::getCurrentD(data = csv, season = "2024-25")
+  source_calendar <- data.frame(
+    pho_season = "2024-25", week = c(40L, 41L),
+    mmwr_year = c(2024L, 2024L)
+  )
+  result <- PAGe::getCurrentD(
+    data = csv, season = "2024-25", source_calendar = source_calendar
+  )
   expect_true(any(is.na(result$p)))
   expect_equal(result$p[result$N > 0], 0.2)
   expect_error(

@@ -11,7 +11,7 @@
 check_scale_identifiability <- function(currentD,
                                         g_ref_fun,
                                         hyper,
-                                        min_week       = 20,
+                                        min_week = 20,
                                         g_range_thresh = 0.25,
                                         p_range_thresh = 0.05) {
   # --- basic data ---
@@ -31,33 +31,32 @@ check_scale_identifiability <- function(currentD,
     ))
   }
 
-  # safe wrapper around g_ref_fun
-  g_ref_safe <- function(u) g_ref_fun(pmin(pmax(u, 1), 52))
+  g_ref_safe <- function(u) .page_alignment_eval(g_ref_fun, u, n_weeks = 52L)
 
   # 1) get tau-hat from a tau-only fit (delta fixed at 0, no scaling)
-  tb  <- hyper$TAU_BOUNDS
-  db0 <- c(0, 0)  # force delta = 0
+  tb <- hyper$TAU_BOUNDS
+  db0 <- c(0, 0) # force delta = 0
 
   fit_tau_only <- fit_tau_delta(
-    currentD      = currentD,
-    g_ref_fun     = g_ref_fun,
-    tau_bounds    = tb,
-    delta_bounds  = db0,
-    allow_scale   = FALSE,
-    week_threshold_delta = Inf,  # never turn delta on in this helper fit
-    lam_delta     = hyper$LAMBDA_DELTA,
-    use_weights   = TRUE
+    currentD = currentD,
+    g_ref_fun = g_ref_fun,
+    tau_bounds = tb,
+    delta_bounds = db0,
+    allow_scale = FALSE,
+    week_threshold_delta = Inf, # never turn delta on in this helper fit
+    lam_delta = hyper$LAMBDA_DELTA,
+    use_weights = TRUE
   )
 
   tau_hat <- fit_tau_only$tau
 
   # 2) aligned u and template range on link scale
   u_aligned <- (t - tau_hat) / (1 + 0)
-  g_vals    <- g_ref_safe(u_aligned)
-  range_g   <- diff(range(g_vals, na.rm = TRUE))
+  g_vals <- g_ref_safe(u_aligned)
+  range_g <- diff(range(g_vals, na.rm = TRUE))
 
   # 3) crude observed positivity range as additional signal
-  p_obs   <- y / pmax(n, 1)
+  p_obs <- y / pmax(n, 1)
   range_p <- diff(range(p_obs, na.rm = TRUE))
 
   # --- NEW, more sensitive rule ---

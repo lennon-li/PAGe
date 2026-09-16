@@ -116,22 +116,22 @@ m2_predict_one <- function(fit,
   }
 
   nd <- tibble::tibble(
-    weekF        = as.integer(ew),
-    newWeek      = if (timing_mode == "fractional") {
+    weekF = as.integer(ew),
+    newWeek = if (timing_mode == "fractional") {
       as.numeric(ew) - as.numeric(iWeek) + as.numeric(anchorWeek)
     } else {
       as.integer(ew) - as.integer(iWeek) + as.integer(anchorWeek)
     },
-    lead         = factor(lead_val, levels = lev_lead),
-    season       = nd_season,
-    logit_f_eff  = as.numeric(logit_f_eff),
-    z_ema        = as.numeric(z_ema),
-    dz_ema       = as.numeric(dz_ema),
+    lead = factor(lead_val, levels = lev_lead),
+    season = nd_season,
+    logit_f_eff = as.numeric(logit_f_eff),
+    z_ema = as.numeric(z_ema),
+    dz_ema = as.numeric(dz_ema),
     logit_spread = as.numeric(logit_spread),
-    z_resid      = as.numeric(z_ema) - as.numeric(logit_f_eff),
-    logN_now     = as.numeric(logN_now),
-    t_since      = as.numeric(ew - iWeek),
-    post_ign     = TRUE
+    z_resid = as.numeric(z_ema) - as.numeric(logit_f_eff),
+    logN_now = as.numeric(logN_now),
+    t_since = as.numeric(ew - iWeek),
+    post_ign = TRUE
   )
 
   # season_h (factor-smooth interaction term) -- use matching level if present
@@ -181,8 +181,10 @@ m2_predict_one <- function(fit,
 }
 
 .m2_prediction_log <- function(prediction, target_weekF, h) {
-  list(target_weekF = target_weekF, m2_p = prediction$m2_p,
-       m2_eta_raw = prediction$m2_eta_raw, h = h)
+  list(
+    target_weekF = target_weekF, m2_p = prediction$m2_p,
+    m2_eta_raw = prediction$m2_eta_raw, h = h
+  )
 }
 
 
@@ -374,11 +376,15 @@ prep_stage2_joint <- function(dat,
   if (timing_mode == "fractional") {
     d0$fit_ref <- stats::approx(
       as.numeric(template_df$newWeek), as.numeric(template_df$fit_ref),
-      xout = as.numeric(d0$newWeek), rule = 2
+      xout = as.numeric(d0$newWeek), rule = 1
     )$y
   } else {
     d0 <- dplyr::left_join(d0, template_df, by = "newWeek")
   }
+
+  # Plain-shifted rows outside the fixed template domain are excluded from
+  # fitting; they are never folded back or clamped to an edge value.
+  d0 <- dplyr::filter(d0, is.finite(.data$fit_ref))
 
   # ---- shift template by delta ----
   if (timing_mode == "fractional" && !is.na(delta) && delta != 0L) {
@@ -386,7 +392,7 @@ prep_stage2_joint <- function(dat,
       dplyr::group_by(.data$season) |>
       dplyr::mutate(fit_shift = stats::approx(
         as.numeric(.data$newWeek), as.numeric(.data$fit_ref),
-        xout = as.numeric(.data$newWeek) - delta, rule = 2
+        xout = as.numeric(.data$newWeek) - delta, rule = 1
       )$y) |>
       dplyr::ungroup()
   } else if (!is.na(delta) && delta != 0L) {

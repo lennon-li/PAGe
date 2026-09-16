@@ -6,14 +6,16 @@
 # runtime is deterministic and warning-free.  Empty inputs return an NA
 # vector, allowing callers to handle an unavailable alignment without a base
 # `min()`/interpolation warning.
-.approx_unique <- function(x, y, xout, rule = 2L) {
+.approx_unique <- function(x, y, xout, rule = 1L) {
   x <- as.numeric(x)
   y <- as.numeric(y)
   xout <- as.numeric(xout)
   out <- rep(NA_real_, length(xout))
   keep <- is.finite(x) & is.finite(y)
   out_keep <- is.finite(xout)
-  if (!any(keep) || !any(out_keep)) return(out)
+  if (!any(keep) || !any(out_keep)) {
+    return(out)
+  }
 
   means <- tapply(y[keep], x[keep], mean)
   x_unique <- as.numeric(names(means))
@@ -22,10 +24,15 @@
   x_unique <- x_unique[ord]
   y_unique <- y_unique[ord]
   if (length(x_unique) == 1L) {
-    out[out_keep] <- y_unique[[1L]]
+    if (identical(as.integer(rule), 1L)) {
+      out[out_keep] <- ifelse(xout[out_keep] == x_unique[[1L]], y_unique[[1L]], NA_real_)
+    } else {
+      out[out_keep] <- y_unique[[1L]]
+    }
   } else {
     out[out_keep] <- stats::approx(
-      x_unique, y_unique, xout = xout[out_keep], rule = rule
+      x_unique, y_unique,
+      xout = xout[out_keep], rule = rule
     )$y
   }
   out
@@ -294,10 +301,10 @@ run_m0_detection <- function(kit,
   }
 
   list(
-    ign_out      = ign_out,
+    ign_out = ign_out,
     iWeek_locked = ign_out$ign_week_locked,
     iWeek_lockedF = if (timing_mode == "fractional") ign_out$iWeek_hat_lockedF else as.numeric(ign_out$ign_week_locked),
-    overridden   = ign_resolved$overridden
+    overridden = ign_resolved$overridden
   )
 }
 
@@ -340,11 +347,15 @@ run_m1_alignment <- function(kit,
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   if (!requireNamespace("tibble", quietly = TRUE)) stop("Please install tibble.")
   `%||%` <- function(x, y) if (is.null(x)) y else x
-
   ref <- kit$ref
   hyper <- kit$hyper
   M1_PARAMS <- kit$M1_PARAMS
   ign_out <- m0_result$ign_out
+  locked_iweek <- if (timing_mode == "fractional") {
+    as.numeric(m0_result$iWeek_lockedF %||% m0_result$iWeek_locked)
+  } else {
+    as.integer(m0_result$iWeek_locked)
+  }
 
   walk_end <- max(current_data$weekF, na.rm = TRUE)
   actual_walk_start <- if (!is.na(m0_result$iWeek_locked)) {
@@ -371,6 +382,7 @@ run_m1_alignment <- function(kit,
 
   per_week <- lapply(eval_weeks, function(ew) {
     season_to_ew <- dplyr::filter(current_data, weekF <= ew)
+    .page_assert_prefix(season_to_ew, ew, label = "M2 prospective input")
     alignment_error <- NA_character_
 
     ap <- tryCatch(
@@ -409,14 +421,24 @@ run_m1_alignment <- function(kit,
   params_df <- dplyr::bind_rows(lapply(per_week, function(pw) {
     ew <- pw$ew
     ap <- pw$ap
-    if (is.null(ap) || ap$state == "pre_ignition") {
+    if (is.null(ap) || ap$state %in% c("pre_ignition", "alignment_failed")) {
       return(tibble::tibble(
-        eval_week = ew, state = if (is.null(ap)) "alignment_failed" else "pre_ignition",
-        iWeek_hat = NA_integer_, tau = NA_real_,
+        eval_week = ew,
+        state = if (is.null(ap)) "alignment_failed" else ap$state,
+        iWeek_hat = if (!is.null(ap) && is.finite(ap$iWeek_hat)) {
+          ap$iWeek_hat
+        } else {
+          locked_iweek
+        }, tau = NA_real_,
         delta_m1 = NA_real_, a = NA_real_, b = NA_real_,
         t_peak = NA_real_, peak_weekF = NA_integer_,
         peak_weekF_lo = NA_real_, peak_weekF_hi = NA_real_,
-        peak_passed = FALSE, fallback = pw$error %||% NA_character_
+        peak_passed = FALSE,
+        fallback = if (!is.null(ap) && identical(ap$state, "alignment_failed")) {
+          ap$fallback_reason %||% pw$error %||% NA_character_
+        } else {
+          pw$error %||% NA_character_
+        }
       ))
     }
     tibble::tibble(
@@ -437,7 +459,7 @@ run_m1_alignment <- function(kit,
   }))
 
   m1_curves <- dplyr::bind_rows(lapply(per_week, function(pw) {
-    if (is.null(pw$ap) || pw$ap$state == "pre_ignition") {
+    if (is.null(pw$ap) || pw$ap$state %in% c("pre_ignition", "alignment_failed")) {
       return(NULL)
     }
     pw$ap$forecast_df |> dplyr::mutate(eval_week = pw$ew)
@@ -492,6 +514,12 @@ run_m2_forecast <- function(kit,
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   if (!requireNamespace("tibble", quietly = TRUE)) stop("Please install tibble.")
   `%||%` <- function(x, y) if (is.null(x)) y else x
+  locked_iweek <- if (timing_mode == "fractional") {
+    as.numeric(m1_result$m0_result$iWeek_lockedF %||%
+      m1_result$m0_result$iWeek_locked)
+  } else {
+    as.integer(m1_result$m0_result$iWeek_locked)
+  }
 
   ref <- kit$ref
   m2_production <- kit$m2_production
@@ -505,12 +533,14 @@ run_m2_forecast <- function(kit,
       stop("M2 family `", m2_subset_family(), "` supports frozen mode only.", call. = FALSE)
     }
     return(m2_subset_runtime_prediction(
-      kit, current_data, m1_result, verbose = verbose,
+      kit, current_data, m1_result,
+      verbose = verbose,
       timing_mode = timing_mode
     ))
   }
   m2_fit <- m2_production$fit
   correction <- .resolve_correction_spec(best_spec)
+  nW_current <- .page_nw_true(current_data)[1L]
 
   ex_terms <- best_spec$exclude_newseason
   if (is.null(ex_terms)) ex_terms <- stage2_exclude_newseason(best_spec)
@@ -527,10 +557,6 @@ run_m2_forecast <- function(kit,
   fr <- m2_production$feature_ranges
   lfe_train_range <- if (!is.null(fr$logit_f_eff)) fr$logit_f_eff else range(m2_fit$model$logit_f_eff, na.rm = TRUE)
   z_ema_hist_range <- if (!is.null(fr$z_ema)) fr$z_ema else range(m2_fit$model$z_ema, na.rm = TRUE)
-
-  # Frozen-fit soft cap (used when mode=="frozen" or as fallback)
-  soft_cap_frozen <- make_soft_cap_fn(m2_fit)
-  lev_lead_frozen <- levels(m2_fit$model$lead)
 
   if (verbose) {
     cat(sprintf("run_m2_forecast: mode=%s, logN_max=%.2f\n", mode, logN_train_max))
@@ -558,7 +584,41 @@ run_m2_forecast <- function(kit,
     ap <- pw$ap
     season_to_ew <- pw$season_to_ew
 
-    if (is.null(ap) || ap$state == "pre_ignition") next
+    if (is.null(ap) || ap$state %in% c("pre_ignition", "alignment_failed")) {
+      # Keep an explicit unavailable row for a post-ignition alignment failure.
+      # The legacy path used to drop this origin before creating the M2 ledger.
+      iWeek_hat <- if (!is.null(ap) && is.finite(ap$iWeek_hat)) {
+        ap$iWeek_hat
+      } else {
+        locked_iweek
+      }
+      reason <- if (!is.null(ap)) ap$fallback_reason else pw$error
+      if (length(reason) != 1L || is.na(reason) || !nzchar(as.character(reason))) {
+        reason <- if (!is.null(ap) && identical(ap$state, "pre_ignition")) {
+          "no_ignition"
+        } else {
+          "alignment_failed"
+        }
+      }
+      failed_rows <- dplyr::bind_rows(lapply(c(1L, 2L), function(h) {
+        target_weekF <- ew + h
+        target_newWeek <- if (is.finite(iWeek_hat)) {
+          as.numeric(target_weekF - iWeek_hat + anchorWeek)
+        } else {
+          NA_real_
+        }
+        tibble::tibble(
+          eval_week = ew, h = h, target_weekF = target_weekF,
+          target_newWeek = target_newWeek, nW_true = nW_current,
+          forecast_available = FALSE, unavailable_reason = as.character(reason),
+          m1_p = NA_real_, m1_lo = NA_real_, m1_hi = NA_real_,
+          m2_p = NA_real_, m2_lo = NA_real_, m2_hi = NA_real_,
+          forecast_action = "unavailable"
+        )
+      }))
+      m2_rows[[length(m2_rows) + 1L]] <- failed_rows
+      next
+    }
 
     # Reset bias on first post-peak transition so rising-phase upward drift
     # does not inflate post-peak predictions.
@@ -607,7 +667,7 @@ run_m2_forecast <- function(kit,
           eval_weekF = as.integer(cur_weeks),
           h = as.integer(h),
           m1_p_hat = .approx_unique(fdf$newWeek, fdf$p_hat,
-            xout = nw, rule = 2
+            xout = nw, rule = 1
           )
         )
       }))
@@ -642,7 +702,6 @@ run_m2_forecast <- function(kit,
       fit_ew <- m2_fit
     }
     soft_cap_ew <- make_soft_cap_fn(fit_ew)
-    lev_lead_ew <- levels(fit_ew$model$lead) %||% lev_lead_frozen
 
     # Compute EMA state once per eval week (shared across horizons)
     obs_to_ew_base <- season_to_ew |>
@@ -690,14 +749,46 @@ run_m2_forecast <- function(kit,
     ew_result <- dplyr::bind_rows(lapply(horizons, function(h) {
       target_weekF <- ew + h
       target_newWeek <- as.numeric(target_weekF - iWeek_hat + anchorWeek)
+      availability <- .page_forecast_availability(
+        target_weekF, target_newWeek,
+        nW_true = nW_current
+      )
 
-      m1_p <- .approx_unique(fdf$newWeek, fdf$p_hat, xout = target_newWeek, rule = 2)
-      m1_lo <- .approx_unique(fdf$newWeek, fdf$p_lo, xout = target_newWeek, rule = 2)
-      m1_hi <- .approx_unique(fdf$newWeek, fdf$p_hi, xout = target_newWeek, rule = 2)
+      m1_p <- if (isTRUE(availability$forecast_available)) {
+        .approx_unique(fdf$newWeek, fdf$p_hat, xout = target_newWeek, rule = 1)
+      } else {
+        NA_real_
+      }
+      m1_lo <- if (isTRUE(availability$forecast_available)) {
+        .approx_unique(fdf$newWeek, fdf$p_lo, xout = target_newWeek, rule = 1)
+      } else {
+        NA_real_
+      }
+      m1_hi <- if (isTRUE(availability$forecast_available)) {
+        .approx_unique(fdf$newWeek, fdf$p_hi, xout = target_newWeek, rule = 1)
+      } else {
+        NA_real_
+      }
+      if (isTRUE(availability$forecast_available) && !is.finite(m1_p)) {
+        availability$forecast_available <- FALSE
+        availability$unavailable_reason <- "alignment_prediction_missing"
+      }
       m1_spread <- if ("logit_spread" %in% names(fdf)) {
-        .approx_unique(fdf$newWeek, fdf$logit_spread, xout = target_newWeek, rule = 2)
+        .approx_unique(fdf$newWeek, fdf$logit_spread, xout = target_newWeek, rule = 1)
       } else {
         0
+      }
+
+      if (!isTRUE(availability$forecast_available)) {
+        return(tibble::tibble(
+          eval_week = ew, h = h, target_weekF = target_weekF,
+          target_newWeek = target_newWeek, nW_true = nW_current,
+          forecast_available = FALSE,
+          unavailable_reason = availability$unavailable_reason,
+          m1_p = NA_real_, m1_lo = NA_real_, m1_hi = NA_real_,
+          m2_p = NA_real_, m2_lo = NA_real_, m2_hi = NA_real_,
+          forecast_action = "unavailable"
+        ))
       }
 
       logit_f_eff <- pmin(
@@ -734,6 +825,8 @@ run_m2_forecast <- function(kit,
       if (is.null(pr)) {
         return(tibble::tibble(
           eval_week = ew, h = h, target_weekF = target_weekF,
+          target_newWeek = target_newWeek, nW_true = nW_current,
+          forecast_available = TRUE, unavailable_reason = NA_character_,
           m1_p = m1_p, m1_lo = m1_lo, m1_hi = m1_hi,
           m2_p = NA_real_, m2_lo = NA_real_, m2_hi = NA_real_
         ))
@@ -758,11 +851,17 @@ run_m2_forecast <- function(kit,
 
       tibble::tibble(
         eval_week = ew, h = h, target_weekF = target_weekF,
+        target_newWeek = target_newWeek, nW_true = nW_current,
+        forecast_available = TRUE, unavailable_reason = NA_character_,
         m1_p = m1_p, m1_lo = m1_lo, m1_hi = m1_hi,
         m2_p = pr$m2_p,
         m2_eta_raw = pr$m2_eta_raw,
         forecast_action = if (identical(correction$post_peak_action, "use_m1") &&
-          isTRUE(ap$peak_passed)) "post_peak_m1" else "gam",
+          isTRUE(ap$peak_passed)) {
+          "post_peak_m1"
+        } else {
+          "gam"
+        },
         m2_lo = pr$m2_lo,
         m2_hi = pr$m2_hi
       )
@@ -957,6 +1056,7 @@ run_m2 <- function(kit, current_data, m1_result, ...) run_m2_forecast(kit, curre
 run_pipeline <- function(kit, current_data,
                          timing_mode = c("legacy", "fractional"), ...) {
   run_prospective_pipeline(
-    kit, current_data, timing_mode = timing_mode, ...
+    kit, current_data,
+    timing_mode = timing_mode, ...
   )
 }

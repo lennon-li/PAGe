@@ -1,5 +1,10 @@
 `%||%` <- function(x, y) if (!is.null(x)) x else y
 
+# The canonical M0 grid and runtime disable the optional classifier unless it
+# is explicit. This preserves the pre-Phase-1 runtime behavior for NULL while
+# allowing governed configurations to opt in with `use_cls = TRUE`.
+.m0_use_cls <- function(params) isTRUE(params$use_cls)
+
 # ============================================================
 # Prospective ignition detection (M0)
 #   Stage-1: ignition classifier scores (fitIgnition)
@@ -130,8 +135,10 @@ fitIgnition <- function(
       any(!is.finite(timing_truth$ignition_target_weekF))) {
       stop("`timing_truth` must have one finite target per season.", call. = FALSE)
     }
-    data.table::setnames(timing_truth, c("season", "ignition_target_weekF"),
-                         c(season_col, "iWeek_true"))
+    data.table::setnames(
+      timing_truth, c("season", "ignition_target_weekF"),
+      c(season_col, "iWeek_true")
+    )
     iWeek_dt <- data.table::as.data.table(timing_truth)
   } else {
     iWeek_dt <- DT_all[get(phase_col) == 1L,
@@ -589,7 +596,8 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
 
   DT <- data.table::as.data.table(if (isTRUE(copy_data)) data.table::copy(dat0) else dat0)
 
-  need <- c(season_col, week_col, score_col, "p", y_col, N_col)
+  use_cls <- .m0_use_cls(params)
+  need <- c(season_col, week_col, if (use_cls) score_col, "p", y_col, N_col)
   miss <- setdiff(need, names(DT))
   if (length(miss)) stop("detectIgnitionBySeason_M0v2: missing cols: ", paste(miss, collapse = ", "))
 
@@ -651,7 +659,7 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
 
   # gates + vote count
   DT[, cond_win := get(week_col) >= w_min & get(week_col) <= w_max]
-  DT[, cond_cls := get(score_col) >= cls_thr]
+  DT[, cond_cls := if (use_cls) get(score_col) >= cls_thr else FALSE]
   DT[, cond_sum := p_sumK >= p_sum_thr]
   DT[, cond_p := p_sm >= p_thr]
   DT[, cond_prev := prev >= prev_thr]
@@ -669,8 +677,8 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
   data.table::setnames(all_s, "season", season_col)
   by_hat <- merge(all_s, by_hat, by = season_col, all.x = TRUE, sort = FALSE)
 
-  # Fallback: if no ignition detected within window, assign w_max
-  by_hat[is.na(iWeek_hat), iWeek_hat := w_max]
+  # A missed detection has no estimated week. Keep it visible to tuning.
+  by_hat[, detection_failed := is.na(iWeek_hat)]
 
   out <- list(by_season = as.data.frame(by_hat))
 
@@ -717,10 +725,10 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
 #'   \item{iWeek_hat}{Integer ignition week estimate, or NA.}
 detectIgnition_oneSeason <- function(d_now, params) {
   det <- detectIgnitionBySeason_M0v2(
-    ign_fit      = d_now,
-    params       = params,
+    ign_fit = d_now,
+    params = params,
     keep_signals = TRUE,
-    verbose      = FALSE,
+    verbose = FALSE,
     # Weekly prospective snapshots are intentionally shorter than the full
     # detector windows before ignition. Strict support checks still protect
     # tuning/expansion entry points; this runtime path returns undefined
@@ -760,7 +768,9 @@ detectIgnition_oneSeason <- function(d_now, params) {
 
   iWeek_hat <- det$by_season$iWeek_hat[1L]
 
-  list(now = now, iWeek_hat = iWeek_hat)
+  detection_failed <- is.na(iWeek_hat)
+  iWeek_hat <- if (detection_failed) as.integer(params$w_max %||% 30L) else iWeek_hat
+  list(now = now, iWeek_hat = iWeek_hat, detection_failed = detection_failed)
 }
 
 
@@ -769,8 +779,9 @@ detectIgnition_oneSeason <- function(d_now, params) {
 #' Tunes M0v2 ignition thresholds over a parameter grid by repeatedly calling
 #' [detectIgnitionBySeason_M0v2()] and comparing estimated ignition weeks to season-level
 #' truth ignition weeks. Scoring uses a symmetric adjusted error with a -1 week wiggle room
-#' (detecting one week early counts as exact). Seasons with no detection within
-#' \code{[w_min, w_max]} are assigned \code{w_max} as a fallback, so misses never occur.
+#' (detecting one week early counts as exact). Fractional mode uses symmetric
+#' absolute error. Seasons with no detection remain missing in the training
+#' artifact and are scored at the legacy \code{w_max} fallback.
 #'
 #' @param ign_fit Either [fitIgnition()] output (list with \code{$data}) or a data.frame/data.table.
 #' @param grid data.frame of parameter combinations; missing columns are filled by defaults.
@@ -925,28 +936,35 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
     } else {
       "iWeek_hat"
     }
-    joined[, diff := get(estimate_col) - iWeek_true]
-    joined[, abs_diff := abs(diff)]
-    # -1 wiggle room: diff in {-1, 0} both score as 0
-    joined[, adj_diff := pmax(diff, 0) + pmax(-1 - diff, 0)]
-    joined[, late := pmax(diff, 0)]
-    joined[, over2 := pmax(adj_diff - 2, 0)]
-    joined[, late_over2 := pmax(diff - 2, 0)]
     joined[, miss := is.na(iWeek_hat)]
+    joined[, diff := get(estimate_col) - iWeek_true]
+    # Keep NA estimates in training artifacts, but score a miss exactly as the
+    # legacy detector did: use w_max and retain every legacy penalty.
+    joined[, score_diff := ifelse(miss, params$w_max - iWeek_true, diff)]
+    # Fractional non-misses use symmetric absolute error; misses use the
+    # legacy asymmetric loss because their score is the w_max fallback.
+    joined[, score_adj_diff := ifelse(
+      timing_mode == "fractional" & !miss,
+      abs(score_diff),
+      pmax(score_diff, 0) + pmax(-1 - score_diff, 0)
+    )]
+    joined[, score_late := pmax(score_diff, 0)]
+    joined[, score_over2 := pmax(score_adj_diff - 2, 0)]
+    joined[, score_late_over2 := pmax(score_diff - 2, 0)]
 
     n_miss <- sum(joined$miss)
-    n_over2 <- sum(joined$adj_diff > 2, na.rm = TRUE)
-    n_late_over2 <- sum(joined$diff > 2, na.rm = TRUE)
+    n_over2 <- sum(joined$score_adj_diff > 2, na.rm = TRUE)
+    n_late_over2 <- sum(joined$score_diff > 2, na.rm = TRUE)
 
     sum_loss <- sum(
-      joined$adj_diff +
-        kappa * joined$late +
-        gamma * joined$over2 +
-        gamma_late * joined$late_over2,
+      joined$score_adj_diff +
+        kappa * joined$score_late +
+        gamma * joined$score_over2 +
+        gamma_late * joined$score_late_over2,
       na.rm = TRUE
     )
 
-    max_abs <- if (all(is.na(joined$adj_diff))) Inf else max(joined$adj_diff, na.rm = TRUE)
+    max_abs <- if (all(is.na(joined$score_adj_diff))) Inf else max(joined$score_adj_diff, na.rm = TRUE)
     score <- sum_loss + lambda * max_abs + miss_penalty * n_miss
 
     c(
@@ -956,7 +974,7 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
       n_miss = n_miss,
       n_over2 = n_over2,
       n_late_over2 = n_late_over2,
-      mean_abs = mean(joined$adj_diff, na.rm = TRUE)
+      mean_abs = mean(joined$score_adj_diff, na.rm = TRUE)
     )
   }
 
@@ -1013,6 +1031,8 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
   best_params <- as.list(best_row[, c(
     "cls_thr", "p_thr", "prev_thr", "n_consec", "L", "eps", "K_sum", "p_sum_thr", "N_req", "w_min", "w_max"
   ), drop = FALSE])
+
+  if ("use_cls" %in% names(best_row)) best_params$use_cls <- best_row$use_cls[[1L]]
 
   # evaluate on all seasons (including excluded)
   det_all <- if (timing_mode == "fractional") {
@@ -1252,7 +1272,7 @@ loso_M0v2 <- function(dat,
 
   m0_param_names <- c(
     "cls_thr", "p_thr", "prev_thr", "n_consec", "L", "eps",
-    "K_sum", "p_sum_thr", "N_req", "w_min", "w_max"
+    "K_sum", "p_sum_thr", "N_req", "w_min", "w_max", "use_cls"
   )
 
   for (ss in seasons) {
@@ -1275,8 +1295,8 @@ loso_M0v2 <- function(dat,
         stop("Fractional M0 LOSO requires `timing_truth`.", call. = FALSE)
       }
       fit_call$timing_truth <- timing_truth[
-        as.character(timing_truth$season) %in% as.character(DT_train[[season_col]]),
-        , drop = FALSE
+        as.character(timing_truth$season) %in% as.character(DT_train[[season_col]]), ,
+        drop = FALSE
       ]
     }
     ign_fit <- tryCatch(
@@ -1309,14 +1329,14 @@ loso_M0v2 <- function(dat,
     # ---- 3) tune detector thresholds on training seasons only ----
     t_tune0 <- proc.time()
     tune_call <- c(list(
-      ign_fit    = as.data.frame(DT_train_scored),
-      grid       = grid,
-      score_col  = score_col,
-      week_col   = week_col,
+      ign_fit = as.data.frame(DT_train_scored),
+      grid = grid,
+      score_col = score_col,
+      week_col = week_col,
       season_col = season_col,
-      phase_col  = phase_col,
-      truth_col  = tune_args$truth_col %||% "iWeek",
-      exSeason   = exSeason_tune,
+      phase_col = phase_col,
+      truth_col = tune_args$truth_col %||% "iWeek",
+      exSeason = exSeason_tune,
       timing_mode = timing_mode
     ), tune_args)
 

@@ -53,7 +53,7 @@ test_that("offset subset family is explicit, opt-in, and all-off is exact at run
   m1_result <- list(per_week = list(list(
     ew = 5L, ap = list(
       state = "aligning", iWeek_hat = 3L,
-      forecast_df = data.frame(newWeek = 1:10, p_hat = seq(.1, .9, length.out = 10))
+      forecast_df = data.frame(newWeek = 1:30, p_hat = seq(.1, .9, length.out = 30))
     ),
     season_to_ew = data.frame(season = "current", weekF = 1:5, y = 1:5, N = 10)
   )))
@@ -168,7 +168,7 @@ test_that("subset tuning prepares M1 predictions once for every candidate", {
   obs <- do.call(rbind, lapply(c("a", "b"), function(s) {
     data.frame(
       season = s, weekF = 1:8,
-      y = c(1, 2, 3, 4, 5, 4, 3, 2), N = 20
+      y = c(1, 2, 3, 4, 5, 4, 3, 2), N = 20, nW_true = 8L
     )
   }))
   preds <- do.call(rbind, lapply(c("a", "b"), function(s) {
@@ -195,6 +195,13 @@ test_that("subset tuning prepares M1 predictions once for every candidate", {
   ), class = "page_season_selection")
   calls <- 0L
   testthat::local_mocked_bindings(
+    .m1_heldout_references = function(m1, seasons, timing_mode) {
+      stats::setNames(lapply(seasons, function(s) {
+        list(
+          ref = list(), hyper = list(), training_seasons = setdiff(seasons, s)
+        )
+      }), seasons)
+    },
     m1_walkforward_multi = function(...) {
       calls <<- calls + 1L
       preds
@@ -211,12 +218,16 @@ test_that("subset tuning prepares M1 predictions once for every candidate", {
   )
 
   expect_equal(calls, 1L)
-  expect_equal(nrow(tuning$grid), 2L)
+  expect_equal(nrow(tuning$grid), 16L)
 })
 
 test_that("train_pipeline exposes an explicit opt-in M2 family", {
   expect_true("m2_family" %in% names(formals(PAGe::train_pipeline)))
-  expect_identical(eval(formals(PAGe::train_pipeline)$m2_family)[[1L]], "legacy")
+  expect_identical(
+    eval(formals(PAGe::train_pipeline)$m2_family)[[1L]],
+    "offset_subset_v1"
+  )
+  expect_identical(eval(formals(PAGe::train_pipeline)$allow_legacy), FALSE)
 })
 
 test_that("subset frozen artifact serializes and existing provenance guards apply", {
@@ -291,7 +302,8 @@ test_that("invalid family and weekly refit are rejected explicitly", {
 test_that("subset tuning selects h1 and h2 by complete inner-season NLL", {
   obs <- do.call(rbind, lapply(c("a", "b"), function(s) {
     data.frame(
-      season = s, weekF = 1:8, y = c(1, 2, 3, 4, 5, 4, 3, 2), N = 20
+      season = s, weekF = 1:8, y = c(1, 2, 3, 4, 5, 4, 3, 2), N = 20,
+      nW_true = 8L
     )
   }))
   preds <- do.call(rbind, lapply(c("a", "b"), function(s) {

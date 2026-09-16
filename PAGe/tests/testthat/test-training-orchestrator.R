@@ -148,7 +148,7 @@ test_that("refresh training uses a compatible prior best and skips tuning", {
     mode = "refresh",
     previous_results = list(best_spec = prior_spec),
     n_cores = 1L,
-    verbose = FALSE
+    verbose = FALSE, m2_family = "legacy", allow_legacy = TRUE
   )
 
   expect_identical(result$mode, "refresh")
@@ -175,7 +175,8 @@ test_that("refresh training uses a compatible prior best and skips tuning", {
     PAGe::train_pipeline(
       workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L)),
       mode = "refresh", previous_results = list(best_spec = prior_spec),
-      promotion = failed, n_cores = 1L, verbose = FALSE
+      promotion = failed, n_cores = 1L, verbose = FALSE,
+      m2_family = "legacy", allow_legacy = TRUE
     ),
     "verified promotion evidence"
   )
@@ -216,7 +217,7 @@ test_that("refresh falls back to locked v16 for an incompatible prior best", {
     mode = "refresh",
     previous_results = list(best_spec = list(k_f = 99L)),
     n_cores = 1L,
-    verbose = FALSE
+    verbose = FALSE, m2_family = "legacy", allow_legacy = TRUE
   )
 
   expect_equal(calls$best_spec$k_f, 4L)
@@ -402,6 +403,7 @@ test_that("retune training runs all tuning stages and fits the winning M2 spec",
     loso_seasons = "alternating",
     n_cores = 1L,
     verbose = FALSE,
+    m2_family = "legacy", allow_legacy = TRUE,
     m0_grid = data.frame(p_thr = 0.005),
     m1_grid = data.frame(k_ref = 25L)
   )
@@ -576,6 +578,7 @@ test_that("retune keeps the prospective holdout out of every stage by default", 
   result <- PAGe::train_pipeline(
     workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L)),
     mode = "retune", n_cores = 1L, verbose = FALSE,
+    m2_family = "legacy", allow_legacy = TRUE,
     m0_grid = data.frame(p_thr = .005),
     m1_grid = data.frame(k_ref = 25L)
   )
@@ -931,7 +934,7 @@ test_that("refresh governed path produces frozen chain and governed kit", {
     mode = "refresh",
     prospective_holdout = "2025-26",
     n_cores = 1L,
-    verbose = FALSE
+    verbose = FALSE, m2_family = "legacy", allow_legacy = TRUE
   )
 
   expect_identical(result$mode, "refresh")
@@ -959,7 +962,7 @@ test_that("refresh governed path rejects overlapping season sets", {
       exclude = "2024-25",
       prospective_holdout = "2025-26",
       n_cores = 1L,
-      verbose = FALSE
+      verbose = FALSE, m2_family = "legacy", allow_legacy = TRUE
     ),
     "at least one trainable season"
   )
@@ -981,11 +984,16 @@ test_that("retune routes offset subset M2 through its governed branch", {
       calls$static_preflight <- TRUE
       list(static = TRUE)
     },
-    tune_m0 = function(...) structure(list(best_params = list(ok = TRUE)),
-      class = "page_m0_tuning"),
+    tune_m0 = function(...) {
+      structure(list(best_params = list(ok = TRUE)),
+        class = "page_m0_tuning"
+      )
+    },
     validate_m0_tuning = function(x, ...) invisible(x),
     boundary_action_plan = function(tuning, stage, ...) {
-      if (identical(stage, "M2")) return(list(stage = stage, settled = TRUE))
+      if (identical(stage, "M2")) {
+        return(list(stage = stage, settled = TRUE))
+      }
       list(stage = stage, settled = TRUE)
     },
     fit_m0 = function(data, selection, config, ...) list(status = "draft"),
@@ -993,15 +1001,19 @@ test_that("retune routes offset subset M2 through its governed branch", {
       fit$status <- "frozen"
       fit
     },
-    tune_m1 = function(...) structure(list(best = data.frame(
-      k_ref = 25L, multi_temperature = .25, align_rise_weight = 1,
-      slope_window = 6L, slope_weight = 8
-    )), class = "page_m1_tuning"),
+    tune_m1 = function(...) {
+      structure(list(best = data.frame(
+        k_ref = 25L, multi_temperature = .25, align_rise_weight = 1,
+        slope_window = 6L, slope_weight = 8
+      )), class = "page_m1_tuning")
+    },
     validate_m1_tuning = function(x, ...) invisible(x),
-    select_m1_candidate = function(...) list(selected = data.frame(
-      k_ref = 25L, multi_temperature = .25, align_rise_weight = 1,
-      slope_window = 6L, slope_weight = 8
-    )),
+    select_m1_candidate = function(...) {
+      list(selected = data.frame(
+        k_ref = 25L, multi_temperature = .25, align_rise_weight = 1,
+        slope_window = 6L, slope_weight = 8
+      ))
+    },
     fit_m1 = function(data, selection, m0, config, ...) list(status = "draft"),
     freeze_m1 = function(fit, ...) {
       fit$status <- "frozen"
@@ -1014,7 +1026,8 @@ test_that("retune routes offset subset M2 through its governed branch", {
       calls$m2_family <- family
       calls$tuning_preds <- data.frame(
         season = selection$training_seasons, eval_weekF = 1L,
-        target_weekF = 2L, h = 1L, m1_p_hat = 0.2
+        target_weekF = 2L, h = 1L, m1_p_hat = 0.2,
+        forecast_available = TRUE, unavailable_reason = NA_character_
       )
       mock_scores <- expand.grid(
         spec_id = grid$id, season = selection$training_seasons, horizon = 1:2,
@@ -1024,6 +1037,10 @@ test_that("retune routes offset subset M2 through its governed branch", {
       mock_scores$mae <- 0.1
       mock_scores$rows <- 1
       mock_scores$trials <- 10
+      mock_scores$scheduled_rows <- 1
+      mock_scores$available_rows <- 1
+      mock_scores$unavailable_rows <- 0
+      mock_scores$coverage_key <- "a"
       mock_scores$status <- "ok"
       mock_summary <- expand.grid(
         spec_id = grid$id, horizon = 1:2, stringsAsFactors = FALSE
@@ -1034,7 +1051,8 @@ test_that("retune routes offset subset M2 through its governed branch", {
         season = selection$training_seasons, eval_weekF = 1L,
         target_weekF = 2L, h = 1L,
         lead = factor("h1", levels = c("h1", "h2")), m1_p = 0.2,
-        m1_logit = 0, z = 0, u = 1, d = 0, y_lead = 1, N_lead = 10
+        m1_logit = 0, z = 0, u = 1, d = 0, y_lead = 1, N_lead = 10,
+        forecast_available = TRUE, unavailable_reason = NA_character_
       )
       structure(list(
         family = family, grid = grid, selected = list(subset_grid[1L, ], subset_grid[1L, ]),

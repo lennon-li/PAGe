@@ -43,5 +43,12 @@ Replay predictions, standardized metrics, and explicit workflow
   bands, not validated full predictive intervals.
 }
 \description{
-Replay a season that was unseen by a pre-trained kit
+The runner must return an independent evaluation schedule in
+`params_df$eval_week` (and optionally `params_df$h`). When the replay emits
+forecasts, their forecast keys are validated against that schedule: each
+origin/horizon pair must be unique, `target_weekF` must equal
+`origin + horizon`, and the emitted set must match the schedule exactly.
+Missing, duplicated, unmatched, or inconsistent keys, and any prediction row
+from a season other than `season`, raise an error rather than silently
+scoring a partial replay.
 }

@@ -18,19 +18,23 @@
 #' @keywords internal
 stage2_extract_hyperparams <- function(best_mean_nll) {
   get1 <- function(obj, nm, default = NULL) {
-    if (is.list(obj) && !is.data.frame(obj) && !is.null(obj[[nm]])) return(obj[[nm]])
-    if (is.data.frame(obj) && nm %in% names(obj)) return(obj[[nm]][1])
+    if (is.list(obj) && !is.data.frame(obj) && !is.null(obj[[nm]])) {
+      return(obj[[nm]])
+    }
+    if (is.data.frame(obj) && nm %in% names(obj)) {
+      return(obj[[nm]][1])
+    }
     default
   }
 
-  delta    <- get1(best_mean_nll, "delta", get1(best_mean_nll, "shift", 0L))
-  K        <- get1(best_mean_nll, "K", 3L)
-  leads    <- get1(best_mean_nll, "leads", c(1L, 2L))
+  delta <- get1(best_mean_nll, "delta", get1(best_mean_nll, "shift", 0L))
+  K <- get1(best_mean_nll, "K", 3L)
+  leads <- get1(best_mean_nll, "leads", c(1L, 2L))
   use_ramp <- get1(best_mean_nll, "use_ramp", TRUE)
 
   extra <- list()
   if (is.list(best_mean_nll) && !is.data.frame(best_mean_nll)) {
-    keep <- setdiff(names(best_mean_nll), c("delta","shift","K","leads","use_ramp"))
+    keep <- setdiff(names(best_mean_nll), c("delta", "shift", "K", "leads", "use_ramp"))
     extra <- best_mean_nll[keep]
   }
 
@@ -86,17 +90,17 @@ stage2_extract_hyperparams <- function(best_mean_nll) {
 #' }
 #'
 build_stage2_pseudo_prospective_list <- function(
-    currentSeason,
-    template_df,
-    best_mean_nll,
-    iWeek_hat,
-    align = TRUE,
-    anchorWeek = 19L,
-    pre_buffer = 1L,
-    n_weeks = 53L,
-    eps = 1e-6,
-    date_col = if ("date" %in% names(currentSeason)) "date" else NULL,
-    timing_mode = c("legacy", "fractional")
+  currentSeason,
+  template_df,
+  best_mean_nll,
+  iWeek_hat,
+  align = TRUE,
+  anchorWeek = 19L,
+  pre_buffer = 1L,
+  n_weeks = 53L,
+  eps = 1e-6,
+  date_col = if ("date" %in% names(currentSeason)) "date" else NULL,
+  timing_mode = c("legacy", "fractional")
 ) {
   stopifnot(is.data.frame(currentSeason), is.data.frame(template_df))
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
@@ -105,17 +109,24 @@ build_stage2_pseudo_prospective_list <- function(
   if (!is.finite(iWeek_num)) stop("iWeek_hat must be finite.")
 
   get1 <- function(obj, nm, default = NULL) {
-    if (is.list(obj) && !is.data.frame(obj) && !is.null(obj[[nm]])) return(obj[[nm]])
-    if (is.data.frame(obj) && nm %in% names(obj)) return(obj[[nm]][1])
+    if (is.list(obj) && !is.data.frame(obj) && !is.null(obj[[nm]])) {
+      return(obj[[nm]])
+    }
+    if (is.data.frame(obj) && nm %in% names(obj)) {
+      return(obj[[nm]][1])
+    }
     default
   }
-  ramp_weight <- function(t_since, K) { K <- as.integer(K); pmin(1, pmax(0, t_since / K)) }
+  ramp_weight <- function(t_since, K) {
+    K <- as.integer(K)
+    pmin(1, pmax(0, t_since / K))
+  }
 
   n_weeks <- as.integer(n_weeks)
   if (!n_weeks %in% c(52L, 53L)) stop("n_weeks must be 52 or 53.")
 
   delta <- as.integer(get1(best_mean_nll, "delta", get1(best_mean_nll, "shift", 0L)))
-  K     <- as.integer(get1(best_mean_nll, "K", 3L))
+  K <- as.integer(get1(best_mean_nll, "K", 3L))
   leads <- as.integer(get1(best_mean_nll, "leads", c(1L, 2L)))
 
   nw_min <- if (timing_mode == "fractional") {
@@ -142,11 +153,15 @@ build_stage2_pseudo_prospective_list <- function(
     dplyr::filter(!is.na(.data$weekF), .data$weekF >= 1L, .data$weekF <= n_weeks) |>
     dplyr::group_by(.data$weekF) |>
     dplyr::summarise(
-      y_true   = sum(.data$y, na.rm = TRUE),
-      N_true   = sum(.data$N, na.rm = TRUE),
+      y_true = sum(.data$y, na.rm = TRUE),
+      N_true = sum(.data$N, na.rm = TRUE),
       neg_true = sum(.data$neg, na.rm = TRUE),
-      p_true   = y_true / pmax(N_true, 1L),
-      date_true = {x <- date; x <- x[!is.na(x)]; if (length(x)) x[1] else as.Date(NA)},
+      p_true = y_true / pmax(N_true, 1L),
+      date_true = {
+        x <- date
+        x <- x[!is.na(x)]
+        if (length(x)) x[1] else as.Date(NA)
+      },
       .groups = "drop"
     ) |>
     dplyr::arrange(.data$weekF)
@@ -167,14 +182,20 @@ build_stage2_pseudo_prospective_list <- function(
   } else {
     grid$newWeek_raw <- as.integer(grid$weekF)
   }
-  grid$newWeek <- pmin(pmax(grid$newWeek_raw, nw_min), nw_max)
+  grid$newWeek <- grid$newWeek_raw
+  grid$alignment_in_domain <- is.finite(grid$newWeek) &
+    grid$newWeek >= nw_min & grid$newWeek <= nw_max
+  grid$alignment_out_of_domain <- !grid$alignment_in_domain
 
   if (timing_mode == "fractional") {
     template_x <- as.numeric(template_df$newWeek)
     template_y <- as.numeric(template_df$fit)
-    template_at <- function(x) stats::approx(
-      template_x, template_y, xout = x, rule = 2, ties = "ordered"
-    )$y
+    template_at <- function(x) {
+      stats::approx(
+        template_x, template_y,
+        xout = x, rule = 1, ties = "ordered"
+      )$y
+    }
     grid$template_fit <- template_at(grid$newWeek)
     grid$newWeek_shift <- pmin(pmax(grid$newWeek + delta, nw_min), nw_max)
     grid$template_fit_shift <- template_at(grid$newWeek_shift)
@@ -218,14 +239,14 @@ build_stage2_pseudo_prospective_list <- function(
 
     d <- base_full |>
       dplyr::mutate(
-        y    = dplyr::if_else(.data$weekF <= asof_weekF, .data$y_true, NA_integer_),
-        N    = dplyr::if_else(.data$weekF <= asof_weekF, .data$N_true, NA_integer_),
-        neg  = dplyr::if_else(.data$weekF <= asof_weekF, .data$neg_true, NA_integer_),
-        p    = dplyr::if_else(.data$weekF <= asof_weekF, .data$p_true, NA_real_),
+        y = dplyr::if_else(.data$weekF <= asof_weekF, .data$y_true, NA_integer_),
+        N = dplyr::if_else(.data$weekF <= asof_weekF, .data$N_true, NA_integer_),
+        neg = dplyr::if_else(.data$weekF <= asof_weekF, .data$neg_true, NA_integer_),
+        p = dplyr::if_else(.data$weekF <= asof_weekF, .data$p_true, NA_real_),
         date = dplyr::if_else(.data$weekF <= asof_weekF, .data$date_true, as.Date(NA)),
         p_true = .data$p_true,
         toFit = ifelse(.data$weekF >= (iWeek_num - as.integer(pre_buffer)) &
-                         .data$weekF <= asof_weekF, 1L, 0L)
+          .data$weekF <= asof_weekF, 1L, 0L)
       )
 
     lead_levels <- paste0("h", sort(unique(leads)))
@@ -235,8 +256,8 @@ build_stage2_pseudo_prospective_list <- function(
   }
 
   start_w <- max(1L, floor(iWeek_num))
-  end_w   <- max(start_w, max_obs_weekF)
-  weekFs  <- seq.int(start_w, end_w)
+  end_w <- max(start_w, max_obs_weekF)
+  weekFs <- seq.int(start_w, end_w)
 
   asof_newWeek <- if (timing_mode == "fractional") {
     pmin(pmax(weekFs - iWeek_num + as.numeric(anchorWeek), nw_min), nw_max)
@@ -337,7 +358,7 @@ stage2_predict_series <- function(pp,
   alpha_state <- as.numeric(alpha_state)
   if (!is.finite(alpha_state) || alpha_state <= 0 || alpha_state >= 1) alpha_state <- 0.3
 
-  lev_lead   <- tryCatch(levels(stage2_fit$model$lead),   error = function(e) NULL)
+  lev_lead <- tryCatch(levels(stage2_fit$model$lead), error = function(e) NULL)
   lev_season <- tryCatch(levels(stage2_fit$model$season), error = function(e) NULL)
   ex <- if (isTRUE(exclude_season_re)) "s(season)" else NULL
 
@@ -345,18 +366,22 @@ stage2_predict_series <- function(pp,
   # Prevents extrapolation artifacts from producing unrealistically high
   # predicted positivity.  Below p_knee the function is identity; above
   # it tanh-squashes toward p_ceil.
-  p_train <- tryCatch({
-    mf <- stage2_fit$model
-    as.numeric(mf[[1]][, 1]) / rowSums(mf[[1]])
-  }, error = function(e) NULL)
+  p_train <- tryCatch(
+    {
+      mf <- stage2_fit$model
+      as.numeric(mf[[1]][, 1]) / rowSums(mf[[1]])
+    },
+    error = function(e) NULL
+  )
   if (!is.null(p_train) && length(p_train) > 10L) {
     p_knee <- as.numeric(stats::quantile(p_train, 0.95, na.rm = TRUE))
     p_train_max <- max(p_train, na.rm = TRUE)
     # Ceiling = historical max + half the gap between max and 95th %ile
     p_ceil <- p_train_max + 0.5 * (p_train_max - p_knee)
-    p_ceil <- min(p_ceil, 1.0)  # never exceed 1
+    p_ceil <- min(p_ceil, 1.0) # never exceed 1
   } else {
-    p_knee <- 0.26; p_ceil <- 0.40
+    p_knee <- 0.26
+    p_ceil <- 0.40
   }
   soft_cap_p <- function(p) {
     above <- p > p_knee
@@ -381,12 +406,16 @@ stage2_predict_series <- function(pp,
     w <- df[[week_col]]
     v <- df[[value_col]]
     ok <- which(is.finite(w) & !is.na(v))
-    if (!length(ok)) return(df)
+    if (!length(ok)) {
+      return(df)
+    }
 
     first_i <- ok[which.min(w[ok])]
-    last_i  <- ok[which.max(w[ok])]
-    w1 <- as.integer(w[first_i]); v1 <- v[first_i]
-    w2 <- as.integer(w[last_i]);  v2 <- v[last_i]
+    last_i <- ok[which.max(w[ok])]
+    w1 <- as.integer(w[first_i])
+    v1 <- v[first_i]
+    w2 <- as.integer(w[last_i])
+    v2 <- v[last_i]
 
     miss_pre <- which(is.na(v) & is.finite(w) & as.integer(w) < w1)
     if (length(miss_pre)) v[miss_pre] <- v1 + step * (as.integer(w[miss_pre]) - w1)
@@ -430,7 +459,7 @@ stage2_predict_series <- function(pp,
   pred_one <- function(d) {
     stopifnot(is.data.frame(d))
     if (!("weekF" %in% names(d))) stop("Snapshot missing weekF.")
-    if (!("lead" %in% names(d)))  stop("Snapshot missing lead.")
+    if (!("lead" %in% names(d))) stop("Snapshot missing lead.")
     if (!("toFit" %in% names(d))) d$toFit <- 1L
 
     base <- d |>
@@ -446,8 +475,11 @@ stage2_predict_series <- function(pp,
     base$date <- if ("date" %in% names(base)) as.Date(base$date) else as.Date(NA)
 
     if (!"p" %in% names(base)) {
-      if (all(c("y", "N") %in% names(base))) base$p <- as.numeric(base$y) / pmax(as.numeric(base$N), 1)
-      else stop("Need p or (y,N) in snapshot to form p_obs.")
+      if (all(c("y", "N") %in% names(base))) {
+        base$p <- as.numeric(base$y) / pmax(as.numeric(base$N), 1)
+      } else {
+        stop("Need p or (y,N) in snapshot to form p_obs.")
+      }
     }
     base$p_obs <- as.numeric(base$p)
     base$p_true <- if ("p_true" %in% names(base)) as.numeric(base$p_true) else NA_real_
@@ -469,7 +501,9 @@ stage2_predict_series <- function(pp,
       N_lookup$N <- as.integer(N_lookup$N)
     }
 
-    base$logN_now <- if ("logN_now" %in% names(base)) as.numeric(base$logN_now) else {
+    base$logN_now <- if ("logN_now" %in% names(base)) {
+      as.numeric(base$logN_now)
+    } else {
       if ("N" %in% names(base)) log(pmax(as.numeric(base$N), 1)) else NA_real_
     }
     # Cap logN_now at training range to prevent extrapolation of s(logN_now)
@@ -487,7 +521,8 @@ stage2_predict_series <- function(pp,
 
     d2 <- d |>
       dplyr::left_join(base |> dplyr::select(.data$weekF, .data$z_ema, .data$logN_now),
-                       by = "weekF")
+        by = "weekF"
+      )
 
     if (!"season" %in% names(d2)) {
       d2$season <- if (!is.null(lev_season)) factor(lev_season[1], levels = lev_season) else factor("current")
@@ -507,9 +542,9 @@ stage2_predict_series <- function(pp,
       miss <- setdiff(need, names(nd))
       if (length(miss)) stop("Prediction rows missing: ", paste(miss, collapse = ", "))
 
-      pr  <- stats::predict(stage2_fit, newdata = nd, type = "link", se.fit = TRUE, exclude = ex)
+      pr <- stats::predict(stage2_fit, newdata = nd, type = "link", se.fit = TRUE, exclude = ex)
       eta <- as.numeric(pr$fit)
-      se  <- as.numeric(pr$se.fit)
+      se <- as.numeric(pr$se.fit)
 
       p_hat <- soft_cap_p(stats::plogis(eta))
 
@@ -550,7 +585,8 @@ stage2_predict_series <- function(pp,
         )
     }
 
-    w_max_obs  <- suppressWarnings(max(base$weekF, na.rm = TRUE)); if (!is.finite(w_max_obs)) w_max_obs <- 1L
+    w_max_obs <- suppressWarnings(max(base$weekF, na.rm = TRUE))
+    if (!is.finite(w_max_obs)) w_max_obs <- 1L
     w_max_pred <- if (!is.null(pred_wide)) suppressWarnings(max(pred_wide$weekF, na.rm = TRUE)) else w_max_obs
     if (!is.finite(w_max_pred)) w_max_pred <- w_max_obs
 
@@ -615,7 +651,7 @@ plot_stage2 <- function(ppp,
                         show_ref = TRUE,
                         show_pi = TRUE,
                         interval = c("pi", "ci", "none"),
-                        h_plot = c("h1", "h2"),   # NEW: choose horizons to plot
+                        h_plot = c("h1", "h2"), # NEW: choose horizons to plot
                         base_size = 10) {
   stopifnot(is.list(ppp), length(ppp) > 0)
   interval <- match.arg(interval)
@@ -631,9 +667,15 @@ plot_stage2 <- function(ppp,
   if (is.null(nm)) nm <- paste0("snap_", seq_along(ppp))
 
   get_ign <- function(i) {
-    if (length(ign_week) == 1L) return(as.integer(ign_week))
-    if (!is.null(names(ign_week)) && nm[i] %in% names(ign_week)) return(as.integer(ign_week[[nm[i]]]))
-    if (length(ign_week) == length(ppp)) return(as.integer(ign_week[[i]]))
+    if (length(ign_week) == 1L) {
+      return(as.integer(ign_week))
+    }
+    if (!is.null(names(ign_week)) && nm[i] %in% names(ign_week)) {
+      return(as.integer(ign_week[[nm[i]]]))
+    }
+    if (length(ign_week) == length(ppp)) {
+      return(as.integer(ign_week[[i]]))
+    }
     NA_integer_
   }
 
@@ -645,13 +687,13 @@ plot_stage2 <- function(ppp,
     d$weekF <- as.integer(d$weekF)
     if (has_date) d$date <- as.Date(d$date)
 
-    need <- c("weekF","p_obs","p_true","p_hat_h1","p_hat_h2","p_lo_h1","p_lo_h2","p_hi_h1","p_hi_h2","asof_weekF")
+    need <- c("weekF", "p_obs", "p_true", "p_hat_h1", "p_hat_h2", "p_lo_h1", "p_lo_h2", "p_hi_h1", "p_hi_h2", "asof_weekF")
     miss <- setdiff(need, names(d))
     if (length(miss)) stop("Snapshot df missing: ", paste(miss, collapse = ", "))
 
     asof <- as.integer(unique(d$asof_weekF)[1])
     asof_x <- if (has_date) d$date[match(asof, d$weekF)] else asof
-    ign_x  <- NA
+    ign_x <- NA
     if (is.finite(iw)) ign_x <- if (has_date) d$date[match(as.integer(iw), d$weekF)] else as.integer(iw)
 
     obs <- dplyr::tibble(snapshot = snap, x = d[[xvar]], p_obs = as.numeric(d$p_obs))
@@ -662,9 +704,11 @@ plot_stage2 <- function(ppp,
     }
 
     pred <- d |>
-      dplyr::select(dplyr::all_of(c(xvar,
-                                    "p_hat_h1","p_lo_h1","p_hi_h1",
-                                    "p_hat_h2","p_lo_h2","p_hi_h2"))) |>
+      dplyr::select(dplyr::all_of(c(
+        xvar,
+        "p_hat_h1", "p_lo_h1", "p_hi_h1",
+        "p_hat_h2", "p_lo_h2", "p_hi_h2"
+      ))) |>
       tidyr::pivot_longer(
         cols = -dplyr::all_of(xvar),
         names_to = c(".value", "h"),
@@ -673,10 +717,10 @@ plot_stage2 <- function(ppp,
       dplyr::transmute(
         snapshot = snap,
         x = .data[[xvar]],
-        h = factor(.data$h, levels = c("h1","h2")),
+        h = factor(.data$h, levels = c("h1", "h2")),
         p_hat = as.numeric(.data$hat),
-        p_lo  = as.numeric(.data$lo),
-        p_hi  = as.numeric(.data$hi)
+        p_lo = as.numeric(.data$lo),
+        p_hi = as.numeric(.data$hi)
       )
 
     truth <- d |>
@@ -687,7 +731,7 @@ plot_stage2 <- function(ppp,
           .data$weekF == asof + 2L ~ "h2",
           TRUE ~ NA_character_
         ),
-        h = factor(.data$h, levels = c("h1","h2")),
+        h = factor(.data$h, levels = c("h1", "h2")),
         x = .data[[xvar]]
       ) |>
       dplyr::transmute(snapshot = snap, x = .data$x, h = .data$h, p_true = as.numeric(.data$p_true)) |>
@@ -700,11 +744,11 @@ plot_stage2 <- function(ppp,
 
   parts <- Map(function(d, name, i) build_one_long(d, name, get_ign(i)), ppp, nm, seq_along(ppp))
 
-  obs_all   <- dplyr::bind_rows(lapply(parts, `[[`, "obs"))
-  pred_all  <- dplyr::bind_rows(lapply(parts, `[[`, "pred"))  |> dplyr::filter(.data$h %in% h_plot)
+  obs_all <- dplyr::bind_rows(lapply(parts, `[[`, "obs"))
+  pred_all <- dplyr::bind_rows(lapply(parts, `[[`, "pred")) |> dplyr::filter(.data$h %in% h_plot)
   truth_all <- dplyr::bind_rows(lapply(parts, `[[`, "truth")) |> dplyr::filter(.data$h %in% h_plot)
-  v_all     <- dplyr::bind_rows(lapply(parts, `[[`, "v"))
-  ref_all   <- dplyr::bind_rows(lapply(parts, `[[`, "ref"))
+  v_all <- dplyr::bind_rows(lapply(parts, `[[`, "v"))
+  ref_all <- dplyr::bind_rows(lapply(parts, `[[`, "ref"))
 
   col_map <- c(h1 = "blue", h2 = "green")[h_plot]
   fill_map <- c(h1 = "blue", h2 = "green")[h_plot]
@@ -733,8 +777,10 @@ plot_stage2 <- function(ppp,
     if (show_band && nrow(pred2)) {
       p <- p + ggplot2::geom_ribbon(
         data = pred2,
-        ggplot2::aes(x = .data$x, ymin = .data$p_lo, ymax = .data$p_hi,
-                     fill = .data$h, group = .data$h),
+        ggplot2::aes(
+          x = .data$x, ymin = .data$p_lo, ymax = .data$p_hi,
+          fill = .data$h, group = .data$h
+        ),
         alpha = 0.18
       )
     }
@@ -778,7 +824,7 @@ plot_stage2 <- function(ppp,
 
   if (isTRUE(facet)) {
     make_plot(obs_all, pred_all, truth_all, v_all, ref_all, title = NULL) +
-      ggplot2::facet_wrap(~ snapshot, ncol = ncol, scales = "free_y")
+      ggplot2::facet_wrap(~snapshot, ncol = ncol, scales = "free_y")
   } else {
     plots <- vector("list", length(ppp))
     names(plots) <- nm

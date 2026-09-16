@@ -30,7 +30,9 @@ align_multi_template(
   dynamic_temp_pivot = 10L,
   gam_obj = NULL,
   spread_method = c("between", "total"),
-  timing_mode = c("legacy", "fractional")
+  timing_mode = c("legacy", "fractional"),
+  prep = NULL,
+  return_prep = FALSE
 )
 }
 \arguments{

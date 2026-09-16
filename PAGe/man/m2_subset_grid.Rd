@@ -9,6 +9,8 @@ m2_subset_grid(
   k_z_values = k_values,
   k_u_values = k_values,
   k_d_values = k_values,
+  k_tau_values = 0L,
+  conf_scale = "none",
   alpha_state = 0.2,
   gamma = 1.4
 )
@@ -17,6 +19,11 @@ m2_subset_grid(
 \item{k_values}{Default candidate basis sizes for every term.}
 
 \item{k_z_values, k_u_values, k_d_values}{Per-term candidate basis sizes.}
+
+\item{k_tau_values}{Candidate basis sizes for the origin-time peak-relative
+term. The stage-A default is the exact existing grid with this term off.}
+
+\item{conf_scale}{Confidence-scaling values. Stage-A defaults to `"none"`.}
 
 \item{alpha_state}{EMA decay used to build the `z`/`d` features; one value.}
 

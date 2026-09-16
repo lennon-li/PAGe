@@ -273,7 +273,8 @@ test_that("retune calls governed lifecycle in M0 -> M1 -> M2 order", {
     mode = "retune",
     exclude = character(0),
     prospective_holdout = "2025-26",
-    n_cores = 1L, verbose = FALSE
+    n_cores = 1L, verbose = FALSE,
+    m2_family = "legacy", allow_legacy = TRUE
   )
 
   expect_s3_class(result, "page_training_result")
@@ -375,7 +376,8 @@ test_that("retune excludes holdout season from training selection", {
     mode = "retune",
     exclude = character(0),
     prospective_holdout = "2025-26",
-    n_cores = 1L, verbose = FALSE
+    n_cores = 1L, verbose = FALSE,
+    m2_family = "legacy", allow_legacy = TRUE
   )
 
   expect_false("2025-26" %in% captured_selection$training_seasons)
@@ -468,6 +470,7 @@ test_that("retune racing=TRUE routes full_evaluator through governed tune_m2", {
     exclude = character(0),
     prospective_holdout = "2025-26",
     n_cores = 1L, verbose = FALSE,
+    m2_family = "legacy", allow_legacy = TRUE,
     racing = TRUE,
     racing_evaluator = mock_evaluator
   )
@@ -541,7 +544,8 @@ test_that("retune preserves page_training_result field shape", {
     mode = "retune",
     exclude = character(0),
     prospective_holdout = "2025-26",
-    n_cores = 1L, verbose = FALSE
+    n_cores = 1L, verbose = FALSE,
+    m2_family = "legacy", allow_legacy = TRUE
   )
 
   expected_fields <- c(

@@ -18,7 +18,8 @@ train_pipeline(
   m0_grid = .default_m0_grid(),
   m1_grid = default_m1_grid(),
   m2_grid = NULL,
-  m2_family = c("legacy", "offset_subset_v1"),
+  m2_family = c("offset_subset_v1", "legacy"),
+  allow_legacy = FALSE,
   max_m2_finalists = 6L,
   max_m2_specs = 64L,
   selection_method = c("min_nll", "one_se", "pareto"),
@@ -76,9 +77,11 @@ candidate, and incumbent artifacts is the safety boundary.}
 \item{m2_grid}{Optional explicit M2 grid; \code{NULL} uses
 \code{plan_m2_grid(previous_results)}.}
 
-\item{m2_family}{M2 model family. The default \code{"legacy"} preserves
-existing behavior; \code{"offset_subset_v1"} opts into the governed
-subset family.}
+\item{m2_family}{M2 model family. The default \code{"offset_subset_v1"}
+is the governed subset family; \code{"legacy"} is research/compatibility
+only.}
+
+\item{allow_legacy}{Logical; explicitly allow the legacy research path.}
 
 \item{max_m2_finalists, max_m2_specs}{Adaptive M2 plan caps.}
 

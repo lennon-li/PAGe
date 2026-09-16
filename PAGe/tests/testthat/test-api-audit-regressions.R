@@ -39,6 +39,10 @@ test_that("subset train_m2 applies exclusions before delegating", {
   scores$mae <- 0.1
   scores$rows <- 2
   scores$trials <- 20
+  scores$scheduled_rows <- 2
+  scores$available_rows <- 2
+  scores$unavailable_rows <- 0
+  scores$coverage_key <- "a"
   scores$status <- "ok"
   summary <- expand.grid(
     spec_id = grid$id, horizon = 1:2, stringsAsFactors = FALSE
@@ -49,11 +53,17 @@ test_that("subset train_m2 applies exclusions before delegating", {
     season = rep(seasons, each = 2), eval_weekF = 1:4,
     target_weekF = 2:5, h = 1L, lead = factor("h1", levels = c("h1", "h2")),
     m1_p = 0.2, m1_logit = 0, z = 0, u = 1, d = 0,
-    y_lead = 1, N_lead = 10
+    tau = 0, peak_weekF_origin = 3, peak_ci_width = 1,
+    ignition_weekF = 2, observed_peak_weekF = 3,
+    phase = "turning", weight_page_v2 = 3, weight_legacy = 2,
+    y_lead = 1, N_lead = 10,
+    forecast_available = TRUE, unavailable_reason = NA_character_
   )
   preds <- data.frame(
     season = rep(seasons, each = 2), eval_weekF = 1:4,
-    target_weekF = 2:5, h = 1L, m1_p_hat = 0.2
+    target_weekF = 2:5, h = 1L, m1_p_hat = 0.2,
+    peak_weekF_origin = 3, peak_ci_width = 1,
+    forecast_available = TRUE, unavailable_reason = NA_character_
   )
   config <- PAGe:::m2_subset_config(h1 = grid[1, ], h2 = grid[1, ])
   out <- list(
@@ -161,7 +171,9 @@ test_that("subset runtime preserves point forecasts and interval columns", {
   per_week <- list(list(
     ew = 5L, ap = list(
       state = "aligning", iWeek_hat = 3L,
-      forecast_df = data.frame(newWeek = 1:10, p_hat = seq(.1, .9, length.out = 10))
+      forecast_df = data.frame(
+        newWeek = 1:52, p_hat = seq(.1, .9, length.out = 52)
+      )
     ),
     season_to_ew = data.frame(season = "current", weekF = 1:5, y = 1:5, N = 10)
   ))

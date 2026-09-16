@@ -20,6 +20,7 @@ train_outer_fold(
   early_max_t_since = 12,
   pre_ignition_weight = 0,
   late_weight = 1,
+  scoring = c("page_v2", "legacy_0_12"),
   score_scale = c("equal_week", "test_count"),
   min_gain = 0.0012,
   min_gain_by_horizon = c(`2` = 0.002),
@@ -39,7 +40,9 @@ train_outer_fold(
   checkpoint_dir = NULL,
   artifact_dir = NULL,
   verbose = TRUE,
-  timing_mode = c("legacy", "fractional")
+  timing_mode = c("legacy", "fractional"),
+  gate_nesting = c("full", "conditional"),
+  shadow_m2 = TRUE
 )
 }
 \arguments{
@@ -136,11 +139,30 @@ fewer than `parallel::detectCores()`.}
 boundary reports, decisions, frozen stages, and the final kit.}
 
 \item{verbose}{Logical progress flag.}
+
+\item{shadow_m2}{Logical; additionally fit and replay the tuned M2 candidate
+for output-only comparison when an outer fold keeps M1. Defaults to `TRUE`.
+Failures are recorded without failing the primary fold. Final all-season
+fits never build a shadow. `FALSE` preserves the original output schema.}
+
+\item{gate_nesting}{Inner-gate nesting depth. `"full"` (default) re-runs
+selection, inside each gate season's excluded dataset, for every upstream
+axis the recipe actually tunes (M0 always; M1 only when its grid has more
+than one value) before re-running the full M2 selection procedure.
+`"conditional"` re-runs the full M2 selection procedure only and passes
+the outer fold's selected M0/M1 settings through unchanged; its evidence
+is labelled `"conditional on upstream selection"`. Both options use nested
+M1 references (rows of `r` exclude `r` and the gate season) and identical
+estimator settings, and both are recorded in run provenance and kit
+metadata.}
 }
 \value{
 A `page_outer_training` object containing the season selection,
   tuning results, boundary histories, adoption evidence, frozen stages, and
-  assembled kit.
+  assembled kit. With `shadow_m2 = TRUE`, the returned `shadow_m2` contains
+  a status and, when built, the shadow kit. Shadow evidence is saved in
+  separate `shadow_m2_kit.rds` and `shadow_m2_status.rds` artifacts; the
+  existing primary training artifact retains its original schema.
 }
 \description{
 Runs the first two levels of the manuscript evaluation. When `holdout` is

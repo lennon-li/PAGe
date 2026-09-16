@@ -9,9 +9,9 @@
 
 utils::globalVariables(".fit_weight")
 
-m2_subset_component_names <- function() c("intercept", "k_z", "k_u", "k_d")
+m2_subset_component_names <- function() c("intercept", "k_z", "k_u", "k_d", "k_tau", "conf_scale")
 
-m2_subset_term_names <- function() c("z", "u", "d")
+m2_subset_term_names <- function() c("z", "u", "d", "tau")
 
 .m2_subset_k <- function(value, name) {
   value <- as.numeric(value[1L])
@@ -32,6 +32,9 @@ m2_subset_term_names <- function() c("z", "u", "d")
 #'
 #' @param k_values Default candidate basis sizes for every term.
 #' @param k_z_values,k_u_values,k_d_values Per-term candidate basis sizes.
+#' @param k_tau_values Candidate basis sizes for the origin-time peak-relative
+#'   term. The stage-A default is the exact existing grid with this term off.
+#' @param conf_scale Confidence-scaling values. Stage-A defaults to `"none"`.
 #' @param alpha_state EMA decay used to build the `z`/`d` features; one value.
 #' @param gamma Smoothness selection multiplier; one value >= 1.
 #'
@@ -40,7 +43,8 @@ m2_subset_term_names <- function() c("z", "u", "d")
 #' @export
 m2_subset_grid <- function(k_values = c(0L, 3L, 4L, 5L, 6L, 7L, 8L),
                            k_z_values = k_values, k_u_values = k_values,
-                           k_d_values = k_values, alpha_state = 0.2,
+                           k_d_values = k_values, k_tau_values = 0L,
+                           conf_scale = "none", alpha_state = 0.2,
                            gamma = 1.4) {
   normalize_k_values <- function(values, name) {
     values <- unique(vapply(values, .m2_subset_k, integer(1), name = name))
@@ -50,6 +54,8 @@ m2_subset_grid <- function(k_values = c(0L, 3L, 4L, 5L, 6L, 7L, 8L),
   k_z_values <- normalize_k_values(k_z_values, "k_z_values")
   k_u_values <- normalize_k_values(k_u_values, "k_u_values")
   k_d_values <- normalize_k_values(k_d_values, "k_d_values")
+  k_tau_values <- normalize_k_values(k_tau_values, "k_tau_values")
+  conf_scale <- match.arg(conf_scale, c("none", "peak_ci"))
   alpha_state <- as.numeric(alpha_state)
   if (any(!is.finite(alpha_state) | alpha_state <= 0 | alpha_state >= 1)) {
     stop("alpha_state grid values must be in (0, 1).", call. = FALSE)
@@ -63,6 +69,8 @@ m2_subset_grid <- function(k_values = c(0L, 3L, 4L, 5L, 6L, 7L, 8L),
     k_z = k_z_values,
     k_u = k_u_values,
     k_d = k_d_values,
+    k_tau = k_tau_values,
+    conf_scale = conf_scale,
     alpha_state = alpha_state,
     gamma = gamma,
     KEEP.OUT.ATTRS = FALSE,
@@ -70,7 +78,7 @@ m2_subset_grid <- function(k_values = c(0L, 3L, 4L, 5L, 6L, 7L, 8L),
   )
   bits <- bits[
     order(
-      rowSums(bits),
+      as.integer(bits$intercept) + bits$k_z + bits$k_u + bits$k_d + bits$k_tau,
       sprintf(
         "i%d_kz%d_ku%d_kd%d", bits$intercept,
         bits$k_z, bits$k_u, bits$k_d
@@ -82,8 +90,13 @@ m2_subset_grid <- function(k_values = c(0L, 3L, 4L, 5L, 6L, 7L, 8L),
     "i%d_kz%d_ku%d_kd%d",
     as.integer(bits$intercept), bits$k_z, bits$k_u, bits$k_d
   )
+  non_default <- bits$k_tau > 0L | bits$conf_scale != "none"
+  bits$id[non_default] <- paste0(
+    bits$id[non_default], "_ktau", bits$k_tau[non_default],
+    "_cs", bits$conf_scale[non_default]
+  )
   bits$enabled_count <- as.integer(bits$intercept) +
-    rowSums(bits[c("k_z", "k_u", "k_d")] > 0)
+    rowSums(bits[c("k_z", "k_u", "k_d", "k_tau")] > 0)
   bits <- bits[, c(
     "id", m2_subset_component_names(), "alpha_state", "gamma",
     "enabled_count"
@@ -92,9 +105,48 @@ m2_subset_grid <- function(k_values = c(0L, 3L, 4L, 5L, 6L, 7L, 8L),
   bits
 }
 
+# Stage B is deliberately small: only the two best stage-A base specifications
+# are crossed with the predeclared tau/confidence axes. The all-off stage-A rows
+# remain in the returned union, so M1 is always a candidate.
+.m2_subset_stage_b_grid <- function(stage_a_grid, stage_a_summary) {
+  stage_a_grid <- as.data.frame(stage_a_grid)
+  if (!nrow(stage_a_grid)) {
+    return(stage_a_grid)
+  }
+  summary <- as.data.frame(stage_a_summary %||% data.frame())
+  ids <- character()
+  if (nrow(summary) && all(c("spec_id", "bernoulli_nll") %in% names(summary))) {
+    agg <- stats::aggregate(
+      bernoulli_nll ~ spec_id, summary[is.finite(summary$bernoulli_nll), , drop = FALSE], mean
+    )
+    complexity <- stage_a_grid$enabled_count[match(agg$spec_id, stage_a_grid$id)]
+    ids <- as.character(agg$spec_id[order(agg$bernoulli_nll, complexity, agg$spec_id)][seq_len(min(2L, nrow(agg)))])
+  }
+  if (!length(ids)) ids <- as.character(utils::head(stage_a_grid$id, 2L))
+  base <- stage_a_grid[stage_a_grid$id %in% ids, , drop = FALSE]
+  rows <- do.call(rbind, lapply(seq_len(nrow(base)), function(i) {
+    do.call(rbind, lapply(c(0L, 3L, 4L, 5L), function(k_tau) {
+      do.call(rbind, lapply(c("none", "peak_ci"), function(conf_scale) {
+        row <- base[i, , drop = FALSE]
+        row$k_tau <- k_tau
+        row$conf_scale <- conf_scale
+        spec <- m2_subset_spec(row)
+        row$id <- spec$id
+        row$enabled_count <- spec$enabled_count
+        row
+      }))
+    }))
+  }))
+  out <- rbind(stage_a_grid, rows)
+  out <- out[!duplicated(as.character(out$id)), , drop = FALSE]
+  rownames(out) <- NULL
+  out
+}
+
 m2_subset_spec <- function(spec = NULL, intercept = FALSE,
-                           k_z = 0L, k_u = 0L, k_d = 0L,
-                           z = NULL, u = NULL, d = NULL) {
+                           k_z = 0L, k_u = 0L, k_d = 0L, k_tau = 0L,
+                           conf_scale = "none", z = NULL, u = NULL, d = NULL,
+                           tau = NULL) {
   if (!is.null(spec)) {
     if (is.data.frame(spec)) {
       if (nrow(spec) != 1L) stop("spec data.frame must have one row.", call. = FALSE)
@@ -103,6 +155,8 @@ m2_subset_spec <- function(spec = NULL, intercept = FALSE,
     }
     if (!is.list(spec)) stop("spec must be a list or one-row data.frame.", call. = FALSE)
     if (!is.null(spec$intercept)) intercept <- spec$intercept
+    if (!is.null(spec$k_tau)) k_tau <- spec$k_tau
+    if (!is.null(spec$conf_scale)) conf_scale <- as.character(spec$conf_scale)
     for (nm in m2_subset_term_names()) {
       k_name <- paste0("k_", nm)
       if (!is.null(spec[[k_name]])) {
@@ -131,18 +185,25 @@ m2_subset_spec <- function(spec = NULL, intercept = FALSE,
   if (!is.null(z)) k_z <- if (z) 3L else 0L
   if (!is.null(u)) k_u <- if (u) 3L else 0L
   if (!is.null(d)) k_d <- if (d) 3L else 0L
+  if (!is.null(tau)) k_tau <- if (tau) 3L else 0L
   if (!is.logical(intercept) || length(intercept) != 1L || is.na(intercept)) {
     stop("M2 subset intercept must be logical.", call. = FALSE)
   }
   k_z <- .m2_subset_k(k_z, "k_z")
   k_u <- .m2_subset_k(k_u, "k_u")
   k_d <- .m2_subset_k(k_d, "k_d")
+  k_tau <- .m2_subset_k(k_tau, "k_tau")
+  conf_scale <- match.arg(conf_scale, c("none", "peak_ci"))
+  id <- sprintf("i%d_kz%d_ku%d_kd%d", as.integer(intercept), k_z, k_u, k_d)
+  if (k_tau > 0L || conf_scale != "none") {
+    id <- paste0(id, "_ktau", k_tau, "_cs", conf_scale)
+  }
   out <- data.frame(
-    id = sprintf("i%d_kz%d_ku%d_kd%d", as.integer(intercept), k_z, k_u, k_d),
-    intercept = intercept, k_z = k_z, k_u = k_u, k_d = k_d,
+    id = id, intercept = intercept, k_z = k_z, k_u = k_u, k_d = k_d,
+    k_tau = k_tau, conf_scale = conf_scale,
     stringsAsFactors = FALSE
   )
-  out$enabled_count <- as.integer(intercept) + sum(c(k_z, k_u, k_d) > 0)
+  out$enabled_count <- as.integer(intercept) + sum(c(k_z, k_u, k_d, k_tau) > 0)
   out
 }
 
@@ -159,6 +220,10 @@ m2_subset_formula <- function(spec, k = NULL, bs = "ts") {
     stop("bs must be one non-empty character value.", call. = FALSE)
   }
   rhs <- c("-1", "offset(m1_logit)")
+  # Both confidence modes share this design: `lead` supplies the horizon
+  # intercept columns and `s(nm, by=lead)` supplies the centered factor-by
+  # smooths. The peak-CI path row-scales the assembled design (and the
+  # prediction lpmatrix) by the confidence scale after fit = FALSE.
   if (isTRUE(spec$intercept)) rhs <- c(rhs, "lead")
   for (nm in m2_subset_term_names()) {
     term_k <- spec[[paste0("k_", nm)]]
@@ -170,6 +235,48 @@ m2_subset_formula <- function(spec, k = NULL, bs = "ts") {
     "cbind(y_lead, N_lead - y_lead) ~",
     paste(rhs, collapse = " + ")
   ))
+}
+
+.m2_subset_scale_design_rows <- function(matrix, scale) {
+  scale <- as.numeric(scale)
+  if (length(scale) != nrow(matrix)) {
+    stop(
+      "M2 subset confidence scale must have one value per design row.",
+      call. = FALSE
+    )
+  }
+  sweep(matrix, 1L, scale, "*")
+}
+
+.m2_subset_fit_scaled_gam <- function(formula, data, family, method, gamma,
+                                      weights, para_pen, scale) {
+  data$.page_scaled_fit_weight <- as.numeric(weights)
+  design <- mgcv::gam(
+    formula = formula, data = data, family = family, method = method,
+    gamma = gamma, select = TRUE, weights = .page_scaled_fit_weight,
+    paraPen = para_pen,
+    na.action = stats::na.fail, fit = FALSE
+  )
+  # The assembled design is row-scaled by the per-row confidence scale before
+  # the final fit; the same construction is applied to prediction lpmatrices.
+  design$X <- .m2_subset_scale_design_rows(design$X, scale)
+  # mgcv does not carry `method`/`gamma` through `fit = FALSE`, so both must be
+  # passed explicitly to the final `gam(G = ...)` call or mgcv silently falls
+  # back to its GCV/UBRE default.
+  mgcv::gam(G = design, method = method, gamma = gamma)
+}
+
+.m2_subset_check_fit_method <- function(fit, method) {
+  actual <- as.character(fit$method)[1L]
+  if (length(actual) != 1L || is.na(actual) ||
+    !identical(toupper(actual), toupper(as.character(method)))) {
+    stop(
+      "M2 subset GAM silently used method '", actual,
+      "' instead of the requested '", method, "'.",
+      call. = FALSE
+    )
+  }
+  invisible(actual)
 }
 
 m2_subset_enabled_features <- function(spec) {
@@ -203,6 +310,34 @@ m2_subset_validate_data <- function(data, spec, require_season = TRUE) {
     stop("M2 subset response or enabled predictors must be finite.", call. = FALSE)
   }
   invisible(data)
+}
+
+.m2_subset_confidence <- function(data, conf_scale, w_ref = NA_real_) {
+  if (identical(conf_scale, "none")) {
+    return(list(
+      scale = rep(1, nrow(data)),
+      missing = rep(FALSE, nrow(data)),
+      zero = rep(FALSE, nrow(data))
+    ))
+  }
+  width <- if ("peak_ci_width" %in% names(data)) {
+    as.numeric(data$peak_ci_width)
+  } else if (all(c("peak_weekF_lo", "peak_weekF_hi") %in% names(data))) {
+    as.numeric(data$peak_weekF_hi) - as.numeric(data$peak_weekF_lo)
+  } else {
+    rep(NA_real_, nrow(data))
+  }
+  zero <- is.finite(width) & width <= 0
+  missing <- !is.finite(width)
+  scale <- rep(1, length(width))
+  if (is.finite(w_ref) && w_ref > 0) {
+    usable <- is.finite(width) & width > 0
+    scale[usable] <- pmin(1, width[usable] / w_ref)
+  }
+  # An exactly zero-width CI carries no confidence: c = 0.  Missing CI falls
+  # back to c = 1 and is flagged separately from a measured zero width.
+  scale[zero] <- 0
+  list(scale = scale, missing = missing, zero = zero)
 }
 
 m2_subset_feature_ranges <- function(data, spec) {
@@ -243,6 +378,31 @@ m2_subset_fit <- function(data, spec, method = "REML", gamma = 1.4,
     stop("Both h1 and h2 are required for a shared-horizon fit.", call. = FALSE)
   }
   ranges <- m2_subset_feature_ranges(dat, spec)
+  has_correction <- spec$enabled_count > 0L
+  w_ref <- if (has_correction && spec$conf_scale == "peak_ci") {
+    widths <- if ("peak_ci_width" %in% names(dat)) {
+      as.numeric(dat$peak_ci_width)
+    } else {
+      as.numeric(dat$peak_weekF_hi) - as.numeric(dat$peak_weekF_lo)
+    }
+    stats::median(widths[is.finite(widths) & widths > 0], na.rm = TRUE)
+  } else {
+    NA_real_
+  }
+  conf <- if (has_correction) {
+    .m2_subset_confidence(dat, spec$conf_scale, w_ref)
+  } else {
+    list(
+      scale = rep(1, nrow(dat)), missing = rep(FALSE, nrow(dat)),
+      zero = rep(FALSE, nrow(dat))
+    )
+  }
+  if (has_correction && spec$conf_scale == "peak_ci" &&
+    (!is.finite(w_ref) || w_ref <= 0)) {
+    stop("peak_ci confidence scaling requires a positive training-row CI width median.", call. = FALSE)
+  }
+  # Estimate effect_h(x) * c by row-scaling the assembled factor-by design; the
+  # scale is exactly one for the `none` mode, so both modes share one design.
   common <- list(
     spec = spec,
     formula = m2_subset_formula(spec, k = k, bs = bs),
@@ -261,7 +421,15 @@ m2_subset_fit <- function(data, spec, method = "REML", gamma = 1.4,
     total_edf = 0,
     edf = numeric(0),
     season_trial_totals = numeric(0),
-    fit_weight_by_season = numeric(0)
+    fit_weight_by_season = numeric(0),
+    conf_scale = spec$conf_scale, w_ref = w_ref,
+    confidence_basis = if (identical(spec$conf_scale, "peak_ci")) {
+      "row_scaled_factor_by_design"
+    } else {
+      "centered_factor_by"
+    },
+    ci_missing_training = sum(conf$missing),
+    ci_zero_training = sum(conf$zero)
   )
   if (identical(spec$enabled_count, 0L)) {
     common$type <- "all_off"
@@ -281,17 +449,25 @@ m2_subset_fit <- function(data, spec, method = "REML", gamma = 1.4,
   }
   warnings <- character()
   fit <- withCallingHandlers(
-    mgcv::gam(
-      formula = common$formula,
-      data = dat,
-      family = stats::binomial(),
-      method = method,
-      gamma = gamma,
-      select = TRUE,
-      weights = .fit_weight,
-      paraPen = para_pen,
-      na.action = stats::na.fail
-    ),
+    if (identical(spec$conf_scale, "peak_ci")) {
+      .m2_subset_fit_scaled_gam(
+        formula = common$formula, data = dat,
+        family = stats::binomial(), method = method, gamma = gamma,
+        weights = dat$.fit_weight, para_pen = para_pen, scale = conf$scale
+      )
+    } else {
+      mgcv::gam(
+        formula = common$formula,
+        data = dat,
+        family = stats::binomial(),
+        method = method,
+        gamma = gamma,
+        select = TRUE,
+        weights = .fit_weight,
+        paraPen = para_pen,
+        na.action = stats::na.fail
+      )
+    },
     warning = function(w) {
       warnings <<- unique(c(warnings, conditionMessage(w)))
       invokeRestart("muffleWarning")
@@ -310,6 +486,9 @@ m2_subset_fit <- function(data, spec, method = "REML", gamma = 1.4,
       call. = FALSE
     )
   }
+  # The governed fitting method (and gamma) must be the one actually used; fail
+  # loudly rather than recording a method mgcv silently replaced.
+  .m2_subset_check_fit_method(fit, method)
   # mgcv records the factor used by a factor-by smooth in `pterms`, even when
   # it has no parametric coefficient.  `nsdf` and the coefficient names are
   # therefore the identifiability check, rather than term labels alone.
@@ -358,11 +537,13 @@ m2_subset_predict <- function(fit, newdata) {
   nd$lead <- factor(as.character(nd$lead), levels = c("h1", "h2"))
   if (anyNA(nd$lead)) stop("Prediction data contains an unknown horizon.", call. = FALSE)
   nd <- m2_subset_apply_ranges(nd, fit$feature_ranges)
+  conf <- .m2_subset_confidence(nd, fit$conf_scale, fit$w_ref)
   if (identical(fit$type, "all_off")) {
     # Preserve the supplied saved M1 probability bit-for-bit.  The link is
     # retained for the correction field, but qlogis/plogis round-tripping is
     # not allowed to perturb the all-off identity contract.
     eta <- stats::qlogis(m1_probability)
+    correction <- rep(0, nrow(nd))
   } else {
     required <- m2_subset_enabled_features(fit$spec)
     if (length(setdiff(required, names(nd)))) {
@@ -371,14 +552,25 @@ m2_subset_predict <- function(fit, newdata) {
     if (any(!vapply(nd[required], function(x) all(is.finite(x)), logical(1)))) {
       stop("Prediction enabled predictors must be finite.", call. = FALSE)
     }
-    eta <- as.numeric(stats::predict(fit$fit, newdata = nd, type = "link"))
+    # The confidence scale row-scales the factor-by prediction design; the
+    # unscaled M1 offset is added afterwards.
+    if (identical(fit$conf_scale, "peak_ci")) {
+      lp <- stats::predict(fit$fit, newdata = nd, type = "lpmatrix")
+      lp <- .m2_subset_scale_design_rows(lp, conf$scale)
+      eta <- as.numeric(lp %*% stats::coef(fit$fit)) + nd$m1_logit
+    } else {
+      eta <- as.numeric(stats::predict(fit$fit, newdata = nd, type = "link"))
+    }
+    correction <- eta - nd$m1_logit
   }
   if (any(!is.finite(eta))) stop("M2 subset prediction is non-finite.", call. = FALSE)
   data.frame(
     m1_p = m1_probability,
     p_hat = if (identical(fit$type, "all_off")) m1_probability else stats::plogis(eta),
     eta = eta,
-    correction_logit = eta - nd$m1_logit,
+    correction_logit = correction,
+    confidence_scale = if (identical(fit$type, "all_off")) rep(1, nrow(nd)) else conf$scale,
+    confidence_scale_missing = if (identical(fit$type, "all_off")) rep(FALSE, nrow(nd)) else conf$missing,
     stringsAsFactors = FALSE
   )
 }
@@ -423,7 +615,9 @@ m2_subset_observed_features <- function(data, declaration_week, alpha_state) {
 
 m2_subset_runtime_feature_row <- function(prefix, origin_week, declaration,
                                           m1_p, h, alpha_state,
-                                          observed_features = NULL) {
+                                          observed_features = NULL, tau = NA_real_,
+                                          peak_ci_width = NA_real_,
+                                          conf_scale = "none", w_ref = NA_real_) {
   if (!is.list(declaration) || !is.finite(declaration$week)) {
     stop("Runtime subset declaration must contain a finite week.", call. = FALSE)
   }
@@ -443,6 +637,13 @@ m2_subset_runtime_feature_row <- function(prefix, origin_week, declaration,
   data.frame(
     m1_logit = m2_subset_logit(m1_p), m1_p = as.numeric(m1_p),
     lead = paste0("h", h), z = row$z, u = row$u, d = row$d,
+    tau = as.numeric(tau), peak_ci_width = as.numeric(peak_ci_width),
+    confidence_scale = .m2_subset_confidence(
+      data.frame(peak_ci_width = peak_ci_width), conf_scale, w_ref
+    )$scale,
+    confidence_scale_missing = .m2_subset_confidence(
+      data.frame(peak_ci_width = peak_ci_width), conf_scale, w_ref
+    )$missing,
     stringsAsFactors = FALSE
   )
 }
@@ -466,11 +667,22 @@ m2_subset_prefix_declaration <- function(data, params, origin_week,
     detector_args$timing_mode <- timing_mode
   }
   out <- do.call(detector, detector_args)
-  declaration <- if (timing_mode == "fractional") {
-    as.numeric(out$ign_week_lockedF %||% out$ign_week_locked)
+  locked_primary <- if (timing_mode == "fractional") out$ign_week_lockedF else out$ign_week_locked
+  locked_alternate <- if (timing_mode == "fractional") out$iWeek_hat_lockedF else out$iWeek_hat_locked
+  locked_fallback <- if (length(locked_primary) && is.finite(locked_primary[1L])) {
+    locked_primary[1L]
   } else {
-    as.integer(out$ign_week_locked)
+    locked_alternate[1L] %||% NA_real_
   }
+  # `ign_week_locked` is the first positive gate and can remain NA when a
+  # prefix has no detection. Runtime's historical output field still carries
+  # w_max in that case, so use it here while retaining the failure flag.
+  if (timing_mode == "fractional") {
+    declaration <- as.numeric(locked_fallback)
+  } else {
+    declaration <- as.integer(locked_fallback)
+  }
+  if (length(declaration) != 1L || !is.finite(declaration)) declaration <- NA_real_
   if (!is.finite(declaration)) declaration <- NA_real_
   detector_df <- if (is.data.frame(out$df)) out$df else data.frame()
   positive_rows <- if ("ignite_ok_now" %in% names(detector_df)) {
@@ -487,7 +699,8 @@ m2_subset_prefix_declaration <- function(data, params, origin_week,
       timing_mode, " timing)"
     ),
     rows_evaluated = nrow(prefix),
-    positive_rows = positive_rows
+    positive_rows = positive_rows,
+    detection_failed = isTRUE(out$detection_failed) || is.na(declaration)
   )
 }
 
@@ -583,11 +796,121 @@ m2_subset_logit <- function(p, eps = 1e-6) {
   stats::qlogis(pmin(1 - eps, pmax(eps, as.numeric(p))))
 }
 
+# Reuse season-wise derivative fits from M1, then refit the same LOSO
+# reference/hyperparameter machinery once per excluded set. Recompute the
+# anchor from the retained seasons, so even the alignment bounds exclude the
+# complete set.
+.m1_exclusion_key <- function(excluded_seasons) {
+  paste(sort(unique(as.character(excluded_seasons))), collapse = "\r")
+}
+
+.m1_heldout_references <- function(m1, seasons, timing_mode = "legacy",
+                                   excluded_sets = NULL, params = NULL) {
+  aligned <- m1$aligned_train
+  required <- c("season", "weekF", "iWeek")
+  if (!is.data.frame(aligned) || !all(required %in% names(aligned))) {
+    stop("Held-out M1 predictions require aligned_train with season, weekF and iWeek.",
+      call. = FALSE
+    )
+  }
+  # The outer M1 configuration may itself have been selected using a season
+  # in this inner fold. Exclusion-set caches therefore require explicitly
+  # supplied controls; absent that, fixed non-fitted defaults are used.
+  p <- params %||%
+    (if (is.null(excluded_sets)) {
+      m1$m1_params %||% .default_m1_params()
+    } else {
+      .default_m1_params()
+    })
+  seasons <- sort(unique(as.character(seasons)))
+  legacy_names <- is.null(excluded_sets)
+  if (legacy_names) excluded_sets <- lapply(seasons, c)
+  excluded_sets <- lapply(excluded_sets, function(x) {
+    x <- sort(unique(as.character(x)))
+    if (!length(x) || any(!x %in% seasons)) {
+      stop("M1 reference exclusion sets must be non-empty subsets of seasons.",
+        call. = FALSE
+      )
+    }
+    x
+  })
+  keys <- vapply(excluded_sets, .m1_exclusion_key, character(1))
+  if (anyDuplicated(keys)) {
+    keep <- !duplicated(keys)
+    excluded_sets <- excluded_sets[keep]
+    keys <- keys[keep]
+  }
+  references <- lapply(seq_along(excluded_sets), function(i) {
+    excluded <- excluded_sets[[i]]
+    train <- aligned[!as.character(aligned$season) %in% excluded, , drop = FALSE]
+    retained <- unique(as.character(train$season))
+    if (!length(retained)) {
+      stop("Held-out M1 reference requires at least one retained season for ",
+        keys[[i]],
+        call. = FALSE
+      )
+    }
+    ignition <- unique(train[, c("season", "iWeek"), drop = FALSE])
+    if (anyDuplicated(as.character(ignition$season)) || any(!is.finite(ignition$iWeek))) {
+      stop("Held-out M1 reference requires one finite ignition per training season.", call. = FALSE)
+    }
+    anchor <- stats::median(ignition$iWeek)
+    if (timing_mode == "legacy") anchor <- as.integer(anchor)
+    train$nW_true <- .season_calendar_weeks(train)
+    train$newWeek <- .page_shift_week(train$weekF, train$iWeek, anchor)
+    train$alignment_in_domain <- train$newWeek >= 1 & train$newWeek <= 52
+    train$alignment_out_of_domain <- !train$alignment_in_domain
+    attr(train, "anchorWeek") <- anchor
+    attr(train, "ignD") <- ignition
+    available_k <- length(unique(train$newWeek[
+      is.finite(train$newWeek) & train$alignment_in_domain
+    ]))
+    k_ref <- min(as.integer(p$k_ref %||% 25L), available_k)
+    if (k_ref < 1L) {
+      stop("Held-out M1 reference has no in-domain support.", call. = FALSE)
+    }
+    ref <- estimateRef(train,
+      exSeason = character(0),
+      k = k_ref, n_weeks = 52L,
+      method = p$ref_method %||% "fs", timing_mode = timing_mode
+    )
+    if (any(as.character(ref$dat$season) %in% excluded)) {
+      stop("Held-out M1 reference retained an excluded season for ", keys[[i]], ".",
+        call. = FALSE
+      )
+    }
+    reference_provenance <- list(
+      cache_key = keys[[i]],
+      excluded_seasons = excluded,
+      training_seasons = retained,
+      reference_training_seasons = sort(unique(as.character(ref$dat$season))),
+      hyperparameter_source = if (is.null(params)) {
+        "fixed governed M1 defaults"
+      } else {
+        "explicit outer-fold M1 controls"
+      },
+      anchor_source = "median ignition labels from retained seasons",
+      fitted_feature_source = "season-local aligned rows filtered before estimateRef",
+      m0_feature_source = "none; nested callers supply label-truth ignition"
+    )
+    list(
+      ref = ref, hyper = learn_alignment_hyperparams(ref$dat, ref$g_ref_fun),
+      training_seasons = retained,
+      excluded_seasons = excluded,
+      excluded_season = if (length(excluded) == 1L) excluded[[1L]] else NULL,
+      provenance = reference_provenance
+    )
+  })
+  stats::setNames(references, if (legacy_names) seasons else keys)
+}
+
 m2_subset_make_rows <- function(data, m0, m1, m1_train_preds = NULL,
                                 seasons = unique(as.character(data$season)),
                                 detector = run_ignition_weekly,
                                 alpha_state = 0.2,
-                                timing_mode = c("legacy", "fractional")) {
+                                timing_mode = c("legacy", "fractional"),
+                                parallel = FALSE,
+                                timing_truth = NULL) {
   timing_mode <- match.arg(timing_mode)
   required <- c("season", "weekF", "y", "N")
   missing <- setdiff(required, names(data))
@@ -597,8 +920,10 @@ m2_subset_make_rows <- function(data, m0, m1, m1_train_preds = NULL,
       stop("M2 subset training requires an M1 walk-forward prediction adapter.", call. = FALSE)
     }
     p <- m2_subset_or(m1$m1_params, .default_m1_params())
+    references <- .m1_heldout_references(m1, seasons, timing_mode)
     m1_train_preds <- m1_walkforward_multi(
       allD = data, ref = m1$ref, hyper = m1$hyper,
+      season_references = references,
       params = m0$best_params, seasons = seasons,
       temperature = m2_subset_or(p$temperature, 0.25),
       rise_weight = m2_subset_or(p$rise_weight, 1),
@@ -609,29 +934,119 @@ m2_subset_make_rows <- function(data, m0, m1, m1_train_preds = NULL,
       dynamic_temp = isTRUE(p$dynamic_temp),
       dynamic_temp_pivot = m2_subset_or(p$dynamic_temp_pivot, 10L),
       spread_method = m2_subset_or(p$spread_method, "between"),
-      parallel = FALSE, verbose = FALSE,
+      parallel = parallel, verbose = FALSE,
       timing_mode = timing_mode
     )
   }
+  timing_truth_by_season <- if (is.null(timing_truth)) {
+    data.frame()
+  } else if (is.numeric(timing_truth) && !is.null(names(timing_truth))) {
+    data.frame(
+      season = names(timing_truth),
+      ignition_target_weekF = as.numeric(timing_truth),
+      stringsAsFactors = FALSE
+    )
+  } else if (is.data.frame(timing_truth) &&
+    all(c("season", "ignition_target_weekF") %in% names(timing_truth))) {
+    as.data.frame(timing_truth)
+  } else {
+    stop("timing_truth must be a named numeric vector or a data frame with ",
+      "season and ignition_target_weekF.",
+      call. = FALSE
+    )
+  }
   m1_train_preds <- as.data.frame(m1_train_preds)
+  original_prediction_names <- names(m1_train_preds)
   needed_preds <- c("season", "eval_weekF", "target_weekF", "h", "m1_p_hat")
   missing <- setdiff(needed_preds, names(m1_train_preds))
   if (length(missing)) stop("M1 predictions are missing: ", paste(missing, collapse = ", "), call. = FALSE)
+  pred_season <- as.character(m1_train_preds$season)
+  nW_by_season <- stats::setNames(
+    vapply(as.character(seasons), function(s) {
+      .page_nw_true(data[as.character(data$season) == s, , drop = FALSE])[1L]
+    }, numeric(1)), as.character(seasons)
+  )
+  if (!"forecast_available" %in% names(m1_train_preds)) {
+    m1_train_preds$forecast_available <- is.finite(m1_train_preds$m1_p_hat)
+  }
+  m1_train_preds$forecast_available <- as.logical(m1_train_preds$forecast_available)
+  m1_train_preds$forecast_available[is.na(m1_train_preds$forecast_available)] <- FALSE
+  if (!"unavailable_reason" %in% names(m1_train_preds)) {
+    m1_train_preds$unavailable_reason <- NA_character_
+  }
+  m1_train_preds$unavailable_reason <- as.character(m1_train_preds$unavailable_reason)
+  peak_col <- intersect(c("peak_weekF", "m1_peak_weekF", "peak_weekF_origin"), names(m1_train_preds))[1L]
+  if (!is.na(peak_col) && length(peak_col)) {
+    m1_train_preds$peak_weekF_origin <- as.numeric(m1_train_preds[[peak_col]])
+  } else {
+    m1_train_preds$peak_weekF_origin <- NA_real_
+  }
+  lo_col <- intersect(c("peak_weekF_lo", "m1_peak_weekF_lo"), names(m1_train_preds))[1L]
+  hi_col <- intersect(c("peak_weekF_hi", "m1_peak_weekF_hi"), names(m1_train_preds))[1L]
+  m1_train_preds$peak_ci_width <- if (!is.na(lo_col) && !is.na(hi_col) &&
+    length(lo_col) && length(hi_col)) {
+    as.numeric(m1_train_preds[[hi_col]]) - as.numeric(m1_train_preds[[lo_col]])
+  } else {
+    NA_real_
+  }
+  missing_reason <- !m1_train_preds$forecast_available &
+    (is.na(m1_train_preds$unavailable_reason) | !nzchar(m1_train_preds$unavailable_reason))
+  m1_train_preds$unavailable_reason[missing_reason] <- "alignment_prediction_missing"
+  if ("target_newWeek" %in% names(m1_train_preds)) {
+    for (i in seq_len(nrow(m1_train_preds))) {
+      s <- pred_season[i]
+      contract <- .page_forecast_availability(
+        m1_train_preds$target_weekF[i], m1_train_preds$target_newWeek[i],
+        nW_true = nW_by_season[[s]] %||% 52L
+      )
+      if (!isTRUE(contract$forecast_available[1L])) {
+        m1_train_preds$forecast_available[i] <- FALSE
+        if (is.na(m1_train_preds$unavailable_reason[i]) ||
+          !nzchar(m1_train_preds$unavailable_reason[i]) ||
+          identical(m1_train_preds$unavailable_reason[i], "alignment_prediction_missing")) {
+          m1_train_preds$unavailable_reason[i] <- contract$unavailable_reason[1L]
+        }
+      }
+    }
+  }
   obs <- data[, required, drop = FALSE]
   obs$season <- as.character(obs$season)
-  rows <- list()
-  declarations <- list()
-  for (s in as.character(seasons)) {
+  # Seasons are independent. Reuse the parent plan and collect in input order;
+  # each worker keeps its origin walk sequential and never installs a plan.
+  prepare_season <- function(s) {
+    rows <- list()
+    declarations <- list()
     os <- obs[obs$season == s, , drop = FALSE]
     mp <- m1_train_preds[as.character(m1_train_preds$season) == s, , drop = FALSE]
-    if (!nrow(os) || !nrow(mp)) next
+    if (!nrow(os) || !nrow(mp)) {
+      return(list(rows = rows, declarations = declarations))
+    }
     origins <- sort(unique(as.integer(mp$eval_weekF)))
+    label_week <- if (nrow(timing_truth_by_season) &&
+      s %in% as.character(timing_truth_by_season$season)) {
+      as.numeric(timing_truth_by_season$ignition_target_weekF[
+        match(s, as.character(timing_truth_by_season$season))
+      ])
+    } else {
+      NULL
+    }
     declarations[[s]] <- lapply(origins, function(origin) {
-      m2_subset_prefix_declaration(os, m0$best_params,
-        origin_week = origin,
-        detector = detector,
-        timing_mode = timing_mode
-      )
+      if (length(label_week) == 1L && is.finite(label_week)) {
+        list(
+          week = as.numeric(label_week),
+          origin_week = as.integer(origin),
+          source = "manual M0 ignition label truth; no fitted M0 feature",
+          rows_evaluated = sum(os$weekF <= origin),
+          positive_rows = NA_integer_,
+          detection_failed = FALSE
+        )
+      } else {
+        m2_subset_prefix_declaration(os, m0$best_params,
+          origin_week = origin,
+          detector = detector,
+          timing_mode = timing_mode
+        )
+      }
     })
     names(declarations[[s]]) <- as.character(origins)
     observed_by_origin <- lapply(origins, function(origin) {
@@ -651,32 +1066,78 @@ m2_subset_make_rows <- function(data, m0, m1, m1_train_preds = NULL,
       target <- as.integer(mp$target_weekF[i])
       h <- as.integer(mp$h[i])
       if (!h %in% c(1L, 2L) || !is.finite(ew) || !is.finite(target) ||
-        target != ew + h || !is.finite(mp$m1_p_hat[i])) {
+        target != ew + h) {
         next
       }
+      ti <- match(target, os$weekF)
+      if (is.na(ti)) next
       dec <- declarations[[s]][[as.character(ew)]]
-      if (is.null(dec) || !is.finite(dec$week)) next
-      ti <- match(target, obs$weekF[obs$season == s])
-      if (is.na(ti) || ew < dec$week) next
       observed_features <- observed_by_origin[[as.character(ew)]]
-      if (is.null(observed_features)) next
-      feature_row <- tryCatch(m2_subset_runtime_feature_row(
-        NULL, ew, dec, mp$m1_p_hat[i], h, alpha_state,
-        observed_features = observed_features
-      ), error = function(e) NULL)
-      if (is.null(feature_row)) next
       y <- os$y[match(target, os$weekF)]
       n <- os$N[match(target, os$weekF)]
       if (!is.finite(y) || !is.finite(n) || n <= 0 || y < 0 || y > n) next
+      available <- isTRUE(mp$forecast_available[i]) && is.finite(mp$m1_p_hat[i])
+      reason <- mp$unavailable_reason[i]
+      if (is.null(dec) || !is.finite(dec$week)) {
+        available <- FALSE
+        reason <- "ignition_declaration_unavailable"
+      } else if (ew < dec$week) {
+        available <- FALSE
+        reason <- "prefix_feature_unavailable"
+      }
+      feature_row <- if (available && !is.null(observed_features)) {
+        tryCatch(m2_subset_runtime_feature_row(
+          NULL, ew, dec, mp$m1_p_hat[i], h, alpha_state,
+          observed_features = observed_features
+        ), error = function(e) NULL)
+      } else {
+        NULL
+      }
+      if (is.null(feature_row)) {
+        available <- FALSE
+        if (is.na(reason) || !nzchar(reason)) reason <- "prefix_feature_unavailable"
+      }
       rows[[length(rows) + 1L]] <- data.frame(
         season = s, eval_weekF = ew, target_weekF = target, h = h,
         lead = factor(paste0("h", h), levels = c("h1", "h2")),
-        m1_p = as.numeric(mp$m1_p_hat[i]),
-        m1_logit = feature_row$m1_logit,
-        z = feature_row$z, u = feature_row$u, d = feature_row$d,
-        y_lead = y, N_lead = n, stringsAsFactors = FALSE
+        m1_p = if (available) as.numeric(mp$m1_p_hat[i]) else NA_real_,
+        m1_logit = if (available) feature_row$m1_logit else NA_real_,
+        z = if (available) feature_row$z else NA_real_,
+        u = if (available) feature_row$u else NA_real_,
+        d = if (available) feature_row$d else NA_real_,
+        tau = if (available) {
+          peak <- as.numeric(mp$peak_weekF_origin[i])
+          if (is.finite(peak)) max(-6, min(6, target - peak)) else NA_real_
+        } else {
+          NA_real_
+        },
+        peak_weekF_origin = if (available) as.numeric(mp$peak_weekF_origin[i]) else NA_real_,
+        peak_ci_width = if (available) as.numeric(mp$peak_ci_width[i]) else NA_real_,
+        ignition_weekF = if (nrow(timing_truth_by_season) &&
+          s %in% as.character(timing_truth_by_season$season)) {
+          as.numeric(timing_truth_by_season$ignition_target_weekF[match(s, as.character(timing_truth_by_season$season))])
+        } else {
+          as.numeric(dec$week)
+        },
+        y_lead = y, N_lead = n,
+        forecast_available = available,
+        unavailable_reason = if (available) NA_character_ else reason,
+        stringsAsFactors = FALSE
       )
     }
+    list(rows = rows, declarations = declarations)
+  }
+  prepared <- if (isTRUE(parallel)) {
+    furrr::future_map(as.character(seasons), prepare_season,
+      .options = furrr::furrr_options(seed = FALSE)
+    )
+  } else {
+    lapply(as.character(seasons), prepare_season)
+  }
+  rows <- do.call(c, lapply(prepared, `[[`, "rows"))
+  declarations <- list()
+  for (result in prepared) {
+    declarations[names(result$declarations)] <- result$declarations
   }
   if (!length(rows)) stop("M2 subset training produced no eligible M1 forecast rows.", call. = FALSE)
   missing_seasons <- setdiff(as.character(seasons), unique(vapply(
@@ -688,12 +1149,51 @@ m2_subset_make_rows <- function(data, m0, m1, m1_train_preds = NULL,
       call. = FALSE
     )
   }
+  out_data <- do.call(rbind, rows)
+  score_meta <- .page_scoring_metadata(data, timing_truth = timing_truth)
+  refs <- unique(score_meta[, c("season", "ignition_weekF", "observed_peak_weekF"), drop = FALSE])
+  refs <- refs[!duplicated(refs$season), , drop = FALSE]
+  reference_ignition <- refs$ignition_weekF[match(out_data$season, refs$season)]
+  row_ignition <- as.numeric(out_data$ignition_weekF)
+  out_data$ignition_weekF <- ifelse(
+    is.finite(reference_ignition), reference_ignition, row_ignition
+  )
+  out_data$observed_peak_weekF <- refs$observed_peak_weekF[match(out_data$season, refs$season)]
+  scored <- page_phase_weights(
+    out_data, page_scoring_weights(),
+    season_col = "season", target_col = "target_weekF",
+    ignition_col = "ignition_weekF", peak_col = "observed_peak_weekF",
+    allow_censored = TRUE
+  )
+  out_data$phase <- scored$phase
+  out_data$weight_page_v2 <- scored$weight
+  out_data$weight_legacy <- .m2_subset_phase_weights(
+    out_data,
+    early_weight = 2, early_max_t_since = 12,
+    pre_ignition_weight = 0, late_weight = 1
+  )
+  derived_prediction_names <- setdiff(
+    c("peak_weekF_origin", "peak_ci_width"), original_prediction_names
+  )
+  prediction_output <- m1_train_preds[, setdiff(
+    names(m1_train_preds), derived_prediction_names
+  ), drop = FALSE]
   list(
-    data = do.call(rbind, rows), m1_train_preds = m1_train_preds,
+    data = out_data, m1_train_preds = prediction_output,
     declarations = declarations,
     declaration_provenance = paste(
-      "Frozen M0 parameters applied to each season prefix through each M1 origin;",
-      "first locked ignite_ok_now declaration; no future prefix rows used."
+      if (nrow(timing_truth_by_season)) {
+        paste0(
+          "Gate rows use manual M0 ignition label truth for timing; no fitted M0 ",
+          "feature enters the gate. Observed z/u/d values use only each season's ",
+          "prefix through its M1 origin."
+        )
+      } else {
+        paste0(
+          "Frozen M0 parameters applied to each season prefix through each M1 origin;",
+          " first locked ignite_ok_now declaration; no future prefix rows used."
+        )
+      }
     )
   )
 }
@@ -761,15 +1261,214 @@ m2_subset_score <- function(data, prediction, weights = NULL) {
   )
 }
 
+# Shared M2 selection procedure. This is the single implementation used by the
+# outer search (`m2_subset_tune`) and by the fully nested inner gate, so the two
+# cannot drift. It takes already-prepared training rows whose M1 features and
+# timing are fixed by the caller; it never reads outer scores, grids, or
+# rankings.
+.m2_subset_select_core <- function(training_data, row_weights, grid,
+                                   training_seasons, scored_seasons_by_horizon,
+                                   nll_primary, mae_primary,
+                                   alpha_state, gamma,
+                                   ckpt_dir = NULL, n_cores = 1L,
+                                   label = "M2 subset tuning",
+                                   evaluation_label = "cross-fitted") {
+  grid <- as.data.frame(grid)
+  training_seasons <- as.character(training_seasons)
+  empty_score <- c(
+    nll_test_count = NA_real_, nll_equal_week = NA_real_,
+    mae_test_count = NA_real_, mae_equal_week = NA_real_,
+    rows = 0, trials = 0, weight_sum = 0
+  )
+  summary_rows <- list()
+  selected <- list()
+  evaluate_spec <- function(i) {
+    spec <- grid[i, , drop = FALSE]
+    spec_id <- as.character(spec$id[1L])
+    ckpt_file <- if (!is.null(ckpt_dir)) {
+      file.path(ckpt_dir, paste0(spec_id, ".rds"))
+    } else {
+      NULL
+    }
+    if (!is.null(ckpt_file) && file.exists(ckpt_file)) {
+      cached <- tryCatch(readRDS(ckpt_file), error = function(e) NULL)
+      if (is.data.frame(cached) &&
+        setequal(as.character(cached$season), training_seasons) &&
+        all(c("spec_id", "season", "horizon", "status", "coverage_key") %in% names(cached))) {
+        cached$evaluation_label <- evaluation_label
+        return(cached)
+      }
+    }
+    spec_rows <- list()
+    available_all <- if ("forecast_available" %in% names(training_data)) {
+      !is.na(training_data$forecast_available) & training_data$forecast_available
+    } else {
+      rep(TRUE, nrow(training_data))
+    }
+    coverage_key_by_h <- setNames(vapply(1:2, function(h) {
+      paste(sort(.page_forecast_row_key(
+        training_data[training_data$h == h & available_all, , drop = FALSE]
+      )), collapse = "\n")
+    }, character(1)), as.character(1:2))
+    scheduled_by_h <- tabulate(as.integer(training_data$h), nbins = 2L)
+    available_by_h <- tabulate(as.integer(training_data$h[available_all]), nbins = 2L)
+    for (s in training_seasons) {
+      keep_tr <- training_data$season != s
+      available <- if ("forecast_available" %in% names(training_data)) {
+        !is.na(training_data$forecast_available) & training_data$forecast_available
+      } else {
+        rep(TRUE, nrow(training_data))
+      }
+      tr <- training_data[keep_tr & available, , drop = FALSE]
+      va_all <- training_data[!keep_tr, , drop = FALSE]
+      va <- va_all[available[!keep_tr], , drop = FALSE]
+      fit <- tryCatch(m2_subset_fit(tr, spec, gamma = gamma), error = function(e) NULL)
+      for (h in 1:2) {
+        vh <- va[va$h == h, , drop = FALSE]
+        wh <- row_weights[!keep_tr][available[!keep_tr]][va$h == h]
+        pr <- if (!is.null(fit) && nrow(vh)) tryCatch(m2_subset_predict(fit, vh)$p_hat, error = function(e) NULL) else NULL
+        sc <- if (!is.null(pr)) {
+          m2_subset_score(vh, pr, weights = wh)
+        } else {
+          empty_score
+        }
+        spec_rows[[length(spec_rows) + 1L]] <- data.frame(
+          spec_id = spec_id, season = s, horizon = h,
+          bernoulli_nll = sc[[nll_primary]], mae = sc[[mae_primary]],
+          bernoulli_nll_test_count = sc[["nll_test_count"]],
+          bernoulli_nll_equal_week = sc[["nll_equal_week"]],
+          mae_test_count = sc[["mae_test_count"]],
+          mae_equal_week = sc[["mae_equal_week"]],
+          rows = sc[["rows"]], trials = sc[["trials"]],
+          weight_sum = sc[["weight_sum"]],
+          scheduled_rows = scheduled_by_h[h],
+          available_rows = available_by_h[h],
+          unavailable_rows = scheduled_by_h[h] - available_by_h[h],
+          coverage_key = coverage_key_by_h[[as.character(h)]],
+          status = if (is.null(pr)) {
+            "failed"
+          } else if (!is.finite(sc[["weight_sum"]]) || sc[["weight_sum"]] <= 0) {
+            "unscored"
+          } else {
+            "ok"
+          },
+          stringsAsFactors = FALSE
+        )
+      }
+    }
+    spec_scores <- do.call(rbind, spec_rows)
+    spec_scores$evaluation_label <- evaluation_label
+    if (!is.null(ckpt_file)) {
+      saveRDS(spec_scores, ckpt_file)
+    }
+    spec_scores
+  }
+  score_rows <- if (n_cores > 1L) {
+    furrr::future_map(seq_len(nrow(grid)), evaluate_spec,
+      .options = furrr::furrr_options(seed = FALSE)
+    )
+  } else {
+    lapply(seq_len(nrow(grid)), evaluate_spec)
+  }
+  scores <- do.call(rbind, score_rows)
+  stage_a_grid <- grid
+  stage_a_summary <- if (nrow(scores)) {
+    z <- scores[is.finite(scores$bernoulli_nll), , drop = FALSE]
+    if (nrow(z)) stats::aggregate(bernoulli_nll ~ spec_id + horizon, z, mean) else data.frame()
+  } else {
+    data.frame()
+  }
+  expanded_grid <- .m2_subset_stage_b_grid(stage_a_grid, stage_a_summary)
+  if (nrow(expanded_grid) > nrow(stage_a_grid)) {
+    old_ids <- as.character(stage_a_grid$id)
+    grid <- expanded_grid
+    extra <- which(!as.character(grid$id) %in% old_ids)
+    extra_scores <- if (n_cores > 1L) {
+      furrr::future_map(extra, evaluate_spec,
+        .options = furrr::furrr_options(seed = FALSE)
+      )
+    } else {
+      lapply(extra, evaluate_spec)
+    }
+    scores <- rbind(scores, do.call(rbind, extra_scores))
+  }
+  coverage_by_horizon <- vector("list", 2L)
+  for (h in 1:2) {
+    z <- scores[scores$horizon == h, , drop = FALSE]
+    coverage_signatures <- unique(as.character(z$coverage_key))
+    if (length(coverage_signatures) != 1L) {
+      stop(label, " candidate coverage differs between compared specs at h=", h,
+        "; refusing to compare models on different denominators.",
+        call. = FALSE
+      )
+    }
+    coverage_by_horizon[[h]] <- data.frame(
+      horizon = h,
+      scheduled_rows = unique(z$scheduled_rows)[1L],
+      available_rows = unique(z$available_rows)[1L],
+      unavailable_rows = unique(z$unavailable_rows)[1L],
+      coverage_key = coverage_signatures[1L], stringsAsFactors = FALSE
+    )
+    valid <- z[as.character(z$status) == "ok" & is.finite(z$bernoulli_nll), , drop = FALSE]
+    counts <- table(valid$spec_id)
+    scored_seasons <- scored_seasons_by_horizon[[as.character(h)]]
+    complete_ids <- names(counts)[counts == length(scored_seasons)]
+    agg <- if (length(complete_ids)) {
+      stats::aggregate(
+        bernoulli_nll ~ spec_id,
+        valid[valid$spec_id %in% complete_ids, , drop = FALSE], mean
+      )
+    } else {
+      data.frame()
+    }
+    if (!nrow(agg) || any(!is.finite(agg$bernoulli_nll))) {
+      stop(label, " has no complete h", h, " candidates.", call. = FALSE)
+    }
+    enabled <- grid$enabled_count[match(agg$spec_id, grid$id)]
+    ord <- order(agg$bernoulli_nll, enabled, agg$spec_id)
+    best <- agg[ord[1L], , drop = FALSE]
+    selected[[h]] <- grid[match(best$spec_id, grid$id), , drop = FALSE]
+    summary_rows[[h]] <- data.frame(
+      spec_id = agg$spec_id, horizon = h, bernoulli_nll = agg$bernoulli_nll,
+      n_seasons = length(scored_seasons), stringsAsFactors = FALSE
+    )
+  }
+  selected_config <- m2_subset_config(
+    h1 = selected[[1L]], h2 = selected[[2L]], alpha_state = alpha_state,
+    gamma = gamma
+  )
+  list(
+    grid = grid, scores = scores,
+    summary = do.call(rbind, summary_rows),
+    selected = selected, selected_config = selected_config,
+    coverage = do.call(rbind, coverage_by_horizon),
+    best_spec_id = paste0(
+      "h1:", selected[[1L]]$id, "|h2:", selected[[2L]]$id
+    )
+  )
+}
+
 m2_subset_tune <- function(data, selection, m0, m1, grid = m2_subset_grid(),
                            alpha_state = NULL, m1_train_preds = NULL,
                            detector = run_ignition_weekly,
                            early_weight = 1, early_max_t_since = 12,
                            pre_ignition_weight = 0, late_weight = 1,
-                           score_scale = c("test_count", "equal_week"),
+                           score_scale = c("equal_week", "test_count"),
+                           scoring = c("page_v2", "legacy_0_12"),
                            checkpoint_dir = NULL,
-                           timing_mode = c("legacy", "fractional"), ...) {
+                           timing_mode = c("legacy", "fractional"),
+                           n_cores = 1L, timing_truth = NULL, ...) {
+  if (length(n_cores) != 1L || !is.numeric(n_cores) ||
+    !is.finite(n_cores) || n_cores < 1 || n_cores > .Machine$integer.max ||
+    n_cores != as.integer(n_cores)) {
+    stop("`n_cores` must be one positive integer.", call. = FALSE)
+  }
+  if (n_cores > 1L) {
+    old_plan <- .page_set_parallel_plan(n_cores)
+    on.exit(future::plan(old_plan), add = TRUE)
+  }
   score_scale <- match.arg(score_scale)
+  scoring <- match.arg(scoring)
   timing_mode <- match.arg(timing_mode)
   grid <- as.data.frame(grid)
   if (!is.data.frame(grid) || !nrow(grid)) stop("M2 subset grid must be non-empty.", call. = FALSE)
@@ -811,13 +1510,33 @@ m2_subset_tune <- function(data, selection, m0, m1, grid = m2_subset_grid(),
   training <- m2_subset_make_rows(data, m0, m1, m1_train_preds,
     selection$training_seasons,
     detector = detector, alpha_state = alpha_state,
-    timing_mode = timing_mode
+    timing_mode = timing_mode, parallel = n_cores > 1L,
+    timing_truth = timing_truth
   )
   data_id <- .stage_training_data_id(data)
   row_weights <- .m2_subset_phase_weights(
     training$data, early_weight, early_max_t_since,
     pre_ignition_weight, late_weight
   )
+  row_weights_legacy <- row_weights
+  row_weights_page <- as.numeric(training$data$weight_page_v2)
+  row_weights <- if (scoring == "page_v2") row_weights_page else row_weights_legacy
+  row_weights[!is.finite(row_weights)] <- 0
+  # A season with no positively weighted scoring rows (no observed peak, a
+  # partial season, or fully censored) is unscored: it is excluded from the
+  # candidate completeness requirement rather than aborting tuning.
+  scored_seasons_by_horizon <- lapply(1:2, function(h) {
+    idx <- as.integer(training$data$h) == h
+    w <- row_weights[idx]
+    keep <- is.finite(w) & w > 0
+    sort(unique(as.character(training$data$season[idx][keep])))
+  })
+  names(scored_seasons_by_horizon) <- as.character(1:2)
+  if (any(lengths(scored_seasons_by_horizon) == 0L)) {
+    stop("M2 subset tuning has no scored rows for at least one horizon.",
+      call. = FALSE
+    )
+  }
   nll_primary <- if (score_scale == "equal_week") "nll_equal_week" else "nll_test_count"
   mae_primary <- if (score_scale == "equal_week") "mae_equal_week" else "mae_test_count"
   scoring_hash <- substr(digest::digest(list(
@@ -828,6 +1547,8 @@ m2_subset_tune <- function(data, selection, m0, m1, grid = m2_subset_grid(),
     early_max_t_since = as.numeric(early_max_t_since),
     pre_ignition_weight = as.numeric(pre_ignition_weight),
     late_weight = as.numeric(late_weight),
+    scoring = scoring,
+    page_scoring_weights = page_scoring_weights(),
     score_scale = score_scale,
     timing_mode = timing_mode,
     training_rows = digest::digest(training$data)
@@ -837,107 +1558,38 @@ m2_subset_tune <- function(data, selection, m0, m1, grid = m2_subset_grid(),
     ckpt_dir <- file.path(checkpoint_dir, scoring_hash)
     dir.create(ckpt_dir, recursive = TRUE, showWarnings = FALSE)
   }
-  empty_score <- c(
-    nll_test_count = NA_real_, nll_equal_week = NA_real_,
-    mae_test_count = NA_real_, mae_equal_week = NA_real_,
-    rows = 0, trials = 0, weight_sum = 0
+  core <- .m2_subset_select_core(
+    training_data = training$data, row_weights = row_weights, grid = grid,
+    training_seasons = selection$training_seasons,
+    scored_seasons_by_horizon = scored_seasons_by_horizon,
+    nll_primary = nll_primary, mae_primary = mae_primary,
+    alpha_state = alpha_state, gamma = gamma,
+    ckpt_dir = ckpt_dir, n_cores = n_cores,
+    evaluation_label = "cross-fitted"
   )
-  score_rows <- list()
-  summary_rows <- list()
-  selected <- list()
-  for (i in seq_len(nrow(grid))) {
-    spec <- grid[i, , drop = FALSE]
-    spec_id <- as.character(spec$id[1L])
-    ckpt_file <- if (!is.null(ckpt_dir)) {
-      file.path(ckpt_dir, paste0(spec_id, ".rds"))
-    } else {
-      NULL
-    }
-    if (!is.null(ckpt_file) && file.exists(ckpt_file)) {
-      cached <- tryCatch(readRDS(ckpt_file), error = function(e) NULL)
-      if (is.data.frame(cached) &&
-        setequal(as.character(cached$season), as.character(selection$training_seasons)) &&
-        all(c("spec_id", "season", "horizon", "status") %in% names(cached))) {
-        score_rows <- c(score_rows, list(cached))
-        next
-      }
-    }
-    spec_rows <- list()
-    for (s in selection$training_seasons) {
-      keep_tr <- training$data$season != s
-      tr <- training$data[keep_tr, , drop = FALSE]
-      va <- training$data[!keep_tr, , drop = FALSE]
-      fit <- tryCatch(m2_subset_fit(tr, spec, gamma = gamma), error = function(e) NULL)
-      for (h in 1:2) {
-        vh <- va[va$h == h, , drop = FALSE]
-        wh <- row_weights[!keep_tr][va$h == h]
-        pr <- if (!is.null(fit) && nrow(vh)) tryCatch(m2_subset_predict(fit, vh)$p_hat, error = function(e) NULL) else NULL
-        sc <- if (!is.null(pr)) {
-          m2_subset_score(vh, pr, weights = wh)
-        } else {
-          empty_score
-        }
-        spec_rows[[length(spec_rows) + 1L]] <- data.frame(
-          spec_id = spec_id, season = s, horizon = h,
-          bernoulli_nll = sc[[nll_primary]], mae = sc[[mae_primary]],
-          bernoulli_nll_test_count = sc[["nll_test_count"]],
-          bernoulli_nll_equal_week = sc[["nll_equal_week"]],
-          mae_test_count = sc[["mae_test_count"]],
-          mae_equal_week = sc[["mae_equal_week"]],
-          rows = sc[["rows"]], trials = sc[["trials"]],
-          weight_sum = sc[["weight_sum"]],
-          status = if (is.null(pr)) "failed" else "ok", stringsAsFactors = FALSE
-        )
-      }
-    }
-    spec_scores <- do.call(rbind, spec_rows)
-    if (!is.null(ckpt_file)) {
-      saveRDS(spec_scores, ckpt_file)
-    }
-    score_rows[[length(score_rows) + 1L]] <- spec_scores
-  }
-  scores <- do.call(rbind, score_rows)
-  for (h in 1:2) {
-    z <- scores[scores$horizon == h, , drop = FALSE]
-    valid <- z[is.finite(z$bernoulli_nll), , drop = FALSE]
-    counts <- table(valid$spec_id)
-    complete_ids <- names(counts)[counts == length(selection$training_seasons)]
-    agg <- if (length(complete_ids)) {
-      stats::aggregate(
-        bernoulli_nll ~ spec_id,
-        valid[valid$spec_id %in% complete_ids, , drop = FALSE], mean
-      )
-    } else {
-      data.frame()
-    }
-    if (!nrow(agg) || any(!is.finite(agg$bernoulli_nll))) stop("M2 subset tuning has no complete h", h, " candidates.", call. = FALSE)
-    enabled <- grid$enabled_count[match(agg$spec_id, grid$id)]
-    ord <- order(agg$bernoulli_nll, enabled, agg$spec_id)
-    best <- agg[ord[1L], , drop = FALSE]
-    selected[[h]] <- grid[match(best$spec_id, grid$id), , drop = FALSE]
-    summary_rows[[h]] <- data.frame(
-      spec_id = agg$spec_id, horizon = h, bernoulli_nll = agg$bernoulli_nll,
-      n_seasons = length(selection$training_seasons), stringsAsFactors = FALSE
-    )
-  }
-  selected_config <- m2_subset_config(
-    h1 = selected[[1L]], h2 = selected[[2L]], alpha_state = alpha_state,
-    gamma = gamma
-  )
+  grid <- core$grid
+  scores <- core$scores
+  selected <- core$selected
+  selected_config <- core$selected_config
+  summary_tbl <- core$summary
   out <- list(
     family = m2_subset_family(), grid = grid,
-    scores = scores, summary = do.call(rbind, summary_rows),
+    scores = scores, summary = summary_tbl,
     selected = selected, selected_config = selected_config,
-    best_spec_id = paste0("h1:", selected[[1L]]$id, "|h2:", selected[[2L]]$id),
+    best_spec_id = core$best_spec_id,
     selection = selection, data_id = data_id,
     training_rows = training$data, m1_train_preds = training$m1_train_preds,
     declaration_provenance = training$declaration_provenance,
     alpha_state = alpha_state,
+    coverage = core$coverage,
+    evaluation_label = "cross-fitted",
     scoring = list(
       early_weight = as.numeric(early_weight),
       early_max_t_since = as.numeric(early_max_t_since),
       pre_ignition_weight = as.numeric(pre_ignition_weight),
       late_weight = as.numeric(late_weight),
+      scoring = scoring,
+      weight_columns = c(page_v2 = "weight_page_v2", legacy_0_12 = "weight_legacy"),
       score_scale = score_scale,
       phase_definition = paste0(
         "target t_since = u + h; pre_ignition (t_since < 0) weight ",
@@ -945,7 +1597,10 @@ m2_subset_tune <- function(data, selection, m0, m1, grid = m2_subset_grid(),
         " early (0 <= t_since <= early_max_t_since) weight early_weight;",
         " late (t_since > early_max_t_since) weight ", late_weight
       ),
-      scoring_hash = scoring_hash
+      coverage = core$coverage,
+      scored_seasons = scored_seasons_by_horizon,
+      scoring_hash = scoring_hash,
+      evaluation_label = "cross-fitted"
     )
   )
   class(out) <- c("page_m2_subset_tuning", "page_m2_tuning", "list")
@@ -1030,29 +1685,40 @@ m2_subset_validate_tuning <- function(x) {
   }
   training_fields <- c(
     "season", "eval_weekF", "target_weekF", "h", "lead", "m1_p",
-    "m1_logit", "z", "u", "d", "y_lead", "N_lead"
+    "m1_logit", "z", "u", "d", "y_lead", "N_lead",
+    "forecast_available", "unavailable_reason"
   )
-  pred_fields <- c("season", "eval_weekF", "target_weekF", "h", "m1_p_hat")
+  # Older governed tuning artifacts predate the phase-2/3 provenance columns;
+  # retain read/validation compatibility while every new tuning result emits
+  # the complete scoring and origin-time feature schema.
+  pred_fields <- c(
+    "season", "eval_weekF", "target_weekF", "h", "m1_p_hat",
+    "forecast_available", "unavailable_reason"
+  )
   if (!all(training_fields %in% names(x$training_rows)) ||
     !all(pred_fields %in% names(x$m1_train_preds))) {
     stop("M2 subset tuning provenance is missing required training fields.", call. = FALSE)
   }
+  training_available <- !is.na(x$training_rows$forecast_available) &
+    x$training_rows$forecast_available
+  pred_available <- !is.na(x$m1_train_preds$forecast_available) &
+    x$m1_train_preds$forecast_available
   if (!setequal(as.character(unique(x$training_rows$season)), seasons) ||
     !setequal(as.character(unique(x$m1_train_preds$season)), seasons) ||
     anyNA(x$training_rows$lead) ||
     any(!is.finite(as.numeric(x$training_rows$eval_weekF))) ||
     any(!is.finite(as.numeric(x$training_rows$target_weekF))) ||
     any(!is.finite(as.numeric(x$training_rows$h))) ||
-    any(!is.finite(as.numeric(x$training_rows$m1_p))) ||
-    any(x$training_rows$m1_p < 0 | x$training_rows$m1_p > 1) ||
-    any(!is.finite(as.numeric(x$training_rows$m1_logit))) ||
+    any(!is.finite(as.numeric(x$training_rows$m1_p[training_available]))) ||
+    any(x$training_rows$m1_p[training_available] < 0 | x$training_rows$m1_p[training_available] > 1) ||
+    any(!is.finite(as.numeric(x$training_rows$m1_logit[training_available]))) ||
     any(!is.finite(as.numeric(x$training_rows$y_lead))) ||
     any(!is.finite(as.numeric(x$training_rows$N_lead))) ||
     any(!is.finite(as.numeric(x$m1_train_preds$eval_weekF))) ||
     any(!is.finite(as.numeric(x$m1_train_preds$target_weekF))) ||
     any(!is.finite(as.numeric(x$m1_train_preds$h))) ||
-    any(!is.finite(as.numeric(x$m1_train_preds$m1_p_hat))) ||
-    any(x$m1_train_preds$m1_p_hat < 0 | x$m1_train_preds$m1_p_hat > 1) ||
+    any(!is.finite(as.numeric(x$m1_train_preds$m1_p_hat[pred_available]))) ||
+    any(x$m1_train_preds$m1_p_hat[pred_available] < 0 | x$m1_train_preds$m1_p_hat[pred_available] > 1) ||
     any(as.character(x$training_rows$lead) != paste0("h", x$training_rows$h)) ||
     any(!(as.numeric(x$training_rows$h) %in% c(1, 2))) ||
     any(!(as.numeric(x$m1_train_preds$h) %in% c(1, 2))) ||
@@ -1062,6 +1728,12 @@ m2_subset_validate_tuning <- function(x) {
       as.numeric(x$m1_train_preds$eval_weekF) + as.numeric(x$m1_train_preds$h)) ||
     !identical(as.numeric(x$alpha_state), as.numeric(selected_config$alpha_state))) {
     stop("M2 subset tuning provenance is inconsistent with its training rows.", call. = FALSE)
+  }
+  if (any(!training_available & (is.na(x$training_rows$unavailable_reason) |
+    !nzchar(as.character(x$training_rows$unavailable_reason)))) ||
+    any(!pred_available & (is.na(x$m1_train_preds$unavailable_reason) |
+      !nzchar(as.character(x$m1_train_preds$unavailable_reason))))) {
+    stop("M2 subset tuning unavailable rows must document an unavailable reason.", call. = FALSE)
   }
 
   if (!identical(as.numeric(x$alpha_state), as.numeric(selected_config$alpha_state))) {
@@ -1111,7 +1783,8 @@ m2_subset_validate_tuning <- function(x) {
 
   score_fields <- c(
     "spec_id", "season", "horizon", "bernoulli_nll", "mae",
-    "rows", "trials", "status"
+    "rows", "trials", "status", "scheduled_rows", "available_rows",
+    "unavailable_rows", "coverage_key"
   )
   if (!all(score_fields %in% names(x$scores)) ||
     anyNA(x$scores$spec_id) || anyNA(x$scores$season) ||
@@ -1133,7 +1806,7 @@ m2_subset_validate_tuning <- function(x) {
   )
   key <- function(data) paste(data$spec_id, data$season, data$horizon, sep = "\r")
   if (nrow(observed) != nrow(expected) || !setequal(key(observed), key(expected)) ||
-    any(!as.character(x$scores$status) %in% c("ok", "failed"))) {
+    any(!as.character(x$scores$status) %in% c("ok", "failed", "unscored"))) {
     stop("M2 subset tuning fold scores are incomplete or have invalid statuses.", call. = FALSE)
   }
   ok <- as.character(x$scores$status) == "ok"
@@ -1143,25 +1816,44 @@ m2_subset_validate_tuning <- function(x) {
     any(x$scores$trials[ok] <= 0)) {
     stop("M2 subset tuning successful folds must have finite metrics.", call. = FALSE)
   }
+  unscored <- as.character(x$scores$status) == "unscored"
+  if (any(x$scores$weight_sum[unscored] > 0, na.rm = TRUE)) {
+    stop("M2 subset tuning unscored folds must have no scoring weight.", call. = FALSE)
+  }
 
   if (!is.data.frame(x$summary) || !nrow(x$summary) ||
     !all(c("spec_id", "horizon", "bernoulli_nll", "n_seasons") %in% names(x$summary)) ||
     anyDuplicated(paste(x$summary$spec_id, x$summary$horizon, sep = "\r"))) {
     stop("M2 subset tuning summary is malformed.", call. = FALSE)
   }
+  scored_seasons_for <- function(h) {
+    ss <- x$scoring$scored_seasons
+    if (is.null(ss)) {
+      return(seasons)
+    }
+    value <- ss[[as.character(h)]]
+    if (is.null(value)) seasons else as.character(value)
+  }
   summary_key <- paste(as.character(x$summary$spec_id), x$summary$horizon, sep = "\r")
+  expected_n <- vapply(1:2, function(h) length(scored_seasons_for(h)), integer(1))
+  summary_n <- vapply(seq_len(nrow(x$summary)), function(i) {
+    expected_n[[as.integer(x$summary$horizon[i])]]
+  }, integer(1))
   if (anyNA(x$summary$spec_id) || anyNA(x$summary$horizon) ||
     any(!x$summary$spec_id %in% grid_ids) ||
     any(!is.finite(x$summary$bernoulli_nll)) ||
-    anyNA(x$summary$n_seasons) || any(x$summary$n_seasons != length(seasons))) {
+    anyNA(x$summary$n_seasons) || any(x$summary$n_seasons != summary_n)) {
     stop("M2 subset tuning summary is incomplete or non-finite.", call. = FALSE)
   }
   complete_keys <- character()
   for (spec_id in grid_ids) {
     for (h in 1:2) {
       fold <- x$scores[x$scores$spec_id == spec_id & x$scores$horizon == h, , drop = FALSE]
-      if (nrow(fold) == length(seasons) && all(as.character(fold$status) == "ok") &&
-        all(is.finite(fold$bernoulli_nll))) {
+      scored_here <- as.character(fold$season) %in% scored_seasons_for(h)
+      if (nrow(fold) == length(seasons) &&
+        all(as.character(fold$status)[scored_here] == "ok") &&
+        all(is.finite(fold$bernoulli_nll[scored_here])) &&
+        all(as.character(fold$status)[!scored_here] %in% c("unscored", "failed"))) {
         complete_keys <- c(complete_keys, paste(spec_id, h, sep = "\r"))
       }
     }
@@ -1172,11 +1864,13 @@ m2_subset_validate_tuning <- function(x) {
   for (h in 1:2) {
     chosen <- x$selected_config[[paste0("h", h)]]$id
     fold <- x$scores[x$scores$spec_id == chosen & x$scores$horizon == h, , drop = FALSE]
+    scored_here <- as.character(fold$season) %in% scored_seasons_for(h)
     selected_summary <- x$summary[x$summary$spec_id == chosen & x$summary$horizon == h, , drop = FALSE]
-    if (nrow(fold) != length(seasons) || any(as.character(fold$status) != "ok") ||
-      any(!is.finite(fold$bernoulli_nll)) || nrow(selected_summary) != 1L ||
+    if (nrow(fold) != length(seasons) ||
+      any(as.character(fold$status)[scored_here] != "ok") ||
+      any(!is.finite(fold$bernoulli_nll[scored_here])) || nrow(selected_summary) != 1L ||
       !isTRUE(all.equal(selected_summary$bernoulli_nll[1L],
-        mean(fold$bernoulli_nll),
+        mean(fold$bernoulli_nll[scored_here]),
         tolerance = 1e-12
       ))) {
       stop("M2 subset tuning selected candidate lacks complete successful fold evidence.", call. = FALSE)
@@ -1194,12 +1888,18 @@ m2_subset_train <- function(data, m0, m1, config, m1_train_preds = NULL,
     detector = detector, alpha_state = config$alpha_state,
     timing_mode = timing_mode
   )
+  fit_data <- if ("forecast_available" %in% names(training$data)) {
+    training$data[!is.na(training$data$forecast_available) &
+      training$data$forecast_available, , drop = FALSE]
+  } else {
+    training$data
+  }
   fits <- list(
-    h1 = m2_subset_fit(training$data, config$h1,
+    h1 = m2_subset_fit(fit_data, config$h1,
       method = config$method,
       gamma = config$gamma, bs = config$bs, intercept_sp = config$intercept_sp
     ),
-    h2 = m2_subset_fit(training$data, config$h2,
+    h2 = m2_subset_fit(fit_data, config$h2,
       method = config$method,
       gamma = config$gamma, bs = config$bs, intercept_sp = config$intercept_sp
     )
@@ -1245,6 +1945,7 @@ m2_subset_runtime_prediction <- function(kit, current_data, m1_result,
   }
   current_data <- current_data[, required_current, drop = FALSE]
   current_data$season <- as.character(current_data$season)
+  nW_current <- .page_nw_true(current_data)[1L]
   if (anyDuplicated(paste(current_data$season, current_data$weekF, sep = ":"))) {
     stop("`current_data` contains duplicate season-week rows.", call. = FALSE)
   }
@@ -1257,6 +1958,13 @@ m2_subset_runtime_prediction <- function(kit, current_data, m1_result,
     ew <- as.integer(pw$ew)
     ap <- pw$ap
     if (is.null(ap) || identical(ap$state, "pre_ignition")) next
+    alignment_failed <- identical(ap$state, "alignment_failed")
+    alignment_reason <- if (alignment_failed) {
+      reason <- as.character(ap$fallback_reason)[1L]
+      if (is.na(reason) || !nzchar(reason)) "alignment_failed" else reason
+    } else {
+      NULL
+    }
     prefix <- pw$season_to_ew
     if (!is.data.frame(prefix) || length(setdiff(required_current, names(prefix)))) {
       stop("M1 per-week prefix is missing required observed-data columns.", call. = FALSE)
@@ -1276,7 +1984,8 @@ m2_subset_runtime_prediction <- function(kit, current_data, m1_result,
     prefix <- current_prefix
     declaration <- if (!all_off) {
       m2_subset_prefix_declaration(
-        prefix, kit$m0_params, ew, timing_mode = timing_mode
+        prefix, kit$m0_params, ew,
+        timing_mode = timing_mode
       )
     } else {
       list(week = NA_integer_)
@@ -1290,17 +1999,52 @@ m2_subset_runtime_prediction <- function(kit, current_data, m1_result,
     fdf <- ap$forecast_df
     for (h in c(1L, 2L)) {
       target <- ew + h
-      target_new <- target - as.numeric(ap$iWeek_hat) + kit$ref$anchorWeek
-      m1_p <- .approx_unique(fdf$newWeek, fdf$p_hat, target_new, rule = 2)
+      i_week <- as.numeric(ap$iWeek_hatF %||% ap$iWeek_hat)
+      target_new <- target - i_week + kit$ref$anchorWeek
+      availability <- .page_forecast_availability(
+        target, target_new,
+        nW_true = nW_current
+      )
+      if (alignment_failed) {
+        availability$forecast_available <- FALSE
+        availability$unavailable_reason <- alignment_reason
+      }
+      m1_p <- if (isTRUE(availability$forecast_available)) {
+        if (is.null(fdf)) {
+          NA_real_
+        } else {
+          .approx_unique(fdf$newWeek, fdf$p_hat, target_new, rule = 1)
+        }
+      } else {
+        NA_real_
+      }
+      if (isTRUE(availability$forecast_available) && !is.finite(m1_p)) {
+        availability$forecast_available <- FALSE
+        availability$unavailable_reason <- {
+          reason <- as.character(ap$fallback_reason)[1L]
+          if (is.na(reason) || !nzchar(reason)) {
+            "alignment_prediction_missing"
+          } else {
+            reason
+          }
+        }
+      }
       base <- data.frame(
-        eval_week = ew, h = h, target_weekF = target, m1_p = m1_p,
+        eval_week = ew, h = h, target_weekF = target,
+        target_newWeek = target_new, nW_true = nW_current,
+        forecast_available = availability$forecast_available,
+        unavailable_reason = availability$unavailable_reason,
+        m1_p = m1_p,
         m1_baseline = m1_p, m2_p = NA_real_, m2_lo = NA_real_,
         m2_hi = NA_real_, correction_logit = NA_real_,
+        tau = NA_real_, peak_ci_width = NA_real_, confidence_scale = 1,
+        confidence_scale_missing = FALSE,
         family = m2_subset_family(), forecast_action = "failed_m2_explicit",
         failure_reason = NA_character_, stringsAsFactors = FALSE
       )
-      if (!is.finite(m1_p)) {
-        base$failure_reason <- "m1_baseline_unavailable"
+      if (!isTRUE(base$forecast_available)) {
+        base$forecast_action <- "unavailable"
+        base$failure_reason <- base$unavailable_reason
       } else if (all_off) {
         base$m2_p <- m1_p
         base$correction_logit <- 0
@@ -1310,10 +2054,18 @@ m2_subset_runtime_prediction <- function(kit, current_data, m1_result,
         base$forecast_action <- "fallback_m1_explicit"
         base$failure_reason <- "prefix_feature_unavailable"
       } else {
+        peak_week <- as.numeric(ap$peak_weekF %||% NA_real_)
+        tau <- if (is.finite(peak_week)) max(-6, min(6, target - peak_week)) else NA_real_
+        peak_width <- as.numeric(ap$peak_weekF_hi %||% NA_real_) -
+          as.numeric(ap$peak_weekF_lo %||% NA_real_)
+        horizon_fit <- fits[[paste0("h", h)]]
         nd <- m2_subset_runtime_feature_row(
-          prefix, ew, declaration, m1_p, h, alpha
+          prefix, ew, declaration, m1_p, h, alpha,
+          tau = tau, peak_ci_width = peak_width,
+          conf_scale = config[[paste0("h", h)]]$conf_scale,
+          w_ref = horizon_fit$w_ref
         )
-        pr <- tryCatch(m2_subset_predict(fits[[paste0("h", h)]], nd), error = function(e) e)
+        pr <- tryCatch(m2_subset_predict(horizon_fit, nd), error = function(e) e)
         if (inherits(pr, "error")) {
           base$m2_p <- m1_p
           base$forecast_action <- "fallback_m1_explicit"
@@ -1321,6 +2073,10 @@ m2_subset_runtime_prediction <- function(kit, current_data, m1_result,
         } else {
           base$m2_p <- pr$p_hat
           base$correction_logit <- pr$correction_logit
+          base$tau <- nd$tau
+          base$peak_ci_width <- nd$peak_ci_width
+          base$confidence_scale <- pr$confidence_scale
+          base$confidence_scale_missing <- pr$confidence_scale_missing
           base$forecast_action <- "subset_gam"
         }
       }
@@ -1332,8 +2088,12 @@ m2_subset_runtime_prediction <- function(kit, current_data, m1_result,
   } else {
     data.frame(
       eval_week = integer(), h = integer(), target_weekF = integer(),
+      target_newWeek = numeric(), nW_true = integer(),
+      forecast_available = logical(), unavailable_reason = character(),
       m1_p = numeric(), m1_baseline = numeric(), m2_p = numeric(),
       m2_lo = numeric(), m2_hi = numeric(), correction_logit = numeric(),
+      tau = numeric(), peak_ci_width = numeric(), confidence_scale = numeric(),
+      confidence_scale_missing = logical(),
       family = character(), forecast_action = character(),
       failure_reason = character(), stringsAsFactors = FALSE
     )
@@ -1348,7 +2108,7 @@ m2_subset_runtime_prediction <- function(kit, current_data, m1_result,
 # Governed boundary audit for offset_subset_v1
 # ---------------------------------------------------------------------------
 
-.m2_subset_boundary_axes <- function() c("intercept", "k_z", "k_u", "k_d")
+.m2_subset_boundary_axes <- function() c("intercept", "k_z", "k_u", "k_d", "k_tau")
 
 .m2_subset_mean_nll <- function(x, horizon) {
   z <- x$scores[
@@ -1365,7 +2125,14 @@ m2_subset_runtime_prediction <- function(kit, current_data, m1_result,
 
 .m2_subset_matched_gain <- function(x, horizon, axis, sel_row) {
   grid <- as.data.frame(x$grid)
-  axes <- .m2_subset_boundary_axes()
+  axes <- c(.m2_subset_boundary_axes(), "conf_scale")
+  same_value <- function(left, right) {
+    if (is.numeric(left) && is.numeric(right)) {
+      isTRUE(all.equal(as.numeric(left), as.numeric(right)))
+    } else {
+      identical(as.character(left), as.character(right))
+    }
+  }
   chosen <- as.numeric(sel_row[[axis]][1L])
   tested <- sort(unique(as.numeric(grid[[axis]])))
   inward <- if (chosen >= tested[length(tested)]) {
@@ -1379,9 +2146,9 @@ m2_subset_runtime_prediction <- function(kit, current_data, m1_result,
   inward <- if (chosen >= tested[length(tested)]) max(inward) else min(inward)
   same_other <- vapply(seq_len(nrow(grid)), function(i) {
     all(vapply(setdiff(axes, axis), function(a) {
-      isTRUE(all.equal(as.numeric(grid[[a]][i]), as.numeric(sel_row[[a]][1L])))
+      same_value(grid[[a]][i], sel_row[[a]][1L])
     }, logical(1))) &&
-      isTRUE(all.equal(as.numeric(grid[[axis]][i]), inward))
+      same_value(grid[[axis]][i], inward)
   }, logical(1))
   neighbor <- grid[same_other, , drop = FALSE]
   if (nrow(neighbor) != 1L) {

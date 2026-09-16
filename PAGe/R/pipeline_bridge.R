@@ -76,6 +76,7 @@ m1_walkforward_predictions <- function(seasonD,
   season_name <- unique(as.character(seasonD$season))[1]
   horizons <- as.integer(horizons)
   max_weekF <- max(seasonD$weekF, na.rm = TRUE)
+  nW_true <- .page_nw_true(seasonD)[1L]
 
   # --- M0: run ignition detection if not supplied ---
   if (is.null(ign_out)) {
@@ -111,6 +112,7 @@ m1_walkforward_predictions <- function(seasonD,
   for (i in seq_along(eval_weeks)) {
     ew <- eval_weeks[i]
     season_to_ew <- dplyr::filter(seasonD, .data$weekF <= ew)
+    .page_assert_prefix(season_to_ew, ew, label = "M1 walk-forward input")
 
     ap <- tryCatch(
       run_alignment_prospective_multi(
@@ -139,12 +141,41 @@ m1_walkforward_predictions <- function(seasonD,
       error = function(e) NULL
     )
 
-    if (is.null(ap) || ap$state == "pre_ignition" || is.null(ap$forecast_df)) {
+    if (is.null(ap) || ap$state == "pre_ignition") {
       next
     }
 
     iWeek_hat <- ap$iWeek_hat
     anchorWeek <- ref$anchorWeek
+    if (identical(ap$state, "alignment_failed")) {
+      # Keep the scheduled origin/horizon rows in the ledger. A post-ignition
+      # solver failure is unavailable forecast output, not pre-ignition.
+      reason <- ap$fallback_reason %||% "alignment_failed"
+      results[[i]] <- dplyr::bind_rows(lapply(horizons, function(h) {
+        target_weekF <- ew + h
+        target_newWeek <- as.numeric(target_weekF - iWeek_hat + anchorWeek)
+        tibble::tibble(
+          season = season_name,
+          eval_weekF = ew,
+          target_weekF = target_weekF,
+          target_newWeek = target_newWeek,
+          nW_true = nW_true,
+          forecast_available = FALSE,
+          unavailable_reason = reason,
+          iWeek_hatF = as.numeric(ap$iWeek_hatF %||% ap$iWeek_hat),
+          h = h,
+          m1_p_hat = NA_real_, m1_p_lo = NA_real_, m1_p_hi = NA_real_,
+          m1_logit_spread = NA_real_,
+          m1_tau = NA_real_, m1_delta = NA_real_,
+          m1_state = "alignment_failed",
+          peak_weekF = NA_real_, peak_weekF_lo = NA_real_, peak_weekF_hi = NA_real_
+        )
+      }))
+      next
+    }
+    if (is.null(ap$forecast_df)) {
+      next
+    }
     fdf <- ap$forecast_df
 
     # Extract predictions at each target week for each horizon
@@ -153,38 +184,53 @@ m1_walkforward_predictions <- function(seasonD,
       h <- horizons[j]
       target_weekF <- ew + h
       target_newWeek <- as.numeric(target_weekF - iWeek_hat + anchorWeek)
+      availability <- .page_forecast_availability(
+        target_weekF, target_newWeek,
+        nW_true = nW_true
+      )
 
       # Interpolate M1's prediction and spread at target_newWeek.
       # logit_spread is the weighted SD of logit-scale template predictions --
       # high values indicate M1 ensemble disagreement (alignment uncertainty).
       p_hat <- .approx_unique(fdf$newWeek, fdf$p_hat,
-        xout = target_newWeek, rule = 2
+        xout = target_newWeek, rule = 1
       )
       p_lo <- .approx_unique(fdf$newWeek, fdf$p_lo,
-        xout = target_newWeek, rule = 2
+        xout = target_newWeek, rule = 1
       )
       p_hi <- .approx_unique(fdf$newWeek, fdf$p_hi,
-        xout = target_newWeek, rule = 2
+        xout = target_newWeek, rule = 1
       )
       spread <- if ("logit_spread" %in% names(fdf)) {
-        .approx_unique(fdf$newWeek, fdf$logit_spread, xout = target_newWeek, rule = 2)
+        .approx_unique(fdf$newWeek, fdf$logit_spread, xout = target_newWeek, rule = 1)
       } else {
         NA_real_
       }
+      if (isTRUE(availability$forecast_available) && !is.finite(p_hat)) {
+        availability$forecast_available <- FALSE
+        availability$unavailable_reason <- "alignment_prediction_missing"
+      }
 
       rows[[j]] <- tibble::tibble(
-        season           = season_name,
-        eval_weekF       = ew,
-        target_weekF     = target_weekF,
-        iWeek_hatF       = as.numeric(ap$iWeek_hatF %||% ap$iWeek_hat),
-        h                = h,
-        m1_p_hat         = p_hat,
-        m1_p_lo          = p_lo,
-        m1_p_hi          = p_hi,
-        m1_logit_spread  = spread,
-        m1_tau           = ap$tau,
-        m1_delta         = ap$delta,
-        m1_state         = ap$state
+        season = season_name,
+        eval_weekF = ew,
+        target_weekF = target_weekF,
+        target_newWeek = target_newWeek,
+        nW_true = nW_true,
+        forecast_available = availability$forecast_available,
+        unavailable_reason = availability$unavailable_reason,
+        iWeek_hatF = as.numeric(ap$iWeek_hatF %||% ap$iWeek_hat),
+        h = h,
+        m1_p_hat = p_hat,
+        m1_p_lo = p_lo,
+        m1_p_hi = p_hi,
+        m1_logit_spread = spread,
+        m1_tau = ap$tau,
+        m1_delta = ap$delta,
+        m1_state = ap$state,
+        peak_weekF = as.numeric(ap$peak_weekF %||% NA_real_),
+        peak_weekF_lo = as.numeric(ap$peak_weekF_lo %||% NA_real_),
+        peak_weekF_hi = as.numeric(ap$peak_weekF_hi %||% NA_real_)
       )
     }
     results[[i]] <- dplyr::bind_rows(rows)
@@ -225,9 +271,15 @@ m1_walkforward_predictions <- function(seasonD,
 #' @param spread_method Character; \code{"between"} (default) or \code{"total"}.
 #'   Passed to \code{m1_walkforward_predictions()} and onward to
 #'   \code{run_alignment_prospective_multi()}.
+#' @param season_ignition Optional named list of season-local ignition outputs.
+#'   When supplied, these are used instead of refitting M0 for the named
+#'   seasons. This is used by the fully nested M2 adoption gate with
+#'   label-truth ignition timing.
 #'
 #' @return A tibble (stacked across seasons) with the same columns as
 #'   \code{m1_walkforward_predictions()}.
+#' @param season_references Optional named per-season reference/hyperparameter cache
+#'   for season-held-out training predictions. NULL uses the runtime reference.
 m1_walkforward_multi <- function(allD,
                                  ref,
                                  hyper,
@@ -253,7 +305,9 @@ m1_walkforward_multi <- function(allD,
                                  spread_method = c("between", "total"),
                                  parallel = TRUE,
                                  verbose = TRUE,
-                                 timing_mode = c("legacy", "fractional")) {
+                                 timing_mode = c("legacy", "fractional"),
+                                 season_references = NULL,
+                                 season_ignition = NULL) {
   spread_method <- match.arg(spread_method)
   timing_mode <- match.arg(timing_mode)
   if (is.null(seasons)) seasons <- sort(unique(as.character(allD$season)))
@@ -267,31 +321,36 @@ m1_walkforward_multi <- function(allD,
   results <- map_fn(seasons, function(s) {
     if (isTRUE(verbose)) message("[m1_walkforward_multi] Processing season: ", s)
     seasonD <- dplyr::filter(allD, .data$season == s)
+    upstream <- if (is.null(season_references)) list(ref = ref, hyper = hyper) else season_references[[s]]
+    if (is.null(upstream$ref) || is.null(upstream$hyper)) {
+      stop("Missing M1 reference for season: ", s, call. = FALSE)
+    }
 
     m1_walkforward_predictions(
-      seasonD            = seasonD,
-      ref                = ref,
-      hyper              = hyper,
-      params             = params,
-      horizons           = horizons,
-      eval_weeks         = eval_weeks,
-      allow_scale        = allow_scale,
-      use_ci             = use_ci,
-      buffer_weeks       = buffer_weeks,
-      min_obs            = min_obs,
-      curvature_ratio    = curvature_ratio,
-      temperature        = temperature,
-      rise_weight        = rise_weight,
-      trough_weight      = trough_weight,
-      peak_decay         = peak_decay,
-      slope_weight       = slope_weight,
-      slope_window       = slope_window,
-      dynamic_temp       = dynamic_temp,
+      seasonD = seasonD,
+      ref = upstream$ref,
+      hyper = upstream$hyper,
+      ign_out = if (is.null(season_ignition)) NULL else season_ignition[[s]],
+      params = params,
+      horizons = horizons,
+      eval_weeks = eval_weeks,
+      allow_scale = allow_scale,
+      use_ci = use_ci,
+      buffer_weeks = buffer_weeks,
+      min_obs = min_obs,
+      curvature_ratio = curvature_ratio,
+      temperature = temperature,
+      rise_weight = rise_weight,
+      trough_weight = trough_weight,
+      peak_decay = peak_decay,
+      slope_weight = slope_weight,
+      slope_window = slope_window,
+      dynamic_temp = dynamic_temp,
       dynamic_temp_pivot = dynamic_temp_pivot,
-      top_k              = top_k,
-      blend_alpha        = blend_alpha,
-      spread_method      = spread_method
-      ,timing_mode       = timing_mode
+      top_k = top_k,
+      blend_alpha = blend_alpha,
+      spread_method = spread_method,
+      timing_mode = timing_mode
     )
   })
 
@@ -302,18 +361,23 @@ m1_walkforward_multi <- function(allD,
 # internal: empty tibble with correct columns
 .empty_m1_preds <- function() {
   tibble::tibble(
-    season           = character(0),
-    eval_weekF       = integer(0),
-    target_weekF     = integer(0),
-    iWeek_hatF       = numeric(0),
-    h                = integer(0),
-    m1_p_hat         = numeric(0),
-    m1_p_lo          = numeric(0),
-    m1_p_hi          = numeric(0),
-    m1_logit_spread  = numeric(0),
-    m1_tau           = numeric(0),
-    m1_delta         = numeric(0),
-    m1_state         = character(0)
+    season = character(0),
+    eval_weekF = integer(0),
+    target_weekF = integer(0),
+    iWeek_hatF = numeric(0),
+    h = integer(0),
+    m1_p_hat = numeric(0),
+    m1_p_lo = numeric(0),
+    m1_p_hi = numeric(0),
+    target_newWeek = numeric(0),
+    nW_true = integer(0),
+    forecast_available = logical(0),
+    unavailable_reason = character(0),
+    m1_logit_spread = numeric(0),
+    m1_tau = numeric(0),
+    m1_delta = numeric(0),
+    m1_state = character(0),
+    peak_weekF = numeric(0), peak_weekF_lo = numeric(0), peak_weekF_hi = numeric(0)
   )
 }
 
@@ -361,7 +425,7 @@ inject_m1_into_snapshots <- function(pp,
     target_newWeek <- as.numeric(target_weekF - iWeek_hat + anchorWeek)
 
     m1_p <- .approx_unique(fdf$newWeek, fdf$p_hat,
-      xout = target_newWeek, rule = 2
+      xout = target_newWeek, rule = 1
     )
 
     has_m1 <- is.finite(m1_p) & !is.na(m1_p)

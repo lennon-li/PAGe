@@ -4,7 +4,16 @@
 \alias{fit_m2}
 \title{Fit an M2 forecast configuration (draft artifact)}
 \usage{
-fit_m2(data, selection, m0, m1, config, family = NULL, ...)
+fit_m2(
+  data,
+  selection,
+  m0,
+  m1,
+  config,
+  family = NULL,
+  allow_legacy = FALSE,
+  ...
+)
 }
 \arguments{
 \item{data}{Canonical surveillance data frame.}
@@ -18,7 +27,10 @@ fit_m2(data, selection, m0, m1, config, family = NULL, ...)
 \item{config}{Named list of M2 specification parameters.}
 
 \item{family}{Optional explicit model-family discriminator. When omitted it
-is read from \code{config$family}; legacy behavior remains the default.}
+is read from \code{config$family}; the governed subset family is the
+default.}
+
+\item{allow_legacy}{Logical; explicitly allow the legacy research path.}
 
 \item{...}{Reserved.}
 }

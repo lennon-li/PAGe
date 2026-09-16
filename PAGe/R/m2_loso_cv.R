@@ -337,7 +337,7 @@ nested_loso_cv <- function(allD,
   # --- Parallel plan (used inside M1 walk-forward) ---
   n_workers <- max(1L, as.integer(n_cores))
   old_plan  <- future::plan()
-  if (n_workers > 1L) future::plan(future::multisession, workers = n_workers)
+  .page_set_parallel_plan(n_workers)
   on.exit(future::plan(old_plan), add = TRUE)
 
   n_folds  <- length(test_seasons)

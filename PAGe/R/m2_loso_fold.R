@@ -94,7 +94,9 @@ nested_loso_build_fold <- function(allD,
   aligned_train <- alignIgnition(train_outs)
   if (timing_mode == "fractional" && !is.null(timing_truth)) {
     tt <- timing_truth[timing_truth$season %in% tr_seasons,
-      c("season", "ignition_target_weekF"), drop = FALSE]
+      c("season", "ignition_target_weekF"),
+      drop = FALSE
+    ]
     if (nrow(tt) != length(tr_seasons) || anyDuplicated(as.character(tt$season)) ||
       any(!is.finite(tt$ignition_target_weekF))) {
       stop("Fractional timing truth must contain one finite target per training season.", call. = FALSE)
@@ -104,10 +106,14 @@ nested_loso_build_fold <- function(allD,
     aligned_train$iWeekF <- unname(target[aligned_train$season])
     aligned_train$iWeek <- aligned_train$iWeekF
     anchor <- stats::median(target, na.rm = TRUE)
-    n_w <- if ("nW_true" %in% names(aligned_train)) as.numeric(aligned_train$nW_true) else
-      ave(aligned_train$weekF, aligned_train$season, FUN = function(x) max(x, na.rm = TRUE))
+    n_w <- .season_calendar_weeks(aligned_train)
     aligned_train$phase <- as.integer(aligned_train$weekF >= aligned_train$iWeekF)
-    aligned_train$newWeek <- ((aligned_train$weekF - aligned_train$iWeekF + anchor - 1) %% n_w) + 1
+    aligned_train$newWeek <- .page_shift_week(
+      aligned_train$weekF, aligned_train$iWeekF, anchor
+    )
+    aligned_train$alignment_in_domain <- aligned_train$newWeek >= 1 &
+      aligned_train$newWeek <= 52
+    aligned_train$alignment_out_of_domain <- !aligned_train$alignment_in_domain
     attr(aligned_train, "anchorWeek") <- anchor
   }
 

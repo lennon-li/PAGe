@@ -5,13 +5,16 @@ test_that("ignition review returns transparent signals and does not mutate data"
   )
   before <- raw
   review <- PAGe::review_ignition_label(
-    raw, smooth_window = 3L, p_threshold = 0.2, confidence = 0.95
+    raw,
+    smooth_window = 3L, p_threshold = 0.2, confidence = 0.95
   )
 
   expect_s3_class(review, "page_ignition_review")
   expect_true(inherits(review$plot, "ggplot"))
-  expect_true(all(c("weekF", "p", "p_ci_lo", "p_smooth",
-                    "threshold_crossing") %in% names(review$signals)))
+  expect_true(all(c(
+    "weekF", "p", "p_ci_lo", "p_smooth",
+    "threshold_crossing"
+  ) %in% names(review$signals)))
   expect_equal(raw, before)
   expect_equal(review$summary$season, "demo")
   expect_true(nrow(review$candidates) >= 1L)
@@ -20,12 +23,15 @@ test_that("ignition review returns transparent signals and does not mutate data"
 
 test_that("finalization validates the selected week and records provenance", {
   review <- PAGe::review_ignition_label(
-    data.frame(season = rep("demo", 4), weekF = 1:4,
-               y = c(0, 1, 3, 4), N = rep(10, 4)),
+    data.frame(
+      season = rep("demo", 4), weekF = 1:4,
+      y = c(0, 1, 3, 4), N = rep(10, 4)
+    ),
     candidate_window = c(2L, 4L)
   )
   label <- PAGe::finalize_ignition_label(
-    review, 3L, annotator = "tester", note = "sustained rise"
+    review, 3L,
+    annotator = "tester", note = "sustained rise"
   )
 
   expect_s3_class(label, "page_ignition_label")
@@ -43,13 +49,16 @@ test_that("finalized labels produce phase and aligned week without changing coun
     nW_true = rep(4L, 6)
   )
   out <- PAGe::apply_ignition_labels(
-    raw, c(a = 2L, b = 3L), anchor_week = 2L,
+    raw, c(a = 2L, b = 3L),
+    anchor_week = 2L,
     n_weeks_col = "nW_true"
   )
 
   expect_equal(out$iWeek, c(2L, 2L, 2L, 3L, 3L, 3L))
   expect_equal(out$phase, c(0L, 1L, 1L, 0L, 0L, 1L))
-  expect_equal(out$newWeek, c(1L, 2L, 3L, 4L, 1L, 2L))
+  # Alignment is a plain shift.  The first row of season `b` is outside the
+  # template domain and remains 0; it is not wrapped to the season end.
+  expect_equal(out$newWeek, c(1L, 2L, 3L, 0L, 1L, 2L))
   expect_equal(out$y, raw$y)
   expect_equal(out$N, raw$N)
   expect_equal(attr(out, "anchorWeek"), 2L)
@@ -78,12 +87,16 @@ test_that("peak review exposes missingness, ties, and validated selection", {
 })
 
 test_that("combined finalization returns downstream-ready named labels", {
-  raw <- data.frame(season = rep("demo", 5), weekF = 1:5,
-                    y = c(0L, 1L, 2L, 8L, 3L), N = rep(10L, 5))
+  raw <- data.frame(
+    season = rep("demo", 5), weekF = 1:5,
+    y = c(0L, 1L, 2L, 8L, 3L), N = rep(10L, 5)
+  )
   review <- PAGe::review_ignition_label(raw, candidate_window = c(1L, 5L))
   labels <- PAGe::finalize_season_labels(review, ignition_weekF = 2L, peak_weekF = 4L)
   expect_equal(labels$ignition_labels, c(demo = 2L))
   expect_equal(labels$peak_labels, c(demo = 4L))
-  expect_equal(labels$ignition$provenance$review_data_hash,
-               labels$peak$provenance$review_data_hash)
+  expect_equal(
+    labels$ignition$provenance$review_data_hash,
+    labels$peak$provenance$review_data_hash
+  )
 })

@@ -21,6 +21,7 @@ boundary_action_plan(
 \item{stage}{One of `"M0"`, `"M1"`, or `"M2"`.}
 
 \item{hard_caps}{M1 hard-cap policy. Defaults to `default_m1_hard_caps()`.}
+
 \item{selection_method}{M2 selection rule.}
 
 \item{steps}{Optional adjacent expansion steps passed to

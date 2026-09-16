@@ -10,7 +10,8 @@ tune_m2(
   m0,
   m1,
   grid,
-  family = c("legacy", "offset_subset_v1"),
+  family = c("offset_subset_v1", "legacy"),
+  allow_legacy = FALSE,
   ...
 )
 }
@@ -25,9 +26,11 @@ tune_m2(
 
 \item{grid}{M2 candidate grid.}
 
-\item{family}{Model family. The default \code{"legacy"} preserves the
-existing Stage-2 GAM; \code{"offset_subset_v1"} enables the governed
-short-horizon offset correction pathway.}
+\item{family}{Model family. The default \code{"offset_subset_v1"} is the
+governed short-horizon offset correction pathway. \code{"legacy"} is
+research/compatibility-only.}
+
+\item{allow_legacy}{Logical; explicitly allow the legacy research path.}
 
 \item{...}{Additional arguments passed to \code{build_m2()}.}
 }

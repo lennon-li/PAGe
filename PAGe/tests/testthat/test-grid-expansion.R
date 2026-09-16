@@ -43,7 +43,7 @@ test_that("M1 expansion stops at the governed reference cap", {
 
   expanded <- PAGe::expand_tuning_grid(tuning, stage = "M1")
   expect_false(any(expanded$k_ref > 50L))
-  expect_true(any(expanded$slope_weight == 6))
+  expect_true(any(expanded$slope_weight == 3))
 })
 
 test_that("M1 hard bounds accept an upper cap and expand a lower edge", {
@@ -56,7 +56,8 @@ test_that("M1 hard bounds accept an upper cap and expand a lower edge", {
     class = "page_m1_tuning"
   )
   report <- PAGe::inspect_tuning_boundaries(
-    tuning, stage = "M1", hard_caps = list(k_ref = c(lower = 10, upper = 50))
+    tuning,
+    stage = "M1", hard_caps = list(k_ref = c(lower = 10, upper = 50))
   )
   expect_equal(report$decision[report$parameter == "k_ref"], "stop_hard_cap")
 
@@ -64,7 +65,8 @@ test_that("M1 hard bounds accept an upper cap and expand a lower edge", {
   lower$best$k_ref <- 20L
   lower$grid <- data.frame(k_ref = c(20L, 30L), slope_weight = 8)
   expanded <- PAGe::expand_tuning_grid(
-    lower, stage = "M1", steps = c(k_ref = 5)
+    lower,
+    stage = "M1", steps = c(k_ref = 5)
   )
   expect_true(any(expanded$k_ref == 15L))
 })
@@ -134,7 +136,8 @@ test_that("M1 practical backoff skips unresolved edges", {
     class = "page_m1_tuning"
   )
   selected <- PAGe::select_m1_candidate(
-    tuning, min_gain = 0.05,
+    tuning,
+    min_gain = 0.05,
     hard_caps = list(k_ref = c(lower = 10L, upper = 52L))
   )
   expect_equal(selected$selected$k_ref, 25L)
@@ -199,6 +202,11 @@ test_that("M0 expansion halves numeric spacing and validates detector support", 
     ),
     "shortest training season"
   )
+})
+
+test_that("irregular boundary expansion uses half the widest tested spacing", {
+  expect_equal(PAGe:::.grid_adjacent_step(c(8, 12, 20), "lower"), 4)
+  expect_equal(PAGe:::.grid_adjacent_step(c(8, 12, 20), "upper"), 4)
 })
 
 test_that("M2 expansion is additive and keeps canonical identities", {

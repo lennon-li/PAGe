@@ -593,9 +593,10 @@ plan_m2_grid <- function(previous_results = NULL,
 #' @param m0_grid,m1_grid Optional explicit M0 and M1 tuning grids.
 #' @param m2_grid Optional explicit M2 grid; \code{NULL} uses
 #'   \code{plan_m2_grid(previous_results)}.
-#' @param m2_family M2 model family. The default \code{"legacy"} preserves
-#'   existing behavior; \code{"offset_subset_v1"} opts into the governed
-#'   subset family.
+#' @param m2_family M2 model family. The default \code{"offset_subset_v1"}
+#'   is the governed subset family; \code{"legacy"} is research/compatibility
+#'   only.
+#' @param allow_legacy Logical; explicitly allow the legacy research path.
 #' @param max_m2_finalists,max_m2_specs Adaptive M2 plan caps.
 #' @param selection_method Final full-LOSO selection rule passed to
 #'   \code{select_m2_candidate()}. Defaults to minimum Bernoulli NLL.
@@ -658,7 +659,8 @@ train_pipeline <- function(
   m0_grid = .default_m0_grid(),
   m1_grid = default_m1_grid(),
   m2_grid = NULL,
-  m2_family = c("legacy", "offset_subset_v1"),
+  m2_family = c("offset_subset_v1", "legacy"),
+  allow_legacy = FALSE,
   max_m2_finalists = 6L,
   max_m2_specs = 64L,
   selection_method = c("min_nll", "one_se", "pareto"),
@@ -685,6 +687,23 @@ train_pipeline <- function(
   mode <- match.arg(mode)
   selection_method <- match.arg(selection_method)
   m2_family <- match.arg(m2_family)
+  if (!is.logical(allow_legacy) || length(allow_legacy) != 1L ||
+    is.na(allow_legacy)) {
+    stop("allow_legacy must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (identical(m2_family, "legacy") && !isTRUE(allow_legacy)) {
+    stop(
+      "Legacy M2 training is research/compatibility-only; set ",
+      "allow_legacy = TRUE explicitly.",
+      call. = FALSE
+    )
+  }
+  if (identical(m2_family, "legacy")) {
+    warning(
+      "Legacy M2 training uses training features that are not season-held-out.",
+      call. = FALSE
+    )
+  }
   timing_mode <- match.arg(timing_mode)
   score_scale <- match.arg(score_scale)
   if (!is.null(manual_labels) && !is.null(timing_labels)) {
@@ -786,7 +805,8 @@ train_pipeline <- function(
       timing_truth = timing_targets
     ))
     m1 <- freeze_m1(fit_m1(
-      allD, selection, m0 = m0, config = m1_params,
+      allD, selection,
+      m0 = m0, config = m1_params,
       timing_mode = timing_mode, timing_truth = timing_targets
     ))
     best_spec <- .valid_previous_m2_spec(previous_results)
@@ -809,6 +829,7 @@ train_pipeline <- function(
       m0 = m0, m1 = m1,
       config = best_spec,
       family = m2_family,
+      allow_legacy = allow_legacy,
       n_cores = n_cores,
       verbose = verbose,
       timing_mode = timing_mode,
@@ -936,7 +957,8 @@ train_pipeline <- function(
   tuned_m1_params <- .m1_params_from_tuning(m1_params, m1_tuning)
   m1 <- freeze_m1(
     fit_m1(
-      allD, selection, m0 = m0, config = tuned_m1_params,
+      allD, selection,
+      m0 = m0, config = tuned_m1_params,
       timing_mode = timing_mode, timing_truth = timing_targets
     ),
     tuning = m1_tuning
@@ -980,6 +1002,7 @@ train_pipeline <- function(
       pre_ignition_weight = pre_ignition_weight,
       late_weight = late_weight,
       score_scale = score_scale,
+      allow_legacy = allow_legacy,
       timing_mode = timing_mode,
       timing_truth = timing_targets
     )
@@ -1055,6 +1078,7 @@ train_pipeline <- function(
         m0 = m0, m1 = m1,
         config = m2_selection$selected_spec,
         family = m2_family,
+        allow_legacy = allow_legacy,
         m1_train_preds = m2_tuning$m1_train_preds,
         n_cores = n_cores,
         verbose = verbose,
@@ -1070,6 +1094,7 @@ train_pipeline <- function(
         m0 = m0, m1 = m1,
         config = m2_selection$selected_spec,
         family = m2_family,
+        allow_legacy = allow_legacy,
         n_cores = n_cores,
         verbose = verbose,
         timing_mode = timing_mode,

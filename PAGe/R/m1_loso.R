@@ -239,9 +239,7 @@ loso_walkforward <- function(allD,
   # --- set up parallel plan; restore on exit ---
   n_workers <- max(1L, as.integer(n_cores))
   old_plan <- future::plan()
-  if (n_workers > 1L) {
-    future::plan(future::multisession, workers = n_workers)
-  }
+  .page_set_parallel_plan(n_workers)
   on.exit(future::plan(old_plan), add = TRUE)
 
   params_list <- vector("list", length(test_seasons))
@@ -336,14 +334,14 @@ loso_walkforward <- function(allD,
       aligned_train$iWeek <- aligned_train$iWeekF
       anchor <- stats::median(target[intersect(names(target), tr_seasons)], na.rm = TRUE)
       if (!is.finite(anchor)) stop("Fractional timing truth has no training-season targets.", call. = FALSE)
-      n_w <- if ("nW_true" %in% names(aligned_train)) {
-        as.numeric(aligned_train$nW_true)
-      } else {
-        ave(aligned_train$weekF, aligned_train$season,
-          FUN = function(x) max(x, na.rm = TRUE))
-      }
+      n_w <- .season_calendar_weeks(aligned_train)
       aligned_train$phase <- as.integer(aligned_train$weekF >= aligned_train$iWeekF)
-      aligned_train$newWeek <- ((aligned_train$weekF - aligned_train$iWeekF + anchor - 1) %% n_w) + 1
+      aligned_train$newWeek <- .page_shift_week(
+        aligned_train$weekF, aligned_train$iWeekF, anchor
+      )
+      aligned_train$alignment_in_domain <- aligned_train$newWeek >= 1 &
+        aligned_train$newWeek <= 52
+      aligned_train$alignment_out_of_domain <- !aligned_train$alignment_in_domain
       attr(aligned_train, "anchorWeek") <- anchor
     }
 
@@ -453,65 +451,74 @@ loso_walkforward <- function(allD,
     # --- 4. Walk-forward: parallelise over eval_weeks ---
     week_results <- furrr::future_map(eval_weeks_s, function(ew) {
       season_data_to_ew <- dplyr::filter(.allD_test, weekF <= ew)
+      .page_assert_prefix(season_data_to_ew, ew, label = "M1 walk-forward input")
       n_obs <- nrow(season_data_to_ew)
 
       # Dispatch: multi-template ensemble or single-template alignment
       if (.use_multi && !is.null(.ref$eta_mat)) {
         ap <- run_alignment_prospective_multi(
-          currentSeason      = season_data_to_ew,
-          ref                = .ref,
-          hyper              = .hyper,
-          ign_out            = .ign_out,
-          use_ci             = .use_ci,
-          buffer_weeks       = .buffer_weeks,
-          allow_scale        = .allow_scale,
-          level              = .level,
-          min_obs            = .min_obs,
-          curvature_ratio    = .curvature_ratio,
-          trough_weight      = .trough_weight,
-          rise_weight        = .rise_weight,
-          peak_decay         = .peak_decay,
-          temperature        = .multi_temp,
-          top_k              = .multi_top_k,
-          blend_alpha        = .multi_blend,
-          slope_weight       = .slope_weight,
-          slope_window       = .slope_window,
-          dynamic_temp       = .dynamic_temp,
-          dynamic_temp_pivot = .dynamic_temp_pivot
-          ,timing_mode = .timing_mode
+          currentSeason = season_data_to_ew,
+          ref = .ref,
+          hyper = .hyper,
+          ign_out = .ign_out,
+          use_ci = .use_ci,
+          buffer_weeks = .buffer_weeks,
+          allow_scale = .allow_scale,
+          level = .level,
+          min_obs = .min_obs,
+          curvature_ratio = .curvature_ratio,
+          trough_weight = .trough_weight,
+          rise_weight = .rise_weight,
+          peak_decay = .peak_decay,
+          temperature = .multi_temp,
+          top_k = .multi_top_k,
+          blend_alpha = .multi_blend,
+          slope_weight = .slope_weight,
+          slope_window = .slope_window,
+          dynamic_temp = .dynamic_temp,
+          dynamic_temp_pivot = .dynamic_temp_pivot,
+          timing_mode = .timing_mode
         )
       } else {
         ap <- run_alignment_prospective(
-          currentSeason   = season_data_to_ew,
-          ref             = .ref,
-          hyper           = .hyper,
-          params          = NULL,
-          ign_out         = .ign_out,
-          use_ci          = .use_ci,
-          buffer_weeks    = .buffer_weeks,
-          allow_scale     = .allow_scale,
-          level           = .level,
-          min_obs         = .min_obs,
+          currentSeason = season_data_to_ew,
+          ref = .ref,
+          hyper = .hyper,
+          params = NULL,
+          ign_out = .ign_out,
+          use_ci = .use_ci,
+          buffer_weeks = .buffer_weeks,
+          allow_scale = .allow_scale,
+          level = .level,
+          min_obs = .min_obs,
           curvature_ratio = .curvature_ratio,
-          trough_weight   = .trough_weight,
-          rise_weight     = .rise_weight,
-          peak_decay      = .peak_decay
-          ,timing_mode    = .timing_mode
+          trough_weight = .trough_weight,
+          rise_weight = .rise_weight,
+          peak_decay = .peak_decay,
+          timing_mode = .timing_mode
         )
       }
 
-      if (ap$state == "pre_ignition") {
+      if (ap$state %in% c("pre_ignition", "alignment_failed")) {
         ign_locked_w <- .ign_out$ign_week_locked
-        reason <- if (is.na(ign_locked_w) || ign_locked_w > ew) {
+        alignment_failed <- identical(ap$state, "alignment_failed")
+        reason <- if (alignment_failed) {
+          ap$fallback_reason %||% "alignment_failed"
+        } else if (is.na(ign_locked_w) || ign_locked_w > ew) {
           "no_ignition"
         } else if (n_obs < .min_obs) {
           "too_few_obs"
         } else {
           "alignment_error"
         }
-        iWeek_hat_ew <- if (!is.na(ign_locked_w) && ign_locked_w <= ew) {
-          if (.timing_mode == "fractional") as.numeric(.ign_out$iWeek_hat_lockedF) else
+        iWeek_hat_ew <- if (alignment_failed && is.finite(ap$iWeek_hat)) {
+          if (.timing_mode == "fractional") as.numeric(ap$iWeek_hat) else as.integer(ap$iWeek_hat)
+        } else if (!is.na(ign_locked_w) && ign_locked_w <= ew) {
+          if (.timing_mode == "fractional") {
+            as.numeric(.ign_out$iWeek_hat_lockedF)
+          } else {
             as.integer(.ign_out$iWeek_hat_locked)
+          }
         } else {
           NA_integer_
         }
@@ -576,9 +583,9 @@ loso_walkforward <- function(allD,
         version = 1L,
         identity = checkpoint_identity,
         completed_seasons = completed_seasons,
-        params_list       = params_list[completed_seasons],
-        forecast_list     = forecast_list[completed_seasons],
-        ref_list          = ref_list[completed_seasons]
+        params_list = params_list[completed_seasons],
+        forecast_list = forecast_list[completed_seasons],
+        ref_list = ref_list[completed_seasons]
       ), checkpoint_file)
       if (verbose) {
         message(sprintf(
@@ -608,6 +615,455 @@ loso_walkforward <- function(allD,
     forecast_df = flatten_list_cols(dplyr::bind_rows(forecast_list)),
     ref_list    = ref_list
   )
+}
+
+
+# Multi-specification walk-forward used by tune_m1_alignment(). Every spec in a
+# group must share all alignment-affecting inputs and differ only in the
+# weighting parameters carried in `weight_sets`. The expensive fold preparation,
+# reference fit, hyperparameter learning, and per-eval-week template alignment
+# are computed once and reused across the group; only the softmax reweighting
+# is repeated. Per-spec checkpoints use the same schema and identity as
+# loso_walkforward() so restart behavior is unchanged.
+#' @keywords internal
+loso_walkforward_weights <- function(allD,
+                                     params,
+                                     weight_sets,
+                                     checkpoint_files = NULL,
+                                     checkpoint_identities = NULL,
+                                     walk_start = NULL,
+                                     walk_end = NULL,
+                                     manual_labels = NULL,
+                                     train_seasons = NULL,
+                                     test_seasons = NULL,
+                                     exclude_seasons = NULL,
+                                     k_deriv = 10L,
+                                     k_ref = 10L,
+                                     n_weeks = 52L,
+                                     flag_args = list(
+                                       p_thresh   = 0.01,
+                                       k1         = 0.4,
+                                       k_c        = 0.01,
+                                       n_consec   = 2L,
+                                       min_window = 10L,
+                                       w_min      = 21L,
+                                       w_max      = 21L,
+                                       d2_relax   = -0.01
+                                     ),
+                                     allow_scale = NULL,
+                                     level = 0.95,
+                                     use_ci = TRUE,
+                                     buffer_weeks = 0L,
+                                     n_cores = parallel::detectCores() - 1L,
+                                     min_obs = 4L,
+                                     curvature_ratio = 1.0,
+                                     template_shift = 0L,
+                                     peak_weight_boost = 1,
+                                     peak_weight_decay = 0.3,
+                                     align_trough_weight = 0.1,
+                                     align_rise_weight = 1.0,
+                                     align_peak_decay = 0.3,
+                                     use_multi_template = TRUE,
+                                     ref_method = "fs",
+                                     multi_top_k = NULL,
+                                     multi_blend_alpha = 1.0,
+                                     timing_mode = c("legacy", "fractional"),
+                                     timing_truth = NULL,
+                                     verbose = TRUE) {
+  timing_mode <- match.arg(timing_mode)
+  spec_ids <- names(weight_sets)
+  if (is.null(spec_ids) || any(!nzchar(spec_ids))) {
+    stop("`weight_sets` must be a named list keyed by spec id.", call. = FALSE)
+  }
+  all_seasons <- sort(unique(as.character(allD$season)))
+
+  if (!is.null(exclude_seasons)) {
+    allD <- dplyr::filter(allD, !season %in% exclude_seasons)
+    all_seasons <- setdiff(all_seasons, exclude_seasons)
+  }
+
+  if (is.null(test_seasons)) test_seasons <- all_seasons
+  bad <- setdiff(test_seasons, all_seasons)
+  if (length(bad) > 0) {
+    stop("test_seasons not found in allD: ", paste(bad, collapse = ", "))
+  }
+  if (!is.null(train_seasons)) {
+    bad_tr <- setdiff(train_seasons, all_seasons)
+    if (length(bad_tr) > 0) {
+      stop("train_seasons not found in allD: ", paste(bad_tr, collapse = ", "))
+    }
+  }
+
+  n_workers <- max(1L, as.integer(n_cores))
+  old_plan <- future::plan()
+  .page_set_parallel_plan(n_workers)
+  on.exit(future::plan(old_plan), add = TRUE)
+
+  params_list <- vector("list", length(spec_ids))
+  forecast_list <- vector("list", length(spec_ids))
+  names(params_list) <- names(forecast_list) <- spec_ids
+  for (sid in spec_ids) {
+    params_list[[sid]] <- vector("list", length(test_seasons))
+    forecast_list[[sid]] <- vector("list", length(test_seasons))
+    names(params_list[[sid]]) <- names(forecast_list[[sid]]) <- test_seasons
+  }
+  ref_list <- vector("list", length(test_seasons))
+  names(ref_list) <- test_seasons
+
+  completed <- stats::setNames(vector("list", length(spec_ids)), spec_ids)
+  for (sid in spec_ids) {
+    completed[[sid]] <- character(0)
+    ckpt_file <- checkpoint_files[[sid]]
+    if (!is.null(ckpt_file) && file.exists(ckpt_file)) {
+      ckpt <- tryCatch(readRDS(ckpt_file), error = function(e) NULL)
+      usable <- is.list(ckpt) &&
+        identical(ckpt$schema, "page_m1_walkforward_checkpoint") &&
+        identical(ckpt$identity, checkpoint_identities[[sid]])
+      if (isTRUE(usable)) {
+        completed[[sid]] <- ckpt$completed_seasons %||% character(0)
+        for (s in intersect(completed[[sid]], test_seasons)) {
+          params_list[[sid]][[s]] <- ckpt$params_list[[s]]
+          forecast_list[[sid]][[s]] <- ckpt$forecast_list[[s]]
+          if (is.null(ref_list[[s]])) ref_list[[s]] <- ckpt$ref_list[[s]]
+        }
+      }
+    }
+  }
+
+  for (test_s in test_seasons) {
+    need_sids <- spec_ids[!vapply(
+      spec_ids, function(sid) test_s %in% completed[[sid]], logical(1)
+    )]
+    if (!length(need_sids)) {
+      if (verbose) message(sprintf("[loso_walkforward_weights] Skipping %s (all specs checkpointed)", test_s))
+      next
+    }
+
+    tr_seasons <- if (!is.null(train_seasons)) {
+      train_seasons
+    } else {
+      setdiff(all_seasons, test_s)
+    }
+    if (length(tr_seasons) < 2) {
+      stop("Fewer than 2 training seasons for test season '", test_s, "'.")
+    }
+
+    season_weeks <- dplyr::filter(allD, season == test_s)$weekF
+    walk_end_s <- if (!is.null(walk_end)) as.integer(walk_end) else max(season_weeks, na.rm = TRUE)
+
+    train_allD <- dplyr::filter(allD, season %in% tr_seasons)
+    res_deriv <- estimateDerivs(train_allD,
+      k = k_deriv,
+      peak_weight_boost = peak_weight_boost,
+      peak_weight_decay = peak_weight_decay,
+      ignition_weeks = manual_labels
+    )
+
+    train_outs <- res_deriv$data |>
+      dplyr::group_by(season) |>
+      dplyr::group_split(.keep = TRUE) |>
+      purrr::map(~ do.call(
+        flagIgnition,
+        c(list(df = .x, manual_labels = manual_labels), flag_args)
+      ))
+
+    aligned_train <- alignIgnition(train_outs)
+
+    if (timing_mode == "fractional" && !is.null(timing_truth)) {
+      if (!is.data.frame(timing_truth) ||
+        !all(c("season", "ignition_target_weekF") %in% names(timing_truth))) {
+        stop("`timing_truth` must contain season and ignition_target_weekF.", call. = FALSE)
+      }
+      tt <- timing_truth[, c("season", "ignition_target_weekF"), drop = FALSE]
+      tt$season <- as.character(tt$season)
+      if (anyDuplicated(tt$season) || any(!is.finite(tt$ignition_target_weekF))) {
+        stop("`timing_truth` must have one finite target per season.", call. = FALSE)
+      }
+      target <- stats::setNames(as.numeric(tt$ignition_target_weekF), tt$season)
+      aligned_train$season <- as.character(aligned_train$season)
+      aligned_train$iWeekF <- unname(target[aligned_train$season])
+      aligned_train$iWeek <- aligned_train$iWeekF
+      anchor <- stats::median(target[intersect(names(target), tr_seasons)], na.rm = TRUE)
+      if (!is.finite(anchor)) stop("Fractional timing truth has no training-season targets.", call. = FALSE)
+      n_w <- .season_calendar_weeks(aligned_train)
+      aligned_train$phase <- as.integer(aligned_train$weekF >= aligned_train$iWeekF)
+      aligned_train$newWeek <- .page_shift_week(
+        aligned_train$weekF, aligned_train$iWeekF, anchor
+      )
+      aligned_train$alignment_in_domain <- aligned_train$newWeek >= 1 &
+        aligned_train$newWeek <= 52
+      aligned_train$alignment_out_of_domain <- !aligned_train$alignment_in_domain
+      attr(aligned_train, "anchorWeek") <- anchor
+    }
+
+    if (use_multi_template && ref_method != "fs") {
+      warning(sprintf("[loso_walkforward_weights] ref_method='%s' ignored when use_multi_template=TRUE; forcing 'fs' (required for eta_mat).", ref_method))
+    }
+    ref_meth <- if (use_multi_template) "fs" else ref_method
+    ref <- tryCatch(
+      estimateRef(
+        alignedD = aligned_train, exSeason = character(0),
+        k = k_ref, n_weeks = n_weeks,
+        method = ref_meth,
+        timing_mode = timing_mode
+      ),
+      error = function(e) {
+        stop(
+          "M1 reference fit failed for fold `", test_s,
+          "` with k_ref=", as.integer(k_ref), ": ", conditionMessage(e),
+          call. = FALSE
+        )
+      }
+    )
+
+    ref$g_ref_fun_orig <- ref$g_ref_fun
+    if (as.integer(template_shift) != 0L) {
+      s_int <- as.integer(template_shift)
+      orig_fun <- ref$g_ref_fun
+      orig_mu_se <- ref$g_ref_mu_se
+      orig_safe <- ref$g_ref_safe
+      ref$g_ref_fun <- function(u) orig_fun(u - s_int)
+      ref$g_ref_safe <- function(u) orig_fun(pmin(pmax(u - s_int, 1L), n_weeks))
+      ref$g_ref_mu_se <- function(u) orig_mu_se(u - s_int)
+    }
+
+    hyper <- learn_alignment_hyperparams(ref$dat, ref$g_ref_fun)
+    ref_list[[test_s]] <- ref
+
+    iWeek_true <- if (timing_mode == "fractional" && !is.null(timing_truth) &&
+      test_s %in% as.character(timing_truth$season)) {
+      as.numeric(timing_truth$ignition_target_weekF[
+        match(test_s, as.character(timing_truth$season))
+      ])
+    } else if (!is.null(manual_labels) && test_s %in% names(manual_labels)) {
+      as.integer(manual_labels[[test_s]])
+    } else {
+      NA_integer_
+    }
+
+    raw_test_D <- dplyr::filter(allD, season == test_s, weekF <= walk_end_s)
+    det_start <- if (!is.null(walk_start)) as.integer(walk_start) else 1L
+    ign_out <- run_ignition_weekly(
+      currentSeason  = raw_test_D,
+      ign_fit_or_gam = NULL,
+      params         = params,
+      start_week     = det_start,
+      timing_mode    = timing_mode
+    )
+
+    walk_start_s <- if (!is.null(walk_start)) {
+      as.integer(walk_start)
+    } else if (!is.na(ign_out$ign_week_locked)) {
+      as.integer(ign_out$ign_week_locked)
+    } else {
+      walk_end_s + 1L
+    }
+    eval_weeks_s <- seq(walk_start_s, walk_end_s)
+
+    if (verbose) {
+      message(sprintf(
+        "[loso_walkforward_weights] test: %-9s | %d specs | train: %d | weeks %d-%d | workers: %d",
+        test_s, length(need_sids), length(tr_seasons), walk_start_s, walk_end_s, n_workers
+      ))
+    }
+
+    .ref <- ref
+    .hyper <- hyper
+    .allD_test <- dplyr::filter(allD, season == test_s)
+    .allow_scale <- allow_scale
+    .test_s <- test_s
+    .tr_seasons <- tr_seasons
+    .min_obs <- min_obs
+    .level <- level
+    .iWeek_true <- iWeek_true
+    .ign_out <- ign_out
+    .use_ci <- use_ci
+    .buffer_weeks <- buffer_weeks
+    .curvature_ratio <- curvature_ratio
+    .trough_weight <- align_trough_weight
+    .rise_weight <- align_rise_weight
+    .peak_decay <- align_peak_decay
+    .use_multi <- use_multi_template
+    .multi_top_k <- multi_top_k
+    .multi_blend <- multi_blend_alpha
+    .timing_mode <- timing_mode
+    .weight_sets <- weight_sets[need_sids]
+
+    week_results <- furrr::future_map(eval_weeks_s, function(ew) {
+      season_data_to_ew <- dplyr::filter(.allD_test, weekF <= ew)
+      .page_assert_prefix(season_data_to_ew, ew, label = "M1 walk-forward input")
+      n_obs <- nrow(season_data_to_ew)
+
+      ap_list <- if (!is.null(.ref$eta_mat)) {
+        run_alignment_prospective_multi_weights(
+          currentSeason      = season_data_to_ew,
+          ref                = .ref,
+          hyper              = .hyper,
+          ign_out            = .ign_out,
+          weight_sets        = .weight_sets,
+          use_ci             = .use_ci,
+          buffer_weeks       = .buffer_weeks,
+          allow_scale        = .allow_scale,
+          level              = .level,
+          min_obs            = .min_obs,
+          curvature_ratio    = .curvature_ratio,
+          trough_weight      = .trough_weight,
+          rise_weight        = .rise_weight,
+          peak_decay         = .peak_decay,
+          top_k              = .multi_top_k,
+          blend_alpha        = .multi_blend,
+          timing_mode        = .timing_mode
+        )
+      } else {
+        # Same fallback as loso_walkforward(): without eta_mat the
+        # single-template path is used and the weighting axes do not apply.
+        ap_single <- run_alignment_prospective(
+          currentSeason   = season_data_to_ew,
+          ref             = .ref,
+          hyper           = .hyper,
+          params          = NULL,
+          ign_out         = .ign_out,
+          use_ci          = .use_ci,
+          buffer_weeks    = .buffer_weeks,
+          allow_scale     = .allow_scale,
+          level           = .level,
+          min_obs         = .min_obs,
+          curvature_ratio = .curvature_ratio,
+          trough_weight   = .trough_weight,
+          rise_weight     = .rise_weight,
+          peak_decay      = .peak_decay,
+          timing_mode     = .timing_mode
+        )
+        stats::setNames(rep(list(ap_single), length(.weight_sets)), names(.weight_sets))
+      }
+
+      out <- vector("list", length(.weight_sets))
+      names(out) <- names(.weight_sets)
+      for (sid in names(.weight_sets)) {
+        ap <- ap_list[[sid]]
+        if (ap$state %in% c("pre_ignition", "alignment_failed")) {
+          ign_locked_w <- .ign_out$ign_week_locked
+          alignment_failed <- identical(ap$state, "alignment_failed")
+          reason <- if (alignment_failed) {
+            ap$fallback_reason %||% "alignment_failed"
+          } else if (is.na(ign_locked_w) || ign_locked_w > ew) {
+            "no_ignition"
+          } else if (n_obs < .min_obs) {
+            "too_few_obs"
+          } else {
+            "alignment_error"
+          }
+          iWeek_hat_ew <- if (alignment_failed && is.finite(ap$iWeek_hat)) {
+            if (.timing_mode == "fractional") as.numeric(ap$iWeek_hat) else as.integer(ap$iWeek_hat)
+          } else if (!is.na(ign_locked_w) && ign_locked_w <= ew) {
+            if (.timing_mode == "fractional") {
+              as.numeric(.ign_out$iWeek_hat_lockedF)
+            } else {
+              as.integer(.ign_out$iWeek_hat_locked)
+            }
+          } else {
+            NA_integer_
+          }
+          na_row <- tibble::tibble(
+            season = .test_s, eval_week = ew, n_obs = n_obs,
+            iWeek_hat = iWeek_hat_ew, iWeek_true = .iWeek_true,
+            tau = NA_real_, delta = NA_real_, a = NA_real_, b = NA_real_,
+            allow_scale = NA, delta_on = NA,
+            t_peak = NA_real_, t_peak_median = NA_real_, t_peak_lo = NA_real_, t_peak_hi = NA_real_,
+            peak_weekF = if (.timing_mode == "fractional") NA_real_ else NA_integer_, peak_passed = FALSE,
+            fallback_reason = reason,
+            n_train = length(.tr_seasons), anchorWeek = .ref$anchorWeek
+          )
+          out[[sid]] <- list(params = na_row, forecast = NULL)
+          next
+        }
+        params_row <- tibble::tibble(
+          season          = .test_s,
+          eval_week       = ew,
+          n_obs           = n_obs,
+          iWeek_hat       = ap$iWeek_hat,
+          iWeek_true      = .iWeek_true,
+          tau             = ap$tau,
+          delta           = ap$delta,
+          a               = ap$a,
+          b               = ap$b,
+          allow_scale     = ap$allow_scale,
+          delta_on        = ap$delta_on,
+          t_peak          = ap$t_peak,
+          t_peak_median   = ap$t_peak_median,
+          t_peak_lo       = ap$t_peak_ci[1],
+          t_peak_hi       = ap$t_peak_ci[2],
+          peak_weekF      = ap$peak_weekF,
+          peak_passed     = ap$peak_passed,
+          fallback_reason = ap$fallback_reason,
+          n_train         = length(.tr_seasons),
+          anchorWeek      = .ref$anchorWeek
+        )
+        forecast_row <- ap$forecast_df |>
+          dplyr::mutate(
+            season = .test_s, eval_week = ew,
+            newWeek = as.numeric(newWeek),
+            p_hat = as.numeric(p_hat),
+            p_lo = as.numeric(p_lo),
+            p_hi = as.numeric(p_hi)
+          ) |>
+          dplyr::select(season, eval_week, newWeek, p_hat, p_lo, p_hi, kind)
+        out[[sid]] <- list(params = params_row, forecast = forecast_row)
+      }
+      out
+    }, .options = furrr::furrr_options(seed = TRUE))
+
+    for (sid in need_sids) {
+      params_list[[sid]][[test_s]] <- dplyr::bind_rows(
+        purrr::map(week_results, function(wk) wk[[sid]]$params)
+      )
+      forecast_list[[sid]][[test_s]] <- dplyr::bind_rows(
+        purrr::map(week_results, function(wk) wk[[sid]]$forecast)
+      )
+    }
+
+    for (sid in need_sids) {
+      completed[[sid]] <- union(completed[[sid]], test_s)
+      if (!is.null(checkpoint_files[[sid]])) {
+        saveRDS(list(
+          schema = "page_m1_walkforward_checkpoint",
+          version = 1L,
+          identity = checkpoint_identities[[sid]],
+          completed_seasons = completed[[sid]],
+          params_list = params_list[[sid]][completed[[sid]]],
+          forecast_list = forecast_list[[sid]][completed[[sid]]],
+          ref_list = ref_list[completed[[sid]]]
+        ), checkpoint_files[[sid]])
+      }
+    }
+    if (verbose) {
+      message(sprintf(
+        "[loso_walkforward_weights] Checkpoint saved: %d specs @ %s",
+        length(need_sids), test_s
+      ))
+    }
+  }
+
+  flatten_list_cols <- function(df) {
+    for (nm in names(df)) {
+      if (is.list(df[[nm]])) {
+        df[[nm]] <- tryCatch(
+          as.numeric(unlist(df[[nm]])),
+          warning = function(w) unlist(df[[nm]]),
+          error   = function(e) unlist(df[[nm]])
+        )
+      }
+    }
+    df
+  }
+
+  stats::setNames(lapply(spec_ids, function(sid) {
+    list(
+      params_df   = flatten_list_cols(dplyr::bind_rows(params_list[[sid]])),
+      forecast_df = flatten_list_cols(dplyr::bind_rows(forecast_list[[sid]])),
+      ref_list    = ref_list
+    )
+  }), spec_ids)
 }
 
 
@@ -767,26 +1223,22 @@ tune_m1_alignment <- function(allD,
   # Tunable column names (columns in grid that are loso_walkforward args)
   tune_cols <- setdiff(names(grid), "spec_id")
 
-  for (i in seq_len(n_specs)) {
-    sid <- grid$spec_id[i]
-    if (sid %in% done_ids) next
+  dots <- list(...)
 
-    spec <- grid[i, ]
-    if (verbose) {
-      spec_str <- paste(tune_cols, "=",
-        vapply(
-          tune_cols, function(c) as.character(spec[[c]]),
-          character(1)
-        ),
-        collapse = ", "
-      )
-      message(sprintf(
-        "[tune_m1] Spec %d / %d  (%s)  %s",
-        i, n_specs, sid, spec_str
-      ))
-    }
+  # Parameters that only enter the ensemble softmax reweighting. Specs that
+  # differ only in these axes share identical fold preparation and template
+  # alignment, so they are evaluated in one shared walk-forward pass.
+  weight_cols <- c(
+    "slope_weight", "multi_temperature", "slope_window",
+    "dynamic_temp", "dynamic_temp_pivot"
+  )
+  non_behavior_cols <- c(
+    "allD", "checkpoint_file", "checkpoint_identity", "verbose", "n_cores"
+  )
 
-    # Build loso_walkforward arguments from the spec row
+  spec_row <- function(sid) grid[grid$spec_id == sid, , drop = FALSE]
+
+  build_wf_args <- function(spec) {
     wf_args <- list(
       allD            = allD,
       params          = params,
@@ -796,43 +1248,26 @@ tune_m1_alignment <- function(allD,
       n_cores         = n_cores,
       verbose         = FALSE
     )
-    # Overlay tunable params from grid
     for (col in tune_cols) {
       wf_args[[col]] <- spec[[col]]
     }
-    # Overlay fixed caller args (...)
-    dots <- list(...)
     for (nm in names(dots)) {
       wf_args[[nm]] <- dots[[nm]]
     }
-    # Per-spec checkpoint
-    wf_args$checkpoint_file <- file.path(
-      checkpoint_dir,
-      paste0("ckpt_", sid, ".rds")
-    )
+    sid <- spec$spec_id
+    wf_args$checkpoint_file <- file.path(checkpoint_dir, paste0("ckpt_", sid, ".rds"))
     wf_args$checkpoint_identity <- list(
       schema = "page_m1_walkforward_checkpoint",
       version = 1L,
       tuning = cache_identity,
-      spec = spec[setdiff(names(spec), "spec_id"), drop = FALSE]
+      spec = spec[, setdiff(names(spec), "spec_id"), drop = FALSE]
     )
+    wf_args
+  }
 
-    wf_error <- NULL
-    wf <- tryCatch(
-      do.call(loso_walkforward, wf_args),
-      error = function(e) {
-        wf_error <<- conditionMessage(e)
-        NULL
-      }
-    )
-    if (!is.null(wf_error)) {
-      message <- paste0("M1 tuning specification ", sid, " failed: ", wf_error)
-      if (isTRUE(fail_fast)) stop(message, call. = FALSE)
-      warning(message, call. = FALSE)
-    }
-
+  score_spec <- function(wf, wf_error, sid) {
     if (is.null(wf)) {
-      row <- tibble::tibble(
+      return(tibble::tibble(
         spec_id         = sid,
         mae_uniform     = NA_real_,
         mae_exp         = NA_real_,
@@ -842,70 +1277,191 @@ tune_m1_alignment <- function(allD,
         mae_med_weibull = NA_real_,
         n_seasons       = 0L,
         failure_reason  = if (is.null(wf_error)) NA_character_ else wf_error
-      )
-    } else {
-      base_df <- wf$params_df |>
-        dplyr::left_join(true_peaks, by = "season") |>
-        dplyr::filter(!is.na(true_peak_weekF), eval_week <= true_peak_weekF) |>
-        dplyr::mutate(
-          t      = eval_week - iWeek_true,
-          w_unif = 1,
-          w_exp  = exp(-(0.1 * t)^1),
-          w_weib = exp(-(0.1 * t)^2)
-        )
-
-      # Score using weighted mean peak
-      score_mean <- base_df |>
-        dplyr::filter(!is.na(t_peak)) |>
-        dplyr::mutate(
-          error = abs((if (timing_mode_cache == "fractional") {
-            t_peak - as.numeric(anchorWeek) + as.numeric(iWeek_hat)
-          } else {
-            round(t_peak - anchorWeek + iWeek_hat)
-          }) - true_peak_weekF)
-        )
-
-      # Score using weighted median peak
-      score_med <- base_df |>
-        dplyr::filter(!is.na(t_peak_median)) |>
-        dplyr::mutate(
-          error = abs((if (timing_mode_cache == "fractional") {
-            t_peak_median - as.numeric(anchorWeek) + as.numeric(iWeek_hat)
-          } else {
-            round(t_peak_median - anchorWeek + as.numeric(iWeek_hat))
-          }) - true_peak_weekF)
-        )
-
-      row <- tibble::tibble(
-        spec_id          = sid,
-        mae_uniform      = .weighted_mae(score_mean, "w_unif"),
-        mae_exp          = .weighted_mae(score_mean, "w_exp"),
-        mae_weibull      = .weighted_mae(score_mean, "w_weib"),
-        mae_med_uniform  = .weighted_mae(score_med, "w_unif"),
-        mae_med_exp      = .weighted_mae(score_med, "w_exp"),
-        mae_med_weibull  = .weighted_mae(score_med, "w_weib"),
-        n_seasons        = dplyr::n_distinct(base_df$season),
-        failure_reason   = NA_character_
-      )
+      ))
     }
+    base_df <- wf$params_df |>
+      dplyr::left_join(true_peaks, by = "season") |>
+      dplyr::filter(!is.na(true_peak_weekF), eval_week <= true_peak_weekF) |>
+      dplyr::mutate(
+        t      = eval_week - iWeek_true,
+        w_unif = 1,
+        w_exp  = exp(-(0.1 * t)^1),
+        w_weib = exp(-(0.1 * t)^2)
+      )
 
-    score_rows <- c(score_rows, list(row))
-    done_ids <- c(done_ids, sid)
+    score_mean <- base_df |>
+      dplyr::filter(!is.na(t_peak)) |>
+      dplyr::mutate(
+        error = abs((if (timing_mode_cache == "fractional") {
+          t_peak - as.numeric(anchorWeek) + as.numeric(iWeek_hat)
+        } else {
+          round(t_peak - anchorWeek + iWeek_hat)
+        }) - true_peak_weekF)
+      )
 
-    # Checkpoint after every spec
-    all_scores <- dplyr::bind_rows(score_rows)
+    score_med <- base_df |>
+      dplyr::filter(!is.na(t_peak_median)) |>
+      dplyr::mutate(
+        error = abs((if (timing_mode_cache == "fractional") {
+          t_peak_median - as.numeric(anchorWeek) + as.numeric(iWeek_hat)
+        } else {
+          round(t_peak_median - anchorWeek + as.numeric(iWeek_hat))
+        }) - true_peak_weekF)
+      )
+
+    tibble::tibble(
+      spec_id          = sid,
+      mae_uniform      = .weighted_mae(score_mean, "w_unif"),
+      mae_exp          = .weighted_mae(score_mean, "w_exp"),
+      mae_weibull      = .weighted_mae(score_mean, "w_weib"),
+      mae_med_uniform  = .weighted_mae(score_med, "w_unif"),
+      mae_med_exp      = .weighted_mae(score_med, "w_exp"),
+      mae_med_weibull  = .weighted_mae(score_med, "w_weib"),
+      n_seasons        = dplyr::n_distinct(base_df$season),
+      failure_reason   = NA_character_
+    )
+  }
+
+  checkpoint_tuning <- function() {
     saveRDS(list(
       schema = "page_m1_tuning_checkpoint",
       version = 1L,
       identity = cache_identity,
-      scores = all_scores
+      scores = dplyr::bind_rows(score_rows)
     ), results_cache)
+  }
 
+  # Group pending specs by alignment signature. All behavior-affecting inputs
+  # except the softmax reweighting axes define the signature.
+  pending <- grid$spec_id[!grid$spec_id %in% done_ids]
+  groups <- list()
+  group_order <- character(0)
+  for (sid in pending) {
+    args <- build_wf_args(spec_row(sid))
+    sig_names <- setdiff(names(args), c(non_behavior_cols, weight_cols))
+    sig <- digest::digest(args[sig_names], algo = "sha256")
+    if (is.null(groups[[sig]])) {
+      groups[[sig]] <- character(0)
+      group_order <- c(group_order, sig)
+    }
+    groups[[sig]] <- c(groups[[sig]], sid)
+  }
+
+  report_result <- function(row) {
     if (verbose) {
       message(sprintf(
         "  -> mae_weibull = %.3f  mae_med_weibull = %.3f   [%d / %d done]",
         row$mae_weibull, row$mae_med_weibull, length(done_ids), n_specs
       ))
+    }
+  }
+
+  for (sig in group_order) {
+    sids <- groups[[sig]]
+    for (sid in sids) {
+      if (verbose) {
+        spec <- spec_row(sid)
+        spec_str <- paste(tune_cols, "=",
+          vapply(tune_cols, function(c) as.character(spec[[c]]), character(1)),
+          collapse = ", "
+        )
+        message(sprintf(
+          "[tune_m1] Spec %s  %s",
+          sid, spec_str
+        ))
+      }
+    }
+
+    # Reuse applies only to the multi-template ensemble; the single-template
+    # path ignores the weighting axes, so run it per spec as before.
+    use_multi <- build_wf_args(spec_row(sids[[1L]]))$use_multi_template %||% TRUE
+    if (length(sids) == 1L || !isTRUE(use_multi)) {
+      for (sid in sids) {
+        wf_args <- build_wf_args(spec_row(sid))
+        wf_error <- NULL
+        wf <- tryCatch(
+          do.call(loso_walkforward, wf_args),
+          error = function(e) {
+            wf_error <<- conditionMessage(e)
+            NULL
+          }
+        )
+        if (!is.null(wf_error)) {
+          msg <- paste0("M1 tuning specification ", sid, " failed: ", wf_error)
+          if (isTRUE(fail_fast)) stop(msg, call. = FALSE)
+          warning(msg, call. = FALSE)
+        }
+        row <- score_spec(wf, wf_error, sid)
+        score_rows <- c(score_rows, list(row))
+        done_ids <- c(done_ids, sid)
+        checkpoint_tuning()
+        report_result(row)
+      }
+      next
+    }
+
+    # Shared-alignment group: build once, reweight per spec.
+    base <- build_wf_args(spec_row(sids[[1L]]))
+    weight_sets <- list()
+    for (sid in sids) {
+      a <- build_wf_args(spec_row(sid))
+      weight_sets[[sid]] <- list(
+        slope_weight       = a$slope_weight %||% 8.0,
+        temperature        = a$multi_temperature %||% 0.25,
+        slope_window       = a$slope_window %||% 6L,
+        dynamic_temp       = a$dynamic_temp %||% FALSE,
+        dynamic_temp_pivot = a$dynamic_temp_pivot %||% 10L
+      )
+    }
+    base <- base[setdiff(names(base), c(weight_cols, "checkpoint_file", "checkpoint_identity"))]
+    checkpoint_files <- stats::setNames(
+      lapply(sids, function(sid) file.path(checkpoint_dir, paste0("ckpt_", sid, ".rds"))),
+      sids
+    )
+    checkpoint_identities <- stats::setNames(
+      lapply(sids, function(sid) {
+        spec <- spec_row(sid)
+        list(
+          schema = "page_m1_walkforward_checkpoint",
+          version = 1L,
+          tuning = cache_identity,
+          spec = spec[, setdiff(names(spec), "spec_id"), drop = FALSE]
+        )
+      }),
+      sids
+    )
+
+    wf_error <- NULL
+    wf_all <- tryCatch(
+      do.call(
+        loso_walkforward_weights,
+        c(base, list(
+          weight_sets = weight_sets,
+          checkpoint_files = checkpoint_files,
+          checkpoint_identities = checkpoint_identities
+        ))
+      ),
+      error = function(e) {
+        wf_error <<- conditionMessage(e)
+        NULL
+      }
+    )
+    if (!is.null(wf_error)) {
+      msg <- paste0(
+        "M1 tuning specifications ", paste(sids, collapse = ", "),
+        " (shared alignment group) failed: ", wf_error
+      )
+      if (isTRUE(fail_fast)) stop(msg, call. = FALSE)
+      warning(msg, call. = FALSE)
+    }
+
+    for (sid in sids) {
+      wf <- if (!is.null(wf_all)) wf_all[[sid]] else NULL
+      row <- score_spec(wf, wf_error, sid)
+      score_rows <- c(score_rows, list(row))
+      done_ids <- c(done_ids, sid)
+      checkpoint_tuning()
+      report_result(row)
     }
   }
 

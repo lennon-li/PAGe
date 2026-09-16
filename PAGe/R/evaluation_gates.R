@@ -659,6 +659,15 @@ race_m2_candidates <- function(grid,
 
 #' Replay a season that was unseen by a pre-trained kit
 #'
+#' The runner must return an independent evaluation schedule in
+#' `params_df$eval_week` (and optionally `params_df$h`). When the replay emits
+#' forecasts, their forecast keys are validated against that schedule: each
+#' origin/horizon pair must be unique, `target_weekF` must equal
+#' `origin + horizon`, and the emitted set must match the schedule exactly.
+#' Missing, duplicated, unmatched, or inconsistent keys, and any prediction row
+#' from a season other than `season`, raise an error rather than silently
+#' scoring a partial replay.
+#'
 #' @param kit Pre-trained deployment kit.
 #' @param allD Multi-season surveillance data.
 #' @param season Holdout season to replay.
@@ -706,9 +715,11 @@ replay_season_holdout <- function(kit,
   }
   replay <- do.call(runner, runner_args)
   all_predictions <- .standardize_replay_predictions(replay, current_data, season,
-    keep_unscored = TRUE)
+    keep_unscored = TRUE
+  )
   expected_keys <- .replay_expected_forecast_keys(
-    replay, include_target = "target_weekF" %in% names(all_predictions)
+    replay,
+    include_target = "target_weekF" %in% names(all_predictions)
   )
   if (nrow(all_predictions) && is.null(expected_keys)) {
     stop(
@@ -726,10 +737,16 @@ replay_season_holdout <- function(kit,
       actual_keys, expected_keys, "Replay predictions", "M1 evaluation schedule"
     )
   }
-  p_obs <- if ("p_obs" %in% names(all_predictions)) all_predictions$p_obs else
+  p_obs <- if ("p_obs" %in% names(all_predictions)) {
+    all_predictions$p_obs
+  } else {
     all_predictions$y_lead / all_predictions$N_lead
-  weights <- if ("N_lead" %in% names(all_predictions)) all_predictions$N_lead else
+  }
+  weights <- if ("N_lead" %in% names(all_predictions)) {
+    all_predictions$N_lead
+  } else {
     rep(1, nrow(all_predictions))
+  }
   scored <- is.finite(all_predictions$p_hat) & is.finite(p_obs) &
     is.finite(weights) & weights > 0
   predictions <- all_predictions[scored, , drop = FALSE]
@@ -742,17 +759,26 @@ replay_season_holdout <- function(kit,
   ignition_week <- if (is.finite(runtime_ignition)) as.numeric(runtime_ignition) else NA_real_
   ignition_status <- replay$ign_out$status %||% replay$ign_out$ignition_status %||%
     if (is.finite(ignition_week)) "locked" else "not_available"
-  failure_code <- if (nrow(predictions)) NA_character_ else if (!is.finite(ignition_week))
-    "ignition_unavailable" else "no_scorable_forecasts"
+  failure_code <- if (nrow(predictions)) {
+    NA_character_
+  } else if (!is.finite(ignition_week)) {
+    "ignition_unavailable"
+  } else {
+    "no_scorable_forecasts"
+  }
   list(
     season = season,
     status = if (nrow(predictions)) "unseen_replay_complete" else "unseen_replay_failed",
     failure_code = failure_code,
     predictions = predictions,
-    forecast_ledger = .replay_forecast_ledger(all_predictions, current_data, season,
-      ignition_week),
-    stages = list(m0 = replay$ign_out, m1_parameters = replay$params_df,
-      m1_curves = replay$m1_curves, m2_predictions = replay$m2_preds),
+    forecast_ledger = .replay_forecast_ledger(
+      all_predictions, current_data, season,
+      ignition_week
+    ),
+    stages = list(
+      m0 = replay$ign_out, m1_parameters = replay$params_df,
+      m1_curves = replay$m1_curves, m2_predictions = replay$m2_preds
+    ),
     interval_interpretation = "conditional_fitted_mean",
     metrics = if (nrow(predictions)) summarize_forecast_metrics(predictions) else NULL,
     diagnostics = if (nrow(predictions)) summarize_replay_diagnostics(predictions) else NULL,
@@ -810,7 +836,7 @@ replay_season_holdout <- function(kit,
 }
 
 .standardize_replay_predictions <- function(replay, current_data, season,
-                                           keep_unscored = FALSE) {
+                                            keep_unscored = FALSE) {
   standardized <- replay$predictions
   metric_columns <- c("p_hat", "lead", "t_since")
   observed_columns <- c("p_obs", "y_lead", "N_lead")
@@ -861,8 +887,10 @@ replay_season_holdout <- function(kit,
   raw <- replay$m2_preds
   required <- c("eval_week", "h", "target_weekF", "m2_p")
   if (is.data.frame(raw) && !nrow(raw)) {
-    raw <- data.frame(eval_week = integer(), h = integer(),
-      target_weekF = integer(), m2_p = numeric())
+    raw <- data.frame(
+      eval_week = integer(), h = integer(),
+      target_weekF = integer(), m2_p = numeric()
+    )
   }
   if (!is.data.frame(raw) || !all(required %in% names(raw))) {
     stop(
@@ -871,7 +899,8 @@ replay_season_holdout <- function(kit,
     )
   }
   .assert_unique_forecast_keys(
-    raw$eval_week, raw$h, "Replay m2_preds", target = raw$target_weekF
+    raw$eval_week, raw$h, "Replay m2_preds",
+    target = raw$target_weekF
   )
   .assert_forecast_target_consistency(
     raw$eval_week, raw$h, raw$target_weekF, "Replay m2_preds"
@@ -909,12 +938,16 @@ replay_season_holdout <- function(kit,
     y_lead = positives,
     N_lead = n_trials
   )
-  optional <- c(p_lo = "m2_lo", p_hi = "m2_hi", m2_eta_raw = "m2_eta_raw",
-    forecast_action = "forecast_action")
+  optional <- c(
+    p_lo = "m2_lo", p_hi = "m2_hi", m2_eta_raw = "m2_eta_raw",
+    forecast_action = "forecast_action"
+  )
   for (column in names(optional)) {
     if (optional[[column]] %in% names(raw)) out[[column]] <- raw[[optional[[column]]]]
   }
-  if (isTRUE(keep_unscored)) return(out)
+  if (isTRUE(keep_unscored)) {
+    return(out)
+  }
   out[is.finite(out$p_hat) & is.finite(out$p_obs) &
     is.finite(out$N_lead) & out$N_lead > 0, , drop = FALSE]
 }
@@ -947,8 +980,10 @@ replay_season_holdout <- function(kit,
 }
 
 .replay_forecast_ledger <- function(predictions, current_data, season, ignition_week) {
-  ledger <- expand.grid(weekF = seq.int(min(current_data$weekF), max(current_data$weekF)),
-    lead = 1:2)
+  ledger <- expand.grid(
+    weekF = seq.int(min(current_data$weekF), max(current_data$weekF)),
+    lead = 1:2
+  )
   ledger <- ledger[order(ledger$weekF, ledger$lead), , drop = FALSE]
   ledger$season <- season
   ledger$target_weekF <- ledger$weekF + ledger$lead
@@ -971,15 +1006,34 @@ replay_season_holdout <- function(kit,
   ledger$N_lead <- current_data$N[target]
   ledger$p_obs <- ledger$y_lead / ledger$N_lead
   ledger$p_hat <- predictions$p_hat[index]
-  for (column in intersect(c("p_lo", "p_hi", "m2_eta_raw", "forecast_action"),
-    names(predictions))) ledger[[column]] <- predictions[[column]][index]
+  for (column in intersect(
+    c(
+      "p_lo", "p_hi", "m2_eta_raw", "forecast_action", "m1_p", "m1_logit",
+      "ignition_weekF", "observed_peak_weekF"
+    ),
+    names(predictions)
+  )) {
+    ledger[[column]] <- predictions[[column]][index]
+  }
   ledger$emitted <- !is.na(index)
   ledger$target_available <- is.finite(ledger$p_obs) &
     is.finite(ledger$N_lead) & ledger$N_lead > 0
   ledger$forecast_status <- ifelse(!ledger$emitted, "not_emitted",
     ifelse(!is.finite(ledger$p_hat), "prediction_failed",
-      ifelse(!ledger$target_available, "target_unavailable", "scored")))
+      ifelse(!ledger$target_available, "target_unavailable", "scored")
+    )
+  )
   ledger$scorable <- ledger$forecast_status == "scored"
+  ledger$forecast_available <- ledger$scorable
+  ledger$unavailable_reason <- ifelse(
+    ledger$forecast_available, NA_character_,
+    ifelse(ledger$forecast_status == "not_emitted", "forecast_not_emitted",
+      ifelse(ledger$forecast_status == "prediction_failed",
+        "forecast_prediction_failed",
+        "target_unavailable"
+      )
+    )
+  )
   rownames(ledger) <- NULL
   ledger
 }

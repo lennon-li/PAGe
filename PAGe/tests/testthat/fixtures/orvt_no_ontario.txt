@@ -1,0 +1,3 @@
+Public health unit,Virus,Week start date,Week end date,Respiratory season,Surveillance week,# of positive tests,Total # of tests,Percent positivity (%)
+A,Influenza A,29JUN2025,05JUL2025,2025-26,27,2,20,10
+B,Influenza A,29JUN2025,05JUL2025,2025-26,27,3,30,10

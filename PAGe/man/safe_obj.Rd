@@ -4,7 +4,7 @@
 \alias{safe_obj}
 \title{Safe penalised NLL objective for tau/delta optimisation}
 \usage{
-safe_obj(par, t, y, n, gfun, allow_scale, lam, w)
+safe_obj(par, t, y, n, gfun, allow_scale, lam, w, min_support = 4L)
 }
 \arguments{
 \item{par}{Numeric vector \code{c(tau, a, b, delta)} when

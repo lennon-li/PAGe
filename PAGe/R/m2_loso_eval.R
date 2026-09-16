@@ -24,8 +24,12 @@ assert_loso_test_season_absent <- function(test_season,
                                            label_name = "labels",
                                            action = c("stop", "warn")) {
   action <- match.arg(action)
-  if (is.null(labels) || is.null(test_season)) return(invisible(TRUE))
-  if (!test_season %in% names(labels)) return(invisible(TRUE))
+  if (is.null(labels) || is.null(test_season)) {
+    return(invisible(TRUE))
+  }
+  if (!test_season %in% names(labels)) {
+    return(invisible(TRUE))
+  }
   msg <- paste0(
     "LOSO label safety: test season '", test_season, "' is present in `",
     label_name, "`. Held-out seasons must not appear in supplied labels to ",
@@ -139,7 +143,8 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
   test_s <- fold$test_season
   assert_loso_test_season_absent(test_s, manual_labels_train, "manual_labels_train")
   assert_loso_test_season_absent(test_s, manual_labels_test, "manual_labels_test",
-    action = "warn")
+    action = "warn"
+  )
   na_scores <- tibble::tibble(
     season = test_s, n = NA_integer_,
     mean_nll = NA_real_, bernoulli_nll = NA_real_,
@@ -235,6 +240,7 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
     t_since_v <- as.numeric(ew - iWeek_used)
 
     obs_to_ew <- dplyr::filter(test_allD, .data$weekF <= ew)
+    .page_assert_prefix(obs_to_ew, ew, label = "M2 replay input")
 
     # Fix B: prospective peak detection -- reset bias on first post-peak week
     p_to_ew <- obs_to_ew$y / pmax(obs_to_ew$N, 1L)
@@ -377,7 +383,11 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
         p_hat = pr$m2_p,
         m2_eta_raw = pr$m2_eta_raw,
         forecast_action = if (identical(correction$post_peak_action, "use_m1") &&
-          identical(m1_state_now, "post_peak")) "post_peak_m1" else "gam",
+          identical(m1_state_now, "post_peak")) {
+          "post_peak_m1"
+        } else {
+          "gam"
+        },
         p_obs = y_lead / max(N_lead, 1L),
         y_lead = y_lead,
         N_lead = N_lead,
@@ -499,7 +509,8 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
   test_s <- fold$test_season
   assert_loso_test_season_absent(test_s, manual_labels_train, "manual_labels_train")
   assert_loso_test_season_absent(test_s, manual_labels_test, "manual_labels_test",
-    action = "warn")
+    action = "warn"
+  )
   na_scores <- tibble::tibble(
     season = test_s, n = NA_integer_,
     mean_nll = NA_real_, brier = NA_real_, rmse_p = NA_real_
@@ -604,6 +615,7 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
       }
     }
     obs_to_ew <- dplyr::filter(test_allD, .data$weekF <= ew)
+    .page_assert_prefix(obs_to_ew, ew, label = "M2 replay input")
     if (nrow(obs_to_ew) < 2L) next
 
     # Combine M1 train + test predictions for refit: the current-season rows

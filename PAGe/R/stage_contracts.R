@@ -432,7 +432,9 @@ season_selection.default <- function(x, ...) {
 }
 
 .assert_forecast_target_consistency <- function(origin, horizon, target, label) {
-  if (is.null(target)) return(invisible(TRUE))
+  if (is.null(target)) {
+    return(invisible(TRUE))
+  }
   origin_num <- suppressWarnings(as.numeric(.forecast_key_column(origin)))
   horizon_num <- suppressWarnings(as.numeric(.forecast_key_column(horizon)))
   target_num <- suppressWarnings(as.numeric(.forecast_key_column(target)))
@@ -831,14 +833,15 @@ inspect_tuning_boundaries <- function(x,
                                       warn = TRUE,
                                       null_axes = NULL,
                                       hard_caps = NULL,
-                                       min_nll_gain = NULL) {
+                                      min_nll_gain = NULL) {
   stage <- toupper(match.arg(stage))
   if (stage == "M2" && inherits(x, "page_m2_subset_tuning")) {
     if (is.null(min_nll_gain)) {
       min_nll_gain <- x$min_nll_gain %||% default_m2_nll_gain_caps()
     }
     report <- .m2_subset_boundary_report(
-      x, min_nll_gain = min_nll_gain, hard_caps = hard_caps
+      x,
+      min_nll_gain = min_nll_gain, hard_caps = hard_caps
     )
     unresolved <- report[report$decision == "expand_required", , drop = FALSE]
     if (isTRUE(warn) && nrow(unresolved)) {
@@ -1174,14 +1177,11 @@ select_m1_candidate <- function(x, min_gain = 0.05, prefer_simpler = TRUE,
   if (length(values) < 2L) {
     return(1)
   }
-  adjacent <- if (edge == "lower") {
-    values[2L] - values[1L]
-  } else {
-    values[length(values)] - values[length(values) - 1L]
-  }
-  # Boundary expansion is exploratory; halve the observed spacing so a new
-  # point does not jump past a narrow optimum. Explicit `steps` are unchanged.
-  adjacent / 2
+  # Preserve the pre-Phase-1 baseline: use half the widest tested spacing.
+  # Explicit `steps` are unchanged.  The current tuning playbook describes
+  # adjacent spacing; this governed helper intentionally follows the binding
+  # baseline until that protocol conflict is resolved.
+  max(diff(values)) / 2
 }
 
 .m1_integer_axes <- function() c("k_ref", "slope_window")
@@ -1486,7 +1486,7 @@ expand_tuning_grid <- function(x,
                                max_specs = NULL,
                                n_weeks = 52L,
                                data = NULL,
-                                m1_k_ref_bounds = .m1_k_ref_bounds()) {
+                               m1_k_ref_bounds = .m1_k_ref_bounds()) {
   stage <- toupper(match.arg(stage))
   if (stage == "M2" && inherits(x, "page_m2_subset_tuning")) {
     return(.m2_subset_expand_grid(x, max_specs = max_specs, steps = steps))
@@ -1905,16 +1905,35 @@ validate_m1_tuning <- function(x,
 #' @param m0 A frozen \code{page_m0_fit}.
 #' @param m1 A frozen \code{page_m1_fit}.
 #' @param grid M2 candidate grid.
-#' @param family Model family. The default \code{"legacy"} preserves the
-#'   existing Stage-2 GAM; \code{"offset_subset_v1"} enables the governed
-#'   short-horizon offset correction pathway.
+#' @param family Model family. The default \code{"offset_subset_v1"} is the
+#'   governed short-horizon offset correction pathway. \code{"legacy"} is
+#'   research/compatibility-only.
+#' @param allow_legacy Logical; explicitly allow the legacy research path.
 #' @param ... Additional arguments passed to \code{build_m2()}.
 #'
 #' @return A governed \code{page_m2_tuning} result.
 #' @export
 tune_m2 <- function(data, selection, m0, m1, grid,
-                    family = c("legacy", "offset_subset_v1"), ...) {
+                    family = c("offset_subset_v1", "legacy"),
+                    allow_legacy = FALSE, ...) {
   family <- match.arg(family)
+  if (!is.logical(allow_legacy) || length(allow_legacy) != 1L ||
+    is.na(allow_legacy)) {
+    stop("allow_legacy must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (identical(family, "legacy") && !isTRUE(allow_legacy)) {
+    stop(
+      "Legacy M2 tuning is research/compatibility-only; set ",
+      "allow_legacy = TRUE explicitly.",
+      call. = FALSE
+    )
+  }
+  if (identical(family, "legacy")) {
+    warning(
+      "Legacy M2 tuning uses training features that are not season-held-out.",
+      call. = FALSE
+    )
+  }
   if (identical(family, m2_subset_family())) {
     .require_frozen_stage(m0, "m0")
     .require_frozen_stage(m1, "m1")
@@ -1948,6 +1967,11 @@ tune_m2 <- function(data, selection, m0, m1, grid,
   )
   out$selection <- selection
   out$data_id <- .stage_training_data_id(training_data)
+  out$legacy_compatibility <- list(
+    allow_legacy = isTRUE(allow_legacy),
+    training_features_season_held_out = FALSE,
+    warning = "Legacy M2 training features are not season-held-out."
+  )
   class(out) <- c("page_m2_tuning", "list")
   out
 }
@@ -1963,16 +1987,32 @@ tune_m2 <- function(data, selection, m0, m1, grid,
 #' @param m1 A frozen \code{page_m1_fit}.
 #' @param config Named list of M2 specification parameters.
 #' @param family Optional explicit model-family discriminator. When omitted it
-#'   is read from \code{config$family}; legacy behavior remains the default.
+#'   is read from \code{config$family}; the governed subset family is the
+#'   default.
+#' @param allow_legacy Logical; explicitly allow the legacy research path.
 #' @param ... Reserved.
 #'
 #' @return A \code{page_m2_fit} list in \code{draft} state.
 #' @export
-fit_m2 <- function(data, selection, m0, m1, config, family = NULL, ...) {
-  family <- family %||% config$family %||% "legacy"
+fit_m2 <- function(data, selection, m0, m1, config, family = NULL,
+                   allow_legacy = FALSE, ...) {
+  family <- family %||% config$family %||% m2_subset_family()
   if (!is.character(family) || length(family) != 1L ||
     !family %in% c("legacy", m2_subset_family())) {
     stop("Unsupported M2 model family: `", family, ".", call. = FALSE)
+  }
+  if (identical(family, "legacy") && !isTRUE(allow_legacy)) {
+    stop(
+      "Legacy M2 fitting is research/compatibility-only; set ",
+      "allow_legacy = TRUE explicitly.",
+      call. = FALSE
+    )
+  }
+  if (identical(family, "legacy")) {
+    warning(
+      "Legacy M2 fitting uses training features that are not season-held-out.",
+      call. = FALSE
+    )
   }
   if (identical(family, m2_subset_family())) {
     .require_frozen_stage(m0, "m0")
@@ -2008,6 +2048,11 @@ fit_m2 <- function(data, selection, m0, m1, config, family = NULL, ...) {
     exclude = character(0),
     ...
   )
+  payload$legacy_compatibility <- list(
+    allow_legacy = isTRUE(allow_legacy),
+    training_features_season_held_out = FALSE,
+    warning = "Legacy M2 training features are not season-held-out."
+  )
   upstream_ids <- list(m0 = m0$artifact_id, m1 = m1$artifact_id)
   .new_stage_fit(
     stage = "m2",
@@ -2032,6 +2077,14 @@ freeze_m2 <- function(fit, tuning = NULL, ...) {
     fit$family %||% fit$config$family,
     m2_subset_family()
   )
+  if (!isTRUE(is_subset_fit) &&
+    inherits(fit, "page_m2_fit") &&
+    !isTRUE(fit$legacy_compatibility$allow_legacy)) {
+    stop(
+      "Governed legacy M2 fits require recorded allow_legacy = TRUE.",
+      call. = FALSE
+    )
+  }
   if (isTRUE(is_subset_fit)) {
     if (!is.null(tuning) && !inherits(tuning, "page_m2_subset_tuning")) {
       stop(
@@ -2046,6 +2099,12 @@ freeze_m2 <- function(fit, tuning = NULL, ...) {
     return(.freeze_stage(fit, NULL, "m2"))
   }
   if (inherits(tuning, "page_m2_tuning") && !is.null(tuning$selection)) {
+    if (!isTRUE(tuning$legacy_compatibility$allow_legacy)) {
+      stop(
+        "Governed legacy M2 tuning requires recorded allow_legacy = TRUE.",
+        call. = FALSE
+      )
+    }
     tuning <- validate_m2_tuning(
       tuning,
       check_boundaries = TRUE,

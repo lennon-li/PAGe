@@ -12,6 +12,7 @@ nested_season_evaluation(
   checkpoint_dir = NULL,
   resume = TRUE,
   timing_labels = NULL,
+  gate_nesting = c("full", "conditional"),
   ...
 )
 }
@@ -29,10 +30,14 @@ nested_season_evaluation(
 \item{checkpoint_dir}{Optional parent checkpoint directory.}
 
 \item{resume}{Reuse a completed `outer_fold_result.rds` when its recorded
-holdout matches the requested fold.}
+holdout matches the requested fold. Legacy results without shadow fields
+load with shadow status `absent`; they are not refit to add shadow evidence.}
 
 \item{timing_labels}{Optional timing-v2 label object or list of objects;
 passed to each outer fold after that fold's holdout is isolated.}
+
+\item{gate_nesting}{Inner-gate nesting depth forwarded to every outer fold.
+See `train_outer_fold()`; defaults to `"full"`.}
 
 \item{...}{Additional arguments passed to `run_outer_fold()`.}
 }
@@ -45,5 +50,7 @@ A `page_nested_season_evaluation` containing all fold results,
 Rotates every requested season through the outer holdout. Each outer fold
 independently performs inner leave-one-season-out tuning, boundary
 expansion, M2-versus-M1 adoption, frozen-kit fitting, and strict weekly
-replay. Completed fold artifacts may be reused when `resume = TRUE`.
+replay. Completed fold artifacts may be reused when `resume = TRUE`. Every
+fold replay must pass the forecast-key completeness and consistency checks
+before its rows contribute to the aggregate.
 }

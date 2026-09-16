@@ -276,6 +276,7 @@ compact_m0_artifact_for_m1 <- function(m0) {
 #' @param k_deriv Integer. GAM basis functions for derivative smoothing (default
 #'   \code{10L}).
 #'
+#' @param peak_weight_boost,peak_weight_decay Derivative smoothing rise boost and decay.
 #' @return A list with \code{aligned} (aligned data frame), \code{seasons_used},
 #'   \code{manual_labels}, \code{flag_args}, and \code{best_params}.
 #'
@@ -286,7 +287,9 @@ build_m0 <- function(allD,
                      flag_args = .default_flag_args(),
                      best_params = .default_m0_params(),
                      k_deriv = 10L,
-                     timing_truth = NULL) {
+                     timing_truth = NULL,
+                     peak_weight_boost = 1,
+                     peak_weight_decay = 0.3) {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
   if (!requireNamespace("purrr", quietly = TRUE)) stop("Need 'purrr'.")
 
@@ -297,7 +300,15 @@ build_m0 <- function(allD,
   }
   seasons_used <- sort(unique(dat$season))
 
-  res_deriv <- estimateDerivs(dat, k = as.integer(k_deriv))
+  preprocessing <- list(
+    k_deriv = as.integer(k_deriv),
+    peak_weight_boost = peak_weight_boost, peak_weight_decay = peak_weight_decay
+  )
+  res_deriv <- estimateDerivs(dat,
+    k = preprocessing$k_deriv,
+    peak_weight_boost = peak_weight_boost, peak_weight_decay = peak_weight_decay,
+    ignition_weeks = manual_labels
+  )
   outs <- res_deriv$data |>
     dplyr::group_by(.data$season) |>
     dplyr::group_split(.keep = TRUE) |>
@@ -322,20 +333,21 @@ build_m0 <- function(allD,
     )
     aligned$season <- as.character(aligned$season)
     aligned$iWeek <- unname(targets[aligned$season])
-    if ("nW_true" %in% names(aligned)) {
-      n_weeks <- as.numeric(aligned$nW_true)
-    } else {
-      n_weeks <- ave(aligned$weekF, aligned$season, FUN = function(x) max(x, na.rm = TRUE))
-    }
-    anchor <- stats::median(targets, na.rm = TRUE)
+    n_weeks <- .season_calendar_weeks(aligned)
+    if (any(!is.finite(aligned$iWeek))) stop("Missing training-season timing target.", call. = FALSE)
+    anchor <- stats::median(targets[seasons_used], na.rm = TRUE)
     aligned$phase <- as.integer(aligned$weekF >= aligned$iWeek)
-    aligned$newWeek <- ((aligned$weekF - aligned$iWeek + anchor - 1) %% n_weeks) + 1
+    aligned$newWeek <- .page_shift_week(aligned$weekF, aligned$iWeek, anchor)
+    aligned$alignment_in_domain <- aligned$newWeek >= 1 & aligned$newWeek <= 52
+    aligned$alignment_out_of_domain <- !aligned$alignment_in_domain
     attr(aligned, "anchorWeek") <- anchor
     attr(aligned, "ignD") <- unique(aligned[, c("season", "iWeek"), drop = FALSE])
   }
 
+  attr(aligned, "preprocessing") <- preprocessing
   list(
     aligned       = aligned,
+    preprocessing = preprocessing,
     seasons_used  = seasons_used,
     manual_labels = manual_labels,
     flag_args     = flag_args,
@@ -472,6 +484,14 @@ tune_m0 <- function(allD,
 # M1
 # ============================================================
 
+.m1_preprocessing <- function(params = list()) {
+  list(
+    k_deriv = as.integer(params$k_deriv %||% 20L),
+    peak_weight_boost = params$peak_weight_boost %||% 3,
+    peak_weight_decay = params$peak_weight_decay %||% 0.3
+  )
+}
+
 #' Build M1 reference curve and alignment hyperparameters
 #'
 #' Fits the epidemic reference curve via \code{estimateRef()} and learns
@@ -533,8 +553,17 @@ build_m1 <- function(allD,
     }
   }
 
+  preprocessing <- .m1_preprocessing(m1_params)
+  # Match the legacy label coordinate used by tune_m1; fractional targets are
+  # already in the common numeric coordinate.
+  manual_labels <- if (timing_mode == "legacy") manual_labels - 1L else manual_labels
   seasons_used <- sort(unique(as.character(dat$season)))
+  aligned_preprocessing <- attr(m0_handoff$aligned, "preprocessing")
+  aligned_labels <- attr(m0_handoff$aligned, "m1_manual_labels")
   can_reuse_m0 <- !is.null(m0_handoff$aligned) &&
+    !is.null(aligned_preprocessing) &&
+    identical(aligned_preprocessing, preprocessing) &&
+    (is.null(aligned_labels) || identical(aligned_labels, manual_labels)) &&
     !is.null(m0_handoff$seasons_used) &&
     setequal(m0_handoff$seasons_used, seasons_used) &&
     (is.null(m0_handoff$data_id) ||
@@ -546,16 +575,19 @@ build_m1 <- function(allD,
       exclude = character(0),
       manual_labels = manual_labels,
       flag_args = flag_args,
-      timing_truth = timing_truth
+      timing_truth = timing_truth,
+      k_deriv = preprocessing$k_deriv,
+      peak_weight_boost = preprocessing$peak_weight_boost,
+      peak_weight_decay = preprocessing$peak_weight_decay
     )$aligned
   }
 
   ref <- estimateRef(
     alignedD = aligned_train,
     exSeason = character(0),
-    k        = as.integer(m1_params$k_ref %||% 25L),
-    n_weeks  = 52L,
-    method   = m1_params$ref_method %||% "fs",
+    k = as.integer(m1_params$k_ref %||% 25L),
+    n_weeks = 52L,
+    method = m1_params$ref_method %||% "fs",
     timing_mode = timing_mode
   )
   hyper <- learn_alignment_hyperparams(ref$dat, ref$g_ref_fun)
@@ -625,6 +657,7 @@ tune_m1 <- function(allD,
     m0_handoff$manual_labels %||%
     .default_manual_labels()
   m1_params <- m1$m1_params %||% .default_m1_params()
+  preprocessing <- .m1_preprocessing(m1_params)
   params <- m0_handoff$best_params
   if (is.null(params)) {
     stop("tune_m1 requires m0 from tune_m0() (needs best_params).")
@@ -673,13 +706,14 @@ tune_m1 <- function(allD,
     verbose             = verbose,
     fail_fast           = TRUE,
     dynamic_temp        = isTRUE(m1_params$dynamic_temp),
-    k_deriv             = 20L,
+    k_deriv             = preprocessing$k_deriv,
     buffer_weeks        = 5L,
     curvature_ratio     = 1.0,
     align_peak_decay    = m1_params$peak_decay %||% 0.3,
     align_trough_weight = m1_params$trough_weight %||% 0.1,
-    peak_weight_boost   = 3,
-    peak_weight_decay   = 0.3,
+    peak_weight_boost   = preprocessing$peak_weight_boost,
+    peak_weight_decay   = preprocessing$peak_weight_decay,
+    flag_args           = m0_handoff$flag_args %||% .default_flag_args(),
     timing_mode         = timing_mode,
     timing_truth        = timing_truth
   )
@@ -1062,7 +1096,7 @@ build_m2 <- function(allD,
     # Validate/reject any supplied Phase-1 artifact before opening a worker
     # cluster. This keeps contract errors deterministic in constrained
     # environments and avoids spawning workers for a request that cannot run.
-    future::plan(future::multisession, workers = as.integer(max(1L, n_cores)))
+    .page_set_parallel_plan(as.integer(max(1L, n_cores)))
     m1_cache <- list()
     for (test_s in test_seasons) {
       if (verbose) message(sprintf("  [%s] build_fold + M1...", test_s))
@@ -1072,8 +1106,8 @@ build_m2 <- function(allD,
           exclude_seasons = exclude_all,
           k_ref = as.integer(m1_params$k_ref %||% 25L),
           ref_method = m1_params$ref_method %||% "fs",
-          manual_labels = manual_labels, verbose = FALSE
-          ,timing_mode = timing_mode, timing_truth = timing_truth
+          manual_labels = manual_labels, verbose = FALSE,
+          timing_mode = timing_mode, timing_truth = timing_truth
         ),
         error = function(e) {
           if (isTRUE(fail_fast)) {
@@ -1129,8 +1163,8 @@ build_m2 <- function(allD,
           slope_window = m1_params$slope_window %||% 6L,
           dynamic_temp = isTRUE(m1_params$dynamic_temp),
           dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L,
-          spread_method = m1_params$spread_method %||% "between"
-          ,timing_mode = timing_mode
+          spread_method = m1_params$spread_method %||% "between",
+          timing_mode = timing_mode
         ),
         error = function(e) {
           if (isTRUE(fail_fast)) {
@@ -1247,10 +1281,7 @@ build_m2 <- function(allD,
   if (length(todo_ids) > 0) {
     n_workers <- as.integer(max(1L, n_cores))
     todo_batches <- split(todo_ids, ceiling(seq_along(todo_ids) / n_workers))
-    future::plan(
-      future::multisession,
-      workers = n_workers
-    )
+    .page_set_parallel_plan(n_workers)
 
     for (bi in seq_along(todo_batches)) {
       batch <- todo_batches[[bi]]
@@ -1447,7 +1478,8 @@ train_m2 <- function(allD,
   }
   if (is.list(best_spec) && identical(best_spec$family, m2_subset_family())) {
     return(m2_subset_train(
-      allD_prod, m0 = m0, m1 = m1, config = best_spec,
+      allD_prod,
+      m0 = m0, m1 = m1, config = best_spec,
       timing_mode = timing_mode
     ))
   }
@@ -1482,7 +1514,9 @@ train_m2 <- function(allD,
   aligned_train <- alignIgnition(train_outs)
   if (timing_mode == "fractional" && !is.null(timing_truth)) {
     tt <- timing_truth[timing_truth$season %in% train_seas,
-      c("season", "ignition_target_weekF"), drop = FALSE]
+      c("season", "ignition_target_weekF"),
+      drop = FALSE
+    ]
     if (nrow(tt) != length(train_seas) || anyDuplicated(as.character(tt$season)) ||
       any(!is.finite(tt$ignition_target_weekF))) {
       stop("Fractional timing truth must contain one finite target per training season.", call. = FALSE)
@@ -1492,10 +1526,14 @@ train_m2 <- function(allD,
     aligned_train$iWeekF <- unname(target[aligned_train$season])
     aligned_train$iWeek <- aligned_train$iWeekF
     anchor <- stats::median(target, na.rm = TRUE)
-    n_w <- if ("nW_true" %in% names(aligned_train)) as.numeric(aligned_train$nW_true) else
-      ave(aligned_train$weekF, aligned_train$season, FUN = function(x) max(x, na.rm = TRUE))
+    n_w <- .season_calendar_weeks(aligned_train)
     aligned_train$phase <- as.integer(aligned_train$weekF >= aligned_train$iWeekF)
-    aligned_train$newWeek <- ((aligned_train$weekF - aligned_train$iWeekF + anchor - 1) %% n_w) + 1
+    aligned_train$newWeek <- .page_shift_week(
+      aligned_train$weekF, aligned_train$iWeekF, anchor
+    )
+    aligned_train$alignment_in_domain <- aligned_train$newWeek >= 1 &
+      aligned_train$newWeek <= 52
+    aligned_train$alignment_out_of_domain <- !aligned_train$alignment_in_domain
     attr(aligned_train, "anchorWeek") <- anchor
   }
 
@@ -1503,7 +1541,7 @@ train_m2 <- function(allD,
   if (verbose) message("[train_m2] M1 walk-forward predictions...")
   old_future_plan <- future::plan()
   on.exit(future::plan(old_future_plan), add = TRUE)
-  future::plan(future::multisession, workers = as.integer(max(1L, n_cores)))
+  .page_set_parallel_plan(as.integer(max(1L, n_cores)))
   m1_train_preds <- m1_walkforward_multi(
     allD = allD, ref = ref, hyper = hyper, params = params,
     seasons = train_seas,
@@ -1598,6 +1636,15 @@ assemble_kit <- function(m0,
     .require_frozen_stage(m0, "m0")
     .require_frozen_stage(m1, "m1")
     .require_frozen_stage(m2_model, "m2")
+    if (!identical(
+      m2_model$family %||% m2_model$config$family,
+      m2_subset_family()
+    ) && !isTRUE(m2_model$legacy_compatibility$allow_legacy)) {
+      stop(
+        "Governed legacy M2 assembly requires recorded allow_legacy = TRUE.",
+        call. = FALSE
+      )
+    }
     .check_selection_match(m0$selection, m1$selection)
     .check_selection_match(m0$selection, m2_model$selection)
     .check_upstream_identity(m1, m0, "m0")
@@ -1635,15 +1682,16 @@ assemble_kit <- function(m0,
   )
 
   m2_bundle <- list(
-    family           = if (subset_family) m2_subset_family() else NULL,
-    spec             = m2_model$spec,
-    fit              = m2_model$fit,
-    feature_ranges   = m2_model$feature_ranges,
-    m1_train_preds   = m2_model$m1_train_preds,
+    family = if (subset_family) m2_subset_family() else NULL,
+    spec = m2_model$spec,
+    fit = m2_model$fit,
+    feature_ranges = m2_model$feature_ranges,
+    m1_train_preds = m2_model$m1_train_preds,
     training_seasons = m2_model$training_seasons,
-    spec_version     = m2_model$spec_version %||% "assembled",
-    best_spec_id     = spec_identity,
-    correction_spec  = correction_spec
+    spec_version = m2_model$spec_version %||% "assembled",
+    best_spec_id = spec_identity,
+    correction_spec = correction_spec,
+    legacy_compatibility = m2_model$legacy_compatibility %||% NULL
   )
 
   if (!is.null(save_ref_path)) {

@@ -50,6 +50,8 @@ prepare_page_data <- function(data,
                               week_type = c("within_season", "mmwr"),
                               start_week = 27L,
                               start_year_col = NULL,
+                              date_col = NULL,
+                              mmwr_year_col = NULL,
                               tolerance = 1e-8) {
   if (!is.data.frame(data)) {
     stop("`data` must be a data frame.", call. = FALSE)
@@ -63,7 +65,9 @@ prepare_page_data <- function(data,
     total_col = total_col,
     negative_col = negative_col,
     positivity_col = positivity_col,
-    start_year_col = start_year_col
+    start_year_col = start_year_col,
+    date_col = date_col,
+    mmwr_year_col = mmwr_year_col
   )
   for (arg in names(column_args)) {
     value <- column_args[[arg]]
@@ -102,6 +106,14 @@ prepare_page_data <- function(data,
   }
   start_week <- as.integer(start_week)
 
+  if (!is.null(start_year_col) && !is.null(mmwr_year_col)) {
+    stop("Supply only one of `start_year_col` and `mmwr_year_col`.", call. = FALSE)
+  }
+  mmwr_year_col <- if (is.null(mmwr_year_col)) start_year_col else mmwr_year_col
+  if (week_type != "mmwr" && (!is.null(date_col) || !is.null(mmwr_year_col))) {
+    stop("`date_col` and `mmwr_year_col` require `week_type = \"mmwr\"`.", call. = FALSE)
+  }
+
   source_values <- function(column, label, allow_na = FALSE) {
     value <- suppressWarnings(as.numeric(as.character(data[[column]])))
     invalid <- if (allow_na) {
@@ -128,49 +140,51 @@ prepare_page_data <- function(data,
     stop("MMWR weeks mapped by `week_col` must be in [1, 53].", call. = FALSE)
   }
 
-  season <- as.character(data[[season_col]])
+  source_season <- as.character(data[[season_col]])
+  season <- source_season
   if (anyNA(season) || any(!nzchar(trimws(season)))) {
     stop("Mapped `season_col` must contain non-empty identifiers.", call. = FALSE)
   }
 
   weekF <- week
   if (week_type == "mmwr") {
-    start_year <- NULL
-    if (!is.null(start_year_col)) {
-      start_year <- source_values(start_year_col, "start_year")
-      if (any(start_year != round(start_year))) {
-        stop("Mapped `start_year_col` must contain whole-number years.", call. = FALSE)
+    if (!is.null(date_col)) {
+      calendar <- page_season_calendar(dates = data[[date_col]], start_week = start_week)
+      if (any(calendar$week != week)) {
+        stop("Mapped `week_col` disagrees with `date_col` under MMWRweek.", call. = FALSE)
       }
+      season <- calendar$season
+      weekF <- calendar$weekF
     } else {
-      match_year <- regexec("^([0-9]{4})-[0-9]{2}$", trimws(season))
-      pieces <- regmatches(trimws(season), match_year)
-      can_infer <- lengths(pieces) == 2L
-      if (!all(can_infer)) {
-        stop(
-          "`week_type = \"mmwr\"` needs `start_year_col` unless every `season_col` ",
-          "value has the form `YYYY-YY`.",
-          call. = FALSE
-        )
+      if (!is.null(mmwr_year_col)) {
+        mmwr_year <- source_values(mmwr_year_col, "mmwr_year")
+        if (any(mmwr_year != round(mmwr_year))) {
+          stop("Mapped `mmwr_year_col` must contain whole-number years.", call. = FALSE)
+        }
+        start_year <- ifelse(week >= start_week, mmwr_year, mmwr_year - 1L)
+      } else {
+        match_year <- regexec("^([0-9]{4})-[0-9]{2}$", trimws(source_season))
+        pieces <- regmatches(trimws(source_season), match_year)
+        if (!all(lengths(pieces) == 2L)) {
+          stop(
+            "`week_type = \"mmwr\"` needs `date_col` or `mmwr_year_col` ",
+            "(formerly `start_year_col`); ",
+            "the label-only compatibility path requires YYYY-YY season values.",
+            call. = FALSE
+          )
+        }
+        start_year <- vapply(pieces, function(piece) as.numeric(piece[2L]), numeric(1))
       }
-      start_year <- vapply(pieces, function(piece) as.numeric(piece[2L]), numeric(1))
-    }
-    if (any(start_year < 1 | start_year > 9999)) {
-      stop("Mapped season start years must be in [1, 9999].", call. = FALSE)
-    }
-    mmwr_year <- ifelse(week >= start_week, start_year, start_year + 1)
-    mmwr_date <- MMWRweek::MMWRweek2Date(mmwr_year, week, 1L)
-    mmwr_check <- MMWRweek::MMWRweek(mmwr_date)
-    valid_week <- mmwr_check$MMWRyear == mmwr_year &
-      mmwr_check$MMWRweek == week
-    if (any(!valid_week)) {
-      stop(
-        "Mapped `week_col` contains an MMWR week that is invalid for the ",
-        "calendar year implied by `start_week` and the season start year.",
-        call. = FALSE
+      if (any(start_year < 1 | start_year > 9999)) {
+        stop("Mapped season start years must be in [1, 9999].", call. = FALSE)
+      }
+      mmwr_year <- ifelse(week >= start_week, start_year, start_year + 1L)
+      calendar <- page_season_calendar(
+        mmwr_year = mmwr_year, week = week, start_week = start_week
       )
+      weekF <- calendar$weekF
+      if (!is.null(mmwr_year_col)) season <- calendar$season
     }
-    n_weeks <- vapply(start_year, n_weeks_in_start_year, integer(1))
-    weekF <- ((week - start_week) %% n_weeks) + 1L
   }
 
   canonical <- data.frame(
@@ -185,6 +199,11 @@ prepare_page_data <- function(data,
 
   canonical_names <- c("season", "weekF", "y", "N", "p", "neg")
   extras <- data[, setdiff(names(data), c(mapped, canonical_names)), drop = FALSE]
+  if (week_type == "mmwr" && (!is.null(date_col) || !is.null(mmwr_year_col)) &&
+    !"pho_season" %in% names(extras)) {
+    extras$pho_season <- source_season
+  }
+  if ("season" %in% names(extras)) names(extras)[names(extras) == "season"] <- "pho_season"
   out <- cbind(canonical, extras)
   prepare_surveillance_data(out, tolerance = tolerance)
 }

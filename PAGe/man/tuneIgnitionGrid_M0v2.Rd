@@ -66,6 +66,7 @@ List with best params, full results, runtime, and evaluation tables.
 Tunes M0v2 ignition thresholds over a parameter grid by repeatedly calling
 [detectIgnitionBySeason_M0v2()] and comparing estimated ignition weeks to season-level
 truth ignition weeks. Scoring uses a symmetric adjusted error with a -1 week wiggle room
-(detecting one week early counts as exact). Seasons with no detection within
-\code{[w_min, w_max]} are assigned \code{w_max} as a fallback, so misses never occur.
+(detecting one week early counts as exact). Fractional mode uses symmetric
+absolute error. Seasons with no detection remain missing in the training
+artifact and are scored at the legacy \code{w_max} fallback.
 }

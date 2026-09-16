@@ -8,7 +8,8 @@ alignIgnition(
   outs,
   season_col = "season",
   week_col = "weekF",
-  nweek_col = "nW_true"
+  nweek_col = "nW_true",
+  template_weeks = 52L
 )
 }
 \arguments{
@@ -18,7 +19,11 @@ alignIgnition(
 
 \item{week_col}{within-season week column name (default "weekF")}
 
-\item{nweek_col}{season length column name (default "nW_true"); if missing uses max(weekF) per season}
+\item{nweek_col}{calendar length output column (default "nW_true"); derived from season start year}
+
+\item{template_weeks}{Template domain used for fitting (default 52). Rows
+shifted outside this domain are retained and flagged, but are excluded by
+`estimateRef()` rather than wrapped back into the season.}
 }
 \value{
 data.frame with newWeek and phase_inSeason added; attributes: anchorWeek, ignD

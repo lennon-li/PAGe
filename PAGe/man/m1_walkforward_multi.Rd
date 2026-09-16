@@ -30,7 +30,9 @@ m1_walkforward_multi(
   spread_method = c("between", "total"),
   parallel = TRUE,
   verbose = TRUE,
-  timing_mode = c("legacy", "fractional")
+  timing_mode = c("legacy", "fractional"),
+  season_references = NULL,
+  season_ignition = NULL
 )
 }
 \arguments{
@@ -74,6 +76,14 @@ Passed to \code{m1_walkforward_predictions()} and onward to
 \item{parallel}{Logical; use parallel via furrr (default TRUE).}
 
 \item{verbose}{Logical; print progress (default TRUE).}
+
+\item{season_references}{Optional named per-season reference/hyperparameter cache
+for season-held-out training predictions. NULL uses the runtime reference.}
+
+\item{season_ignition}{Optional named list of season-local ignition outputs.
+When supplied, these are used instead of refitting M0 for the named
+seasons. This is used by the fully nested M2 adoption gate with
+label-truth ignition timing.}
 }
 \value{
 A tibble (stacked across seasons) with the same columns as
