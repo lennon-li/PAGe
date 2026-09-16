@@ -237,3 +237,94 @@ or package article was represented.
 - **Frozen analysis protocol v1.1 SHA-256 (semantically unchanged;
   formatting-normalized):**
   `04ce726af5dbc603c9568373101f789000a482708f8d4878040632af80a1b6ee`
+
+## 2026-09-01 — Influenza season-scope and ignition-label amendment
+
+### Project-lead instruction
+
+The project lead authorized the next governance work and directed that no
+season data outside the current influenza workflow be introduced. This is a
+scope constraint, not a result-driven exclusion decision.
+
+### Repository reconciliation
+
+Current API defaults and historical training scripts identify 15 available
+influenza seasons. The project lead fixed four exclusions and directed that all
+remaining seasons be treated equally. The resulting 11-season universe is:
+`2012-13`, `2013-14`, `2014-15`, `2016-17`, `2017-18`, `2018-19`, `2019-20`,
+`2022-23`, `2023-24`, `2024-25`, and `2025-26`. The workflow keeps `2011-12`,
+`2015-16`, `2020-21`, and `2021-22` outside ordinary training. Each valid
+season is held out once while the other ten are used for training and tuning.
+The old examined `2025-26` acceptance artifact remains separate historical
+evidence, while the newly generated `2025-26` outer-fold result belongs to the
+11-season retrospective aggregate and is not described as untouched.
+
+The private influenza CSV was absent from this workspace, consistent with the
+repository's private-data boundary. No surveillance rows were copied, imported,
+or newly inspected. Final fitting still requires a hash-bound authorized input
+and a preflight check that its season identifiers match the declaration.
+
+### Disposition
+
+- Created [`GOVERNANCE_DECISIONS.md`](GOVERNANCE_DECISIONS.md), recording the
+  fixed season scope, exclusion wording, backfill rule, private/public boundary,
+  promotion-gate interpretation, and unresolved external authorization tasks.
+- Created
+  [`ONTARIO_FLU_SEASON_DECLARATION.md`](ONTARIO_FLU_SEASON_DECLARATION.md),
+  freezing 11 principal outer folds and prohibiting automatic admission of any
+  other influenza season.
+- Created [`IGNITION_LABEL_PROTOCOL.md`](IGNITION_LABEL_PROTOCOL.md), freezing
+  the existing verified ten-season M0 vector, fold-safe withholding rule, M1
+  coordinate handling, and the `-1`, `+1`, and all-M0 sensitivities. A verified
+  retrospective `2025-26` reference label remains required before the 11-fold
+  M0 analysis; the approximate script value is not accepted as ground truth.
+- Amended the core analysis protocol. The amendment changes
+  season membership from the earlier provisional 2015-16 inclusion rule:
+  `2015-16` remains special diagnostic evidence and is not pooled into the
+  principal aggregate. The later direct project-lead scope instruction controls.
+- Established that the package's `0.02` value is a 2% relative operational NLL
+  promotion gate introduced in commit `feebaa0` on 2026-07-16, before the
+  recorded 2025-26 acceptance replay. No scientific minimum-important-
+  difference rationale was found, so it remains historical operational policy
+  rather than a manuscript decision threshold.
+
+Publication authorization and the ethics/REB determination remain open. They
+were not inferred or fabricated.
+
+## 2026-09-01 — Descriptive-analysis correction
+
+### Project-lead clarification
+
+The project lead clarified that the manuscript is not conducting statistical
+hypothesis testing. Pairing is used only to calculate within-season score
+differences because PAGe and each comparator are evaluated on identical replay
+rows.
+
+### Correction
+
+The protocol and drafting guide now prohibit t-tests, sign-flip tests, p-values,
+confidence intervals for between-model contrasts, power calculations,
+statistical-significance language, and inferential superiority decisions. The
+primary result reports all 11 season-specific PAGe-minus-calendar-GAM
+differences, the equal-season mean and median, observed dispersion and range,
+and leave-one-season-out influence. Predictive intervals emitted by forecasting
+models may still be evaluated descriptively for coverage and width; this is not
+a between-model hypothesis test.
+
+The previous protocol language specifying a sign-flip analysis and a
+t-distribution precision calculation was introduced during manuscript planning,
+not inherited from PAGe code or artifacts. It is superseded by protocol version
+1.4.
+
+### Corrected artifact identities
+
+- **Analysis protocol v1.4 SHA-256:**
+  `cce2e046f1a1bd05a1da0b46a8a865a3c30d61dabe26379135c7c160ddcf4c42`
+- **Manuscript skeleton SHA-256:**
+  `e1806b14090ec0418520f7696e85eafc73613a218eb077b6b83319cecf1a781c`
+- **Governance decisions SHA-256:**
+  `6572872165adfd942496a729e6a4e8faa44a8ec35fec4f0e84e4106fac6d3718`
+- **Ontario influenza season declaration SHA-256:**
+  `56b34c84ae2aadce28bf9a3484ebd59d415a42f2ae72a879c1031b340169c5d3`
+- **Ignition-label protocol SHA-256:**
+  `a70701cdde1ca17624c2c4657140579b14c9815a1248dee5dc0853f709c599db`

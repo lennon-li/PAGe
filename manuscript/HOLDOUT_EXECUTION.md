@@ -1,3 +1,5 @@
+> **Status (2026-09-15): PRIOR CYCLE** — commit 95c1c9f / CSV-label seasons / truncated 2025-26; not comparable with the new cycle. See drafts/ANALYSIS_DEVIATIONS_new-cycle-draft.md.
+
 # Governed holdout execution record
 
 Created: 2026-09-02

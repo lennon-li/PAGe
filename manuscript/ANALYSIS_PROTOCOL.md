@@ -1,17 +1,33 @@
+> **Status (2026-09-15): FROZEN v1.4, PRIOR CYCLE** — to be superseded for the new cycle by drafts/ANALYSIS_PROTOCOL_v2.0-draft.md; changes in drafts/ANALYSIS_DEVIATIONS_new-cycle-draft.md.
+
 # PAGe analysis protocol
 
-- Protocol version: 1.1
+- Protocol version: 1.4
 - Status: frozen core protocol
 - Freeze date: 2026-09-01
 - Amendment date: 2026-09-01
-- Authorized by: project lead instruction to proceed
+- Authorized by: project lead instructions to proceed and to add no influenza
+  season outside the current workflow
 - Applies to: Ontario influenza reconstruction and, after its data gate, Ontario RSV
 
-This protocol fixes the comparative and statistical analysis before the Ontario
-RSV data are supplied. Dataset-specific season identifiers, source metadata,
-publication permissions, and the package commit used for final computation are
-intentionally not invented here. They must be appended before fitting, without
-changing the rules below in response to outcomes.
+This protocol fixes the comparative evaluation before the Ontario RSV data are
+supplied. Version 1.4 freezes the existing 11-season Ontario
+influenza analysis universe, its exclusions, and its ignition-label vector in
+[`ONTARIO_FLU_SEASON_DECLARATION.md`](ONTARIO_FLU_SEASON_DECLARATION.md) and
+[`IGNITION_LABEL_PROTOCOL.md`](IGNITION_LABEL_PROTOCOL.md). Source metadata,
+publication permissions, and the package commit used for final computation
+remain to be appended before fitting, without changing the rules below in
+response to outcomes.
+
+**Post-results audit note (2026-09-08; not a protocol amendment).** See
+[`ANALYSIS_DEVIATIONS_2026-09-08.md`](ANALYSIS_DEVIATIONS_2026-09-08.md)
+for the executed stage objectives, scoring differences, and pending diagnostics.
+The primary h2, ignition-through-+12-week, trial-weighted NLL and
+one-standard-error selection definitions below remain frozen. The existing
+both-horizon, full-available-season results do not fulfill or replace that
+primary analysis. This note records deviations after outcomes were viewed;
+it does not retrospectively preregister the executed choices or authorize
+inferential testing.
 
 ## 1. Scientific estimands
 
@@ -19,13 +35,13 @@ PAGe is evaluated as the ordered chain
 
 `ignition detection -> partial-curve phase and peak estimation -> h1/h2 forecast`.
 
-The manuscript must report all three stage outputs. There is one confirmatory
-model comparison so that the limited number of independent seasons is not
-spent on multiple headline tests.
+The manuscript must report all three stage outputs. One primary model
+comparison focuses the presentation; it is an estimation and benchmarking
+summary, not a statistical hypothesis test.
 
-### 1.1 Confirmatory comparison
+### 1.1 Primary comparison
 
-The confirmatory estimand is the equal-season mean difference in two-week-ahead
+The primary summary is the equal-season mean difference in two-week-ahead
 per-trial binomial negative log-likelihood (NLL):
 
 \[
@@ -52,11 +68,11 @@ negative `Delta` favors PAGe.
 
 Within a season, test counts weight weekly observations. Across seasons, every
 season receives equal weight. A pooled score across all trials is secondary and
-must not replace the equal-season confirmatory estimand.
+must not replace the equal-season primary summary.
 
 ### 1.2 Forecast origins and common rows
 
-- The confirmatory horizon is `h = 2`; `h = 1` is secondary.
+- The primary horizon is `h = 2`; `h = 1` is secondary.
 - The evaluation window is forecast origins from the held-out season's
   prospectively detected ignition through ignition plus 12 weeks, inclusive,
   where the target at `w + h` is observed.
@@ -64,14 +80,15 @@ must not replace the equal-season confirmatory estimand.
 - Every prediction, transformation, update, and model state at origin `w` may
   use information available no later than `w`.
 - A season with no PAGe ignition or no valid forecast is a pipeline failure. It
-  must be reported and cannot be silently removed. The confirmatory analysis
+  must be reported and cannot be silently removed. The primary comparison
   stops for a documented protocol disposition if a paired season score cannot
   be formed.
 
-The 2025--26 Ontario influenza replay is historical confirmatory evidence that
-has already been examined. It is not converted retrospectively into a new
-untouched test and is reported separately from the protocol-governed replay
-estimate.
+The earlier 2025--26 Ontario influenza acceptance replay has already been
+examined and remains separately reported historical evidence. Under the
+project-lead exchangeability instruction, `2025-26` also participates as one of
+the 11 equal outer folds in the new retrospective analysis. That new fold is not
+described as untouched confirmation.
 
 ### 1.3 Stage estimands
 
@@ -88,15 +105,17 @@ interval coverage when available. The observed peak is the earliest week at
 the maximum final weekly positivity; a prespecified smoothed-peak sensitivity
 analysis will assess ties and weekly noise.
 
-These stage outcomes are required evidence, but they are not additional
-confirmatory superiority tests. They establish whether the claimed staged
-outputs work and identify where the chain fails.
+These stage outcomes are required descriptive evidence. They show how the
+staged outputs behaved and identify where the chain failed.
 
 ## 2. Validation design and information boundary
 
 ### 2.1 Outer replay
 
-Each eligible season is held out in turn. The held-out season is absent from:
+Each of the 11 seasons frozen in
+[`ONTARIO_FLU_SEASON_DECLARATION.md`](ONTARIO_FLU_SEASON_DECLARATION.md) is held
+out in turn. No additional influenza season may enter this protocol version.
+The held-out season is absent from:
 
 - all model fitting and hyperparameter selection;
 - scaling, imputation, feature selection, templates, and prior distributions;
@@ -178,7 +197,7 @@ added because of its observed ranking.
    historical positivity for the corresponding within-season target week from
    outer training seasons, with Jeffreys smoothing
    `(sum(y) + 0.5) / (sum(N) + 1)`.
-3. **Calendar-week binomial GAM.** This is the confirmatory comparator. Fit a
+3. **Calendar-week binomial GAM.** This is the primary comparator. Fit a
    denominator-aware GAM with horizon, a cyclic within-season-week smooth,
    current logit positivity, one-week logit change, and horizon-specific smooth
    effects. It receives no M0 decision, aligned week, template, peak estimate,
@@ -229,42 +248,32 @@ Structural ablations are refitted and retuned inside every outer fold.
 
 Required label sensitivities are: shift all admissible retrospective ignition
 labels by `-1` week, shift them by `+1` week, and use fold-specific M0-generated
-labels for all downstream training without manual overrides. The historical
-2015--16 exclusion is not allowed solely because it is an ignition outlier; it
-is included in the principal analysis when its data pass the generic quality
-rules and may also be shown in a labelled historical-exclusion sensitivity.
+labels for all downstream training without manual overrides. These analyses
+use the same 11 valid seasons and cannot add an excluded or newly obtained
+season. `2015-16` remains outside the principal aggregate under the project-
+lead season-scope decision and may appear only as separately labelled special
+diagnostic evidence.
 
-## 5. Uncertainty, precision, and interpretation
+## 5. Descriptive comparison and interpretation
 
-The independent resampling unit is season. For the primary paired differences
-`Delta_s`:
+For the primary within-season differences `Delta_s`:
 
-- report the mean, median, standard deviation, and every season-specific value;
-- construct a two-sided 95% percentile interval from 10,000 paired
-  season-cluster bootstrap resamples using seed `20260901`;
-- report a paired sign-flip randomization p-value, enumerating all assignments
-  when `S <= 20` and using 100,000 deterministic-seed assignments otherwise;
-  and
-- report leave-one-season-out influence on the mean contrast.
+- report every season-specific value;
+- report the equal-season mean and median;
+- report the standard deviation, interquartile range, minimum, and maximum as
+  descriptions of observed between-season variation; and
+- report the mean after omitting each season in turn as an influence analysis.
 
-The interpretation threshold is zero NLL difference. Evidence favors PAGe only
-when the point estimate is negative and the upper 95% season-bootstrap limit is
-below zero. An interval containing zero is inconclusive, regardless of the
-pooled weekly score. A wholly positive interval indicates harm. Magnitude is
-reported in NLL units and relative to the comparator; no unsupported clinical
-minimum-important difference is invented.
+Negative values mean PAGe had lower NLL than the comparator on the observed
+replay; positive values mean it had higher NLL. The manuscript reports the
+direction, magnitude, season-to-season consistency, and influential seasons.
+It does not report p-values, confidence intervals, power, statistical
+significance, or a superiority decision.
 
-Precision is limited by the number of seasons. Before opening model-result
-tables, instantiate the following feasibility calculation with the locked
-number of paired seasons and an outcome-blind planning standard deviation. For
-`S = 10`, a conventional paired-mean 95% interval has approximate half-width
-`0.715 * SD(Delta_s)`, and 80% power at two-sided alpha 0.05 requires a mean
-difference of approximately `0.996 * SD(Delta_s)`. These standardized values
-are the prespecified precision warning; the bootstrap interval remains the
-reported uncertainty analysis.
-
-Secondary contrasts receive compatible season-bootstrap intervals but are
-descriptive. No isolated secondary p-value supports a superiority claim.
+All contrasts are descriptive. The primary designation controls presentation
+order and prevents outcome-driven switching; it does not create an inferential
+test. The limited season count and temporal dependence between successive
+seasons are stated as limitations on generalization.
 
 ## 6. Secondary outcomes and strata
 
@@ -291,8 +300,8 @@ Ontario RSV may enter model fitting only if all criteria below pass:
   every scored week;
 - stable weekly date/MMWR and season identifiers can be constructed;
 - at least eight complete eligible seasons are available for nested replay,
-  with ten preferred; six or seven seasons permit only explicitly exploratory
-  estimation, not the planned superiority claim;
+  with ten preferred; six or seven seasons permit only a more limited
+  descriptive evaluation;
 - each included season has at least 80% of expected weekly observations and no
   unexplained gap longer than two consecutive weeks in the ignition-to-peak
   analysis window;

@@ -1,10 +1,15 @@
 # PAGe manuscript execution TODO
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
 Authoritative consolidated plan: [`PLAN.md`](PLAN.md)
 
 Frozen core analysis protocol: [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md)
+
+Frozen Ontario governance, season, and ignition-label records:
+[`GOVERNANCE_DECISIONS.md`](GOVERNANCE_DECISIONS.md),
+[`ONTARIO_FLU_SEASON_DECLARATION.md`](ONTARIO_FLU_SEASON_DECLARATION.md), and
+[`IGNITION_LABEL_PROTOCOL.md`](IGNITION_LABEL_PROTOCOL.md)
 
 Independent review record: [`REVIEW_LOG.md`](REVIEW_LOG.md)
 
@@ -16,12 +21,17 @@ This file is the execution checklist. Section numbers below group related work b
 
 - **Current phase:** Phase 0, governance and evidence-definition blockers.
 - **Blocked until the Ontario influenza go/no-go gate:** Ontario RSV model fitting and RSV-results drafting.
+- **Methods/reporting status:** Finalized in [`METHODS.md`](METHODS.md) and [`REPORTING_TEMPLATES.md`](REPORTING_TEMPLATES.md); result-dependent fields remain gated.
+
+> **Status (2026-09-15): PRIOR CYCLE** — commit 95c1c9f / CSV-label seasons / truncated 2025-26; not comparable with the new cycle. See drafts/ANALYSIS_DEVIATIONS_new-cycle-draft.md.
 
 ## 0. Ontario influenza evidence must precede RSV validation
 
 Ming's 2026-09-01 independent review concluded **REVISE FIRST**. Complete this workstream before committing substantial effort to the Ontario RSV application.
 
 - [ ] Re-derive the manuscript's frozen Ontario kit end to end through the governed `tune_*() -> validate_*() -> fit_*() -> freeze_*()` lifecycle and record every stage and kit identity.
+> **Status (2026-09-15): PRIOR CYCLE** — commit 95c1c9f / CSV-label seasons / truncated 2025-26; not comparable with the new cycle. See drafts/ANALYSIS_DEVIATIONS_new-cycle-draft.md.
+
 - [ ] Treat the historical `v16-corrected` incumbent as contextual evidence unless its lineage becomes fully reconstructible.
 - [ ] Resolve all genuinely tuned boundaries before freezing the manuscript kit.
 - [ ] Recompute M1 validation results and either resolve or retire the conflicting historical peak-MAE values.
@@ -31,20 +41,28 @@ Ming's 2026-09-01 independent review concluded **REVISE FIRST**. Complete this w
   analysis details, claim boundaries, result branches, historical-holdout home,
   display economy, and Phase-4 drafting gate recorded in [`REVIEW_LOG.md`](REVIEW_LOG.md).
 - [x] Freeze the literature-supported seven-model comparator set, four structural ablations, and label sensitivities in [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md).
-- [x] Prespecify the primary PAGe-versus-calendar-GAM comparison at horizon two, including aggregation, uncertainty, and the zero-difference interpretation threshold.
+- [x] Prespecify the primary descriptive PAGe-versus-calendar-GAM comparison at
+  horizon two, including aggregation and direction of the observed difference;
+  do not perform statistical hypothesis testing.
 - [x] Freeze the exact per-trial binomial NLL formula, normalization, omitted combinatorial term, sign convention, and weekly/seasonal aggregation.
-- [x] Record standardized precision limits for the planned season-level analysis; instantiate the numeric interval width after the eligible season count and outcome-blind planning variance are locked.
 - [x] Freeze the operational cadence: one training/tuning workflow and one frozen kit per target season, reused across all weekly origins.
-- [ ] Evaluate all seven core Ontario models, four structural ablations, and label sensitivities across eligible seasons using season-level resampling.
+- [x] Finalize the manuscript-facing Methods draft and reporting templates, including the no-hypothesis-testing rule, stage outputs, provenance schema, runtime fields, and RSV conditional gate.
+- [ ] Evaluate all seven core Ontario models, four structural ablations, and
+  label sensitivities across eligible seasons; report complete season-specific
+  results and descriptive summaries without hypothesis tests.
 - [ ] Produce the canonical Ontario replay table with consistent season, horizon, phase, metric, artifact identity, and runtime fields.
-- [ ] Write and version the ignition-labeling protocol; run label-perturbation and all-M0-label sensitivity analyses.
-- [ ] Resolve 2011--12 with a dated epidemiological/data-quality rationale for
-  exclusion or include it in the principal or a prespecified sensitivity analysis.
-- [ ] Include 2015--16 in the principal analysis if the generic data-quality
-  criteria pass; treat its historical exclusion only as a prespecified sensitivity.
-- [ ] Define Ontario backfill and reporting-revision handling.
-- [ ] Confirm data-custodian publication authorization and any research-ethics requirements.
-- [ ] Document the provenance and rationale of the historical 0.02 NLL gate; treat it as historical rather than prespecified if provenance cannot be established.
+- [x] Write and version the fold-safe ignition-label protocol in [`IGNITION_LABEL_PROTOCOL.md`](IGNITION_LABEL_PROTOCOL.md).
+- [ ] Run the frozen `-1`, `+1`, and all-M0-label sensitivity analyses.
+- [x] Freeze the exact 11-season principal influenza universe without adding
+  new season data in [`ONTARIO_FLU_SEASON_DECLARATION.md`](ONTARIO_FLU_SEASON_DECLARATION.md).
+- [x] Preserve `2011-12`, `2015-16`, `2020-21`, and `2021-22` as non-principal
+  current-workflow seasons; use `2015-16` only as special diagnostic evidence.
+- [x] Define Ontario backfill and reporting-revision handling in [`GOVERNANCE_DECISIONS.md`](GOVERNANCE_DECISIONS.md).
+- [ ] Obtain written data-custodian publication authorization and disclosure limits.
+- [ ] Obtain and record the applicable research-ethics/REB determination.
+- [x] Document the code provenance of the historical 2% relative-NLL gate and
+  keep it separate from the manuscript estimand because no scientific
+  minimum-important-difference rationale was found.
 - [ ] Report the historical 2025--26 acceptance replay in its own table with its
   different artifact lineage, excluding it from the new governed replay aggregate.
 - [ ] Pin the package version, repository commit, dependencies, and runtime environment used for manuscript analyses.
@@ -96,7 +114,8 @@ Selection deliverable:
 - [ ] Define missing-week and reporting-revision handling.
 - [ ] Define ignition labels without consulting holdout outcomes.
 - [ ] Freeze the primary metric as binomial negative log-likelihood.
-- [ ] Freeze secondary metrics, phase definitions, and uncertainty method.
+- [ ] Freeze secondary metrics, phase definitions, descriptive summaries, and
+  predictive-interval evaluation where available.
 - [ ] Freeze comparator and ablation definitions.
 - [ ] Define boundary-expansion stopping rules before tuning.
 - [ ] Hash or otherwise version the protocol before model fitting.
