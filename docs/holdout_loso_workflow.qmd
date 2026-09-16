@@ -144,12 +144,89 @@ only when it is an explicit null/drop choice, a valid structural cap, or when
 the predeclared minimum-gain rule justifies stopping. Expansion must finish
 before the holdout is viewed.
 
+For M1, `boundary_action_plan()` exposes two practical-gain controls that are
+forwarded to `select_m1_candidate()`: `m1_min_gain` (the improvement in weeks
+required before added M1 complexity is accepted; default `0.05`) and
+`m1_prefer_simpler` (prefer the simplest boundary-safe candidate within
+`m1_min_gain` of the best; default `TRUE`). `train_outer_fold()` accepts and
+records both, so a manual stage decision and the governed nested evaluation
+apply the same M1 backoff rule.
+
 ## Canonical manual call sequence
+
+For the manuscript protocol, the exported high-level calls are the preferred
+interface. `train_outer_fold()` performs the nine-season candidate fits and 10
+inner holdouts for one designated outer season. `run_outer_fold()` adds the
+strict replay of that outer season. `nested_season_evaluation()` rotates the
+same operation over all eligible outer holdouts and forms the equal-season
+aggregate.
+
+```{r}
+evaluation <- nested_season_evaluation(
+  allD,
+  holdouts = eligible_seasons,
+  exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
+  manual_labels = ignition_labels,
+  pre_ignition_weight = 0,
+  early_weight = 2,
+  early_max_t_since = 12,
+  late_weight = 1,
+  score_scale = "equal_week",
+  min_gain = 0.0012,
+  min_gain_by_horizon = c("2" = 0.002),
+  max_season_degradation = 0,
+  m1_min_gain = 0.05,
+  max_boundary_rounds = c(M0 = 5L, M1 = 4L, M2 = 6L),
+  m1_expansion_steps = c(k_ref = 5, slope_weight = 4),
+  m2_expansion_increment = 12L,
+  artifact_dir = "results/nested-evaluation",
+  checkpoint_dir = "results/nested-checkpoints"
+)
+```
+
+Each outer-fold subdirectory retains the tuning objects, expanded grids,
+round-specific boundary reports, M2 adoption evidence, frozen stages, kit,
+strict replay, and canonical prediction rows. Resume checks bind a completed
+fold to its data identity and requested controls; changed settings require a
+new artifact directory.
+
+All scientific and computational controls are function arguments with
+documented defaults: exclusions, stage grids and baseline settings, phase
+weights and phase break, score scale, gain thresholds, confidence and
+degradation limits, boundary round limits and expansion steps, minimum
+training-season count, worker count, and artifact/checkpoint paths. These
+values are recorded in `protocol.rds`; changing one changes the resume identity.
+Fixed stage names, forecast horizons, artifact filenames, hash algorithms, and
+strict replay compatibility are schema and governance invariants rather than
+tuning constants.
+
+After the outer results have been examined and the procedure is fixed, the
+same tuning policy is applied to all eligible seasons to create the next
+deployment kit. This final fit does not create another validation estimate.
+
+```{r}
+final <- fit_final_pipeline(
+  allD,
+  exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
+  manual_labels = ignition_labels,
+  pre_ignition_weight = 0,
+  early_weight = 2,
+  early_max_t_since = 12,
+  late_weight = 1,
+  score_scale = "equal_week",
+  min_gain = 0.0012,
+  min_gain_by_horizon = c("2" = 0.002),
+  artifact_dir = "results/final-2026-27",
+  checkpoint_dir = "results/final-2026-27-checkpoints"
+)
+```
+
+The lower-level sequence below remains available for auditing individual stage
+contracts.
 
 The following is a template; supply the authorized data and the grids for the
 cycle. It intentionally shows the low-level calls so that every gate is
-visible. `train_pipeline(mode = "retune")` composes the same lifecycle when a
-single orchestrator is preferred.
+visible.
 
 ```{r}
 # H is the only season reserved for replay.
@@ -211,6 +288,62 @@ For a boundary expansion, keep the same selection, checkpoint directory, and
 fold definitions. Pass the previous tuning result to the expansion helper so
 completed specification IDs are reused; do not restart a fresh grid that loses
 the prior audit trail.
+
+## Replay completeness and forecast keys
+
+`replay_season_holdout()` scores a holdout only against an independent
+evaluation schedule that the runner returns in `params_df$eval_week` (and
+optionally `params_df$h`). It never infers the expected schedule from the
+emitted prediction rows, because that would let a partial replay look
+complete. The result's `forecast_ledger` retains the full expected weekly
+origin/horizon set, including missing targets and forecasts.
+
+Every emitted forecast must satisfy the same key contract:
+
+- one unique row per `(origin, horizon)` pair;
+- `target_weekF == origin + horizon`; and
+- the emitted key set equals the schedule's one- and two-week forecast set,
+  with no missing and no extra keys.
+
+Prediction rows whose `season` is not the replayed season are rejected. When a
+runner returns forecasts without `params_df`, the replay stops with an
+explanatory error instead of scoring a subset. `fit_final_pipeline()` and
+`nested_season_evaluation()` enforce the same keys before matching, and reject
+matched rows with missing M1/M2 values or timing. A runner therefore cannot
+pass a partial or misaligned replay into the aggregate.
+
+## Preparing all-season holdout inputs
+
+`scripts/prepare_all_season_holdouts.R` builds the canonical data snapshots and
+timing-label inputs for every eligible outer holdout without fitting a model or
+launching workers. It reads the authorized CSV, maps it with
+`prepare_page_data()`, and writes one `folds/<holdout>/` directory per
+requested holdout containing `training_data.rds`, `holdout_data.rds`,
+`timing_labels_training.rds`, and `training_seasons.txt`. Each fold's label
+file excludes its own holdout, so it is ready for
+`nested_season_evaluation()`.
+
+Labels are generated for every eligible season, not only the holdouts named by
+`--holdouts`, so a subset request still yields complete training labels. The
+script also writes `prepared_data_all_seasons.rds`,
+`timing_labels_v2_all_holdouts.rds`, `season_manifest.csv`, and
+`outer_holdout_manifest.csv`.
+
+```bash
+PAGE_FLU_HIST_FILE=/authorized/flu_history.csv \
+R_LIBS_USER=/home/yeli/repos/PAGe/r-lib \
+Rscript scripts/prepare_all_season_holdouts.R \
+  --output results/manuscript/all-season-holdout-prep \
+  --holdouts 2025-26,2024-25
+```
+
+The output directory must not already exist. `manifest.rds` records the input
+path and MD5, the review parameters, the eligible and requested holdouts, a
+relative-path to SHA-256 map of every generated output, and a `source_identity`
+block with the git revision, branch, porcelain status, and installed PAGe
+version. The companion `README.md` repeats the input and source identity, so
+the prepared inputs are bound to an exact source revision before any holdout is
+opened.
 
 ## Holdout inventory
 

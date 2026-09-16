@@ -111,6 +111,12 @@ incumbent <- replay_season_holdout(incumbent_kit, allD, season = "2025-26")
 promotion <- check_promotion(candidate$metrics, incumbent$metrics)
 ```
 
+Each replay validates the emitted forecasts against the runner's independent
+evaluation schedule: forecast keys must be unique, must satisfy
+`target_weekF == origin + horizon`, and must match the schedule exactly.
+Duplicated, unmatched, or inconsistent keys fail the replay instead of being
+scored as a partial run.
+
 The default gates require 2% NLL improvement, no horizon MAE degradation over
 5%, and no phase MAE degradation over 10%. This in-memory report is diagnostic
 only: it has no artifact provenance and cannot release the holdout. A governed

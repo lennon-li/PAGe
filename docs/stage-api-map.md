@@ -9,6 +9,15 @@ shape is preserved by unwrapping governed payloads, while the assembled kit
 retains the frozen stage identities and season selection. Optional M2 racing
 routes its full evaluator through governed `tune_m2()`.
 
+For a manual run, start with `plan_training()` (a read-only dry run), inspect
+its `support` audit and resource estimate, then execute the stage calls in
+order. After each tuning stage, call `boundary_action_plan()` to compare the
+raw optimizer winner with the governed final candidate. It returns the raw and
+final boundary reports plus an additive `next_grid` when expansion is needed.
+`preflight_support_audit()` can be rerun after the M0 and M1 handoffs: M1
+support needs the aligned handoff and M2 support needs the prepared M2 feature
+data, so those checks are explicitly marked `deferred` until the data exists.
+
 ## Design rules
 
 1. Every training or tuning call receives an explicit normalized season
@@ -28,12 +37,16 @@ routes its full evaluator through governed `tune_m2()`.
 | Existing function | Current role | Relationship to guarded design |
 |---|---|---|
 | `prepare_surveillance_data()` | Canonicalizes surveillance input. | Retain as the data-entry contract. |
+| `prepare_page_data()` | Maps arbitrary source column names and optional MMWR weeks to the canonical surveillance input. | Use before `prepare_surveillance_data()`/`train_pipeline()` when data do not use PAGe's canonical names. It does not fetch or aggregate data. |
 | `validate_surveillance_data()` | Validates canonical surveillance data. | Retain. |
 | `simulate_flu_seasons()` | Produces public synthetic example/test data. | Supporting utility only; not a production stage API. Later make its output canonical. |
 | `train_pipeline()` | Runs M0/M1/M2 tuning or fixed refresh in one call. | Compatibility orchestrator that now composes the guarded lifecycle and preserves the legacy result shape. Use the explicit stage calls when each gate must be inspected manually. |
 | `assemble_kit()` | Combines M0/M1/M2 objects. | Accepts the legacy objects or an all-governed chain. If any input is governed, all three must be frozen, selection-matched, and identity-linked. |
 | `validate_page_kit()` | Validates runtime fields of a kit. | Also checks completeness and integrity of governance metadata when present. |
 | `new_result_manifest()` / `validate_result_manifest()` | Records disclosure-safe provenance. | Retain; versioned extension is needed before it carries all season-set identities. |
+| `plan_training()` | Read-only dry run of season selection, grids, caps, support checks, and resource estimates. | Use before launching a manual or long-running retune. It creates no checkpoints or artifacts. |
+| `preflight_support_audit()` | Reuses stage support validators without fitting. | Run before each stage; deferred M1/M2 checks become executable once their upstream handoff data exists. |
+| `boundary_action_plan()` | Compares raw and governed selections and prepares an additive expansion grid. For M1 it also takes `m1_min_gain` (practical-gain backoff in weeks) and `m1_prefer_simpler`, both forwarded to `select_m1_candidate()`. | Use after each complete tuning result; do not freeze or start the next stage while `settled` is `FALSE`. |
 
 ### M0 — ignition
 
@@ -67,7 +80,7 @@ routes its full evaluator through governed `tune_m2()`.
 | Existing function | Current role | Guarded status |
 |---|---|---|
 | `run_prospective_pipeline()` / `run_pipeline()` | Executes M0 → M1 → M2 for one current season. | Retained. A governed assembled kit carries integrity-checked stage identities; legacy kits remain supported. |
-| `replay_season_holdout()` | Replays one holdout season. | Keep as a compatibility wrapper around a later vectorized replay API. |
+| `replay_season_holdout()` | Replays one holdout season against an independent runner-supplied evaluation schedule (`params_df$eval_week`). | Requires unique `(origin, horizon)` keys, `target_weekF = origin + horizon`, an exact match to the schedule, and no other-season rows; keeps the compatibility result shape. |
 
 ## Implemented stage contracts
 
@@ -77,6 +90,7 @@ routes its full evaluator through governed `tune_m2()`.
 |---|---|---|
 | `validate_season_selection(data, training_seasons, exclude_seasons = character(), holdout_seasons = character(), application_seasons = character())` | yes | Returns a normalized `page_season_selection`; checks existence, duplicates, stable order, and set disjointness. |
 | `season_selection(x)` | yes | Accessor for the normalized selection recorded in a stage result, kit, or replay result. |
+| `decide_m2_vs_m1(forecasts, ...)` | yes | Data-agnostic equal-season M2-versus-M1 adoption gate with configurable phase and denominator weights, season-level uncertainty, practical gain floors, and exact all-off M1 fallback. |
 | `.require_frozen_stage(x, stage)` | no | Internal guard used before a downstream stage or kit assembly consumes an artifact. |
 | `.record_stage_provenance(...)` | no | Internal constructor for selection, upstream identities, configuration, folds, and status. |
 
@@ -164,9 +178,11 @@ axis. The expansion preserves prior rows and stable specification IDs. Reuse
 the same checkpoint directory when calling `tune_m1()` or `tune_m2()`; their
 completed specifications are skipped. For M0, pass the prior object as
 `previous_results` to `tune_m0()` so cached per-fold grid scores are reused.
-The governed pipeline stops on unresolved M0, M1, or M2 non-null boundaries;
+The governed validators stop on unresolved M0, M1, or M2 non-null boundaries;
 null/drop values are explicitly recorded rather than expanded into invalid
-parameter domains.
+parameter domains. `train_pipeline()` attaches the preflight and boundary
+reports to its result so a caller can audit the decision even when using the
+compatibility orchestrator.
 
 Completed:
 

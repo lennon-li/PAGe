@@ -26,12 +26,30 @@ only by the final strict replay.
 
 ## Reproduction command
 
-Run from the repository root. Use a new `PAGE_RUN_ID` for every attempt;
-the wrapper refuses to overwrite an existing run directory. The launcher
-reinstalls the current package source into the repository-local `r-lib/`
-library before starting, so nested workers use the same source revision.
-The runner loads that installed package directly; this avoids the incompatible
-`pkgload::load_all()` namespace registry path on the current R version.
+Run from the repository root. Use a new `PAGE_RUN_ID` for every attempt; the
+launcher creates the run directory up front and refuses to overwrite an
+existing run. It records a content hash of `PAGe/DESCRIPTION`,
+`PAGe/NAMESPACE`, and every `PAGe/R/*.R` file, reinstalls that source into the
+repository-local `r-lib/` library, and then verifies the installed package
+before any model worker starts. The runner loads the installed package
+directly; this avoids the incompatible `pkgload::load_all()` namespace
+registry path on the current R version.
+
+### Package-source verification
+
+The post-install check aborts the launch unless all of the following hold:
+
+- the source hash still matches the pre-install record, so the checkout did
+  not change during installation;
+- `find.package("PAGe")` resolves inside `PAGE_PACKAGE_LIBRARY` (`r-lib/`),
+  not a user or system library;
+- the installed `DESCRIPTION` version equals the source version; and
+- the installed `R/PAGe.rdb` is no older than the newest source file, so a
+  stale installation cannot silently serve the run.
+
+The check writes version, library path, source revision, source hash, and
+installed-database hash to `<run-dir>/package_revision_check.txt`. A failure
+is recorded there and in `<run-dir>/run.log`, and no training starts.
 
 ```bash
 PAGE_FLU_HIST_FILE=/home/yeli/FLU/flu_testing_data.csv \
@@ -123,6 +141,11 @@ The run directory contains provenance and execution records at its root:
 
 - `provenance.rds` records the data hash, source identity, season split, and
   explicit protocol values.
+- `source_manifest_before_install.txt` records the pre-install SHA-256 content
+  hash over `PAGe/DESCRIPTION`, `PAGe/NAMESPACE`, and `PAGe/R/*.R`.
+- `package_revision_check.txt` records the post-install verification result:
+  version, library path, source revision, source hash, and installed
+  `PAGe.rdb` hash.
 - `package_source_manifest.csv` and `source_snapshot/` preserve the package
   source used by the run.
 - `session_info.txt` records the R version and loaded package context.
@@ -158,7 +181,11 @@ readable, the replay status is `unseen_replay_complete`, the holdout is
 training or tuning season set contains `2025-26`. Confirm that the recorded
 protocol matches the values above and that every source hash in
 `package_source_manifest.csv` matches the corresponding file in
-`source_snapshot/`.
+`source_snapshot/`. Confirm that `package_revision_check.txt` contains a
+`verified installed PAGe` record whose source hash equals
+`source_manifest_before_install.txt` and that it records a
+`source_revision`; an error record or a missing file means the run did not
+execute the verified package revision.
 
 The final report should use the weighted outer metrics from
 `run_summary.rds`. The test-count-weighted values are reported beside them as
