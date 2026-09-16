@@ -1770,6 +1770,18 @@ fit_final_pipeline <- function(data,
   result
 }
 
+# Non-leaky ignition fallback for `.nested_scoring_export()`: the replay's
+# own runtime-detected ignition week (never a looked-up truth value), used
+# only when detection actually locked onto a week.
+.replay_ignition_override <- function(replay) {
+  week <- replay$ignition_week
+  if (!identical(replay$ignition_status, "locked") ||
+    !is.numeric(week) || length(week) != 1L || !is.finite(week)) {
+    return(NULL)
+  }
+  stats::setNames(as.numeric(week), as.character(replay$season))
+}
+
 .nested_replay_rows <- function(replay) {
   predictions <- replay$predictions
   m2_predictions <- replay$stages$m2_predictions
@@ -1850,7 +1862,8 @@ fit_final_pipeline <- function(data,
   out
 }
 
-.nested_scoring_export <- function(rows, data, timing_labels = NULL) {
+.nested_scoring_export <- function(rows, data, timing_labels = NULL,
+                                   ignition_overrides = NULL) {
   timing_truth <- if (!is.null(timing_labels)) {
     tryCatch(as_timing_targets_v2(timing_labels), error = function(e) NULL)
   } else {
@@ -1865,6 +1878,20 @@ fit_final_pipeline <- function(data,
   out$h <- as.integer(out$horizon)
   out$ignition_weekF <- refs$ignition_weekF[match(out$season, refs$season)]
   out$observed_peak_weekF <- refs$observed_peak_weekF[match(out$season, refs$season)]
+  # No timing-truth entry exists for a true unseen holdout (injecting one
+  # would be leakage), and observed_peak_weekF already has an empirical
+  # data-driven fallback above -- ignition_weekF has none, so it stays NA
+  # for that season and every downstream phase/weight collapses to
+  # "censored". The replay's own runtime detection (locked, not looked up)
+  # is exactly the non-leaky value to fall back to.
+  if (!is.null(ignition_overrides) && length(ignition_overrides)) {
+    na_idx <- which(is.na(out$ignition_weekF))
+    if (length(na_idx)) {
+      out$ignition_weekF[na_idx] <- unname(
+        ignition_overrides[out$season[na_idx]]
+      )
+    }
+  }
   phase <- page_phase_weights(
     out, page_scoring_weights(),
     season_col = "season", target_col = "target_weekF",
@@ -1948,7 +1975,11 @@ fit_final_pipeline <- function(data,
     },
     stringsAsFactors = FALSE
   )
-  .nested_scoring_export(rows, data, timing_labels = timing_labels)
+  .nested_scoring_export(
+    rows, data,
+    timing_labels = timing_labels,
+    ignition_overrides = .replay_ignition_override(replay)
+  )
 }
 
 #' Train and replay one outer-held-out season
@@ -2006,7 +2037,8 @@ run_outer_fold <- function(data, holdout, artifact_dir = NULL,
   }
   rows <- .nested_scoring_export(
     .nested_replay_rows(replay), data,
-    timing_labels = training$protocol$timing_labels_v2
+    timing_labels = training$protocol$timing_labels_v2,
+    ignition_overrides = .replay_ignition_override(replay)
   )
   weighting <- training$protocol$weighting
   adoption <- training$protocol$adoption
@@ -2067,7 +2099,8 @@ run_outer_fold <- function(data, holdout, artifact_dir = NULL,
         shadow_rows <- .nested_scoring_export(
           .nested_shadow_match(rows, .nested_replay_rows(shadow_replay)),
           data,
-          timing_labels = training$protocol$timing_labels_v2
+          timing_labels = training$protocol$timing_labels_v2,
+          ignition_overrides = .replay_ignition_override(shadow_replay)
         )
         m1_equal <- TRUE
       } else if (shadow$status %in% c("not_needed_use_m2", "not_needed_tuned_all_off")) {
