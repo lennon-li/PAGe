@@ -809,12 +809,24 @@
       do.call(rbind, pair_preds)
     )
     m0_params_used[[season]] <- .nested_m0_params(m0_season)
+    # Mirror the M0 exclusion above (`labels <- manual_labels[names(manual_labels)
+    # != season]`): the gate season's own manual timing label must not enter
+    # its own test-row features either, or its u-feature reflects oracle
+    # knowledge of its true ignition week instead of the nested M0 detection
+    # it would actually have. Other (training) seasons keep truth timing,
+    # same as m2_subset_tune()'s spec-selection rows.
+    gate_timing_truth <- if (is.data.frame(timing_truth) &&
+      "season" %in% names(timing_truth)) {
+      timing_truth[as.character(timing_truth$season) != season, , drop = FALSE]
+    } else {
+      timing_truth
+    }
     prepared <- m2_subset_make_rows(
       data = data, m0 = m0_season, m1 = m1,
       m1_train_preds = gate_preds, seasons = seasons,
       alpha_state = tuning$alpha_state %||% m2_subset_config()$alpha_state,
       timing_mode = timing_mode,
-      timing_truth = timing_truth
+      timing_truth = gate_timing_truth
     )
     # Keep unavailable-row accounting instead of silently dropping it: the
     # audit records scheduled/available/unavailable counts per gate season.
@@ -937,7 +949,10 @@
     )
     m0_timing_source <- paste(
       "nested per-gate-season M0 detected timing (M0 re-selected without",
-      "the gate season); no manual label enters gate features"
+      "the gate season); the gate season's own manual timing label is",
+      "excluded from its test-row features too, matching its detected",
+      "M0 (other in-gate training seasons still use manual timing truth",
+      "for their own u-features, isolating spec selection from M0 noise)"
     )
     m1_parameter_source <- if (isTRUE(upstream$nested_m1)) {
       "nested per-gate-season M1 selection; curve, anchor, and hyperparameters rebuilt per exclusion set"
@@ -956,7 +971,12 @@
     reference_keys <- cache$reference_keys
     reference_cache <- cache$excluded_sets
     reference_fit_strategy <- cache$reference_fit_strategy
-    m0_timing_source <- "outer-fold selected M0 detected timing; no manual label enters gate features"
+    m0_timing_source <- paste(
+      "outer-fold selected M0 detected timing; the gate season's own manual",
+      "timing label is excluded from its test-row features too (other",
+      "in-gate training seasons still use manual timing truth for their",
+      "own u-features, isolating spec selection from M0 noise)"
+    )
     m1_parameter_source <- "explicit outer-fold M1 controls; curve, anchor, and hyperparameters rebuilt per exclusion set"
     m2_gate_parameter_source <- paste(
       "shared selection core run on s-excluded rows; outer recipe grid and",

@@ -119,7 +119,12 @@ page_scoring_weights <- function(pre_ignition = 0, rise = 2, turning = 3,
     ignition <- intersect(c("ignition_target_weekF", "iWeekF", "iWeek"), names(truth))[1L]
     peak <- intersect(c("peak_observed_weekF", "peak_target_weekF", "peak_weekF"), names(truth))[1L]
     if (length(ignition) && !is.na(ignition)) {
-      out$ignition_weekF <- unname(as.numeric(truth[[ignition]])[match(out$season, truth$season)])
+      # Only overwrite rows the truth table actually covers -- a season
+      # absent from `truth` must keep whatever real ignition_weekF `data`
+      # already supplied, not be blanked to NA.
+      looked_up <- unname(as.numeric(truth[[ignition]])[match(out$season, truth$season)])
+      found <- !is.na(looked_up)
+      out$ignition_weekF[found] <- looked_up[found]
     }
     if (length(peak) && !is.na(peak)) {
       out$observed_peak_weekF <- unname(as.numeric(truth[[peak]])[match(out$season, truth$season)])
