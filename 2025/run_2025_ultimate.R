@@ -336,7 +336,7 @@ provenance <- list(
   input_csv = hist_path,
   input_csv_md5 = unname(tools::md5sum(hist_path)),
   holdout = HOLDOUT,
-  exclude = EXCLUDE,
+  exclude = c(EXCLUDE, INCOMPLETE),
   training_seasons = sort(training_seasons),
   n_training_seasons = length(training_seasons),
   timing_label_input = "timing-v2",
@@ -400,7 +400,7 @@ result <- PAGe:::.page_training_audit(do.call(PAGe::run_outer_fold, c(
     timing_labels = timing_labels_training,
     artifact_dir = artifact_dir,
     checkpoint_dir = checkpoint_dir,
-    exclude = EXCLUDE,
+    exclude = c(EXCLUDE, INCOMPLETE),
     verbose = TRUE
   ),
   PROTOCOL_ARGS

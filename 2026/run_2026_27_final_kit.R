@@ -380,7 +380,7 @@ t0 <- Sys.time()
 result <- PAGe:::.page_training_audit(do.call(PAGe::train_outer_fold, c(list(
   data = allD, holdout = NULL, timing_labels = timing_labels_training,
   artifact_dir = artifact_dir, checkpoint_dir = checkpoint_dir,
-  exclude = EXCLUDE, verbose = TRUE
+  exclude = c(EXCLUDE, INCOMPLETE), verbose = TRUE
 ), PROTOCOL_ARGS)), directory = run_dir)
 elapsed_s <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
 stopifnot(
