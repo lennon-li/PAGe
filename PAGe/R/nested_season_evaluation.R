@@ -794,6 +794,12 @@
   m0_params_used <- stats::setNames(vector("list", length(seasons)), seasons)
   for (season_index in seq_along(seasons)) {
     season <- seasons[[season_index]]
+    if (isTRUE(verbose)) {
+      message(
+        "[nested_inner_gate] season ", season_index, "/", length(seasons),
+        " (", season, "): starting", if (full) " (full nesting: M0/M1/M2 re-tuned for this exclusion)" else ""
+      )
+    }
     season_cache <- cache_for(season)
     m0_season <- if (full) upstream$m0[[season]] %||% m0 else m0
     own_key <- .m1_exclusion_key(season)
@@ -880,6 +886,12 @@
       sort(unique(as.character(train$season[idx][keep])))
     })
     names(gate_scored_by_h) <- as.character(1:2)
+    if (isTRUE(verbose)) {
+      message(
+        "[nested_inner_gate] season ", season_index, "/", length(seasons),
+        " (", season, "): scoring M2 config (", nrow(m2_recipe_grid), "-spec grid)"
+      )
+    }
     selected <- .nested_gate_select_config(
       tuning, train,
       training_seasons = setdiff(seasons, season),
@@ -892,6 +904,12 @@
       n_cores = n_cores
     )
     selected_ids[[season]] <- selected$selected_ids
+    if (isTRUE(verbose)) {
+      message(
+        "[nested_inner_gate] season ", season_index, "/", length(seasons),
+        " (", season, "): done"
+      )
+    }
     horizons <- sort(unique(as.integer(test$h)))
     by_horizon <- lapply(horizons, function(horizon) {
       spec <- selected$config[[paste0("h", horizon)]]
@@ -1438,159 +1456,217 @@ train_outer_fold <- function(
     )
   }
 
-  m0_checkpoint <- .nested_stage_checkpoint(checkpoint_dir, "M0")
-  m0_life <- .nested_selection_lifecycle(
-    stage = "M0", initial_grid = m0_grid, max_rounds = rounds[["M0"]],
-    tune = function(current_grid, attempt, previous) {
-      tune_m0(
-        data,
-        grid = current_grid,
-        manual_labels = manual_labels,
-        flag_args = m0_flag_args,
-        n_cores = n_cores,
-        verbose = verbose,
-        selection = selection,
-        checkpoint_dir = m0_checkpoint,
-        timing_truth = timing_targets,
-        timing_mode = timing_mode,
-        previous_results = if (attempt == 1L) {
-          NULL
-        } else {
-          previous$tuning %||% previous
-        }
-      )
-    },
-    plan = function(x, current_grid, attempt) {
-      boundary_action_plan(x, stage = "M0", steps = m0_expansion_steps)
-    },
-    validate = function(x, current_grid) {
-      validate_m0_tuning(x, grid = current_grid, check_boundaries = TRUE)
-    },
-    artifact_dir = artifact_dir
-  )
-  m0_tuning <- m0_life$tuning
-  m0_history <- m0_life$history
-  m0 <- freeze_m0(fit_m0(
-    data,
-    selection,
-    config = m0_tuning$best_params,
-    manual_labels = manual_labels,
-    flag_args = m0_flag_args,
-    timing_truth = timing_targets
-  ), tuning = m0_tuning)
-  .nested_save_rds(m0, artifact_dir, "m0_frozen.rds")
+  # Stage-level resume: M0/M1 are the top-level (non-nested) stage fits, each
+  # already saved to a stable artifact_dir filename below. If a prior attempt
+  # into this SAME artifact_dir already froze a stage, reload it instead of
+  # redoing the tune/fit -- artifact_dir is unique per run_dir, so a file
+  # found here can only be from this run's own earlier (interrupted) attempt.
+  # This does not by itself make the "full" nested inner-gate loop below
+  # resumable stage-by-stage (it re-tunes M0/M1 per gate-season internally),
+  # but that loop already shares checkpoint_dir for spec-level reuse.
+  m0_frozen_path <- if (is.null(artifact_dir)) NULL else file.path(artifact_dir, "m0_frozen.rds")
+  if (!is.null(m0_frozen_path) && file.exists(m0_frozen_path)) {
+    if (isTRUE(verbose)) message("[train_outer_fold] M0: resuming from ", m0_frozen_path)
+    m0 <- readRDS(m0_frozen_path)
+    m0_tuning <- readRDS(file.path(artifact_dir, "m0_tuning_result.rds"))
+    m0_history <- readRDS(file.path(artifact_dir, "m0_history_result.rds"))
+    if (isTRUE(verbose)) message("[train_outer_fold] M0: resumed")
+  } else {
+    if (isTRUE(verbose)) message("[train_outer_fold] M0: starting tune/fit/freeze")
+    m0_checkpoint <- .nested_stage_checkpoint(checkpoint_dir, "M0")
+    m0_life <- .nested_selection_lifecycle(
+      stage = "M0", initial_grid = m0_grid, max_rounds = rounds[["M0"]],
+      tune = function(current_grid, attempt, previous) {
+        tune_m0(
+          data,
+          grid = current_grid,
+          manual_labels = manual_labels,
+          flag_args = m0_flag_args,
+          n_cores = n_cores,
+          verbose = verbose,
+          selection = selection,
+          checkpoint_dir = m0_checkpoint,
+          timing_truth = timing_targets,
+          timing_mode = timing_mode,
+          previous_results = if (attempt == 1L) {
+            NULL
+          } else {
+            previous$tuning %||% previous
+          }
+        )
+      },
+      plan = function(x, current_grid, attempt) {
+        boundary_action_plan(x, stage = "M0", steps = m0_expansion_steps)
+      },
+      validate = function(x, current_grid) {
+        validate_m0_tuning(x, grid = current_grid, check_boundaries = TRUE)
+      },
+      artifact_dir = artifact_dir
+    )
+    m0_tuning <- m0_life$tuning
+    m0_history <- m0_life$history
+    m0 <- freeze_m0(fit_m0(
+      data,
+      selection,
+      config = m0_tuning$best_params,
+      manual_labels = manual_labels,
+      flag_args = m0_flag_args,
+      timing_truth = timing_targets
+    ), tuning = m0_tuning)
+    .nested_save_rds(m0_tuning, artifact_dir, "m0_tuning_result.rds")
+    .nested_save_rds(m0_history, artifact_dir, "m0_history_result.rds")
+    .nested_save_rds(m0, artifact_dir, "m0_frozen.rds")
+    if (isTRUE(verbose)) message("[train_outer_fold] M0: settled and frozen")
+  }
 
-  m1_checkpoint <- .nested_stage_checkpoint(checkpoint_dir, "M1")
-  m1_life <- .nested_selection_lifecycle(
-    stage = "M1", initial_grid = m1_grid, max_rounds = rounds[["M1"]],
-    tune = function(current_grid, attempt, previous) {
-      x <- tune_m1(
-        data,
-        m0 = m0,
-        m1 = list(m1_params = m1_params),
-        grid = current_grid,
-        n_cores = n_cores,
-        checkpoint_dir = m1_checkpoint,
-        verbose = verbose,
-        selection = selection,
-        manual_labels = manual_labels,
-        timing_truth = timing_targets,
-        timing_mode = timing_mode
-      )
-      x$hard_caps <- m1_hard_caps
-      x
-    },
-    plan = function(x, current_grid, attempt) {
-      boundary_action_plan(
-        x,
-        stage = "M1", hard_caps = m1_hard_caps,
-        m1_min_gain = m1_min_gain,
-        m1_prefer_simpler = m1_prefer_simpler,
-        steps = m1_expansion_steps
-      )
-    },
-    validate = function(x, current_grid) {
-      m1_selection <- select_m1_candidate(
-        x,
-        min_gain = m1_min_gain,
-        prefer_simpler = m1_prefer_simpler, hard_caps = m1_hard_caps
-      )
-      x$best <- m1_selection$selected
-      x$m1_selection <- m1_selection
-      validate_m1_tuning(
-        x,
-        check_boundaries = TRUE, hard_caps = m1_hard_caps
-      )
-    },
-    artifact_dir = artifact_dir
-  )
-  m1_tuning <- m1_life$tuning
-  m1_history <- m1_life$history
-  m1_selection <- m1_tuning$m1_selection
-  m1_config <- .m1_params_from_tuning(m1_params, m1_tuning)
-  m1 <- freeze_m1(fit_m1(
-    data,
-    selection,
-    m0 = m0,
-    config = m1_config,
-    timing_mode = timing_mode,
-    timing_truth = timing_targets
-  ), tuning = m1_tuning)
-  .nested_save_rds(m1_selection, artifact_dir, "m1_selection.rds")
-  .nested_save_rds(m1, artifact_dir, "m1_frozen.rds")
+  m1_frozen_path <- if (is.null(artifact_dir)) NULL else file.path(artifact_dir, "m1_frozen.rds")
+  if (!is.null(m1_frozen_path) && file.exists(m1_frozen_path)) {
+    if (isTRUE(verbose)) message("[train_outer_fold] M1: resuming from ", m1_frozen_path)
+    m1 <- readRDS(m1_frozen_path)
+    m1_tuning <- readRDS(file.path(artifact_dir, "m1_tuning_result.rds"))
+    m1_history <- readRDS(file.path(artifact_dir, "m1_history_result.rds"))
+    m1_selection <- readRDS(file.path(artifact_dir, "m1_selection.rds"))
+    if (isTRUE(verbose)) message("[train_outer_fold] M1: resumed")
+  } else {
+    if (isTRUE(verbose)) message("[train_outer_fold] M1: starting tune/fit/freeze")
+    m1_checkpoint <- .nested_stage_checkpoint(checkpoint_dir, "M1")
+    m1_life <- .nested_selection_lifecycle(
+      stage = "M1", initial_grid = m1_grid, max_rounds = rounds[["M1"]],
+      tune = function(current_grid, attempt, previous) {
+        x <- tune_m1(
+          data,
+          m0 = m0,
+          m1 = list(m1_params = m1_params),
+          grid = current_grid,
+          n_cores = n_cores,
+          checkpoint_dir = m1_checkpoint,
+          verbose = verbose,
+          selection = selection,
+          manual_labels = manual_labels,
+          timing_truth = timing_targets,
+          timing_mode = timing_mode
+        )
+        x$hard_caps <- m1_hard_caps
+        x
+      },
+      plan = function(x, current_grid, attempt) {
+        boundary_action_plan(
+          x,
+          stage = "M1", hard_caps = m1_hard_caps,
+          m1_min_gain = m1_min_gain,
+          m1_prefer_simpler = m1_prefer_simpler,
+          steps = m1_expansion_steps
+        )
+      },
+      validate = function(x, current_grid) {
+        m1_selection <- select_m1_candidate(
+          x,
+          min_gain = m1_min_gain,
+          prefer_simpler = m1_prefer_simpler, hard_caps = m1_hard_caps
+        )
+        x$best <- m1_selection$selected
+        x$m1_selection <- m1_selection
+        validate_m1_tuning(
+          x,
+          check_boundaries = TRUE, hard_caps = m1_hard_caps
+        )
+      },
+      artifact_dir = artifact_dir
+    )
+    m1_tuning <- m1_life$tuning
+    m1_history <- m1_life$history
+    m1_selection <- m1_tuning$m1_selection
+    m1_config <- .m1_params_from_tuning(m1_params, m1_tuning)
+    m1 <- freeze_m1(fit_m1(
+      data,
+      selection,
+      m0 = m0,
+      config = m1_config,
+      timing_mode = timing_mode,
+      timing_truth = timing_targets
+    ), tuning = m1_tuning)
+    .nested_save_rds(m1_tuning, artifact_dir, "m1_tuning_result.rds")
+    .nested_save_rds(m1_history, artifact_dir, "m1_history_result.rds")
+    .nested_save_rds(m1_selection, artifact_dir, "m1_selection.rds")
+    .nested_save_rds(m1, artifact_dir, "m1_frozen.rds")
+    if (isTRUE(verbose)) message("[train_outer_fold] M1: settled and frozen")
+  }
 
-  m2_checkpoint <- .nested_stage_checkpoint(checkpoint_dir, "M2")
-  m1_train_preds <- NULL
-  m2_life <- .nested_selection_lifecycle(
-    stage = "M2", initial_grid = m2_grid, max_rounds = rounds[["M2"]],
-    tune = function(current_grid, attempt, previous) {
-      x <- tune_m2(
-        data,
-        selection = selection,
-        m0 = m0,
-        m1 = m1,
-        grid = current_grid,
-        family = m2_family,
-        checkpoint_dir = m2_checkpoint,
-        early_weight = early_weight,
-        early_max_t_since = early_max_t_since,
-        pre_ignition_weight = pre_ignition_weight,
-        late_weight = late_weight,
-        scoring = scoring,
-        score_scale = score_scale,
-        m1_train_preds = m1_train_preds,
-        n_cores = n_cores,
-        verbose = verbose,
-        timing_mode = timing_mode,
-        timing_truth = timing_targets
-      )
-      m1_train_preds <<- x$m1_train_preds
-      x$min_nll_gain <- m2_min_nll_gain
-      x$recipe_grid <- as.data.frame(m2_grid)
-      x
-    },
-    plan = function(x, current_grid, attempt) {
-      .nested_save_csv(x$grid, artifact_dir, "m2_grid.csv")
-      .nested_save_csv(x$scores, artifact_dir, "m2_fold_scores.csv")
-      .nested_save_csv(x$summary, artifact_dir, "m2_summary.csv")
-      boundary_action_plan(
-        x,
-        stage = "M2", steps = m2_expansion_steps,
-        max_specs = nrow(x$grid) + m2_expansion_increment
-      )
-    },
-    validate = function(x, current_grid) {
-      validate_m2_tuning(
-        x,
-        check_boundaries = TRUE, min_nll_gain = m2_min_nll_gain
-      )
-    },
-    artifact_dir = artifact_dir
-  )
-  m2_tuning <- m2_life$tuning
-  m2_history <- m2_life$history
-
-  m2_tuning$recipe_grid <- as.data.frame(m2_grid)
+  # Same resume pattern as M0/M1 for the top-level (not-yet-gate-nested) M2
+  # tuning settle point. This does NOT make the nested inner-gate loop just
+  # below stage-resumable on its own (it re-tunes M0/M1/M2 again per
+  # gate-season internally), but skipping a redundant top-level M2 re-tune
+  # on restart is still real, and that loop already reuses checkpoint_dir
+  # for spec-level caching regardless.
+  m2_tuning_settled_path <- if (is.null(artifact_dir)) NULL else file.path(artifact_dir, "m2_tuning_settled.rds")
+  if (!is.null(m2_tuning_settled_path) && file.exists(m2_tuning_settled_path)) {
+    if (isTRUE(verbose)) message("[train_outer_fold] M2 (top-level): resuming from ", m2_tuning_settled_path)
+    m2_tuning <- readRDS(m2_tuning_settled_path)
+    m2_history <- readRDS(file.path(artifact_dir, "m2_history_result.rds"))
+    if (isTRUE(verbose)) message("[train_outer_fold] M2 (top-level): resumed")
+  } else {
+    if (isTRUE(verbose)) message("[train_outer_fold] M2 (top-level): starting tune")
+    m2_checkpoint <- .nested_stage_checkpoint(checkpoint_dir, "M2")
+    m1_train_preds <- NULL
+    m2_life <- .nested_selection_lifecycle(
+      stage = "M2", initial_grid = m2_grid, max_rounds = rounds[["M2"]],
+      tune = function(current_grid, attempt, previous) {
+        x <- tune_m2(
+          data,
+          selection = selection,
+          m0 = m0,
+          m1 = m1,
+          grid = current_grid,
+          family = m2_family,
+          checkpoint_dir = m2_checkpoint,
+          early_weight = early_weight,
+          early_max_t_since = early_max_t_since,
+          pre_ignition_weight = pre_ignition_weight,
+          late_weight = late_weight,
+          scoring = scoring,
+          score_scale = score_scale,
+          m1_train_preds = m1_train_preds,
+          n_cores = n_cores,
+          verbose = verbose,
+          timing_mode = timing_mode,
+          timing_truth = timing_targets
+        )
+        m1_train_preds <<- x$m1_train_preds
+        x$min_nll_gain <- m2_min_nll_gain
+        x$recipe_grid <- as.data.frame(m2_grid)
+        x
+      },
+      plan = function(x, current_grid, attempt) {
+        .nested_save_csv(x$grid, artifact_dir, "m2_grid.csv")
+        .nested_save_csv(x$scores, artifact_dir, "m2_fold_scores.csv")
+        .nested_save_csv(x$summary, artifact_dir, "m2_summary.csv")
+        boundary_action_plan(
+          x,
+          stage = "M2", steps = m2_expansion_steps,
+          max_specs = nrow(x$grid) + m2_expansion_increment
+        )
+      },
+      validate = function(x, current_grid) {
+        validate_m2_tuning(
+          x,
+          check_boundaries = TRUE, min_nll_gain = m2_min_nll_gain
+        )
+      },
+      artifact_dir = artifact_dir
+    )
+    m2_tuning <- m2_life$tuning
+    m2_history <- m2_life$history
+    m2_tuning$recipe_grid <- as.data.frame(m2_grid)
+    .nested_save_rds(m2_tuning, artifact_dir, "m2_tuning_settled.rds")
+    .nested_save_rds(m2_history, artifact_dir, "m2_history_result.rds")
+    if (isTRUE(verbose)) message("[train_outer_fold] M2 (top-level): settled")
+  }
+  if (isTRUE(verbose)) {
+    message(
+      "[train_outer_fold] nested inner gate: starting (", length(selection$training_seasons),
+      " gate seasons, nesting=", gate_nesting, ")"
+    )
+  }
   inner_rows <- .nested_inner_gate_rows(
     m2_tuning, selection$training_seasons,
     data = data, m0 = m0, m1 = m1, timing_mode = timing_mode,
@@ -1621,6 +1697,7 @@ train_outer_fold <- function(
     n_cores = n_cores,
     verbose = verbose
   )
+  if (isTRUE(verbose)) message("[train_outer_fold] nested inner gate: done, deciding M2 vs M1")
   inner_audit <- attr(inner_rows, "nested_audit") %||% list(
     nested = TRUE, reference_fit_count = NA_integer_,
     reference_keys = character()
@@ -1727,6 +1804,12 @@ train_outer_fold <- function(
     })
   }
 
+  if (isTRUE(verbose)) {
+    message(
+      "[train_outer_fold] gate decision: ", applied$action,
+      "; fitting final M2 and assembling kit"
+    )
+  }
   m2 <- freeze_m2(fit_m2(
     data,
     selection,
@@ -1750,6 +1833,7 @@ train_outer_fold <- function(
   validate_page_kit(kit)
   .nested_save_rds(m2, artifact_dir, "m2_frozen.rds")
   .nested_save_rds(kit, artifact_dir, "candidate_pre_holdout.rds")
+  if (isTRUE(verbose)) message("[train_outer_fold] kit assembled and saved")
 
   result <- structure(list(
     protocol = protocol,
