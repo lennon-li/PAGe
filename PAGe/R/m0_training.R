@@ -79,6 +79,42 @@
   )
 }
 
+# .m0_rank_aware_basis()'s `event_support_limit <- n_event_p - 1L` avoids the
+# exact rank boundary in the common case, but gamm4:::getVb()'s backsolve on
+# the joint random-effects covariance can still hit a singular matrix for
+# some data/platform (BLAS/LAPACK) combinations even one step back from that
+# boundary -- the static heuristic is an a-priori estimate, not a guarantee.
+# This wraps a gamm4::gamm4() call with a runtime fallback: on a singular
+# matrix error specifically, retry with the p-smooth basis reduced by one
+# more, down to the same floor of 3 .m0_rank_aware_basis() itself enforces.
+# Any other error is rethrown unchanged.
+.m0_gamm4_rank_retry <- function(week_col, p_col, k_week_effective, k_p_start,
+                                 random, data, select, min_k_p = 3L) {
+  k_p_try <- as.integer(k_p_start)
+  repeat {
+    rhs <- paste0(
+      "s(", week_col, ", bs='ts', k=", k_week_effective, ") + ",
+      "s(", p_col, ", bs='ts', k=", k_p_try, ")"
+    )
+    form <- stats::as.formula(paste0("event ~ ", rhs))
+    fit <- tryCatch(
+      gamm4::gamm4(
+        formula = form, random = random, data = data,
+        family = stats::binomial(), nAGQ = 1, select = select
+      ),
+      error = function(e) e
+    )
+    if (!inherits(fit, "error")) {
+      return(list(fit = fit, k_p_used = k_p_try))
+    }
+    if (!grepl("singular matrix", conditionMessage(fit), fixed = TRUE) ||
+      k_p_try <= min_k_p) {
+      stop(fit)
+    }
+    k_p_try <- k_p_try - 1L
+  }
+}
+
 # ============================================================
 # Prospective ignition detection (M0)
 #   Stage-1: ignition classifier scores (fitIgnition)
@@ -266,12 +302,6 @@ fitIgnition <- function(
     )
   }
 
-  rhs_fixed <- paste0(
-    "s(", week_col, ", bs='ts', k=", k_week_effective, ") + ",
-    "s(", p_col,    ", bs='ts', k=", k_p_effective,    ")"
-  )
-  form_fixed <- stats::as.formula(paste0("event ~ ", rhs_fixed))
-
   fits <- list()
 
   pred_into <- function(gam_obj, outcol) {
@@ -282,14 +312,13 @@ fitIgnition <- function(
   # (1) base
   if (isTRUE(fit_base)) {
     if (verbose) message("[fitIgnition] fitting base (random intercept)")
-    fit_base_obj <- gamm4::gamm4(
-      formula = form_fixed,
-      random  = stats::as.formula(paste0("~(1|", season_col, ")")),
-      data    = DT_tr,
-      family  = stats::binomial(),
-      nAGQ    = 1,
-      select  = select
+    base_retry <- .m0_gamm4_rank_retry(
+      week_col = week_col, p_col = p_col,
+      k_week_effective = k_week_effective, k_p_start = k_p_effective,
+      random = stats::as.formula(paste0("~(1|", season_col, ")")),
+      data = DT_tr, select = select
     )
+    fit_base_obj <- base_retry$fit
     fits$base <- fit_base_obj
     pred_into(fit_base_obj$gam, "p_cls_p") # canonical name used downstream
     DT_all[, p_cls_base_pop := p_cls_p] # alias
@@ -298,14 +327,13 @@ fitIgnition <- function(
   # (2) random slope on week (population-level via $gam)
   if (isTRUE(fit_slope)) {
     if (verbose) message("[fitIgnition] fitting slope (random intercept + slope on week)")
-    fit_slope_obj <- gamm4::gamm4(
-      formula = form_fixed,
-      random  = stats::as.formula(paste0("~(1 + ", week_col, "|", season_col, ")")),
-      data    = DT_tr,
-      family  = stats::binomial(),
-      nAGQ    = 1,
-      select  = select
+    slope_retry <- .m0_gamm4_rank_retry(
+      week_col = week_col, p_col = p_col,
+      k_week_effective = k_week_effective, k_p_start = k_p_effective,
+      random = stats::as.formula(paste0("~(1 + ", week_col, "|", season_col, ")")),
+      data = DT_tr, select = select
     )
+    fit_slope_obj <- slope_retry$fit
     fits$slope <- fit_slope_obj
     pred_into(fit_slope_obj$gam, "p_cls_slope_pop")
   }

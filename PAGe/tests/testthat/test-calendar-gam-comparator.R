@@ -93,8 +93,12 @@ test_that("calendar GAM outcome lookup follows the requested horizons", {
   expect_identical(h2$target, 14)
   full <- cal_gam_origin(data, 12)
   expect_identical(full$horizon, c(1, 2))
-  expect_identical(full$prediction[1], h1$prediction)
-  expect_identical(full$prediction[2], h2$prediction)
+  # These are three independently-fit GAMs (separate baseline_calendar_gam()
+  # calls), not the same fit reused -- IRLS convergence can land a few ULPs
+  # apart across platforms/BLAS even for the same inputs, so compare the
+  # predictions with a tolerance rather than exact bitwise identity.
+  expect_equal(full$prediction[1], h1$prediction, tolerance = 1e-8)
+  expect_equal(full$prediction[2], h2$prediction, tolerance = 1e-8)
 })
 
 test_that("calendar GAM is deterministic", {
