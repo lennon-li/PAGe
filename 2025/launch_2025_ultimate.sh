@@ -15,7 +15,10 @@ command -v setsid >/dev/null
 command -v nohup >/dev/null
 cd /home/yeli/repos/PAGe
 
-export PAGE_FLU_HIST_FILE="${PAGE_FLU_HIST_FILE:-/home/yeli/FLU/flu_testing_data.csv}"
+# No default: the old fallback was a truncated extract (2025-26 ends at
+# weekF 28 of 53) that silently trained the 2026-09-17 campaign.
+: "${PAGE_FLU_HIST_FILE:?Set PAGE_FLU_HIST_FILE to the authorized CSV}"
+export PAGE_FLU_HIST_FILE
 export PAGE_RUN_ROOT="${PAGE_RUN_ROOT:-/home/yeli/repos/PAGe/results/manuscript/nested-outer-2025-26-ultimate-20260911}"
 : "${PAGE_RUN_ID:?PAGE_RUN_ID must be set}"
 

@@ -15,7 +15,10 @@ set -u
 
 REPO_ROOT="${PAGE_REPO_ROOT:-/home/yeli/repos/PAGe-r6-run}"
 ARTIFACT_ROOT="${PAGE_ARTIFACT_ROOT:-/home/yeli/PAGe-bcc-artifacts/asgard-archive-20260812}"
-HIST_FILE="${PAGE_FLU_HIST_FILE:-$REPO_ROOT/data/flu_testing_data.csv}"
+# No default: the old fallback was a truncated extract (2025-26 ends at
+# weekF 28 of 53) that silently trained the 2026-09-17 campaign.
+: "${PAGE_FLU_HIST_FILE:?Set PAGE_FLU_HIST_FILE to the authorized CSV}"
+HIST_FILE="$PAGE_FLU_HIST_FILE"
 N_CORES="${PAGE_N_CORES:-16}"
 MAX_ATTEMPTS="${PAGE_MAX_ATTEMPTS:-3}"
 DRIVER_LOG="$ARTIFACT_ROOT/campaign_driver.log"

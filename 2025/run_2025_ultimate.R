@@ -118,7 +118,15 @@ run_root <- Sys.getenv(
   "/home/yeli/repos/PAGe/results/manuscript/nested-outer-2025-26-ultimate-20260911"
 )
 run_id <- Sys.getenv("PAGE_RUN_ID", "")
-hist_path <- Sys.getenv("PAGE_FLU_HIST_FILE", "/home/yeli/FLU/flu_testing_data.csv")
+hist_path <- Sys.getenv("PAGE_FLU_HIST_FILE", "")
+# No default. This used to fall back to /home/yeli/FLU/flu_testing_data.csv,
+# which is a TRUNCATED extract (2025-26 stops at weekF 28 of 53). The
+# 2026-09-17 outer-fold campaign trained every fold on it without anyone
+# noticing, because a silent default cannot be reviewed. The authorized feed
+# must now be named explicitly, as the production runner already requires.
+if (!nzchar(hist_path)) {
+  stop("Set PAGE_FLU_HIST_FILE to the authorized historical CSV.", call. = FALSE)
+}
 if (!file.exists(hist_path)) stop("Authorized historical CSV not found: ", hist_path)
 
 run_dir <- if (nzchar(run_id)) file.path(run_root, run_id) else NA_character_
