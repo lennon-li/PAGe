@@ -9,7 +9,7 @@ alignIgnition(
   season_col = "season",
   week_col = "weekF",
   nweek_col = "nW_true",
-  template_weeks = 52L
+  template_weeks = .page_template_weeks()
 )
 }
 \arguments{

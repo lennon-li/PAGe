@@ -140,11 +140,6 @@ boundary reports, decisions, frozen stages, and the final kit.}
 
 \item{verbose}{Logical progress flag.}
 
-\item{shadow_m2}{Logical; additionally fit and replay the tuned M2 candidate
-for output-only comparison when an outer fold keeps M1. Defaults to `TRUE`.
-Failures are recorded without failing the primary fold. Final all-season
-fits never build a shadow. `FALSE` preserves the original output schema.}
-
 \item{gate_nesting}{Inner-gate nesting depth. `"full"` (default) re-runs
 selection, inside each gate season's excluded dataset, for every upstream
 axis the recipe actually tunes (M0 always; M1 only when its grid has more
@@ -155,6 +150,11 @@ is labelled `"conditional on upstream selection"`. Both options use nested
 M1 references (rows of `r` exclude `r` and the gate season) and identical
 estimator settings, and both are recorded in run provenance and kit
 metadata.}
+
+\item{shadow_m2}{Logical; additionally fit and replay the tuned M2 candidate
+for output-only comparison when an outer fold keeps M1. Defaults to `TRUE`.
+Failures are recorded without failing the primary fold. Final all-season
+fits never build a shadow. `FALSE` preserves the original output schema.}
 }
 \value{
 A `page_outer_training` object containing the season selection,

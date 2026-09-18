@@ -10,7 +10,7 @@ compute_align_weights(
   trough_weight = 0.1,
   rise_weight = 3,
   peak_decay = 0.3,
-  n_weeks = 52L
+  n_weeks = .page_template_weeks()
 )
 }
 \arguments{

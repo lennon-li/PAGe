@@ -318,19 +318,46 @@ m1_walkforward_multi <- function(allD,
     purrr::map
   }
 
-  results <- map_fn(seasons, function(s) {
-    if (isTRUE(verbose)) message("[m1_walkforward_multi] Processing season: ", s)
-    seasonD <- dplyr::filter(allD, .data$season == s)
-    upstream <- if (is.null(season_references)) list(ref = ref, hyper = hyper) else season_references[[s]]
+  # Build one self-contained task per season BEFORE mapping. A lambda that
+  # closes over `allD`/`season_references`/`season_ignition` and subsets them
+  # inside the worker forces future to export the whole objects to every
+  # worker: `season_references` alone can exceed 600 MiB, which both trips
+  # future's maxSizeOfObjects guard and ships the entire cache to all cores on
+  # every call. Each task below carries only its own season's slice.
+  tasks <- lapply(seasons, function(s) {
+    upstream <- if (is.null(season_references)) {
+      list(ref = ref, hyper = hyper)
+    } else {
+      season_references[[s]]
+    }
     if (is.null(upstream$ref) || is.null(upstream$hyper)) {
       stop("Missing M1 reference for season: ", s, call. = FALSE)
     }
-
-    m1_walkforward_predictions(
-      seasonD = seasonD,
+    list(
+      season = s,
+      seasonD = dplyr::filter(allD, .data$season == s),
       ref = upstream$ref,
       hyper = upstream$hyper,
-      ign_out = if (is.null(season_ignition)) NULL else season_ignition[[s]],
+      ign_out = if (is.null(season_ignition)) NULL else season_ignition[[s]]
+    )
+  })
+  # Drop the large captures so the mapped closure cannot pull them in.
+  allD <- NULL
+  season_references <- NULL
+  season_ignition <- NULL
+  ref <- NULL
+  hyper <- NULL
+
+  results <- map_fn(tasks, function(task) {
+    if (isTRUE(verbose)) {
+      message("[m1_walkforward_multi] Processing season: ", task$season)
+    }
+
+    m1_walkforward_predictions(
+      seasonD = task$seasonD,
+      ref = task$ref,
+      hyper = task$hyper,
+      ign_out = task$ign_out,
       params = params,
       horizons = horizons,
       eval_weeks = eval_weeks,

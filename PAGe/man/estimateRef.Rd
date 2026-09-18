@@ -8,7 +8,7 @@ estimateRef(
   alignedD,
   exSeason = NULL,
   k = 10,
-  n_weeks = 52L,
+  n_weeks = .page_template_weeks(),
   nAGQ = 1,
   method = c("binomial", "binomial_weighted", "gaussian_logit", "median_smooth", "fs",
     "gaussian_logit_fs"),

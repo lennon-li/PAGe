@@ -72,6 +72,8 @@ A list with:
   \item{train_data}{Training subset with \code{event} label and per-row bounds.}
   \item{iWeek_by_season}{Season-level truth ignition week table.}
   \item{fits}{List of fitted objects for each enabled model.}
+  \item{basis_support}{Requested and effective basis dimensions with the
+    explicit support-based adjustment reason.}
 }
 
 \strong{Added score columns (in \code{$data}).}

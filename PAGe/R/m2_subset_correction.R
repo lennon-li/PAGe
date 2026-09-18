@@ -562,6 +562,20 @@ m2_subset_predict <- function(fit, newdata) {
       eta <- as.numeric(stats::predict(fit$fit, newdata = nd, type = "link"))
     }
     correction <- eta - nd$m1_logit
+    # Safety net independent of the feature-construction fix above: nothing
+    # else here bounds the fitted correction, and a training-range feature
+    # clamp (m2_subset_apply_ranges(), above) does not bound the value AT a
+    # boundary knot -- an unconstrained smooth edge can still emit a wildly
+    # implausible correction (traced: +12 to +33 logits, turning p~0.004
+    # into p_hat=1.000). Clamp to a generous but finite band; legitimate
+    # corrections observed in this pipeline's data run up to ~7 logits, so
+    # +-10 leaves real signal untouched while capping genuine blowups.
+    correction_cap <- 10
+    correction_clamped <- correction < -correction_cap | correction > correction_cap
+    if (any(correction_clamped)) {
+      correction <- pmin(correction_cap, pmax(-correction_cap, correction))
+      eta <- nd$m1_logit + correction
+    }
   }
   if (any(!is.finite(eta))) stop("M2 subset prediction is non-finite.", call. = FALSE)
   data.frame(
@@ -569,6 +583,7 @@ m2_subset_predict <- function(fit, newdata) {
     p_hat = if (identical(fit$type, "all_off")) m1_probability else stats::plogis(eta),
     eta = eta,
     correction_logit = correction,
+    correction_clamped = if (identical(fit$type, "all_off")) rep(FALSE, nrow(nd)) else correction_clamped,
     confidence_scale = if (identical(fit$type, "all_off")) rep(1, nrow(nd)) else conf$scale,
     confidence_scale_missing = if (identical(fit$type, "all_off")) rep(FALSE, nrow(nd)) else conf$missing,
     stringsAsFactors = FALSE
@@ -593,7 +608,14 @@ m2_subset_observed_features <- function(data, declaration_week, alpha_state) {
   if (any(!is.finite(d$y) | !is.finite(d$N) | d$N <= 0 | d$y < 0 | d$y > d$N)) {
     stop("Observed data contains invalid counts.", call. = FALSE)
   }
-  p <- pmin(1 - 1e-6, pmax(1e-6, d$y / d$N))
+  # A fixed 1e-6 floor on p manufactures an extreme logit outlier at any
+  # zero-count week regardless of N (e.g. N=1000 -> logit -13.8, vs a
+  # statistically honest ~-7.6) -- this poisons the z/d EMA features that
+  # follow and was traced (Opus audit, 2026-09-18) as the root cause of an
+  # unbounded M2 correction blowup in one sparse/truncated season. A
+  # continuity-corrected empirical logit keeps the zero-count case finite
+  # and proportionate to N instead of an arbitrary constant.
+  p <- (d$y + 0.5) / (d$N + 1)
   logit_now <- stats::qlogis(p)
   z <- as.numeric(stats::filter(alpha_state * logit_now,
     filter = 1 - alpha_state, method = "recursive", init = logit_now[1L]
@@ -1425,12 +1447,42 @@ m2_subset_score <- function(data, prediction, weights = NULL) {
     if (!nrow(agg) || any(!is.finite(agg$bernoulli_nll))) {
       stop(label, " has no complete h", h, " candidates.", call. = FALSE)
     }
+    # Selection previously ranked on mean NLL alone, which can select a spec
+    # that beats the all-off baseline on average while being catastrophically
+    # worse than it in one held-out season -- exactly the mean-vs-worst-fold
+    # mismatch (Opus audit, 2026-09-18) between this ranking and the
+    # downstream adoption gate's zero-tolerance max_season_degradation rule:
+    # the search could propose, and the gate would then have to reject, a
+    # spec whose worst season is strictly worse than not correcting at all.
+    # Prefer any candidate that never underperforms all-off in a single
+    # season; only fall back to the full candidate set if none qualify (the
+    # all-off spec itself always qualifies trivially, so this fallback path
+    # is unreachable in practice, but is kept explicit rather than assumed).
+    all_off_id <- grid$id[which(grid$enabled_count == 0)[1L]]
+    worst_excess <- stats::setNames(rep(NA_real_, nrow(agg)), agg$spec_id)
+    if (!is.na(all_off_id) && all_off_id %in% valid$spec_id) {
+      all_off_by_season <- stats::setNames(
+        valid$bernoulli_nll[valid$spec_id == all_off_id],
+        valid$season[valid$spec_id == all_off_id]
+      )
+      worst_excess[] <- vapply(agg$spec_id, function(sid) {
+        rows <- valid[valid$spec_id == sid, , drop = FALSE]
+        matched <- all_off_by_season[as.character(rows$season)]
+        delta <- rows$bernoulli_nll - matched
+        if (!length(delta) || all(is.na(delta))) NA_real_ else max(delta, na.rm = TRUE)
+      }, numeric(1L))
+    }
+    robust <- is.finite(worst_excess) & worst_excess <= 0
+    candidate_idx <- if (any(robust)) which(robust) else seq_len(nrow(agg))
     enabled <- grid$enabled_count[match(agg$spec_id, grid$id)]
-    ord <- order(agg$bernoulli_nll, enabled, agg$spec_id)
+    ord <- candidate_idx[order(
+      agg$bernoulli_nll[candidate_idx], enabled[candidate_idx], agg$spec_id[candidate_idx]
+    )]
     best <- agg[ord[1L], , drop = FALSE]
     selected[[h]] <- grid[match(best$spec_id, grid$id), , drop = FALSE]
     summary_rows[[h]] <- data.frame(
       spec_id = agg$spec_id, horizon = h, bernoulli_nll = agg$bernoulli_nll,
+      worst_season_excess_vs_all_off = unname(worst_excess),
       n_seasons = length(scored_seasons), stringsAsFactors = FALSE
     )
   }
