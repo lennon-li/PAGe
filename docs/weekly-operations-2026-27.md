@@ -14,8 +14,17 @@ review the forecast, ignition status and provenance before anything is shared.
   launch from inside an agent sandbox: `setsid` cannot detach there.
 - R with the PAGe dependencies, GNU coreutils, `findutils`, `procps`,
   `util-linux` (`setsid`), and Bash.
-- The frozen 2026-27 kit (`final_kit.rds`) and its expected SHA-256, e.g. from
-  `final_kit.sha256` produced by `2026/run_2026_27_final_kit.R`.
+- The designated production kit and its expected SHA-256. As of 2026-09-18
+  that is **v2.1**, and it is the only kit weekly runs may use:
+
+  ```sh
+  PAGE_KIT_PATH=results/final-kit-2026-27/20260918T1520Z-final-2026-27-wmin8-venkata/final_kit.rds
+  PAGE_KIT_SHA256=cef535799994a68f5dbacfddced46eeea23d2e5deb15dbd6a823e8c555bf87cc
+  ```
+
+  See `docs/production-kit-2026-27.md` for what it selected, why v2.1 rather
+  than v2.0, and the standing caveat on its outer evaluation. Other runs under
+  `results/final-kit-2026-27/` are superseded history, not alternatives.
 - Network access to the PHO ORVT feed, or an authorized local CSV.
 
 ## Runtime functions used
