@@ -112,6 +112,31 @@ input_sha256 <- sha256(hist_path)
 # {0,3,4,5} x conf_scale {none, peak_ci}) is built by the package as
 # implemented; gate_nesting = "full"; scoring = page_v2.
 M0_GRID <- PAGe:::.default_m0_grid()
+# PROTOCOL v2.1, 2026-09-18: the M0 eligibility window floor (w_min) is an
+# operational constant, not a tuned axis -- it was held fixed at 13 across all
+# three rounds of the v2.0 M0 grid. Epidemiological review moved it to the
+# week the weekly run actually starts (weekF 8, the minimum history PAGe needs
+# to run), leaving w_max = 26 untouched. Declared here rather than by editing
+# the package default so the value is recorded in the run's source snapshot.
+# Verified before adoption: at the v2.0 SELECTED M0 parameters this changes no
+# detection in any of the 12 detected historical seasons (all ignition weeks
+# identical), and it does not make 2026-27 ignite -- the binding constraint
+# there is the 4-of-5 vote, not the window. It does change detections for
+# 38/40 OTHER grid specs, which is why the tuning is re-run rather than the
+# stored value patched.
+m0_w_min_text <- Sys.getenv("PAGE_M0_W_MIN", "")
+if (nzchar(m0_w_min_text)) {
+  m0_w_min <- suppressWarnings(as.integer(m0_w_min_text))
+  if (is.na(m0_w_min) || !grepl("^[0-9]+$", m0_w_min_text)) {
+    stop("PAGE_M0_W_MIN must be a positive integer week.")
+  }
+  if (!"w_min" %in% names(M0_GRID)) stop("M0 grid has no w_min column to override.")
+  if (any(as.integer(M0_GRID$w_max) < m0_w_min)) {
+    stop("PAGE_M0_W_MIN must not exceed w_max in any M0 specification.")
+  }
+  M0_GRID$w_min <- m0_w_min
+  message(sprintf("[recipe] M0 w_min overridden to %d (w_max unchanged).", m0_w_min))
+}
 M1_GRID <- data.frame(
   k_ref = 30L, multi_temperature = 0.25, template_shift = 0L,
   align_rise_weight = 1.0, slope_window = 6L, slope_weight = 16.0
