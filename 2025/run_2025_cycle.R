@@ -139,7 +139,16 @@ if (!holdout %in% eligible_seasons) {
 }
 packet_training <- setdiff(eligible_seasons, holdout)
 all_seasons <- unique(as.character(allD$season))
-training_seasons <- setdiff(all_seasons, c(permanent_exclusions, holdout))
+# Any season present in the data but not on the eligible list is excluded by
+# construction, not just the four permanent exclusions. Without this the
+# runner inherited whatever extra seasons the CSV happened to carry: a feed
+# covering the in-progress 2026-27 (9 observed weeks) pushed it straight into
+# training_seasons and tripped the season contract check. Deriving the
+# exclusion set from the eligible list keeps the contract stable as the feed
+# grows, and records the real exclusions in the training plan.
+non_eligible <- setdiff(all_seasons, eligible_seasons)
+exclude_seasons <- union(permanent_exclusions, non_eligible)
+training_seasons <- setdiff(all_seasons, c(exclude_seasons, holdout))
 if (!setequal(training_seasons, packet_training)) {
   stop(
     "Season contract mismatch. Expected: ",
@@ -147,10 +156,49 @@ if (!setequal(training_seasons, packet_training)) {
     " | Got: ", paste(training_seasons, collapse = ", ")
   )
 }
+# ---- Season completeness contract (added 2026-09-18) ----
+# eligible_seasons is a hardcoded list, so an eligible season that is only
+# PARTIALLY observed used to pass straight through into training: the
+# 2026-09-17 campaign trained all ten folds on a 2025-26 truncated at weekF
+# 28 of 52, because the supplied CSV stopped there. A half season still has
+# an ignition but no observed decline, so it silently corrupts the M1
+# reference curve, the timing truth and the M2 training rows. The production
+# runner (2026/run_2026_27_final_kit.R) already drops short seasons on
+# observed-vs-expected coverage; this runner never got that guard. Hard stop
+# rather than a warning or a silent drop: an outer-fold campaign must not
+# quietly change which seasons it trained on.
+season_coverage <- allD |>
+  dplyr::filter(.data$season %in% eligible_seasons) |>
+  dplyr::group_by(.data$season) |>
+  dplyr::summarise(
+    observed = dplyr::n_distinct(.data$weekF),
+    expected = n_weeks_in_start_year(dplyr::first(.data$start_year)),
+    .groups = "drop"
+  ) |>
+  dplyr::mutate(short_by = .data$expected - .data$observed)
+incomplete <- season_coverage[season_coverage$short_by > 0L, , drop = FALSE]
+if (nrow(incomplete)) {
+  stop(
+    "Incomplete eligible season(s) in ", hist_path, ": ",
+    paste(sprintf(
+      "%s (%d of %d weeks)", incomplete$season, incomplete$observed,
+      incomplete$expected
+    ), collapse = "; "),
+    ". Supply a CSV covering every eligible season in full, or remove the ",
+    "season from eligible_seasons deliberately.",
+    call. = FALSE
+  )
+}
+message(sprintf(
+  "[seasons] %d eligible seasons, all complete (%d-%d weeks observed).",
+  nrow(season_coverage), min(season_coverage$observed),
+  max(season_coverage$observed)
+))
+
 selection <- PAGe::validate_season_selection(
   allD,
   training_seasons = training_seasons,
-  exclude_seasons = permanent_exclusions, holdout_seasons = holdout,
+  exclude_seasons = exclude_seasons, holdout_seasons = holdout,
   application_seasons = character(0)
 )
 stopifnot(!holdout %in% selection$training_seasons)
@@ -178,6 +226,29 @@ n_cores <- as.integer(Sys.getenv(
 n_cores <- max(1L, n_cores)
 
 m0_grid0 <- PAGe:::.default_m0_grid()
+# The M0 eligibility window floor is an operational constant, not a tuned
+# axis: it stayed fixed at 13 across every round of the v2.0 grid while only
+# the thresholds varied. Epidemiological review moved it to weekF 8, the week
+# the weekly run actually starts and the minimum history PAGe needs, with
+# w_max left at 26. Declared per run so the value lands in the run's own log
+# and manifest; the package default is untouched. Mirrors the hook in
+# 2026/run_2026_27_final_kit.R so the outer campaign and the production kit
+# can be run on the same declared cycle.
+m0_w_min_text <- Sys.getenv("PAGE_M0_W_MIN", "")
+if (nzchar(m0_w_min_text)) {
+  m0_w_min <- suppressWarnings(as.integer(m0_w_min_text))
+  if (is.na(m0_w_min) || !grepl("^[0-9]+$", m0_w_min_text)) {
+    stop("PAGE_M0_W_MIN must be a positive integer week.", call. = FALSE)
+  }
+  if (!"w_min" %in% names(m0_grid0)) {
+    stop("M0 grid has no w_min column to override.", call. = FALSE)
+  }
+  if (any(as.integer(m0_grid0$w_max) < m0_w_min)) {
+    stop("PAGE_M0_W_MIN must not exceed w_max in any M0 specification.", call. = FALSE)
+  }
+  m0_grid0$w_min <- m0_w_min
+  message(sprintf("[recipe] M0 w_min overridden to %d (w_max unchanged).", m0_w_min))
+}
 m1_grid0 <- PAGe::default_m1_grid()
 m2_grid0 <- PAGe::m2_subset_grid()
 m1_hard_caps <- PAGe::default_m1_hard_caps()
@@ -186,7 +257,13 @@ m2_gain_caps <- PAGe::default_m2_nll_gain_caps()
 plan <- PAGe::plan_training(
   allD,
   mode = "retune", prospective_holdout = holdout,
-  exclude = permanent_exclusions, n_cores = n_cores,
+  # Must be the DERIVED exclusion set, not just the four permanent ones.
+  # plan_training() builds the actual training universe as data minus
+  # exclude minus holdout, independently of the `selection` object above, so
+  # passing permanent_exclusions here let any season the CSV happened to
+  # carry enter training silently -- the in-progress 2026-27 did exactly
+  # that once the feed was switched to the full ORVT file.
+  exclude = exclude_seasons, n_cores = n_cores,
   checkpoint_dir = checkpoint_dir,
   m0_grid = m0_grid0, m1_grid = m1_grid0, m2_grid = m2_grid0,
   m1_hard_caps = m1_hard_caps
@@ -265,7 +342,7 @@ manifest <- list(
   data_entry = "load_flu_hist() -> canonical mutate -> prepare_surveillance_data(); prepare_page_data() remapping not required (canonical schema)",
   data_seasons = all_seasons,
   training_seasons = selection$training_seasons,
-  exclude_seasons = permanent_exclusions,
+  exclude_seasons = exclude_seasons,
   holdout_seasons = holdout,
   manual_labels_train = manual_labels_train,
   holdout_label_isolated = TRUE,
