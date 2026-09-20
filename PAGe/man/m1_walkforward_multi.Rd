@@ -31,6 +31,8 @@ m1_walkforward_multi(
   parallel = TRUE,
   verbose = TRUE,
   timing_mode = c("legacy", "fractional"),
+  peak_stabilization = c("legacy", "causal"),
+  stabilizer_max_jump_weeks = 2,
   season_references = NULL,
   season_ignition = NULL
 )
@@ -76,6 +78,12 @@ Passed to \code{m1_walkforward_predictions()} and onward to
 \item{parallel}{Logical; use parallel via furrr (default TRUE).}
 
 \item{verbose}{Logical; print progress (default TRUE).}
+
+\item{peak_stabilization}{Character; \code{"legacy"} (default) or
+\code{"causal"}.}
+
+\item{stabilizer_max_jump_weeks}{Positive maximum causal peak movement per
+origin (default 2 weeks).}
 
 \item{season_references}{Optional named per-season reference/hyperparameter cache
 for season-held-out training predictions. NULL uses the runtime reference.}

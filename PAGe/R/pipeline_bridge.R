@@ -32,6 +32,10 @@
 #' @param spread_method Character; \code{"between"} (default) or \code{"total"}.
 #'   Passed to \code{run_alignment_prospective_multi()} to select the
 #'   \code{logit_spread} computation method.
+#' @param peak_stabilization Character; \code{"legacy"} (default) or
+#'   \code{"causal"}.
+#' @param stabilizer_max_jump_weeks Positive maximum causal peak movement per
+#'   origin (default 2 weeks).
 #'
 #' @return A tibble with columns:
 #' \describe{
@@ -70,9 +74,12 @@ m1_walkforward_predictions <- function(seasonD,
                                        top_k = NULL,
                                        blend_alpha = 1.0,
                                        spread_method = c("between", "total"),
-                                       timing_mode = c("legacy", "fractional")) {
+                                       timing_mode = c("legacy", "fractional"),
+                                       peak_stabilization = c("legacy", "causal"),
+                                       stabilizer_max_jump_weeks = 2) {
   spread_method <- match.arg(spread_method)
   timing_mode <- match.arg(timing_mode)
+  peak_stabilization <- match.arg(peak_stabilization)
   season_name <- unique(as.character(seasonD$season))[1]
   horizons <- as.integer(horizons)
   max_weekF <- max(seasonD$weekF, na.rm = TRUE)
@@ -108,6 +115,7 @@ m1_walkforward_predictions <- function(seasonD,
 
   # --- Walk-forward over eval weeks ---
   results <- vector("list", length(eval_weeks))
+  peak_state <- NULL
 
   for (i in seq_along(eval_weeks)) {
     ew <- eval_weeks[i]
@@ -116,27 +124,30 @@ m1_walkforward_predictions <- function(seasonD,
 
     ap <- tryCatch(
       run_alignment_prospective_multi(
-        currentSeason      = season_to_ew,
-        ref                = ref,
-        hyper              = hyper,
-        ign_out            = ign_out,
-        use_ci             = use_ci,
-        buffer_weeks       = buffer_weeks,
-        allow_scale        = allow_scale,
-        min_obs            = min_obs,
-        curvature_ratio    = curvature_ratio,
-        temperature        = temperature,
-        rise_weight        = rise_weight,
-        trough_weight      = trough_weight,
-        peak_decay         = peak_decay,
-        slope_weight       = slope_weight,
-        slope_window       = slope_window,
-        dynamic_temp       = dynamic_temp,
+        currentSeason = season_to_ew,
+        ref = ref,
+        hyper = hyper,
+        ign_out = ign_out,
+        use_ci = use_ci,
+        buffer_weeks = buffer_weeks,
+        allow_scale = allow_scale,
+        min_obs = min_obs,
+        curvature_ratio = curvature_ratio,
+        temperature = temperature,
+        rise_weight = rise_weight,
+        trough_weight = trough_weight,
+        peak_decay = peak_decay,
+        slope_weight = slope_weight,
+        slope_window = slope_window,
+        dynamic_temp = dynamic_temp,
         dynamic_temp_pivot = dynamic_temp_pivot,
-        top_k              = top_k,
-        blend_alpha        = blend_alpha,
-        spread_method      = spread_method,
-        timing_mode        = timing_mode
+        top_k = top_k,
+        blend_alpha = blend_alpha,
+        spread_method = spread_method,
+        timing_mode = timing_mode,
+        peak_stabilization = peak_stabilization,
+        peak_state = peak_state,
+        stabilizer_max_jump_weeks = stabilizer_max_jump_weeks
       ),
       error = function(e) NULL
     )
@@ -168,13 +179,22 @@ m1_walkforward_predictions <- function(seasonD,
           m1_logit_spread = NA_real_,
           m1_tau = NA_real_, m1_delta = NA_real_,
           m1_state = "alignment_failed",
-          peak_weekF = NA_real_, peak_weekF_lo = NA_real_, peak_weekF_hi = NA_real_
+          peak_weekF = NA_real_, peak_weekF_lo = NA_real_, peak_weekF_hi = NA_real_,
+          peak_weekF_raw = NA_real_, peak_weekF_lo_raw = NA_real_, peak_weekF_hi_raw = NA_real_,
+          peak_weekF_stabilized = NA_real_, peak_weekF_lo_stabilized = NA_real_, peak_weekF_hi_stabilized = NA_real_,
+          peak_passed = isTRUE(peak_state$peak_passed),
+          peak_passed_now = FALSE,
+          peak_passed_latched = isTRUE(peak_state$peak_passed),
+          peak_threshold_week = NA_real_
         )
       }))
       next
     }
     if (is.null(ap$forecast_df)) {
       next
+    }
+    if (identical(peak_stabilization, "causal") && !is.null(ap$peak_state)) {
+      peak_state <- ap$peak_state
     }
     fdf <- ap$forecast_df
 
@@ -230,7 +250,17 @@ m1_walkforward_predictions <- function(seasonD,
         m1_state = ap$state,
         peak_weekF = as.numeric(ap$peak_weekF %||% NA_real_),
         peak_weekF_lo = as.numeric(ap$peak_weekF_lo %||% NA_real_),
-        peak_weekF_hi = as.numeric(ap$peak_weekF_hi %||% NA_real_)
+        peak_weekF_hi = as.numeric(ap$peak_weekF_hi %||% NA_real_),
+        peak_weekF_raw = as.numeric(ap$peak_weekF_raw %||% NA_real_),
+        peak_weekF_lo_raw = as.numeric(ap$peak_weekF_lo_raw %||% NA_real_),
+        peak_weekF_hi_raw = as.numeric(ap$peak_weekF_hi_raw %||% NA_real_),
+        peak_weekF_stabilized = as.numeric(ap$peak_weekF_stabilized %||% ap$peak_weekF %||% NA_real_),
+        peak_weekF_lo_stabilized = as.numeric(ap$peak_weekF_lo_stabilized %||% ap$peak_weekF_lo %||% NA_real_),
+        peak_weekF_hi_stabilized = as.numeric(ap$peak_weekF_hi_stabilized %||% ap$peak_weekF_hi %||% NA_real_),
+        peak_passed = isTRUE(ap$peak_passed),
+        peak_passed_now = isTRUE(ap$peak_passed_now),
+        peak_passed_latched = isTRUE(ap$peak_passed_latched %||% ap$peak_passed),
+        peak_threshold_week = as.numeric(ap$peak_threshold_week %||% NA_real_)
       )
     }
     results[[i]] <- dplyr::bind_rows(rows)
@@ -271,6 +301,10 @@ m1_walkforward_predictions <- function(seasonD,
 #' @param spread_method Character; \code{"between"} (default) or \code{"total"}.
 #'   Passed to \code{m1_walkforward_predictions()} and onward to
 #'   \code{run_alignment_prospective_multi()}.
+#' @param peak_stabilization Character; \code{"legacy"} (default) or
+#'   \code{"causal"}.
+#' @param stabilizer_max_jump_weeks Positive maximum causal peak movement per
+#'   origin (default 2 weeks).
 #' @param season_ignition Optional named list of season-local ignition outputs.
 #'   When supplied, these are used instead of refitting M0 for the named
 #'   seasons. This is used by the fully nested M2 adoption gate with
@@ -306,10 +340,13 @@ m1_walkforward_multi <- function(allD,
                                  parallel = TRUE,
                                  verbose = TRUE,
                                  timing_mode = c("legacy", "fractional"),
+                                 peak_stabilization = c("legacy", "causal"),
+                                 stabilizer_max_jump_weeks = 2,
                                  season_references = NULL,
                                  season_ignition = NULL) {
   spread_method <- match.arg(spread_method)
   timing_mode <- match.arg(timing_mode)
+  peak_stabilization <- match.arg(peak_stabilization)
   if (is.null(seasons)) seasons <- sort(unique(as.character(allD$season)))
 
   map_fn <- if (isTRUE(parallel) && requireNamespace("furrr", quietly = TRUE)) {
@@ -377,7 +414,9 @@ m1_walkforward_multi <- function(allD,
       top_k = top_k,
       blend_alpha = blend_alpha,
       spread_method = spread_method,
-      timing_mode = timing_mode
+      timing_mode = timing_mode,
+      peak_stabilization = peak_stabilization,
+      stabilizer_max_jump_weeks = stabilizer_max_jump_weeks
     )
   })
 
@@ -404,7 +443,11 @@ m1_walkforward_multi <- function(allD,
     m1_tau = numeric(0),
     m1_delta = numeric(0),
     m1_state = character(0),
-    peak_weekF = numeric(0), peak_weekF_lo = numeric(0), peak_weekF_hi = numeric(0)
+    peak_weekF = numeric(0), peak_weekF_lo = numeric(0), peak_weekF_hi = numeric(0),
+    peak_weekF_raw = numeric(0), peak_weekF_lo_raw = numeric(0), peak_weekF_hi_raw = numeric(0),
+    peak_weekF_stabilized = numeric(0), peak_weekF_lo_stabilized = numeric(0), peak_weekF_hi_stabilized = numeric(0),
+    peak_passed = logical(0), peak_passed_now = logical(0), peak_passed_latched = logical(0),
+    peak_threshold_week = numeric(0)
   )
 }
 

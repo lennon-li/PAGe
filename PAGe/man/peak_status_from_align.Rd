@@ -4,7 +4,14 @@
 \alias{peak_status_from_align}
 \title{Determine whether the epidemic peak has passed}
 \usage{
-peak_status_from_align(res, currentD, use_ci = TRUE, buffer_weeks = 0L)
+peak_status_from_align(
+  res,
+  currentD,
+  use_ci = TRUE,
+  buffer_weeks = 0L,
+  previous_peak_passed = FALSE,
+  peak_override = NULL
+)
 }
 \arguments{
 \item{res}{List returned by [align_forecast_pipeline_dilate()]; must have
@@ -19,6 +26,12 @@ peak. If `FALSE`, we use the point estimate only.}
 
 \item{buffer_weeks}{Non-negative integer; additional weeks beyond the
 peak (or upper CI) required before declaring the peak passed.}
+
+\item{previous_peak_passed}{Logical scalar. A prior same-season passage
+decision that remains latched when the current origin is unavailable.}
+
+\item{peak_override}{Optional peak list with `t_peak` and `t_peak_ci` to
+use in place of `res$peak`.}
 }
 \value{
 A list with components:

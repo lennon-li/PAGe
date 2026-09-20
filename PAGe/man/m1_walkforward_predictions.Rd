@@ -28,7 +28,9 @@ m1_walkforward_predictions(
   top_k = NULL,
   blend_alpha = 1,
   spread_method = c("between", "total"),
-  timing_mode = c("legacy", "fractional")
+  timing_mode = c("legacy", "fractional"),
+  peak_stabilization = c("legacy", "causal"),
+  stabilizer_max_jump_weeks = 2
 )
 }
 \arguments{
@@ -71,6 +73,12 @@ alignment-loss controls.}
 \item{spread_method}{Character; \code{"between"} (default) or \code{"total"}.
 Passed to \code{run_alignment_prospective_multi()} to select the
 \code{logit_spread} computation method.}
+
+\item{peak_stabilization}{Character; \code{"legacy"} (default) or
+\code{"causal"}.}
+
+\item{stabilizer_max_jump_weeks}{Positive maximum causal peak movement per
+origin (default 2 weeks).}
 }
 \value{
 A tibble with columns:

@@ -33,6 +33,13 @@
 #' @param curvature_ratio Numeric coefficient for activating dilation.
 #' @param time_weights Optional observation weights.
 #' @param trough_weight,rise_weight,peak_decay Alignment-loss controls.
+#' @param peak_stabilization Character; `"legacy"` (default) preserves the
+#'   existing stateless peak output, while `"causal"` uses the stabilized
+#'   decimal peak candidate.
+#' @param peak_state Optional prior same-season state returned by this
+#'   function when `peak_stabilization = "causal"`.
+#' @param stabilizer_max_jump_weeks Positive maximum causal peak movement per
+#'   origin (default 2 weeks).
 #'
 #' @return A named list with components:
 #' \describe{
@@ -68,8 +75,8 @@
 #'
 #' @examples
 #' \dontrun{
-#' ref    <- readRDS("data/ref.rds")
-#' hyper  <- readRDS("data/hyper.rds")
+#' ref <- readRDS("data/ref.rds")
+#' hyper <- readRDS("data/hyper.rds")
 #' params <- readRDS("data/stage1_tuning.rds")$best_params
 #'
 #' # Called once per week as new data arrives
@@ -79,8 +86,8 @@
 #'   hyper         = hyper,
 #'   params        = params
 #' )
-#' ap$state       # "pre_ignition", "aligning", or "post_peak"
-#' ap$peak_weekF  # estimated peak in original week space
+#' ap$state # "pre_ignition", "aligning", or "post_peak"
+#' ap$peak_weekF # estimated peak in original week space
 #'
 #' # Pass previous ign_out to avoid re-running ignition each week
 #' ap2 <- run_alignment_prospective(
@@ -95,51 +102,65 @@ run_alignment_prospective <- function(
   currentSeason,
   ref,
   hyper,
-  params          = NULL,
-  ign_out         = NULL,
-  use_ci          = TRUE,
-  buffer_weeks    = 0L,
-  allow_scale     = NULL,
-  level           = 0.95,
-  min_obs         = 4L,
-  cal             = NULL,   # output of fit_peak_calibration(); NULL = no calibration
-  curvature_ratio = 1.0,    # passed to fit_tau_delta() delta curvature gate
-  time_weights    = NULL,
-  trough_weight   = 0.1,
-  rise_weight     = 1.0,
-  peak_decay      = 0.3,
-  timing_mode     = c("legacy", "fractional")
+  params = NULL,
+  ign_out = NULL,
+  use_ci = TRUE,
+  buffer_weeks = 0L,
+  allow_scale = NULL,
+  level = 0.95,
+  min_obs = 4L,
+  cal = NULL, # output of fit_peak_calibration(); NULL = no calibration
+  curvature_ratio = 1.0, # passed to fit_tau_delta() delta curvature gate
+  time_weights = NULL,
+  trough_weight = 0.1,
+  rise_weight = 1.0,
+  peak_decay = 0.3,
+  timing_mode = c("legacy", "fractional"),
+  peak_stabilization = c("legacy", "causal"),
+  peak_state = NULL,
+  stabilizer_max_jump_weeks = 2
 ) {
   timing_mode <- match.arg(timing_mode)
+  peak_stabilization <- match.arg(peak_stabilization)
 
   # Helper: early return in pre-ignition state
   pre_ign <- function(ign_out_val = ign_out) {
     list(
-      state           = "pre_ignition",
-      iWeek_hat       = NA_integer_,
+      state = "pre_ignition",
+      iWeek_hat = NA_integer_,
       ign_week_locked = NA_integer_,
-      tau             = NA_real_,
-      delta           = NA_real_,
-      a               = NA_real_,
-      b               = NA_real_,
-      allow_scale     = NA,
-      delta_on        = NA,
-      t_peak          = NA_real_,
-      t_peak_ci       = c(NA_real_, NA_real_),
-      peak_weekF      = NA_integer_,
-      peak_weekF_lo   = NA_integer_,
-      peak_weekF_hi   = NA_integer_,
-      peak_passed     = FALSE,
+      tau = NA_real_,
+      delta = NA_real_,
+      a = NA_real_,
+      b = NA_real_,
+      allow_scale = NA,
+      delta_on = NA,
+      t_peak = NA_real_,
+      t_peak_ci = c(NA_real_, NA_real_),
+      t_peak_raw = NA_real_,
+      t_peak_ci_raw = c(NA_real_, NA_real_),
+      t_peak_stabilized = NA_real_,
+      t_peak_ci_stabilized = c(NA_real_, NA_real_),
+      peak_weekF = NA_integer_,
+      peak_weekF_lo = NA_integer_,
+      peak_weekF_hi = NA_integer_,
+      peak_passed = FALSE,
+      peak_passed_now = FALSE,
+      peak_passed_latched = FALSE,
+      peak_threshold_week = NA_real_,
+      peak_stabilization = peak_stabilization,
+      peak_state = peak_state,
       fallback_reason = NA_character_,
-      forecast_df     = NULL,
-      ign_out         = ign_out_val
+      forecast_df = NULL,
+      ign_out = ign_out_val
     )
   }
 
   # --- Step 1: Run or accept ignition detection ---
   if (is.null(ign_out)) {
-    if (is.null(params))
+    if (is.null(params)) {
       stop("Either 'ign_out' or 'params' must be provided.")
+    }
     ign_out <- run_ignition_weekly(
       currentSeason  = currentSeason,
       ign_fit_or_gam = NULL,
@@ -152,12 +173,15 @@ run_alignment_prospective <- function(
   # --- Step 2: Check if ignition has locked within the available data ---
   # max weekF in currentSeason defines the evaluation horizon
   max_weekF_available <- max(currentSeason$weekF, na.rm = TRUE)
-  if (is.na(ign_out$ign_week_locked) || ign_out$ign_week_locked > max_weekF_available)
+  if (is.na(ign_out$ign_week_locked) || ign_out$ign_week_locked > max_weekF_available) {
     return(pre_ign(ign_out))
+  }
 
-  iWeek_hat       <- if (timing_mode == "fractional") {
+  iWeek_hat <- if (timing_mode == "fractional") {
     as.numeric(ign_out$iWeek_hat_lockedF %||% ign_out$iWeek_hat_locked)
-  } else as.integer(ign_out$iWeek_hat_locked)
+  } else {
+    as.integer(ign_out$iWeek_hat_locked)
+  }
   ign_week_locked <- as.integer(ign_out$ign_week_locked)
 
   # --- Step 3: Re-anchor data to alignment (newWeek) space ---
@@ -169,8 +193,9 @@ run_alignment_prospective <- function(
     })
 
   # --- Step 4: Guard minimum observations ---
-  if (nrow(currentD) < as.integer(min_obs))
+  if (nrow(currentD) < as.integer(min_obs)) {
     return(pre_ign(ign_out))
+  }
 
   # --- Step 5: Scale identifiability check ---
   scale_rec <- if (!is.null(allow_scale)) {
@@ -203,18 +228,37 @@ run_alignment_prospective <- function(
     error = function(e) NULL
   )
 
-  if (is.null(res))
+  if (is.null(res)) {
     return(pre_ign(ign_out))
+  }
 
-  # --- Step 7: Peak passage detection ---
-  pk <- peak_status_from_align(
-    res          = res,
-    currentD     = currentD,
-    use_ci       = use_ci,
-    buffer_weeks = buffer_weeks
+  # --- Step 7: Raw and causal stabilized peak fields ---
+  peak_use <- .m1_prepare_peak(
+    res = res,
+    peak_stabilization = peak_stabilization,
+    previous_state = peak_state,
+    max_jump_weeks = stabilizer_max_jump_weeks
+  )
+  peak_for_status <- list(
+    t_peak = peak_use$t_peak_stabilized,
+    t_peak_ci = peak_use$t_peak_ci_stabilized
   )
 
-  # --- Step 8: Optionally calibrate peak estimate, then convert to weekF ---
+  # --- Step 8: Peak passage detection ---
+  pk <- peak_status_from_align(
+    res = res,
+    currentD = currentD,
+    use_ci = use_ci,
+    buffer_weeks = if (identical(peak_stabilization, "causal")) 5L else buffer_weeks,
+    previous_peak_passed = if (identical(peak_stabilization, "causal")) {
+      isTRUE(peak_state$peak_passed)
+    } else {
+      FALSE
+    },
+    peak_override = peak_for_status
+  )
+
+  # --- Step 9: Optionally calibrate peak estimate, then convert to weekF ---
   t_since_ign <- max(currentSeason$weekF, na.rm = TRUE) - iWeek_hat
 
   if (!is.null(cal)) {
@@ -229,39 +273,61 @@ run_alignment_prospective <- function(
     t_peak_use <- cal_res$t_peak
     t_peak_ci_use <- c(cal_res$t_peak_lo, cal_res$t_peak_hi)
   } else {
-    t_peak_use    <- res$peak$t_peak
-    t_peak_ci_use <- res$peak$t_peak_ci
+    t_peak_use <- peak_use$t_peak_stabilized
+    t_peak_ci_use <- peak_use$t_peak_ci_stabilized
   }
 
-  peak_weekF    <- round(t_peak_use       - ref$anchorWeek + iWeek_hat)
+  peak_weekF <- round(t_peak_use - ref$anchorWeek + iWeek_hat)
   peak_weekF_lo <- round(t_peak_ci_use[1] - ref$anchorWeek + iWeek_hat)
   peak_weekF_hi <- round(t_peak_ci_use[2] - ref$anchorWeek + iWeek_hat)
+  peak_weekF_raw <- peak_use$t_peak_raw - ref$anchorWeek + iWeek_hat
+  peak_weekF_lo_raw <- peak_use$t_peak_ci_raw[1L] - ref$anchorWeek + iWeek_hat
+  peak_weekF_hi_raw <- peak_use$t_peak_ci_raw[2L] - ref$anchorWeek + iWeek_hat
 
-  # --- Step 9: State ---
+  peak_state_out <- list(
+    t_peak_stabilized = peak_use$t_peak_stabilized,
+    t_peak_ci_stabilized = peak_use$t_peak_ci_stabilized,
+    peak_passed = pk$peak_passed
+  )
+
+  # --- Step 10: State ---
   state <- if (pk$peak_passed) "post_peak" else "aligning"
 
   list(
-    state           = state,
-    iWeek_hat       = iWeek_hat,
+    state = state,
+    iWeek_hat = iWeek_hat,
     ign_week_locked = ign_week_locked,
-    tau             = res$tau,
-    delta           = res$delta,
-    a               = res$a,
-    b               = res$b,
-    allow_scale     = res$allow_scale,
-    delta_on        = res$delta_on,
-    t_peak          = t_peak_use,
-    t_peak_ci       = t_peak_ci_use,
-    t_peak_raw      = res$peak$t_peak,
-    t_peak_ci_raw   = res$peak$t_peak_ci,
-    peak_weekF      = if (timing_mode == "fractional") as.numeric(t_peak_use - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF),
-    peak_weekF_lo   = if (timing_mode == "fractional") as.numeric(t_peak_ci_use[1] - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF_lo),
-    peak_weekF_hi   = if (timing_mode == "fractional") as.numeric(t_peak_ci_use[2] - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF_hi),
-    iWeek_hatF      = as.numeric(iWeek_hat),
-    peak_passed     = pk$peak_passed,
+    tau = res$tau,
+    delta = res$delta,
+    a = res$a,
+    b = res$b,
+    allow_scale = res$allow_scale,
+    delta_on = res$delta_on,
+    t_peak = t_peak_use,
+    t_peak_ci = t_peak_ci_use,
+    t_peak_raw = peak_use$t_peak_raw,
+    t_peak_ci_raw = peak_use$t_peak_ci_raw,
+    t_peak_stabilized = peak_use$t_peak_stabilized,
+    t_peak_ci_stabilized = peak_use$t_peak_ci_stabilized,
+    peak_weekF = if (timing_mode == "fractional") as.numeric(t_peak_use - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF),
+    peak_weekF_lo = if (timing_mode == "fractional") as.numeric(t_peak_ci_use[1] - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF_lo),
+    peak_weekF_hi = if (timing_mode == "fractional") as.numeric(t_peak_ci_use[2] - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF_hi),
+    peak_weekF_raw = as.numeric(peak_weekF_raw),
+    peak_weekF_lo_raw = as.numeric(peak_weekF_lo_raw),
+    peak_weekF_hi_raw = as.numeric(peak_weekF_hi_raw),
+    peak_weekF_stabilized = as.numeric(t_peak_use - ref$anchorWeek + iWeek_hat),
+    peak_weekF_lo_stabilized = as.numeric(t_peak_ci_use[1] - ref$anchorWeek + iWeek_hat),
+    peak_weekF_hi_stabilized = as.numeric(t_peak_ci_use[2] - ref$anchorWeek + iWeek_hat),
+    iWeek_hatF = as.numeric(iWeek_hat),
+    peak_passed = pk$peak_passed,
+    peak_passed_now = pk$peak_passed_now,
+    peak_passed_latched = pk$peak_passed,
+    peak_threshold_week = pk$threshold_week,
+    peak_stabilization = peak_stabilization,
+    peak_state = peak_state_out,
     fallback_reason = res$fallback_reason,
-    forecast_df     = res$pred_df,
-    ign_out         = ign_out
+    forecast_df = res$pred_df,
+    ign_out = ign_out
   )
 }
 
@@ -308,20 +374,21 @@ run_alignment_prospective <- function(
 #'
 #' @examples
 #' \dontrun{
-#' wf     <- readRDS("data/loso_wf_cache.rds")
-#' allD   <- read.csv("data/flu_testing_data.csv") |>
+#' wf <- readRDS("data/loso_wf_cache.rds")
+#' allD <- read.csv("data/flu_testing_data.csv") |>
 #'   mutate(p = y / N, N = as.integer(N))
 #' tuning <- tune_peak_detection(wf$params_df, allD)
 #' # Pick smallest buffer_weeks with fp_rate == 0
-#' tuning |> filter(fp_rate == 0) |> arrange(mean_delay)
+#' tuning |>
+#'   filter(fp_rate == 0) |>
+#'   arrange(mean_delay)
 #' }
 tune_peak_detection <- function(
   params_df,
   allD,
-  use_ci_grid       = c(TRUE, FALSE),
+  use_ci_grid = c(TRUE, FALSE),
   buffer_weeks_grid = -2:3
 ) {
-
   # --- True peak weekF per season from observed data ---
   true_peaks <- allD |>
     dplyr::filter(!is.na(.data$p), is.finite(.data$p), .data$N > 0) |>
@@ -336,13 +403,12 @@ tune_peak_detection <- function(
 
   # Build evaluation grid
   grid <- expand.grid(
-    use_ci       = use_ci_grid,
+    use_ci = use_ci_grid,
     buffer_weeks = as.integer(buffer_weeks_grid),
     stringsAsFactors = FALSE
   )
 
   purrr::map_dfr(seq_len(nrow(grid)), function(i) {
-
     uc <- grid$use_ci[i]
     bw <- as.integer(grid$buffer_weeks[i])
 
@@ -350,8 +416,8 @@ tune_peak_detection <- function(
     det <- pdf |>
       dplyr::mutate(
         last_obs_newW = as.numeric(.data$eval_week) - as.numeric(.data$iWeek_hat) +
-                        as.numeric(.data$anchorWeek),
-        thresh   = if (uc) .data$t_peak_hi + bw else .data$t_peak + bw,
+          as.numeric(.data$anchorWeek),
+        thresh = if (uc) .data$t_peak_hi + bw else .data$t_peak + bw,
         detected = .data$last_obs_newW >= .data$thresh
       )
 
@@ -366,7 +432,7 @@ tune_peak_detection <- function(
     # Compute delay vs true peak for all test seasons
     eval_df <- tibble::tibble(season = all_test_seasons) |>
       dplyr::left_join(true_peaks, by = "season") |>
-      dplyr::left_join(first_det,  by = "season") |>
+      dplyr::left_join(first_det, by = "season") |>
       dplyr::filter(!is.na(.data$true_peak_weekF)) |>
       dplyr::mutate(
         delay     = .data$detection_weekF - .data$true_peak_weekF,
@@ -383,9 +449,9 @@ tune_peak_detection <- function(
       use_ci       = uc,
       buffer_weeks = bw,
       fp_rate      = if (n_seasons > 0L) mean(eval_df$fp, na.rm = TRUE) else NA_real_,
-      mean_delay   = if (nrow(clean) > 0L) mean(clean$delay,            na.rm = TRUE) else NA_real_,
-      median_delay = if (nrow(clean) > 0L) stats::median(clean$delay,   na.rm = TRUE) else NA_real_,
-      max_delay    = if (nrow(clean) > 0L) max(clean$delay,             na.rm = TRUE) else NA_real_,
+      mean_delay   = if (nrow(clean) > 0L) mean(clean$delay, na.rm = TRUE) else NA_real_,
+      median_delay = if (nrow(clean) > 0L) stats::median(clean$delay, na.rm = TRUE) else NA_real_,
+      max_delay    = if (nrow(clean) > 0L) max(clean$delay, na.rm = TRUE) else NA_real_,
       n_seasons    = n_seasons
     )
   })
@@ -417,19 +483,20 @@ tune_peak_detection <- function(
 #' @keywords internal
 .apply_peak_calibration <- function(t_peak, t_peak_lo, t_peak_hi,
                                     t_since_ign, cal, level = 0.95) {
-  z       <- stats::qnorm((1 + level) / 2)
-  se_hat  <- max((t_peak_hi - t_peak_lo) / (2 * z), 0.1)
+  z <- stats::qnorm((1 + level) / 2)
+  se_hat <- max((t_peak_hi - t_peak_lo) / (2 * z), 0.1)
 
   # (C) Bayesian shrinkage toward historical prior
-  prec_data  <- 1 / se_hat^2
+  prec_data <- 1 / se_hat^2
   prec_prior <- 1 / cal$sigma_prior^2
   prec_total <- prec_data + prec_prior
   t_peak_post <- (t_peak * prec_data + cal$mu_prior * prec_prior) / prec_total
-  var_post    <- 1 / prec_total
+  var_post <- 1 / prec_total
 
   # (A) Residual bias correction (GAM trained on LOSO residuals)
-  bias_pred  <- as.numeric(stats::predict(
-    cal$bias_gam, newdata = data.frame(t_since_ign = t_since_ign)
+  bias_pred <- as.numeric(stats::predict(
+    cal$bias_gam,
+    newdata = data.frame(t_since_ign = t_since_ign)
   ))
   t_peak_cal <- t_peak_post - bias_pred
 
@@ -478,25 +545,25 @@ tune_peak_detection <- function(
 #'
 #' @examples
 #' \dontrun{
-#' wf  <- readRDS("data/loso_wf_cache.rds")
+#' wf <- readRDS("data/loso_wf_cache.rds")
 #' allD <- read.csv("data/flu_testing_data.csv") |>
 #'   mutate(p = pos_flua / test_flu, N = test_flu)
 #' cal <- fit_peak_calibration(wf$params_df, allD)
 #' # LOSO-safe usage (exclude held-out season):
 #' cal_fold <- fit_peak_calibration(wf$params_df, allD, holdout_season = "2022-23")
 #' # Use in production:
-#' ap  <- run_alignment_prospective(currentSeason, ref, hyper, params, cal = cal)
+#' ap <- run_alignment_prospective(currentSeason, ref, hyper, params, cal = cal)
 #' }
 fit_peak_calibration <- function(params_df, allD,
-                                  anchorWeek = 27L, level = 0.95,
-                                  holdout_season = NULL) {
+                                 anchorWeek = 27L, level = 0.95,
+                                 holdout_season = NULL) {
   z <- stats::qnorm((1 + level) / 2)
 
   # When a holdout_season is specified, exclude it from prior and GAM fitting
   # to prevent data leakage in LOSO evaluation loops.
   if (!is.null(holdout_season)) {
     params_df <- dplyr::filter(params_df, .data$season != holdout_season)
-    allD      <- dplyr::filter(allD, .data$season != holdout_season)
+    allD <- dplyr::filter(allD, .data$season != holdout_season)
   }
 
   # --- True peak weekF per season ---
@@ -517,8 +584,8 @@ fit_peak_calibration <- function(params_df, allD,
     dplyr::filter(!is.na(.data$true_peak_weekF)) |>
     dplyr::mutate(peak_newW = .data$true_peak_weekF - .data$iWeek_true + anchorWeek)
 
-  mu_prior    <- mean(prior_df$peak_newW)
-  sigma_prior <- max(stats::sd(prior_df$peak_newW), 1.0)   # floor at 1 week
+  mu_prior <- mean(prior_df$peak_newW)
+  sigma_prior <- max(stats::sd(prior_df$peak_newW), 1.0) # floor at 1 week
 
   # --- Build calibration dataset (pre-peak rows with successful alignment) ---
   cal_df <- params_df |>
@@ -538,22 +605,22 @@ fit_peak_calibration <- function(params_df, allD,
     ) |>
     dplyr::mutate(
       # (C) Bayesian shrinkage toward prior
-      prec_data        = 1 / .data$se_hat^2,
-      prec_prior       = 1 / sigma_prior^2,
-      prec_total       = .data$prec_data + .data$prec_prior,
-      t_peak_post      = (.data$t_peak * .data$prec_data + mu_prior * .data$prec_prior) /
-                         .data$prec_total,
-      pred_post_weekF  = round(.data$t_peak_post - anchorWeek + .data$iWeek_hat),
+      prec_data = 1 / .data$se_hat^2,
+      prec_prior = 1 / sigma_prior^2,
+      prec_total = .data$prec_data + .data$prec_prior,
+      t_peak_post = (.data$t_peak * .data$prec_data + mu_prior * .data$prec_prior) /
+        .data$prec_total,
+      pred_post_weekF = round(.data$t_peak_post - anchorWeek + .data$iWeek_hat),
       # Residual bias after shrinkage
-      residual_bias    = .data$pred_post_weekF - .data$true_peak_weekF,
+      residual_bias = .data$pred_post_weekF - .data$true_peak_weekF,
       # Shrinkage weight (how much prior pulled the estimate)
-      shrinkage        = .data$prec_prior / .data$prec_total
+      shrinkage = .data$prec_prior / .data$prec_total
     )
 
   # --- (A) GAM on residual bias ~ s(t_since_ign) ---
   bias_gam <- mgcv::gam(
     residual_bias ~ s(t_since_ign, k = 5),
-    data   = cal_df,
+    data = cal_df,
     method = "REML"
   )
 

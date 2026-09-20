@@ -509,6 +509,12 @@ align_multi_template <- function(currentD,
 #' @param spread_method Character; \code{"between"} (default) or \code{"total"}.
 #'   Passed to \code{align_multi_template()} to select the \code{logit_spread}
 #'   computation method. See \code{\link{align_multi_template}} for details.
+#' @param peak_stabilization Character; \code{"legacy"} (default) or
+#'   \code{"causal"}.
+#' @param peak_state Optional prior same-season stabilized state. Used only in
+#'   causal mode.
+#' @param stabilizer_max_jump_weeks Positive maximum causal peak movement per
+#'   origin (default 2 weeks).
 #'
 #' @return List with same structure as \code{run_alignment_prospective()} output.
 run_alignment_prospective_multi <- function(
@@ -533,10 +539,14 @@ run_alignment_prospective_multi <- function(
   dynamic_temp = TRUE,
   dynamic_temp_pivot = 10L,
   spread_method = c("between", "total"),
-  timing_mode = c("legacy", "fractional")
+  timing_mode = c("legacy", "fractional"),
+  peak_stabilization = c("legacy", "causal"),
+  peak_state = NULL,
+  stabilizer_max_jump_weeks = 2
 ) {
   spread_method <- match.arg(spread_method)
   timing_mode <- match.arg(timing_mode)
+  peak_stabilization <- match.arg(peak_stabilization)
 
   # Helper: early return in pre-ignition state
   pre_ign <- function() {
@@ -553,10 +563,19 @@ run_alignment_prospective_multi <- function(
       t_peak = NA_real_,
       t_peak_median = NA_real_,
       t_peak_ci = c(NA_real_, NA_real_),
+      t_peak_raw = NA_real_,
+      t_peak_ci_raw = c(NA_real_, NA_real_),
+      t_peak_stabilized = NA_real_,
+      t_peak_ci_stabilized = c(NA_real_, NA_real_),
       peak_weekF = NA_integer_,
       peak_weekF_lo = NA_integer_,
       peak_weekF_hi = NA_integer_,
       peak_passed = FALSE,
+      peak_passed_now = FALSE,
+      peak_passed_latched = FALSE,
+      peak_threshold_week = NA_real_,
+      peak_stabilization = peak_stabilization,
+      peak_state = peak_state,
       fallback_reason = NA_character_,
       forecast_df = NULL,
       ign_out = ign_out,
@@ -652,21 +671,48 @@ run_alignment_prospective_multi <- function(
     return(alignment_failed("alignment_result_missing"))
   }
 
+  # Raw and causal stabilized peak fields
+  peak_use <- .m1_prepare_peak(
+    res = res,
+    peak_stabilization = peak_stabilization,
+    previous_state = peak_state,
+    max_jump_weeks = stabilizer_max_jump_weeks
+  )
+  peak_for_status <- list(
+    t_peak = peak_use$t_peak_stabilized,
+    t_peak_ci = peak_use$t_peak_ci_stabilized
+  )
+
   # Peak passage detection
   pk <- peak_status_from_align(
-    res          = res,
-    currentD     = currentD,
-    use_ci       = use_ci,
-    buffer_weeks = buffer_weeks
+    res = res,
+    currentD = currentD,
+    use_ci = use_ci,
+    buffer_weeks = if (identical(peak_stabilization, "causal")) 5L else buffer_weeks,
+    previous_peak_passed = if (identical(peak_stabilization, "causal")) {
+      isTRUE(peak_state$peak_passed)
+    } else {
+      FALSE
+    },
+    peak_override = peak_for_status
   )
 
   # Convert peak to weekF space
-  t_peak_use <- res$peak$t_peak
-  t_peak_ci_use <- res$peak$t_peak_ci
+  t_peak_use <- peak_use$t_peak_stabilized
+  t_peak_ci_use <- peak_use$t_peak_ci_stabilized
 
   peak_weekF <- round(t_peak_use - ref$anchorWeek + iWeek_hat)
   peak_weekF_lo <- round(t_peak_ci_use[1] - ref$anchorWeek + iWeek_hat)
   peak_weekF_hi <- round(t_peak_ci_use[2] - ref$anchorWeek + iWeek_hat)
+  peak_weekF_raw <- peak_use$t_peak_raw - ref$anchorWeek + iWeek_hat
+  peak_weekF_lo_raw <- peak_use$t_peak_ci_raw[1L] - ref$anchorWeek + iWeek_hat
+  peak_weekF_hi_raw <- peak_use$t_peak_ci_raw[2L] - ref$anchorWeek + iWeek_hat
+
+  peak_state_out <- list(
+    t_peak_stabilized = peak_use$t_peak_stabilized,
+    t_peak_ci_stabilized = peak_use$t_peak_ci_stabilized,
+    peak_passed = pk$peak_passed
+  )
 
   state <- if (pk$peak_passed) "post_peak" else "aligning"
 
@@ -681,16 +727,29 @@ run_alignment_prospective_multi <- function(
     allow_scale = res$allow_scale,
     delta_on = res$delta_on,
     t_peak = t_peak_use,
-    t_peak_median = res$peak$t_peak_median,
+    t_peak_median = if (identical(peak_stabilization, "causal")) t_peak_use else res$peak$t_peak_median,
     t_peak_ci = t_peak_ci_use,
-    t_peak_raw = res$peak$t_peak,
-    t_peak_ci_raw = res$peak$t_peak_ci,
+    t_peak_raw = peak_use$t_peak_raw,
+    t_peak_ci_raw = peak_use$t_peak_ci_raw,
+    t_peak_stabilized = peak_use$t_peak_stabilized,
+    t_peak_ci_stabilized = peak_use$t_peak_ci_stabilized,
     peak_weekF = if (timing_mode == "fractional") as.numeric(t_peak_use - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF),
     peak_weekF_lo = if (timing_mode == "fractional") as.numeric(t_peak_ci_use[1] - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF_lo),
     peak_weekF_hi = if (timing_mode == "fractional") as.numeric(t_peak_ci_use[2] - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF_hi),
+    peak_weekF_raw = as.numeric(peak_weekF_raw),
+    peak_weekF_lo_raw = as.numeric(peak_weekF_lo_raw),
+    peak_weekF_hi_raw = as.numeric(peak_weekF_hi_raw),
+    peak_weekF_stabilized = as.numeric(t_peak_use - ref$anchorWeek + iWeek_hat),
+    peak_weekF_lo_stabilized = as.numeric(t_peak_ci_use[1] - ref$anchorWeek + iWeek_hat),
+    peak_weekF_hi_stabilized = as.numeric(t_peak_ci_use[2] - ref$anchorWeek + iWeek_hat),
     iWeek_hatF = as.numeric(iWeek_hat),
     iWeek_hat_bracket = ign_out$iWeek_hat_bracket %||% NULL,
     peak_passed = pk$peak_passed,
+    peak_passed_now = pk$peak_passed_now,
+    peak_passed_latched = pk$peak_passed,
+    peak_threshold_week = pk$threshold_week,
+    peak_stabilization = peak_stabilization,
+    peak_state = peak_state_out,
     fallback_reason = res$fallback_reason,
     forecast_df = res$pred_df,
     ign_out = ign_out,
@@ -741,10 +800,14 @@ run_alignment_prospective_multi_weights <- function(
   top_k = NULL,
   blend_alpha = 1.0,
   spread_method = c("between", "total"),
-  timing_mode = c("legacy", "fractional")
+  timing_mode = c("legacy", "fractional"),
+  peak_stabilization = c("legacy", "causal"),
+  peak_state = NULL,
+  stabilizer_max_jump_weeks = 2
 ) {
   spread_method <- match.arg(spread_method)
   timing_mode <- match.arg(timing_mode)
+  peak_stabilization <- match.arg(peak_stabilization)
   if (!is.list(weight_sets) || !length(weight_sets)) {
     stop("`weight_sets` must be a non-empty list.", call. = FALSE)
   }
@@ -763,10 +826,19 @@ run_alignment_prospective_multi_weights <- function(
       t_peak = NA_real_,
       t_peak_median = NA_real_,
       t_peak_ci = c(NA_real_, NA_real_),
+      t_peak_raw = NA_real_,
+      t_peak_ci_raw = c(NA_real_, NA_real_),
+      t_peak_stabilized = NA_real_,
+      t_peak_ci_stabilized = c(NA_real_, NA_real_),
       peak_weekF = NA_integer_,
       peak_weekF_lo = NA_integer_,
       peak_weekF_hi = NA_integer_,
       peak_passed = FALSE,
+      peak_passed_now = FALSE,
+      peak_passed_latched = FALSE,
+      peak_threshold_week = NA_real_,
+      peak_stabilization = peak_stabilization,
+      peak_state = peak_state,
       fallback_reason = NA_character_,
       forecast_df = NULL,
       ign_out = ign_out,
@@ -863,17 +935,37 @@ run_alignment_prospective_multi_weights <- function(
   }
 
   finalize <- function(res) {
-    pk <- peak_status_from_align(
-      res          = res,
-      currentD     = currentD,
-      use_ci       = use_ci,
-      buffer_weeks = buffer_weeks
+    peak_use <- .m1_prepare_peak(
+      res = res,
+      peak_stabilization = peak_stabilization,
+      previous_state = peak_state,
+      max_jump_weeks = stabilizer_max_jump_weeks
     )
-    t_peak_use <- res$peak$t_peak
-    t_peak_ci_use <- res$peak$t_peak_ci
+    pk <- peak_status_from_align(
+      res = res,
+      currentD = currentD,
+      use_ci = use_ci,
+      buffer_weeks = if (identical(peak_stabilization, "causal")) 5L else buffer_weeks,
+      previous_peak_passed = if (identical(peak_stabilization, "causal")) {
+        isTRUE(peak_state$peak_passed)
+      } else {
+        FALSE
+      },
+      peak_override = list(
+        t_peak = peak_use$t_peak_stabilized,
+        t_peak_ci = peak_use$t_peak_ci_stabilized
+      )
+    )
+    t_peak_use <- peak_use$t_peak_stabilized
+    t_peak_ci_use <- peak_use$t_peak_ci_stabilized
     peak_weekF <- round(t_peak_use - ref$anchorWeek + iWeek_hat)
     peak_weekF_lo <- round(t_peak_ci_use[1] - ref$anchorWeek + iWeek_hat)
     peak_weekF_hi <- round(t_peak_ci_use[2] - ref$anchorWeek + iWeek_hat)
+    peak_state_out <- list(
+      t_peak_stabilized = peak_use$t_peak_stabilized,
+      t_peak_ci_stabilized = peak_use$t_peak_ci_stabilized,
+      peak_passed = pk$peak_passed
+    )
     state <- if (pk$peak_passed) "post_peak" else "aligning"
     list(
       state = state,
@@ -886,16 +978,23 @@ run_alignment_prospective_multi_weights <- function(
       allow_scale = res$allow_scale,
       delta_on = res$delta_on,
       t_peak = t_peak_use,
-      t_peak_median = res$peak$t_peak_median,
+      t_peak_median = if (identical(peak_stabilization, "causal")) t_peak_use else res$peak$t_peak_median,
       t_peak_ci = t_peak_ci_use,
-      t_peak_raw = res$peak$t_peak,
-      t_peak_ci_raw = res$peak$t_peak_ci,
+      t_peak_raw = peak_use$t_peak_raw,
+      t_peak_ci_raw = peak_use$t_peak_ci_raw,
+      t_peak_stabilized = peak_use$t_peak_stabilized,
+      t_peak_ci_stabilized = peak_use$t_peak_ci_stabilized,
       peak_weekF = if (timing_mode == "fractional") as.numeric(t_peak_use - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF),
       peak_weekF_lo = if (timing_mode == "fractional") as.numeric(t_peak_ci_use[1] - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF_lo),
       peak_weekF_hi = if (timing_mode == "fractional") as.numeric(t_peak_ci_use[2] - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF_hi),
       iWeek_hatF = as.numeric(iWeek_hat),
       iWeek_hat_bracket = ign_out$iWeek_hat_bracket %||% NULL,
       peak_passed = pk$peak_passed,
+      peak_passed_now = pk$peak_passed_now,
+      peak_passed_latched = pk$peak_passed,
+      peak_threshold_week = pk$threshold_week,
+      peak_stabilization = peak_stabilization,
+      peak_state = peak_state_out,
       fallback_reason = res$fallback_reason,
       forecast_df = res$pred_df,
       ign_out = ign_out,

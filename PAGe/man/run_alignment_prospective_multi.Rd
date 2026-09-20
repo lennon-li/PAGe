@@ -26,7 +26,10 @@ run_alignment_prospective_multi(
   dynamic_temp = TRUE,
   dynamic_temp_pivot = 10L,
   spread_method = c("between", "total"),
-  timing_mode = c("legacy", "fractional")
+  timing_mode = c("legacy", "fractional"),
+  peak_stabilization = c("legacy", "causal"),
+  peak_state = NULL,
+  stabilizer_max_jump_weeks = 2
 )
 }
 \arguments{
@@ -70,6 +73,15 @@ contain \code{eta_mat}.}
 \item{spread_method}{Character; \code{"between"} (default) or \code{"total"}.
 Passed to \code{align_multi_template()} to select the \code{logit_spread}
 computation method. See \code{\link{align_multi_template}} for details.}
+
+\item{peak_stabilization}{Character; \code{"legacy"} (default) or
+\code{"causal"}.}
+
+\item{peak_state}{Optional prior same-season stabilized state. Used only in
+causal mode.}
+
+\item{stabilizer_max_jump_weeks}{Positive maximum causal peak movement per
+origin (default 2 weeks).}
 }
 \value{
 List with same structure as \code{run_alignment_prospective()} output.
