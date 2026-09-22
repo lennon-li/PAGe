@@ -1,0 +1,35 @@
+{
+  "experiment": "m1-prior-stabilization-a0",
+  "variants": [
+    {
+      "variant_id": "baseline",
+      "delta_mode": "baseline",
+      "lambda_multiplier": 1,
+      "positive_scale": false
+    },
+    {
+      "variant_id": "delta_fixed_zero_positive_scale",
+      "delta_mode": "fixed_zero",
+      "lambda_multiplier": 1,
+      "positive_scale": true
+    },
+    {
+      "variant_id": "delta_ridge4_positive_scale",
+      "delta_mode": "gated",
+      "lambda_multiplier": 4,
+      "positive_scale": true
+    },
+    {
+      "variant_id": "delta_ridge16_positive_scale",
+      "delta_mode": "gated",
+      "lambda_multiplier": 16,
+      "positive_scale": true
+    }
+  ],
+  "baseline_id": "m1-replay-baseline-v1.0.0",
+  "unchanged": ["M0", "template universe", "slope_weight=8", "temperature=0.25", "weighted-mean peak", "rounding", "origins"],
+  "positive_scale_rule": "Use constrained fit_tau_delta a,b values for final curve/peak; no unconstrained post-fit b replacement",
+  "delta_prior_rule": "fixed zero or frozen LAMBDA_DELTA multiplied by 4/16",
+  "selection": "none; evidence-only comparison",
+  "no_production_changes": true
+}
