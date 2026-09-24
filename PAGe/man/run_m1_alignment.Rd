@@ -34,6 +34,8 @@ Actual start is \code{max(walk_start, iWeek_locked)}.}
 A list with:
   \describe{
     \item{params_df}{Tibble with one row per eval_week of alignment params.}
+    \item{m1_peak_ensemble}{Per-origin template peak atoms and weights, with
+      timing-coordinate and season metadata for peak-week distributions.}
     \item{m1_curves}{Tibble of M1 forecast curves by eval_week.}
     \item{per_week}{List with one entry per eval_week; each entry holds
       \code{ew}, \code{ap} (raw alignment output), and \code{season_to_ew}

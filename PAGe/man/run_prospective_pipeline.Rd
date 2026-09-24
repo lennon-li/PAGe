@@ -42,9 +42,10 @@ production GAM; \code{"weekly_refit"} refits using kit history.}
 \item{...}{Additional arguments passed by the \code{run_pipeline()} alias.}
 }
 \value{
-A list with \code{params_df}, \code{m1_curves}, \code{m2_preds},
-  \code{pred_df}, \code{last_obs}, and \code{ign_out}. The plot fields are
-  consumed directly by \code{plot_forecast()}.
+A \code{page_forecast} list with \code{params_df},
+  \code{m1_peak_ensemble}, \code{m1_curves}, \code{m2_preds},
+  \code{pred_df}, \code{last_obs}, \code{season}, and \code{ign_out}.
+  The plot fields are consumed directly by \code{plot_forecast()}.
 }
 \description{
 Thin wrapper around \code{run_m0_detection()}, \code{run_m1_alignment()},

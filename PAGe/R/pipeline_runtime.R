@@ -329,6 +329,8 @@ run_m0_detection <- function(kit,
 #' @return A list with:
 #'   \describe{
 #'     \item{params_df}{Tibble with one row per eval_week of alignment params.}
+#'     \item{m1_peak_ensemble}{Per-origin template peak atoms and weights, with
+#'       timing-coordinate and season metadata for peak-week distributions.}
 #'     \item{m1_curves}{Tibble of M1 forecast curves by eval_week.}
 #'     \item{per_week}{List with one entry per eval_week; each entry holds
 #'       \code{ew}, \code{ap} (raw alignment output), and \code{season_to_ew}
@@ -374,6 +376,7 @@ run_m1_alignment <- function(kit,
         peak_passed = logical(0), fallback = character(0)
       ),
       m1_curves = tibble::tibble(),
+      m1_peak_ensemble = tibble::tibble(),
       per_week = list(),
       m0_result = m0_result
     ))
@@ -458,6 +461,51 @@ run_m1_alignment <- function(kit,
     )
   }))
 
+  season_value <- if ("season" %in% names(current_data)) {
+    as.character(unique(current_data$season)[1L])
+  } else {
+    NA_character_
+  }
+  season_length <- tryCatch(.page_nw_true(current_data)[1L], error = function(e) NA_integer_)
+  alignment_config_id <- digest::digest(
+    list(M1_PARAMS = M1_PARAMS, anchorWeek = ref$anchorWeek),
+    algo = "sha256"
+  )
+  m1_peak_ensemble <- dplyr::bind_rows(lapply(per_week, function(pw) {
+    ap <- pw$ap
+    ensemble <- if (!is.null(ap)) ap$peak_ensemble else NULL
+    usable <- !is.null(ensemble) && nrow(ensemble) >= 2L &&
+      all(is.finite(ensemble$t_peak)) && all(is.finite(ensemble$weight)) &&
+      all(ensemble$weight > 0)
+    fallback_reason <- if (is.null(ap)) {
+      if (!is.null(pw$error) && !is.na(pw$error) && nzchar(pw$error)) pw$error else "alignment_failed"
+    } else if (identical(ap$state, "pre_ignition")) {
+      "pre_ignition"
+    } else if (is.null(ensemble) || !nrow(ensemble)) {
+      reason <- as.character(ap$fallback_reason)[1L]
+      if (is.na(reason) || !nzchar(reason)) "single_reference_fallback" else reason
+    } else if (!usable) {
+      "insufficient_peak_ensemble"
+    } else {
+      NA_character_
+    }
+    tibble::tibble(
+      eval_week = pw$ew,
+      season = season_value,
+      latest_data_week = pw$ew,
+      iWeek_hat = if (!is.null(ap) && is.finite(ap$iWeek_hat)) ap$iWeek_hat else locked_iweek,
+      anchorWeek = as.numeric(ref$anchorWeek),
+      nW_true = as.integer(season_length),
+      timing_mode = timing_mode,
+      alignment_config_id = alignment_config_id,
+      status = if (usable) "available" else "unavailable",
+      fallback_reason = fallback_reason,
+      template = list(if (usable) as.character(ensemble$template) else character()),
+      t_peak = list(if (usable) as.numeric(ensemble$t_peak) else numeric()),
+      weight = list(if (usable) as.numeric(ensemble$weight) else numeric())
+    )
+  }))
+
   m1_curves <- dplyr::bind_rows(lapply(per_week, function(pw) {
     if (is.null(pw$ap) || pw$ap$state %in% c("pre_ignition", "alignment_failed")) {
       return(NULL)
@@ -467,8 +515,9 @@ run_m1_alignment <- function(kit,
 
   list(
     params_df = params_df,
+    m1_peak_ensemble = m1_peak_ensemble,
     m1_curves = m1_curves,
-    per_week  = per_week,
+    per_week = per_week,
     m0_result = m0_result
   )
 }
@@ -968,9 +1017,10 @@ run_m2_forecast <- function(kit,
 #' @param verbose Logical. Emit progress messages (default \code{TRUE}).
 #' @param ... Additional arguments passed by the \code{run_pipeline()} alias.
 #'
-#' @return A list with \code{params_df}, \code{m1_curves}, \code{m2_preds},
-#'   \code{pred_df}, \code{last_obs}, and \code{ign_out}. The plot fields are
-#'   consumed directly by \code{plot_forecast()}.
+#' @return A \code{page_forecast} list with \code{params_df},
+#'   \code{m1_peak_ensemble}, \code{m1_curves}, \code{m2_preds},
+#'   \code{pred_df}, \code{last_obs}, \code{season}, and \code{ign_out}.
+#'   The plot fields are consumed directly by \code{plot_forecast()}.
 #'
 #' @export
 run_prospective_pipeline <- function(kit,
@@ -1002,13 +1052,17 @@ run_prospective_pipeline <- function(kit,
     timing_mode = timing_mode
   )
   plot_data <- .as_forecast_plot_data(m2$m2_preds, current_data)
+  forecast_seasons <- unique(as.character(current_data$season))
+  forecast_seasons <- forecast_seasons[!is.na(forecast_seasons) & nzchar(forecast_seasons)]
   structure(list(
     params_df = m1$params_df,
+    m1_peak_ensemble = m1$m1_peak_ensemble,
     m1_curves = m1$m1_curves,
-    m2_preds  = m2$m2_preds,
-    pred_df   = plot_data$pred_df,
-    last_obs  = plot_data$last_obs,
-    ign_out   = m0$ign_out
+    m2_preds = m2$m2_preds,
+    pred_df = plot_data$pred_df,
+    last_obs = plot_data$last_obs,
+    season = if (length(forecast_seasons) == 1L) forecast_seasons else NULL,
+    ign_out = m0$ign_out
   ), class = c("page_forecast", "list"))
 }
 

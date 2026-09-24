@@ -203,6 +203,8 @@ align_multi_template <- function(currentD,
   # Stack forecast p_hat from each template; work on logit scale throughout
   fw_weeks <- ref_pred$newWeek[future_rows]
   n_fw <- length(fw_weeks)
+  wts <- w_s[valid_idx]
+  wts <- wts / sum(wts)
 
   if (n_fw > 0) {
     p_mat <- matrix(NA_real_, nrow = n_fw, ncol = length(valid_idx))
@@ -214,9 +216,6 @@ align_multi_template <- function(currentD,
         p_mat[, j] <- pred_j$p_hat[fj]
       }
     }
-
-    wts <- w_s[valid_idx]
-    wts <- wts / sum(wts)
 
     # Logit-scale ensemble: average and quantiles on log-odds, then back-transform.
     # This respects the binomial model geometry (log-odds is the linear predictor)
@@ -293,6 +292,12 @@ align_multi_template <- function(currentD,
 
   if (any(pk_valid)) {
     pk_wts <- wts[pk_valid] / sum(wts[pk_valid])
+    peak_ensemble <- data.frame(
+      template = names(results)[valid_idx][pk_valid],
+      t_peak = t_peaks[pk_valid],
+      weight = as.numeric(pk_wts),
+      stringsAsFactors = FALSE
+    )
     t_peak <- sum(t_peaks[pk_valid] * pk_wts)
     t_peak_med <- .weighted_quantile(t_peaks[pk_valid], pk_wts, 0.5)
 
@@ -300,6 +305,10 @@ align_multi_template <- function(currentD,
     t_peak_lo <- .weighted_quantile(t_peaks[pk_valid], pk_wts, (1 - level) / 2)
     t_peak_hi <- .weighted_quantile(t_peaks[pk_valid], pk_wts, 1 - (1 - level) / 2)
   } else {
+    peak_ensemble <- data.frame(
+      template = character(), t_peak = numeric(), weight = numeric(),
+      stringsAsFactors = FALSE
+    )
     t_peak <- NA_real_
     t_peak_med <- NA_real_
     t_peak_lo <- NA_real_
@@ -343,6 +352,7 @@ align_multi_template <- function(currentD,
     V_ab = best_res$V_ab,
     V_td = best_res$V_td,
     peak = peak_out,
+    peak_ensemble = peak_ensemble,
     fallback_reason = best_res$fallback_reason,
     per_template = results,
     weights = w_s,
@@ -754,6 +764,9 @@ run_alignment_prospective_multi <- function(
     forecast_df = res$pred_df,
     ign_out = ign_out,
     weights = res$weights,
+    peak_ensemble = res$peak_ensemble %||% data.frame(
+      template = character(), t_peak = numeric(), weight = numeric()
+    ),
     template_names = res$template_names,
     spread_method = res$spread_method %||% spread_method,
     spread_fallback_count = res$spread_fallback_count %||% 0L
@@ -999,6 +1012,9 @@ run_alignment_prospective_multi_weights <- function(
       forecast_df = res$pred_df,
       ign_out = ign_out,
       weights = res$weights,
+      peak_ensemble = res$peak_ensemble %||% data.frame(
+        template = character(), t_peak = numeric(), weight = numeric()
+      ),
       template_names = res$template_names,
       spread_method = res$spread_method %||% spread_method,
       spread_fallback_count = res$spread_fallback_count %||% 0L
