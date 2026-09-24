@@ -1,3 +1,47 @@
+#' Fit the Legacy Model calibration at a fixed alignment
+#'
+#' @keywords internal
+.fit_legacy_model_ab <- function(y, n, eta, w, allow_scale, ab_prior) {
+  objective <- function(par) {
+    a <- par[1]
+    log_b <- if (allow_scale) par[2] else 0
+    b <- exp(log_b)
+    p <- pmin(pmax(stats::plogis(a + b * eta), 1e-12), 1 - 1e-12)
+    nll <- -sum(w * stats::dbinom(y, n, p, log = TRUE) / pmax(n, 1))
+    penalty <- 0.5 * ((a - ab_prior$a_mean) / ab_prior$a_sd)^2
+    if (allow_scale) {
+      penalty <- penalty + 0.5 * ((log_b - ab_prior$log_b_mean) / ab_prior$log_b_sd)^2
+    }
+    nll + penalty
+  }
+  start <- if (allow_scale) c(ab_prior$a_mean, ab_prior$log_b_mean) else ab_prior$a_mean
+  opt <- stats::optim(start, objective, method = "BFGS", hessian = TRUE)
+  if (!is.finite(opt$value) || any(!is.finite(opt$par))) {
+    stop("Legacy Model a/b calibration failed.", call. = FALSE)
+  }
+  a <- opt$par[1]
+  b <- if (allow_scale) exp(opt$par[2]) else 1
+  V_theta <- tryCatch(solve(opt$hessian), error = function(e) NULL)
+  if (is.null(V_theta) || any(!is.finite(V_theta))) {
+    V_ab <- if (allow_scale) {
+      diag(c(ab_prior$a_sd^2, (b * ab_prior$log_b_sd)^2))
+    } else {
+      matrix(ab_prior$a_sd^2, 1, 1)
+    }
+  } else if (allow_scale) {
+    jacobian <- diag(c(1, b))
+    V_ab <- jacobian %*% V_theta %*% jacobian
+  } else {
+    V_ab <- matrix(V_theta[1, 1], 1, 1)
+  }
+  glm_hat <- if (allow_scale) {
+    stats::glm(cbind(y, n - y) ~ eta, family = stats::binomial(), weights = w)
+  } else {
+    stats::glm(cbind(y, n - y) ~ 1 + offset(eta), family = stats::binomial(), weights = w)
+  }
+  list(a = a, b = b, V = V_ab, glm = glm_hat, objective = opt$value)
+}
+
 #' Align and forecast using dilated reference curve
 #'
 #' @param currentD tibble/data.frame with at least newWeek, y, neg.
@@ -5,6 +49,10 @@
 #' @param g_ref_mu_se function(u) returning list(mu, se) from GAM.
 #' @param hyper list with TAU_BOUNDS, DELTA_BOUNDS, WEEK_THRESHOLD_DELTA, LAMBDA_DELTA.
 #' @param allow_scale logical or NULL; passed to fit_tau_delta().
+#' @param ab_prior Optional named list with \code{a_mean}, \code{a_sd},
+#'   \code{log_b_mean}, and \code{log_b_sd}. The value from
+#'   \code{legacy_model_settings()$m1_ab_prior} opts into the Legacy Model;
+#'   NULL preserves the package's unregularized calibration.
 #' @param use_weights logical; use y + neg as binomial weights.
 #' @param level CI level.
 #' @param future_weeks optional vector of future newWeek values; if NULL,
@@ -33,36 +81,38 @@ align_forecast_pipeline_dilate <- function(currentD,
                                            include_observed = TRUE,
                                            fallback_when_unstable = TRUE,
                                            curvature_ratio = 1.0,
-                                           time_weights  = NULL,
+                                           time_weights = NULL,
                                            trough_weight = 0.1,
-                                           rise_weight   = 1.0,
-                                           peak_decay    = 0.3) {
-  tb  <- hyper$TAU_BOUNDS
-  db  <- hyper$DELTA_BOUNDS
-  wk  <- hyper$WEEK_THRESHOLD_DELTA
+                                           rise_weight = 1.0,
+                                           peak_decay = 0.3,
+                                           ab_prior = NULL) {
+  tb <- hyper$TAU_BOUNDS
+  db <- hyper$DELTA_BOUNDS
+  wk <- hyper$WEEK_THRESHOLD_DELTA
   lam <- hyper$LAMBDA_DELTA
-  
+
   # local safe wrapper around the passed-in g_ref_fun
   g_ref_safe <- function(u) g_ref_fun(pmin(pmax(u, 1), 52))
-  
-  # 1) Align (τ, δ, a, b)
+
+  # 1) Align (tau, delta, a, b)
   fit <- fit_tau_delta(
-    currentD      = currentD,
-    g_ref_fun     = g_ref_fun,
-    tau_bounds    = tb,
-    delta_bounds  = db,
-    allow_scale   = allow_scale,
+    currentD = currentD,
+    g_ref_fun = g_ref_fun,
+    tau_bounds = tb,
+    delta_bounds = db,
+    allow_scale = allow_scale,
     week_threshold_delta = wk,
-    lam_delta     = lam,
-    use_weights   = use_weights,
+    lam_delta = lam,
+    use_weights = use_weights,
     curvature_ratio = curvature_ratio,
-    time_weights  = time_weights,
+    time_weights = time_weights,
     trough_weight = trough_weight,
-    rise_weight   = rise_weight,
-    peak_decay    = peak_decay
+    rise_weight = rise_weight,
+    peak_decay = peak_decay,
+    ab_prior = ab_prior
   )
 
-  # 2) (a,b) at aligned (τ,δ)
+  # 2) (a,b) at aligned (tau, delta)
   t <- currentD$newWeek
   y <- currentD$y
   n <- currentD$y + currentD$neg
@@ -76,17 +126,23 @@ align_forecast_pipeline_dilate <- function(currentD,
     rep(1, length(n))
   }
   w <- w_n * w_t
-  
-  u_hat  <- (t - fit$tau) / (1 + fit$delta)
+
+  u_hat <- (t - fit$tau) / (1 + fit$delta)
   eta_of <- g_ref_safe(u_hat)
-  
-  if (fit$allow_scale) {
+
+  if (!is.null(ab_prior)) {
+    ab_fit <- .fit_legacy_model_ab(y, n, eta_of, w, fit$allow_scale, ab_prior)
+    glm_hat <- ab_fit$glm
+    V_ab <- ab_fit$V
+    a_hat <- ab_fit$a
+    b_hat <- ab_fit$b
+  } else if (fit$allow_scale) {
     glm_hat <- glm(
       cbind(y, n - y) ~ eta_of,
       family  = binomial(),
       weights = w
     )
-    V_ab  <- vcov(glm_hat)
+    V_ab <- vcov(glm_hat)
     a_hat <- coef(glm_hat)[1]
     b_hat <- coef(glm_hat)[2]
   } else {
@@ -95,43 +151,50 @@ align_forecast_pipeline_dilate <- function(currentD,
       family  = binomial(),
       weights = w
     )
-    V_ab  <- matrix(vcov(glm_hat)[1, 1], 1, 1)
+    V_ab <- matrix(vcov(glm_hat)[1, 1], 1, 1)
     a_hat <- coef(glm_hat)[1]
     b_hat <- 1
   }
-  
-  # 3) (τ,δ) covariance via 2D profile if δ is on
+
+  # 3) (tau, delta) covariance via 2D profile if delta is on
   prof2d <- if (fit$delta_on) cov_tau_delta_from_profile(fit) else list(V = diag(c(NA, NA), 2))
-  V_td   <- prof2d$V
+  V_td <- prof2d$V
   cov_ok <- fit$delta_on && is_cov_ok(V_td)
-  
-  # Fallback if δ unstable
+
+  # Fallback if delta is unstable
   fb_reason <- NA_character_
   if (fallback_when_unstable && fit$delta_on && !cov_ok) {
     fit <- fit_tau_delta(
-      currentD      = currentD,
-      g_ref_fun     = g_ref_fun,
-      tau_bounds    = tb,
-      delta_bounds  = c(0, 0),      # force delta = 0
-      allow_scale   = fit$allow_scale,
-      week_threshold_delta = 1e9,   # never turn delta on
-      lam_delta     = lam,
-      use_weights   = use_weights,
-      time_weights  = time_weights,
+      currentD = currentD,
+      g_ref_fun = g_ref_fun,
+      tau_bounds = tb,
+      delta_bounds = c(0, 0), # force delta = 0
+      allow_scale = fit$allow_scale,
+      week_threshold_delta = 1e9, # never turn delta on
+      lam_delta = lam,
+      use_weights = use_weights,
+      time_weights = time_weights,
       trough_weight = trough_weight,
-      rise_weight   = rise_weight,
-      peak_decay    = peak_decay
+      rise_weight = rise_weight,
+      peak_decay = peak_decay,
+      ab_prior = ab_prior
     )
-    u_hat  <- (t - fit$tau) / (1 + fit$delta)
+    u_hat <- (t - fit$tau) / (1 + fit$delta)
     eta_of <- g_ref_safe(u_hat)
-    
-    if (fit$allow_scale) {
+
+    if (!is.null(ab_prior)) {
+      ab_fit <- .fit_legacy_model_ab(y, n, eta_of, w, fit$allow_scale, ab_prior)
+      glm_hat <- ab_fit$glm
+      V_ab <- ab_fit$V
+      a_hat <- ab_fit$a
+      b_hat <- ab_fit$b
+    } else if (fit$allow_scale) {
       glm_hat <- glm(
         cbind(y, n - y) ~ eta_of,
         family  = binomial(),
         weights = w
       )
-      V_ab  <- vcov(glm_hat)
+      V_ab <- vcov(glm_hat)
       a_hat <- coef(glm_hat)[1]
       b_hat <- coef(glm_hat)[2]
     } else {
@@ -140,30 +203,32 @@ align_forecast_pipeline_dilate <- function(currentD,
         family  = binomial(),
         weights = w
       )
-      V_ab  <- matrix(vcov(glm_hat)[1, 1], 1, 1)
+      V_ab <- matrix(vcov(glm_hat)[1, 1], 1, 1)
       a_hat <- coef(glm_hat)[1]
       b_hat <- 1
     }
-    V_td      <- NULL
-    cov_ok    <- FALSE
+    V_td <- NULL
+    cov_ok <- FALSE
     fb_reason <- "delta_unstable_profile"
   }
-  
+
   # 4) Predictions + PIs
   last_obs <- max(t)
   if (is.null(future_weeks)) {
     future_weeks <- if (last_obs < 52) (last_obs + 1):52 else integer(0)
   }
   z <- qnorm((1 + level) / 2)
-  
+
   make_block <- function(tt, kind, n_future = NULL, add_sampling_future = FALSE) {
-    if (length(tt) == 0) return(tibble::tibble())
-    
-    u   <- (tt - fit$tau) / (1 + fit$delta)
+    if (length(tt) == 0) {
+      return(tibble::tibble())
+    }
+
+    u <- (tt - fit$tau) / (1 + fit$delta)
     g_mu <- g_ref_safe(u)
-    eta  <- a_hat + b_hat * g_mu
-    p    <- plogis(eta)
-    
+    eta <- a_hat + b_hat * g_mu
+    p <- plogis(eta)
+
     # (1) Var from (a,b) (quasi-binomial)
     if (fit$allow_scale) {
       Xab <- cbind(1, g_mu)
@@ -177,8 +242,8 @@ align_forecast_pipeline_dilate <- function(currentD,
       error = function(e) 1
     )
     var_eta_ab <- phi_hat * rowSums((Xab %*% Vab) * Xab)
-    
-    # (2) alignment variance (τ,δ), or τ-only fallback
+
+    # (2) alignment variance (tau, delta), or tau-only fallback
     var_eta_align <- 0
     if (!is.null(V_td) && is_cov_ok(V_td)) {
       gprime <- num_deriv(u, g_ref_safe)
@@ -192,7 +257,8 @@ align_forecast_pipeline_dilate <- function(currentD,
         g_ref       = g_ref_safe,
         allow_scale = fit$allow_scale,
         tau0        = fit$tau,
-        tau_bounds  = tb
+        tau_bounds  = tb,
+        ab_prior    = ab_prior
       )
       if (is.finite(tp$se_tau)) {
         gprime <- num_deriv(u, g_ref_safe)
@@ -200,16 +266,16 @@ align_forecast_pipeline_dilate <- function(currentD,
         var_eta_align <- (d_eta_d_tau^2) * (tp$se_tau^2)
       }
     }
-    
+
     # (3) template uncertainty from GAM
     g_se <- g_ref_mu_se(u)$se
     var_eta_template <- (b_hat^2) * (g_se^2)
-    
+
     se_eta <- sqrt(pmax(0, var_eta_ab + var_eta_align + var_eta_template))
-    
+
     p_lo <- plogis(eta - z * se_eta)
     p_hi <- plogis(eta + z * se_eta)
-    
+
     tibble::tibble(
       newWeek = tt,
       p_hat   = p,
@@ -218,7 +284,7 @@ align_forecast_pipeline_dilate <- function(currentD,
       kind    = kind
     )
   }
-  
+
   # Observed with Wilson CIs
   pred_obs <- if (include_observed) {
     ci <- wilson_ci(y, n, level = level)
@@ -232,9 +298,9 @@ align_forecast_pipeline_dilate <- function(currentD,
   } else {
     tibble::tibble()
   }
-  
+
   pred_fut <- make_block(future_weeks, "forecast")
-  
+
   peak <- peak_summary_from_fit(
     fit_obj   = list(tau = fit$tau, delta = fit$delta, a = a_hat, b = b_hat),
     g_ref_fun = g_ref_safe,
@@ -242,36 +308,37 @@ align_forecast_pipeline_dilate <- function(currentD,
     V_td      = if (!is.null(V_td) && is_cov_ok(V_td)) V_td else diag(NA_real_, 2),
     level     = level
   )
-  
-  # Fallback peak CI with τ-only profile if needed
+
+  # Fallback peak CI with tau-only profile if needed
   if (any(is.na(peak$t_peak_ci))) {
     tp <- tau_profile_se(
       currentD,
       g_ref       = g_ref_safe,
       allow_scale = fit$allow_scale,
       tau0        = fit$tau,
-      tau_bounds  = tb
+      tau_bounds  = tb,
+      ab_prior    = ab_prior
     )
     if (is.finite(tp$se_tau)) {
       z <- qnorm((1 + level) / 2)
       peak$t_peak_ci <- peak$t_peak + c(-1, 1) * z * tp$se_tau
     }
   }
-  
+
   list(
-    tau             = fit$tau,
-    delta           = fit$delta,
-    a               = a_hat,
-    b               = b_hat,
-    allow_scale     = fit$allow_scale,
-    delta_on        = fit$delta_on,
-    nll             = fit$value,
-    pred_df         = dplyr::bind_rows(pred_obs, pred_fut) |>
+    tau = fit$tau,
+    delta = fit$delta,
+    a = a_hat,
+    b = b_hat,
+    allow_scale = fit$allow_scale,
+    delta_on = fit$delta_on,
+    nll = fit$value,
+    pred_df = dplyr::bind_rows(pred_obs, pred_fut) |>
       dplyr::arrange(newWeek),
-    last_obs        = last_obs,
-    V_ab            = V_ab,
-    V_td            = V_td,
-    peak            = peak,
+    last_obs = last_obs,
+    V_ab = V_ab,
+    V_td = V_td,
+    peak = peak,
     fallback_reason = fb_reason
   )
 }

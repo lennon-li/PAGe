@@ -20,14 +20,25 @@
 #' @return A numeric scalar; the penalised binomial negative log-likelihood.
 negloglik_tau_delta <- function(par, t, y, n, gfun, allow_scale = TRUE,
                                 lam = 0.1, w = n) {
-  tau <- par[1]; a <- par[2]
-  if (allow_scale) { b <- par[3]; del <- par[4] } else { b <- 1; del <- par[3] }
-  u   <- (t - tau) / (1 + del)
+  tau <- par[1]
+  a <- par[2]
+  if (allow_scale) {
+    b <- par[3]
+    del <- par[4]
+  } else {
+    b <- 1
+    del <- par[3]
+  }
+  u <- (t - tau) / (1 + del)
   eta <- a + b * gfun(u)
-  p   <- plogis(eta)
+  p <- plogis(eta)
   nll <- -sum(w * dbinom(y, size = n, prob = p, log = TRUE) / pmax(n, 1))
   nll + lam * del^2
 }
+
+# Legacy Model M1 calibration prior, based on historical full-season fits:
+# a ~ N(0, 0.10^2), log(b) ~ N(0, 0.05^2).
+.legacy_model_ab_prior <- list(a_mean = 0, a_sd = 0.10, log_b_mean = 0, log_b_sd = 0.05)
 
 #' Estimate tau and its profile standard error
 #'
@@ -48,17 +59,32 @@ negloglik_tau_delta <- function(par, t, y, n, gfun, allow_scale = TRUE,
 #'   (default 0).
 #' @param tau_bounds Numeric vector of length 2; hard limits for \code{tau}
 #'   (default \code{c(-12, 12)}).
+#' @param ab_prior Optional named calibration prior; NULL leaves calibration
+#'   unregularized.
 #'
 #' @return A list with \code{tau_hat} (numeric) and \code{se_tau}
 #'   (numeric, \code{NA} when the Hessian is non-positive).
 #' @keywords internal
 tau_profile_se <- function(currentD, g_ref, allow_scale = FALSE,
-                           h = 1e-3, tau0 = 0, tau_bounds = c(-12, 12)) {
-  dat <- currentD |> dplyr::mutate(n = y + neg) |> dplyr::filter(n > 0)
-  t <- dat$newWeek; y <- dat$y; n <- dat$n; w <- n
+                           h = 1e-3, tau0 = 0, tau_bounds = c(-12, 12),
+                           ab_prior = NULL) {
+  dat <- currentD |>
+    dplyr::mutate(n = y + neg) |>
+    dplyr::filter(n > 0)
+  t <- dat$newWeek
+  y <- dat$y
+  n <- dat$n
+  w <- n
 
   nll_of_tau <- function(tau) {
     eta_shift <- g_ref(t - tau)
+    if (!is.null(ab_prior)) {
+      fit <- try(.fit_legacy_model_ab(y, n, eta_shift, w, allow_scale, ab_prior), silent = TRUE)
+      if (inherits(fit, "try-error") || !is.finite(fit$objective)) {
+        return(1e9)
+      }
+      return(fit$objective)
+    }
     fit <- try(
       if (allow_scale) {
         glm(cbind(y, n - y) ~ eta_shift, family = binomial(), weights = w)
@@ -67,9 +93,13 @@ tau_profile_se <- function(currentD, g_ref, allow_scale = FALSE,
       },
       silent = TRUE
     )
-    if (inherits(fit, "try-error")) return(1e9)
+    if (inherits(fit, "try-error")) {
+      return(1e9)
+    }
     ll <- try(logLik(fit), silent = TRUE)
-    if (inherits(ll, "try-error") || !is.finite(ll)) return(1e9)
+    if (inherits(ll, "try-error") || !is.finite(ll)) {
+      return(1e9)
+    }
     -as.numeric(ll)
   }
 
@@ -78,12 +108,10 @@ tau_profile_se <- function(currentD, g_ref, allow_scale = FALSE,
   tau_hat <- opt$minimum
 
   nll2 <- function(tau) 2 * nll_of_tau(tau)
-  Dpp <- (nll2(tau_hat + h) - 2*nll2(tau_hat) + nll2(tau_hat - h)) / (h^2)
+  Dpp <- (nll2(tau_hat + h) - 2 * nll2(tau_hat) + nll2(tau_hat - h)) / (h^2)
   se_tau <- if (is.finite(Dpp) && Dpp > 0) sqrt(1 / Dpp) else NA_real_
   list(tau_hat = tau_hat, se_tau = se_tau)
 }
-
-
 
 
 #' Compute ignition-to-peak time weights for alignment loss
@@ -104,28 +132,28 @@ tau_profile_se <- function(currentD, g_ref, allow_scale = FALSE,
 compute_align_weights <- function(t,
                                   g_ref_fun,
                                   trough_weight = 0.1,
-                                  rise_weight   = 3.0,
-                                  peak_decay    = 0.3,
-                                  n_weeks       = 52L) {
+                                  rise_weight = 3.0,
+                                  peak_decay = 0.3,
+                                  n_weeks = 52L) {
   # Find peak of the reference curve (probability scale)
-  grid_u   <- seq_len(n_weeks)
-  g_vals   <- g_ref_fun(grid_u)
-  p_vals   <- stats::plogis(g_vals)
-  u_peak   <- grid_u[which.max(p_vals)]
-  p_peak   <- max(p_vals)
-  p_min    <- min(p_vals)
+  grid_u <- seq_len(n_weeks)
+  g_vals <- g_ref_fun(grid_u)
+  p_vals <- stats::plogis(g_vals)
+  u_peak <- grid_u[which.max(p_vals)]
+  p_peak <- max(p_vals)
+  p_min <- min(p_vals)
 
   # Rising limb start: last week before peak where p is below 10% of peak
   # range above baseline.  This avoids false positives from cyclic wrap-around.
   p_thresh <- p_min + 0.10 * (p_peak - p_min)
   pre_peak <- grid_u[seq_len(u_peak)]
-  below    <- which(p_vals[pre_peak] < p_thresh)
-  u_rise   <- if (length(below) > 0) max(below) + 1L else 1L
+  below <- which(p_vals[pre_peak] < p_thresh)
+  u_rise <- if (length(below) > 0) max(below) + 1L else 1L
 
   # Build weight vector
   w_t <- rep(1.0, length(t))
   # Pre-rising-limb trough
-  w_t[t < u_rise]                <- trough_weight
+  w_t[t < u_rise] <- trough_weight
   # Ignition-to-peak boost
   w_t[t >= u_rise & t <= u_peak] <- rise_weight
   # Post-peak exponential decay back toward 1
@@ -137,6 +165,8 @@ compute_align_weights <- function(t,
 
 
 #' Internal: fit tau & delta for one season, given reference curve
+#' @param ab_prior Optional named calibration prior; NULL leaves calibration
+#'   unregularized.
 #' @keywords internal
 fit_tau_delta <- function(currentD, g_ref_fun,
                           tau_bounds, delta_bounds,
@@ -145,10 +175,11 @@ fit_tau_delta <- function(currentD, g_ref_fun,
                           lam_delta,
                           use_weights = TRUE,
                           curvature_ratio = 1.0,
-                          time_weights  = NULL,
+                          time_weights = NULL,
                           trough_weight = 0.1,
-                          rise_weight   = 1.0,
-                          peak_decay    = 0.3) {
+                          rise_weight = 1.0,
+                          peak_decay = 0.3,
+                          ab_prior = NULL) {
   # safe wrapper around the user-supplied g_ref_fun
   # (clamp to [1, 52] or whatever range your template is on)
   g_ref_safe <- function(u) g_ref_fun(pmin(pmax(u, 1), 52))
@@ -170,7 +201,7 @@ fit_tau_delta <- function(currentD, g_ref_fun,
   }
   w <- w_n * w_t
 
-  # if we haven’t seen far enough into the season, don’t try scale yet
+  # If we have not seen far enough into the season, do not try scale yet.
   if (is.null(allow_scale)) allow_scale <- max(t, na.rm = TRUE) >= 28
 
   # ------- Quick 1-D tau scan (profile over a, b at delta = 0) -------
@@ -179,17 +210,25 @@ fit_tau_delta <- function(currentD, g_ref_fun,
   nll_tau_only <- function(tau_try) {
     g_t <- g_ref_safe(t - tau_try)
     ok_t <- is.finite(g_t) & n > 0
-    if (sum(ok_t) < 2) return(1e9)
+    if (sum(ok_t) < 2) {
+      return(1e9)
+    }
     fit_t <- if (allow_scale) {
       try(glm(cbind(y[ok_t], n[ok_t] - y[ok_t]) ~ g_t[ok_t],
-              family = binomial(), weights = w[ok_t]), silent = TRUE)
+        family = binomial(), weights = w[ok_t]
+      ), silent = TRUE)
     } else {
       try(glm(cbind(y[ok_t], n[ok_t] - y[ok_t]) ~ 1 + offset(g_t[ok_t]),
-              family = binomial(), weights = w[ok_t]), silent = TRUE)
+        family = binomial(), weights = w[ok_t]
+      ), silent = TRUE)
     }
-    if (inherits(fit_t, "try-error")) return(1e9)
+    if (inherits(fit_t, "try-error")) {
+      return(1e9)
+    }
     ll <- try(logLik(fit_t), silent = TRUE)
-    if (inherits(ll, "try-error") || !is.finite(ll)) return(1e9)
+    if (inherits(ll, "try-error") || !is.finite(ll)) {
+      return(1e9)
+    }
     -as.numeric(ll)
   }
 
@@ -205,18 +244,22 @@ fit_tau_delta <- function(currentD, g_ref_fun,
   if (allow_scale) {
     fit_opt <- try(
       glm(cbind(y[ok_opt], n[ok_opt] - y[ok_opt]) ~ g_opt[ok_opt],
-          family = binomial(), weights = w[ok_opt]),
+        family = binomial(), weights = w[ok_opt]
+      ),
       silent = TRUE
     )
     if (inherits(fit_opt, "try-error")) {
-      a0 <- qlogis(pmax(mean(y[ok_opt] / n[ok_opt]), 1e-6)); b0 <- 1
+      a0 <- qlogis(pmax(mean(y[ok_opt] / n[ok_opt]), 1e-6))
+      b0 <- 1
     } else {
-      a0 <- unname(coef(fit_opt)[1]); b0 <- unname(coef(fit_opt)[2])
+      a0 <- unname(coef(fit_opt)[1])
+      b0 <- unname(coef(fit_opt)[2])
     }
   } else {
     fit_opt <- try(
       glm(cbind(y[ok_opt], n[ok_opt] - y[ok_opt]) ~ 1 + offset(g_opt[ok_opt]),
-          family = binomial(), weights = w[ok_opt]),
+        family = binomial(), weights = w[ok_opt]
+      ),
       silent = TRUE
     )
     a0 <- if (inherits(fit_opt, "try-error")) {
@@ -228,8 +271,8 @@ fit_tau_delta <- function(currentD, g_ref_fun,
   }
 
   tau0 <- tau_opt
-  a0   <- median(c(a0, -10, 10))
-  b0   <- if (allow_scale) median(c(b0, 0.2, 5.0)) else 1
+  a0 <- median(c(a0, -10, 10))
+  b0 <- if (allow_scale) median(c(b0, 0.2, 5.0)) else 1
 
   # lam_delta is now on the same per-observation scale as safe_obj():
   # learn_alignment_hyperparams() uses unweighted GLM for LAMBDA_DELTA calibration.
@@ -239,119 +282,130 @@ fit_tau_delta <- function(currentD, g_ref_fun,
   # Delta (dilation) and tau (shift) are confounded on the rising edge of the
   # curve. We only allow delta to vary when:
   #   (1) enough time has passed (existing time gate), AND
-  #   (2) the data actually constrains delta — d²NLL/dδ² at the tau-optimal
-  #       point (unweighted) exceeds curvature_ratio × lam_eff. Both are now
+  #   (2) the data actually constrains delta -- d2NLL/ddelta2 at the tau-optimal
+  #       point (unweighted) exceeds curvature_ratio * lam_eff. Both are now
   #       in the same per-observation scale. Computing at tau_opt is critical:
   #       at the wrong tau, the NLL surface is flat in delta regardless of
   #       how much data exists.
-  time_ok  <- max(t, na.rm = TRUE) >= week_threshold_delta
+  time_ok <- max(t, na.rm = TRUE) >= week_threshold_delta
   delta_on <- FALSE
   if (time_ok) {
     # Unweighted GLM-profiled NLL (per-observation, same scale as lam_delta)
     nll_d_nw <- function(d) {
-      u_d  <- (t - tau0) / (1 + d)
-      g_d  <- g_ref_safe(u_d)
+      u_d <- (t - tau0) / (1 + d)
+      g_d <- g_ref_safe(u_d)
       ok_d <- is.finite(g_d) & n > 0
-      if (sum(ok_d) < 2) return(1e9)
+      if (sum(ok_d) < 2) {
+        return(1e9)
+      }
       fit_d <- try(
         glm(cbind(y[ok_d], n[ok_d] - y[ok_d]) ~ g_d[ok_d],
-            family = binomial()),
+          family = binomial()
+        ),
         silent = TRUE
       )
-      if (inherits(fit_d, "try-error")) return(1e9)
+      if (inherits(fit_d, "try-error")) {
+        return(1e9)
+      }
       ll <- try(logLik(fit_d), silent = TRUE)
-      if (inherits(ll, "try-error") || !is.finite(ll)) return(1e9)
+      if (inherits(ll, "try-error") || !is.finite(ll)) {
+        return(1e9)
+      }
       -as.numeric(ll)
     }
-    h_d  <- 0.01
-    Dpp  <- (nll_d_nw(h_d) - 2 * nll_d_nw(0) + nll_d_nw(-h_d)) / h_d^2
+    h_d <- 0.01
+    Dpp <- (nll_d_nw(h_d) - 2 * nll_d_nw(0) + nll_d_nw(-h_d)) / h_d^2
     delta_on <- is.finite(Dpp) && Dpp > curvature_ratio * lam_eff
   }
 
   del0 <- if (delta_on) median(c(0, delta_bounds[1] + 1e-4, delta_bounds[2] - 1e-4)) else 0
-  
+
   if (allow_scale && delta_on) {
     x0 <- c(tau0, a0, b0, del0)
-    lb <- c(tau_bounds[1], -10, 0.2,  delta_bounds[1])
-    ub <- c(tau_bounds[2],  10, 5.0,  delta_bounds[2])
+    lb <- c(tau_bounds[1], -10, 0.2, delta_bounds[1])
+    ub <- c(tau_bounds[2], 10, 5.0, delta_bounds[2])
   } else if (allow_scale && !delta_on) {
     x0 <- c(tau0, a0, b0, 0)
     lb <- c(tau_bounds[1], -10, 0.2, 0)
-    ub <- c(tau_bounds[2],  10, 5.0, 0)
+    ub <- c(tau_bounds[2], 10, 5.0, 0)
   } else if (!allow_scale && delta_on) {
     x0 <- c(tau0, a0, del0)
     lb <- c(tau_bounds[1], -10, delta_bounds[1])
-    ub <- c(tau_bounds[2],  10, delta_bounds[2])
+    ub <- c(tau_bounds[2], 10, delta_bounds[2])
   } else {
     x0 <- c(tau0, a0, 0)
     lb <- c(tau_bounds[1], -10, 0)
-    ub <- c(tau_bounds[2],  10, 0)
+    ub <- c(tau_bounds[2], 10, 0)
   }
-  
+
   obj <- function(par) {
     safe_obj(
       par,
-      t   = t,
-      y   = y,
-      n   = n,
+      t = t,
+      y = y,
+      n = n,
       gfun = g_ref_safe,
       allow_scale = allow_scale,
-      lam  = lam_eff,     # scale-corrected penalty (lam_delta / mean_n)
-      w    = w
+      lam = lam_eff, # scale-corrected penalty (lam_delta / mean_n)
+      w = w,
+      ab_prior = ab_prior
     )
   }
-  
+
   # make sure starting point is finite
   if (!is.finite(obj(x0))) {
     for (sc in c(0, 0.25, 0.5, 1)) {
       x_try <- x0
-      x_try[1] <- median(c(x0[1] + sc,
-                           tau_bounds[1] + 1e-3,
-                           tau_bounds[2] - 1e-3))
+      x_try[1] <- median(c(
+        x0[1] + sc,
+        tau_bounds[1] + 1e-3,
+        tau_bounds[2] - 1e-3
+      ))
       if (is.finite(obj(x_try))) {
         x0 <- x_try
         break
       }
     }
   }
-  
+
   opt <- nloptr::sbplx(
-    x0     = x0,
-    fn     = obj,
-    lower  = lb,
-    upper  = ub,
+    x0 = x0,
+    fn = obj,
+    lower = lb,
+    upper = ub,
     control = list(xtol_rel = 1e-7, maxeval = 3000)
   )
-  
+
   par <- opt$par
   tau_hat <- par[1]
-  a_hat   <- par[2]
+  a_hat <- par[2]
   if (allow_scale) {
-    b_hat   <- par[3]
+    b_hat <- par[3]
     del_hat <- par[4]
   } else {
-    b_hat   <- 1
+    b_hat <- 1
     del_hat <- par[3]
   }
-  
+
   predict_prob <- function(tt) {
     u <- (tt - tau_hat) / (1 + del_hat)
     plogis(a_hat + b_hat * g_ref_safe(u))
   }
-  
+
   list(
-    tau   = tau_hat,
-    a     = a_hat,
-    b     = b_hat,
+    tau = tau_hat,
+    a = a_hat,
+    b = b_hat,
     delta = del_hat,
     allow_scale = allow_scale,
-    delta_on    = delta_on,
-    value  = opt$value,
+    delta_on = delta_on,
+    value = opt$value,
     status = opt$convergence,
     predict_prob = predict_prob,
     # store data for profiling t_peak, etc.
     t = t, y = y, n = n, w = w,
-    g_ref_fun = g_ref_fun  # for downstream if you need it
+    g_ref_fun = g_ref_fun, # for downstream if you need it
+    ab_prior = ab_prior
   )
 }
 
@@ -359,7 +413,7 @@ fit_tau_delta <- function(currentD, g_ref_fun,
 #' Compute 2x2 profile-likelihood covariance for (tau, delta)
 #'
 #' Estimates the joint covariance matrix of the alignment parameters
-#' \eqn{(\hat\tau, \hat\delta)} via a numerical 2×2 Hessian of the profile
+#' \eqn{(\hat\tau, \hat\delta)} via a numerical 2x2 Hessian of the profile
 #' NLL (marginalised over the intercept \code{a} and scale \code{b} using
 #' Nelder-Mead at each grid point). Uses nine NLL evaluations via central
 #' differences.
@@ -373,26 +427,52 @@ fit_tau_delta <- function(currentD, g_ref_fun,
 #' @param h_del Numeric step size for the \code{delta} derivative (default
 #'   0.005).
 #'
-#' @return A list with \code{V} (2×2 covariance matrix, \code{NA}-filled when
+#' @return A list with \code{V} (2x2 covariance matrix, \code{NA}-filled when
 #'   the Hessian is singular) and \code{center} (\code{c(tau_hat, delta_hat)}).
 #' @keywords internal
 cov_tau_delta_from_profile <- function(fit, h_tau = 0.1, h_del = 0.005) {
-  tau0 <- fit$tau; del0 <- fit$delta
-  t <- fit$t; y <- fit$y; n <- fit$n; w <- fit$w
+  tau0 <- fit$tau
+  del0 <- fit$delta
+  t <- fit$t
+  y <- fit$y
+  n <- fit$n
+  w <- fit$w
   gfun <- function(u) fit$g_ref_fun(pmin(pmax(u, 1), 52))
 
   # Profile NLL at (tau, delta), marginalised over (a, b)
   profile_nll <- function(tau, delta) {
     inner_fn <- function(par_ab) {
       a <- par_ab[1]
-      b <- if (fit$allow_scale) par_ab[2] else 1
+      b <- if (fit$allow_scale) {
+        if (is.null(fit$ab_prior)) par_ab[2] else exp(par_ab[2])
+      } else {
+        1
+      }
+      if (!is.finite(b) || b <= 0) {
+        return(Inf)
+      }
       u <- (t - tau) / (1 + delta)
       p <- plogis(a + b * gfun(u))
-      -sum(w * dbinom(y, size = n, prob = p, log = TRUE) / pmax(n, 1))
+      nll <- -sum(w * dbinom(y, size = n, prob = p, log = TRUE) / pmax(n, 1))
+      prior <- fit$ab_prior
+      if (is.null(prior)) {
+        return(nll)
+      }
+      penalty <- 0.5 * ((a - prior$a_mean) / prior$a_sd)^2
+      if (fit$allow_scale) {
+        penalty <- penalty + 0.5 * ((log(b) - prior$log_b_mean) / prior$log_b_sd)^2
+      }
+      nll + penalty
     }
+    start <- c(fit$a, if (fit$allow_scale) {
+      if (is.null(fit$ab_prior)) fit$b else log(fit$b)
+    } else {
+      NULL
+    })
     o <- tryCatch(
-      optim(c(fit$a, if (fit$allow_scale) fit$b else NULL), inner_fn,
-            method = "Nelder-Mead", control = list(maxit = 500, reltol = 1e-8)),
+      optim(start, inner_fn,
+        method = "Nelder-Mead", control = list(maxit = 500, reltol = 1e-8)
+      ),
       error = function(e) list(value = 1e9)
     )
     o$value
@@ -412,7 +492,7 @@ cov_tau_delta_from_profile <- function(fit, h_tau = 0.1, h_del = 0.005) {
   H11 <- (nll_p0 - 2 * nll00 + nll_m0) / h_tau^2
   H22 <- (nll_0p - 2 * nll00 + nll_0m) / h_del^2
   H12 <- (nll_pp - nll_pm - nll_mp + nll_mm) / (4 * h_tau * h_del)
-  H   <- matrix(c(H11, H12, H12, H22), 2, 2)
+  H <- matrix(c(H11, H12, H12, H22), 2, 2)
 
   V <- if (any(!is.finite(H)) || det(H) <= 1e-12) diag(NA_real_, 2) else solve(H)
   list(V = V, center = c(tau0, del0))
@@ -436,27 +516,52 @@ cov_tau_delta_from_profile <- function(fit, h_tau = 0.1, h_del = 0.005) {
 #'   included in \code{par}.
 #' @param lam Numeric; ridge penalty coefficient on \code{delta}.
 #' @param w Numeric vector of observation weights.
+#' @param ab_prior Optional named calibration prior; NULL leaves calibration
+#'   unregularized.
 #'
 #' @return A single numeric scalar (the penalised NLL, or \code{1e9} on
 #'   failure).
 #' @keywords internal
-safe_obj <- function(par, t, y, n, gfun, allow_scale, lam, w) {
-  out <- try({
-    tau <- par[1]; a <- par[2]
-    if (allow_scale) { b <- par[3]; del <- par[4] } else { b <- 1; del <- par[3] }
-    u   <- (t - tau) / (1 + del)
-    gmu <- gfun(u)
-    if (any(!is.finite(gmu))) return(1e9)
-    eta <- a + b * gmu
-    p   <- plogis(eta)
-    eps <- 1e-12
-    p   <- pmin(pmax(p, eps), 1 - eps)
-    n_eff <- pmax(n, 1)
-    ll    <- dbinom(y, size = n, prob = p, log = TRUE)
-    if (any(!is.finite(ll))) return(1e9)
-    nll <- -sum(w * ll / n_eff)
-    if (!is.finite(nll)) return(1e9)
-    nll + lam * del^2
-  }, silent = TRUE)
+safe_obj <- function(par, t, y, n, gfun, allow_scale, lam, w, ab_prior = NULL) {
+  out <- try(
+    {
+      tau <- par[1]
+      a <- par[2]
+      if (allow_scale) {
+        b <- par[3]
+        del <- par[4]
+      } else {
+        b <- 1
+        del <- par[3]
+      }
+      u <- (t - tau) / (1 + del)
+      gmu <- gfun(u)
+      if (any(!is.finite(gmu))) {
+        return(1e9)
+      }
+      eta <- a + b * gmu
+      p <- plogis(eta)
+      eps <- 1e-12
+      p <- pmin(pmax(p, eps), 1 - eps)
+      n_eff <- pmax(n, 1)
+      ll <- dbinom(y, size = n, prob = p, log = TRUE)
+      if (any(!is.finite(ll))) {
+        return(1e9)
+      }
+      nll <- -sum(w * ll / n_eff)
+      if (!is.finite(nll)) {
+        return(1e9)
+      }
+      penalty <- 0
+      if (!is.null(ab_prior)) {
+        penalty <- 0.5 * ((a - ab_prior$a_mean) / ab_prior$a_sd)^2
+        if (allow_scale) {
+          penalty <- penalty + 0.5 * ((log(b) - ab_prior$log_b_mean) / ab_prior$log_b_sd)^2
+        }
+      }
+      nll + lam * del^2 + penalty
+    },
+    silent = TRUE
+  )
   if (inherits(out, "try-error") || !is.finite(out)) 1e9 else out
 }

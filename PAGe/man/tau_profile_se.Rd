@@ -10,7 +10,8 @@ tau_profile_se(
   allow_scale = FALSE,
   h = 0.001,
   tau0 = 0,
-  tau_bounds = c(-12, 12)
+  tau_bounds = c(-12, 12),
+  ab_prior = NULL
 )
 }
 \arguments{
@@ -31,6 +32,9 @@ tau_profile_se(
 
 \item{tau_bounds}{Numeric vector of length 2; hard limits for \code{tau}
 (default \code{c(-12, 12)}).}
+
+\item{ab_prior}{Optional named calibration prior; NULL leaves calibration
+unregularized.}
 }
 \value{
 A list with \code{tau_hat} (numeric) and \code{se_tau}

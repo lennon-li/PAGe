@@ -42,6 +42,46 @@
   )
 }
 
+.legacy_model_m0_params <- function() {
+  list(
+    cls_thr = 0.26, p_thr = 0.002, prev_thr = 0.001,
+    p_sum_thr = 0.07, eps = 0, n_consec = 5L, L = 2L,
+    K_sum = 5L, N_req = 4L, w_min = 8L, w_max = 26L
+  )
+}
+
+.legacy_model_m0_grid <- function() {
+  if (!requireNamespace("data.table", quietly = TRUE)) stop("Need 'data.table'.")
+  data.table::CJ(
+    cls_thr = 0.26, use_cls = FALSE, p_thr = 0.002,
+    prev_thr = c(0.001, 0.002, 0.003), n_consec = 5L, L = 2L,
+    eps = 0, K_sum = 5L, p_sum_thr = 0.07, N_req = 4L,
+    w_min = 8L, w_max = 26L, K_dp = 3L, dp_thr = 0.01,
+    sorted = FALSE
+  )
+}
+
+#' Return the explicitly selected Legacy Model settings
+#'
+#' The Legacy Model pins \code{p_thr = 0.002}, \code{p_sum_thr = 0.07}, and
+#' ignition weeks 8--26. Its M1 prior is \eqn{a \sim N(0, 0.10^2)} and
+#' \eqn{\log(b) \sim N(0, 0.05^2)}. These settings are opt-in and do not
+#' change the package's general training defaults. Pass \code{$m0_params} to
+#' \code{build_m0()}, \code{$m0_grid} to \code{tune_m0()}, and
+#' \code{$m1_ab_prior} to \code{align_forecast_pipeline_dilate()}.
+#'
+#' @return A named list containing the Legacy Model M0 parameters, tuning grid,
+#'   and M1 calibration prior.
+#' @export
+legacy_model_settings <- function() {
+  list(
+    name = "Legacy Model",
+    m0_params = .legacy_model_m0_params(),
+    m0_grid = .legacy_model_m0_grid(),
+    m1_ab_prior = .legacy_model_ab_prior
+  )
+}
+
 .default_m2_spec <- function() {
   stage2_make_spec(
     delta = 0L, Kr = 1L, T = "S", k_f = 4L, k_e = 2L,

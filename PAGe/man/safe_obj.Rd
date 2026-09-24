@@ -4,7 +4,7 @@
 \alias{safe_obj}
 \title{Safe penalised NLL objective for tau/delta optimisation}
 \usage{
-safe_obj(par, t, y, n, gfun, allow_scale, lam, w)
+safe_obj(par, t, y, n, gfun, allow_scale, lam, w, ab_prior = NULL)
 }
 \arguments{
 \item{par}{Numeric vector \code{c(tau, a, b, delta)} when
@@ -24,6 +24,9 @@ included in \code{par}.}
 \item{lam}{Numeric; ridge penalty coefficient on \code{delta}.}
 
 \item{w}{Numeric vector of observation weights.}
+
+\item{ab_prior}{Optional named calibration prior; NULL leaves calibration
+unregularized.}
 }
 \value{
 A single numeric scalar (the penalised NLL, or \code{1e9} on

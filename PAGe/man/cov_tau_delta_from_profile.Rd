@@ -19,12 +19,12 @@ cov_tau_delta_from_profile(fit, h_tau = 0.1, h_del = 0.005)
 0.005).}
 }
 \value{
-A list with \code{V} (2×2 covariance matrix, \code{NA}-filled when
+A list with \code{V} (2x2 covariance matrix, \code{NA}-filled when
   the Hessian is singular) and \code{center} (\code{c(tau_hat, delta_hat)}).
 }
 \description{
 Estimates the joint covariance matrix of the alignment parameters
-\eqn{(\hat\tau, \hat\delta)} via a numerical 2×2 Hessian of the profile
+\eqn{(\hat\tau, \hat\delta)} via a numerical 2x2 Hessian of the profile
 NLL (marginalised over the intercept \code{a} and scale \code{b} using
 Nelder-Mead at each grid point). Uses nine NLL evaluations via central
 differences.

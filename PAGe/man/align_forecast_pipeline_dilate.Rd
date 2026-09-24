@@ -19,7 +19,8 @@ align_forecast_pipeline_dilate(
   time_weights = NULL,
   trough_weight = 0.1,
   rise_weight = 1,
-  peak_decay = 0.3
+  peak_decay = 0.3,
+  ab_prior = NULL
 )
 }
 \arguments{
@@ -57,6 +58,11 @@ curve via \code{compute_align_weights()}.}
 i.e. no boost by default).}
 
 \item{peak_decay}{Numeric; exponential decay rate after peak (default 0.3).}
+
+\item{ab_prior}{Optional named list with \code{a_mean}, \code{a_sd},
+\code{log_b_mean}, and \code{log_b_sd}. The value from
+\code{legacy_model_settings()$m1_ab_prior} opts into the Legacy Model;
+NULL preserves the package's unregularized calibration.}
 }
 \value{
 list with tau, delta, a, b, pred_df, peak, nll, etc.
