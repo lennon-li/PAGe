@@ -62,7 +62,8 @@
 <span>  time_weights <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  trough_weight <span class="op">=</span> <span class="fl">0.1</span>,</span>
 <span>  rise_weight <span class="op">=</span> <span class="fl">1</span>,</span>
-<span>  peak_decay <span class="op">=</span> <span class="fl">0.3</span></span>
+<span>  peak_decay <span class="op">=</span> <span class="fl">0.3</span>,</span>
+<span>  ab_prior <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -133,6 +134,13 @@ i.e. no boost by default).</p></dd>
 
 <dt id="arg-peak-decay">peak_decay<a class="anchor" aria-label="anchor" href="#arg-peak-decay"></a></dt>
 <dd><p>Numeric; exponential decay rate after peak (default 0.3).</p></dd>
+
+
+<dt id="arg-ab-prior">ab_prior<a class="anchor" aria-label="anchor" href="#arg-ab-prior"></a></dt>
+<dd><p>Optional named list with <code>a_mean</code>, <code>a_sd</code>,
+<code>log_b_mean</code>, and <code>log_b_sd</code>. The value from
+<code>legacy_model_settings()$m1_ab_prior</code> opts into the Legacy Model;
+NULL preserves the package's unregularized calibration.</p></dd>
 
 </dl></div>
     <div class="section level2">

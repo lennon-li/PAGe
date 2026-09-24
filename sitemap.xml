@@ -38,6 +38,7 @@
 <url><loc>https://lennon-li.github.io/PAGe/reference/detect_ignition_from_tuning.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/dot-apply_peak_calibration.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/dot-compute_logit_spread.html</loc></url>
+<url><loc>https://lennon-li.github.io/PAGe/reference/dot-fit_legacy_model_ab.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/dot-resolve_correction_spec.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/dot-weighted_quantile.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/estimateDerivs.html</loc></url>
@@ -72,6 +73,7 @@
 <url><loc>https://lennon-li.github.io/PAGe/reference/inspect_tuning_boundaries.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/is_cov_ok.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/learn_alignment_hyperparams.html</loc></url>
+<url><loc>https://lennon-li.github.io/PAGe/reference/legacy_model_settings.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/load_flu_hist.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/load_promoted_kit.html</loc></url>
 <url><loc>https://lennon-li.github.io/PAGe/reference/load_prospective_kit.html</loc></url>

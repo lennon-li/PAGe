@@ -1,7 +1,7 @@
 # Compute 2x2 profile-likelihood covariance for (tau, delta)
 
 Estimates the joint covariance matrix of the alignment parameters
-\\(\hat\tau, \hat\delta)\\ via a numerical 2×2 Hessian of the profile
+\\(\hat\tau, \hat\delta)\\ via a numerical 2x2 Hessian of the profile
 NLL (marginalised over the intercept `a` and scale `b` using Nelder-Mead
 at each grid point). Uses nine NLL evaluations via central differences.
 
@@ -30,5 +30,5 @@ cov_tau_delta_from_profile(fit, h_tau = 0.1, h_del = 0.005)
 
 ## Value
 
-A list with `V` (2×2 covariance matrix, `NA`-filled when the Hessian is
+A list with `V` (2x2 covariance matrix, `NA`-filled when the Hessian is
 singular) and `center` (`c(tau_hat, delta_hat)`).

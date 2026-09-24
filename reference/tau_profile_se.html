@@ -62,7 +62,8 @@ numerical second derivative of the profile <em>deviance</em>.</p>
 <span>  allow_scale <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  h <span class="op">=</span> <span class="fl">0.001</span>,</span>
 <span>  tau0 <span class="op">=</span> <span class="fl">0</span>,</span>
-<span>  tau_bounds <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">12</span>, <span class="fl">12</span><span class="op">)</span></span>
+<span>  tau_bounds <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">12</span>, <span class="fl">12</span><span class="op">)</span>,</span>
+<span>  ab_prior <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -98,6 +99,11 @@ numerical second derivative of the profile <em>deviance</em>.</p>
 <dt id="arg-tau-bounds">tau_bounds<a class="anchor" aria-label="anchor" href="#arg-tau-bounds"></a></dt>
 <dd><p>Numeric vector of length 2; hard limits for <code>tau</code>
 (default <code>c(-12, 12)</code>).</p></dd>
+
+
+<dt id="arg-ab-prior">ab_prior<a class="anchor" aria-label="anchor" href="#arg-ab-prior"></a></dt>
+<dd><p>Optional named calibration prior; NULL leaves calibration
+unregularized.</p></dd>
 
 </dl></div>
     <div class="section level2">

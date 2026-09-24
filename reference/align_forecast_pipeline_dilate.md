@@ -20,7 +20,8 @@ align_forecast_pipeline_dilate(
   time_weights = NULL,
   trough_weight = 0.1,
   rise_weight = 1,
-  peak_decay = 0.3
+  peak_decay = 0.3,
+  ab_prior = NULL
 )
 ```
 
@@ -91,6 +92,13 @@ align_forecast_pipeline_dilate(
 - peak_decay:
 
   Numeric; exponential decay rate after peak (default 0.3).
+
+- ab_prior:
+
+  Optional named list with `a_mean`, `a_sd`, `log_b_mean`, and
+  `log_b_sd`. The value from `legacy_model_settings()$m1_ab_prior` opts
+  into the Legacy Model; NULL preserves the package's unregularized
+  calibration.
 
 ## Value
 

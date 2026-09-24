@@ -294,6 +294,8 @@ Compatibility helpers and implementation details.
   : Inspect tuning boundaries and optionally warn about unresolved edges
 - [`learn_alignment_hyperparams()`](https://lennon-li.github.io/PAGe/reference/learn_alignment_hyperparams.md)
   : Learn tau/delta bounds and penalty from historical seasons
+- [`legacy_model_settings()`](https://lennon-li.github.io/PAGe/reference/legacy_model_settings.md)
+  : Return the explicitly selected Legacy Model settings
 - [`load_flu_hist()`](https://lennon-li.github.io/PAGe/reference/load_flu_hist.md)
   : Load historical influenza surveillance data
 - [`load_promoted_kit()`](https://lennon-li.github.io/PAGe/reference/load_promoted_kit.md)

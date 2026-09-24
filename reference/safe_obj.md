@@ -9,7 +9,7 @@ continue.
 ## Usage
 
 ``` r
-safe_obj(par, t, y, n, gfun, allow_scale, lam, w)
+safe_obj(par, t, y, n, gfun, allow_scale, lam, w, ab_prior = NULL)
 ```
 
 ## Arguments
@@ -46,6 +46,11 @@ safe_obj(par, t, y, n, gfun, allow_scale, lam, w)
 - w:
 
   Numeric vector of observation weights.
+
+- ab_prior:
+
+  Optional named calibration prior; NULL leaves calibration
+  unregularized.
 
 ## Value
 

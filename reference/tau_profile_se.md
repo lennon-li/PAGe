@@ -14,7 +14,8 @@ tau_profile_se(
   allow_scale = FALSE,
   h = 0.001,
   tau0 = 0,
-  tau_bounds = c(-12, 12)
+  tau_bounds = c(-12, 12),
+  ab_prior = NULL
 )
 ```
 
@@ -47,6 +48,11 @@ tau_profile_se(
 
   Numeric vector of length 2; hard limits for `tau` (default
   `c(-12, 12)`).
+
+- ab_prior:
+
+  Optional named calibration prior; NULL leaves calibration
+  unregularized.
 
 ## Value
 
