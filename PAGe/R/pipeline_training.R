@@ -36,9 +36,10 @@
 
 .default_m0_params <- function() {
   list(
-    cls_thr = 0.26, p_thr = 0.005, prev_thr = 0.001,
+    cls_thr = 0.26, use_cls = FALSE, p_thr = 0.005, prev_thr = 0.001,
     p_sum_thr = 0.06, eps = 0, n_consec = 5L, L = 2L,
-    K_sum = 5L, N_req = 4L, w_min = 13L, w_max = 26L
+    K_sum = 5L, raw_nondec_n = 3L, raw_drop_se_tol = 1.0,
+    N_req = 4L, w_min = 12L, w_max = 26L
   )
 }
 
@@ -152,8 +153,10 @@ m1_make_params <- function(k_ref = 25L,
     eps       = 0,
     K_sum     = 5L,
     p_sum_thr = c(0.050, 0.055, 0.060),
+    raw_nondec_n = 3L,
+    raw_drop_se_tol = 1.0,
     N_req     = 4L,
-    w_min     = 13L,
+    w_min     = 12L,
     w_max     = 26L,
     K_dp      = 3L,
     dp_thr    = 0.01,
@@ -601,6 +604,86 @@ build_m1 <- function(allD,
   )
 }
 
+
+
+#' Build the governed M1-v2 timing artifact
+#'
+#' Fits the peak-aligned low-rank M1-v2 historical library and its strictly
+#' inner-cross-fitted early-bias calibrator. This timing artifact is independent
+#' of the legacy M1 alignment curves still used by the current M2 implementation.
+#'
+#' @param allD Completed historical surveillance data.
+#' @param peak_truth Retrospective peak truth with columns `season` and
+#'   `peak_week_decimal`.
+#' @param activation_table Historical cross-fitted M0 activation table with
+#'   `season`, `activation_origin_week`, and `activation_week_decimal`.
+#' @param k,grid_step,tau_step Retrospective smoothing and peak-relative library
+#'   controls passed to `fit_m1_v2_library()`.
+#' @param amplitude_grid Candidate peak-amplitude integration grid forwarded to
+#'   the M1-v2 library. Defaults to the frozen Influenza-A grid.
+#' @param calibration_origins Number of earliest post-M0 primary origins used
+#'   by the nested scalar timing calibrator.
+#' @param calibration_candidate_step Candidate grid spacing used only in the
+#'   inner calibration replay.
+#' @param passage_candidate_step Candidate grid spacing used in inner cross-fitted
+#'   M1-C policy selection.
+#' @return A `page_m1_v2_stage` object containing `library`, `calibrator`, and
+#'   a deterministic artifact identity.
+#' @export
+build_m1_v2_timing <- function(allD, peak_truth, activation_table,
+                               k = 8L, grid_step = 0.01, tau_step = 0.1,
+                               amplitude_grid = seq(0.08, 0.44, by = 0.02),
+                               calibration_origins = 4L,
+                               calibration_candidate_step = 0.2,
+                               passage_candidate_step = 0.2) {
+  d <- prepare_surveillance_data(allD)
+  amplitude_grid <- .normalize_m1_v2_amplitude_grid(amplitude_grid)
+  library <- fit_m1_v2_library(
+    d, peak_truth, k = k, grid_step = grid_step, tau_step = tau_step,
+    amplitude_grid = amplitude_grid
+  )
+  calibrator <- fit_m1_v2_bias_calibrator(
+    library = library,
+    data = d,
+    peak_truth = peak_truth,
+    activation_table = activation_table,
+    n_origins = calibration_origins,
+    candidate_step = calibration_candidate_step
+  )
+  passage_policy <- fit_m1_v2_passage_policy(
+    library = library,
+    data = d,
+    peak_truth = peak_truth,
+    activation_table = activation_table,
+    candidate_step = passage_candidate_step
+  )
+  config <- list(
+    k = as.integer(k), grid_step = grid_step, tau_step = tau_step,
+    amplitude_grid = amplitude_grid,
+    calibration_origins = as.integer(calibration_origins),
+    calibration_candidate_step = calibration_candidate_step,
+    passage_candidate_step = passage_candidate_step
+  )
+  stage <- list(
+    version = "page-m1-v2-stage-v1",
+    artifact_id = NA_character_,
+    library = library,
+    calibrator = calibrator,
+    passage_policy = passage_policy,
+    training_seasons = library$training_seasons,
+    config = config,
+    output_contract = list(
+      raw_posterior = TRUE,
+      calibrated_location_summary = TRUE,
+      passage_probability = TRUE,
+      passage_state = TRUE,
+      elapsed_remaining_timing = TRUE,
+      m2_handoff_version = "m1-v2-to-m2-v1"
+    )
+  )
+  stage$artifact_id <- .m1_v2_stage_artifact_id(stage)
+  structure(stage, class = c("page_m1_v2_stage", "list"))
+}
 
 #' Tune M1 alignment hyperparameters via LOSO grid search
 #'
@@ -1608,6 +1691,10 @@ train_m2 <- function(allD,
 #'   output from \code{build_m1()}.
 #' @param m2_model Frozen \code{page_m2_fit} from \code{freeze_m2()}, or a
 #'   legacy output from \code{train_m2()}.
+#' @param m1_v2 Optional `page_m1_v2_stage` from `build_m1_v2_timing()`.
+#'   Carried alongside legacy M1 for the redesigned timing runtime and M2 handoff.
+#' @param m2_v2 Optional `page_m2_v2_c2_governed` shadow artifact. It is carried
+#'   alongside legacy M2 and never replaces `m2_model`.
 #' @param best_spec_id Character label for the best M2 spec (optional;
 #'   taken from \code{build_m2()$best_spec_id}).
 #' @param save_ref_path Character. If set, saves the reference bundle
@@ -1625,7 +1712,9 @@ assemble_kit <- function(m0,
                          m2_model,
                          best_spec_id = NULL,
                          save_ref_path = NULL,
-                         save_m2_path = NULL) {
+                         save_m2_path = NULL,
+                         m1_v2 = NULL,
+                         m2_v2 = NULL) {
   governed <- any(vapply(
     list(m0, m1, m2_model),
     function(x) inherits(x, c("page_m0_fit", "page_m1_fit", "page_m2_fit")),
@@ -1649,6 +1738,27 @@ assemble_kit <- function(m0,
     .check_upstream_identity(m1, m0, "m0")
     .check_upstream_identity(m2_model, m0, "m0")
     .check_upstream_identity(m2_model, m1, "m1")
+  }
+
+  if (!is.null(m1_v2)) {
+    if (!inherits(m1_v2, "page_m1_v2_stage")) {
+      stop("`m1_v2` must be a `page_m1_v2_stage` from `build_m1_v2_timing()`.", call. = FALSE)
+    }
+    m1_seasons <- sort(unique(as.character(m1$seasons_used %||% character())))
+    if (length(m1_seasons) && !setequal(m1_v2$training_seasons, m1_seasons)) {
+      stop("`m1_v2` training seasons do not match the M1 training season set.", call. = FALSE)
+    }
+  }
+
+  if (!is.null(m2_v2)) {
+    if (!inherits(m2_v2, "page_m2_v2_c2_governed")) {
+      stop("`m2_v2` must be a `page_m2_v2_c2_governed` artifact.", call. = FALSE)
+    }
+    validate_m2_v2_c2_governed_artifact(m2_v2)
+    m2_seasons <- sort(unique(as.character(m2_model$training_seasons %||% character())))
+    if (length(m2_seasons) && !setequal(m2_v2$training_seasons, m2_seasons)) {
+      stop("`m2_v2` training seasons do not match the legacy M2 training season set.", call. = FALSE)
+    }
   }
 
   manual_labels <- m0$manual_labels %||% .default_manual_labels()
@@ -1677,7 +1787,8 @@ assemble_kit <- function(m0,
     hist_data     = m1$aligned_train,
     M1_PARAMS     = m1_params,
     flag_args     = flag_args,
-    manual_labels = manual_labels
+    manual_labels = manual_labels,
+    m1_v2 = m1_v2
   )
 
   m2_bundle <- list(
@@ -1690,7 +1801,8 @@ assemble_kit <- function(m0,
     spec_version = m2_model$spec_version %||% "assembled",
     best_spec_id = spec_identity,
     correction_spec = correction_spec,
-    legacy_compatibility = m2_model$legacy_compatibility %||% NULL
+    legacy_compatibility = m2_model$legacy_compatibility %||% NULL,
+    m2_v2 = m2_v2
   )
 
   if (!is.null(save_ref_path)) {
@@ -1713,7 +1825,9 @@ assemble_kit <- function(m0,
     manual_labels  = manual_labels,
     hist_data      = m1$aligned_train,
     m1_train_preds = m2_model$m1_train_preds,
-    template_df    = m1$ref$pred_df[, c("newWeek", "fit")]
+    template_df    = m1$ref$pred_df[, c("newWeek", "fit")],
+    m1_v2           = m1_v2,
+    m2_v2           = m2_v2
   )
   if (governed) {
     kit$season_selection <- m0$selection
@@ -1726,6 +1840,18 @@ assemble_kit <- function(m0,
       kit$season_selection,
       kit$stage_artifact_ids
     )
+    if (!is.null(m1_v2)) {
+      kit$m1_v2_governance_id <- digest::digest(
+        list(base_governance_id = kit$governance_id, m1_v2_artifact_id = m1_v2$artifact_id),
+        algo = "sha256"
+      )
+    }
+    if (!is.null(m2_v2)) {
+      kit$m2_v2_governance_id <- digest::digest(
+        list(base_governance_id = kit$governance_id, m2_v2_artifact_id = m2_v2$artifact_id),
+        algo = "sha256"
+      )
+    }
   }
   kit
 }

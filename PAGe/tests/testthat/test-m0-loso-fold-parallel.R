@@ -142,3 +142,86 @@ test_that("fold-parallel loso_M0v2 checkpoints progress and propagates a fold er
     fixed = TRUE
   )
 })
+
+
+test_that("fractional loso_M0v2 uses explicit decimal timing truth for tuning and held-out scoring", {
+  seasons <- c("2012-13", "2013-14", "2014-15")
+  dat <- do.call(rbind, lapply(seasons, function(s) {
+    data.frame(
+      season = s, weekF = 1:8, y = 1L, N = 100L, p = 0.01,
+      phase = as.integer(1:8 >= 6L), stringsAsFactors = FALSE
+    )
+  }))
+  truth <- data.frame(
+    season = seasons,
+    ignition_target_weekF = c(5.25, 5.50, 5.75),
+    stringsAsFactors = FALSE
+  )
+  seen_truth <- new.env(parent = emptyenv())
+
+  fake_fit <- function(dat, timing_truth = NULL, ...) {
+    list(data = dat, fits = list(base = list(gam = structure(list(), class = "fake_m0_decimal_gam"))))
+  }
+  predict.fake_m0_decimal_gam <<- function(object, newdata, type = "response", ...) {
+    rep(0.05, nrow(newdata))
+  }
+  fake_tune <- function(ign_fit, grid, season_col, timing_truth = NULL, ...) {
+    held_out <- setdiff(seasons, unique(as.character(ign_fit[[season_col]])))
+    seen_truth[[held_out]] <- timing_truth
+    list(results = data.frame(
+      spec_id = grid$spec_id,
+      score = 1, sum_loss = 1, max_abs = 0, n_miss = 0,
+      n_over2 = 0, n_late_over2 = 0, mean_abs = 0,
+      cls_thr = 0.2, p_thr = 0.01, prev_thr = 0.01,
+      n_consec = 3L, L = 2L, eps = 0, K_sum = 4L,
+      p_sum_thr = 0.04, N_req = 3L, w_min = 1L, w_max = 8L,
+      use_cls = FALSE, stringsAsFactors = FALSE
+    ))
+  }
+  fake_detect_timing <- function(ign_fit, season_col = "season", ...) {
+    ho <- unique(as.character(ign_fit[[season_col]]))
+    list(
+      compare = data.frame(
+        season = ho, iWeek_true = 6, iWeek_hat = 6,
+        diff = 0, diffF = 0, stringsAsFactors = FALSE
+      ),
+      by_season = data.frame(
+        season = ho, iWeek_hat = 6, iWeek_hatF = 5.6,
+        stringsAsFactors = FALSE
+      )
+    )
+  }
+
+  grid <- data.frame(
+    spec_id = "decimal_spec", cls_thr = 0.2, use_cls = FALSE,
+    p_thr = 0.01, prev_thr = 0.01, n_consec = 3L, L = 2L, eps = 0,
+    K_sum = 4L, p_sum_thr = 0.04, N_req = 3L, w_min = 1L, w_max = 8L,
+    stringsAsFactors = FALSE
+  )
+
+  testthat::local_mocked_bindings(
+    fitIgnition = fake_fit,
+    tuneIgnitionGrid_M0v2 = fake_tune,
+    detectIgnitionBySeason_M0v2_timing = fake_detect_timing,
+    .package = "PAGe"
+  )
+
+  out <- loso_M0v2(
+    dat = dat, grid = grid,
+    fit_args = list(),
+    tune_args = list(ncores = 1L, verbose = FALSE),
+    timing_truth = truth,
+    timing_mode = "fractional",
+    verbose = FALSE
+  )
+
+  for (s in seasons) {
+    tt <- seen_truth[[s]]
+    expect_false(s %in% tt$season)
+    expect_setequal(tt$season, setdiff(seasons, s))
+  }
+  got <- out$compare[match(seasons, out$compare$season), ]
+  expect_equal(got$iWeek_true, truth$ignition_target_weekF)
+  expect_equal(got$iWeek_hatF, rep(5.6, length(seasons)))
+  expect_equal(got$diff, 5.6 - truth$ignition_target_weekF)
+})

@@ -654,18 +654,22 @@ plot_season_detection_table <- function(det_all, season) {
 
 #' Prospective ignition detection (M0v2) across seasons
 #'
-#' Applies a prospective-safe ignition detector across all seasons. The detector uses five gates:
-#' \enumerate{
-#'   \item classifier score gate: \code{score_col >= cls_thr}
-#'   \item rolling-sum evidence gate: \code{p_sumK >= p_sum_thr} where \code{p_sumK = rollsum(p, K_sum)}
-#'   \item smoothed positivity level gate: \code{p_sm >= p_thr} where \code{p_sm = rollmean(p, L)}
-#'   \item cumulative prevalence gate: \code{prev >= prev_thr} where \code{prev = cumsum(y)/cumsum(N)}
-#'   \item noise-tolerant trend gate on \code{p_sm} requiring sustained increases with tolerance \code{eps}
-#' }
+#' Applies a prospective-safe ignition detector across all seasons. The detector
+#' has five possible evidence votes: classifier score, rolling positivity sum,
+#' smoothed positivity level, cumulative prevalence, and smoothed trend. The
+#' classifier vote is optional and is disabled in the current M0-v2 policy.
 #'
-#' Within the eligible window \code{w_min <= week <= w_max}, ignition is declared at the earliest
-#' week where at least \code{N_req} of the five gates are satisfied (N-of-5 voting). The classifier
-#' gate is a vote (not mandatory).
+#' A separate raw-positivity persistence safeguard can be enabled with
+#' \code{raw_nondec_n > 1}. Each week-to-week decrease in the most recent
+#' \code{raw_nondec_n} observations must be no larger than
+#' \code{raw_drop_se_tol} standard errors of the difference between the two
+#' weekly binomial proportions. The current M0-v2 policy uses 1 SE. This
+#' safeguard is mandatory in addition to the N-of-votes rule; it is not an
+#' interchangeable vote. Setting \code{raw_nondec_n = 1} disables it.
+#'
+#' Within the eligible window \code{w_min <= week <= w_max}, ignition is declared
+#' at the earliest week where the raw-persistence safeguard passes and at least
+#' \code{N_req} evidence votes are satisfied.
 #'
 #' @param ign_fit Either a list returned by [fitIgnition()] containing \code{$data}, or a data.frame/data.table.
 #' @param params Named list of thresholds/hyperparameters.
@@ -725,6 +729,8 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
 
   K_sum <- as.integer(params$K_sum %||% 4L)
   p_sum_thr <- params$p_sum_thr %||% 0.04
+  raw_nondec_n <- as.integer(params$raw_nondec_n %||% 1L)
+  raw_drop_se_tol <- as.numeric(params$raw_drop_se_tol %||% 0)
 
   N_req <- as.integer(params$N_req %||% params$N %||% 3L)
 
@@ -739,7 +745,8 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
     data.frame(
       cls_thr = cls_thr, p_thr = p_thr, prev_thr = prev_thr,
       n_consec = n_consec, L = L, eps = eps, K_sum = K_sum,
-      p_sum_thr = p_sum_thr, N_req = N_req, w_min = w_min, w_max = w_max,
+      p_sum_thr = p_sum_thr, raw_nondec_n = raw_nondec_n,
+      raw_drop_se_tol = raw_drop_se_tol, N_req = N_req, w_min = w_min, w_max = w_max,
       stringsAsFactors = FALSE
     ),
     # Runtime snapshots may be too short for rolling windows, but the
@@ -760,6 +767,32 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
   DT[, p0 := data.table::fifelse(is.na(p), 0, p)]
   DT[, p_sumK := data.table::frollsum(p0, n = K_sum, align = "right", fill = NA_real_), by = season_col]
 
+  # Raw positivity persistence with sampling-noise tolerance.
+  # `raw_nondec_n = 1` disables this guard. With tolerance 0 this reduces to
+  # strict non-decrease and therefore preserves the previous raw-3 behavior.
+  DT[, raw_p_prev := data.table::shift(p, 1L, type = "lag"), by = season_col]
+  DT[, raw_N_prev := data.table::shift(get(N_col), 1L, type = "lag"), by = season_col]
+  DT[, raw_dp := p - raw_p_prev]
+  DT[, raw_diff_se := sqrt(
+    raw_p_prev * (1 - raw_p_prev) / raw_N_prev +
+      p * (1 - p) / get(N_col)
+  )]
+  DT[, raw_drop_z := data.table::fifelse(
+    is.finite(raw_diff_se) & raw_diff_se > 0, raw_dp / raw_diff_se,
+    data.table::fifelse(is.finite(raw_dp) & raw_dp >= 0, Inf, -Inf)
+  )]
+  DT[, raw_step_stable := raw_dp >= -raw_drop_se_tol * raw_diff_se]
+  if (raw_nondec_n <= 1L) {
+    DT[, cond_raw_nondec := TRUE]
+  } else {
+    raw_steps <- raw_nondec_n - 1L
+    DT[, cond_raw_nondec := data.table::frollsum(
+      as.integer(raw_step_stable %in% TRUE), n = raw_steps,
+      align = "right", fill = NA_integer_
+    ) >= raw_steps, by = season_col]
+  }
+  DT[, cond_raw_stable := cond_raw_nondec]
+
   # smoothed level + trend (prospective)
   DT[, p_sm := data.table::frollmean(p, n = L, align = "right", fill = NA_real_), by = season_col]
   DT[, dp := p_sm - data.table::shift(p_sm, 1L, type = "lag"), by = season_col]
@@ -779,7 +812,7 @@ detectIgnitionBySeason_M0v2 <- function(ign_fit,
   DT[, cond_prev := prev >= prev_thr]
 
   DT[, n_hit := rowSums(cbind(cond_cls, cond_sum, cond_p, cond_prev, cond_inc), na.rm = FALSE)]
-  DT[, ignite_ok := cond_win & (n_hit >= N_req)]
+  DT[, ignite_ok := cond_win & (cond_raw_nondec %in% TRUE) & (n_hit >= N_req)]
 
   ignition_rows <- DT[ignite_ok %in% TRUE]
   by_hat <- if (nrow(ignition_rows) > 0L) {
@@ -903,6 +936,9 @@ detectIgnition_oneSeason <- function(d_now, params) {
 #' @param week_col,season_col Column names for within-season week and season.
 #' @param phase_col Column name used if \code{truth_col} is unavailable.
 #' @param truth_col Column name for truth ignition week if stored.
+#' @param timing_truth Optional data frame with `season` and `ignition_target_weekF`.
+#'   When `timing_mode = "fractional"`, this is the authoritative decimal truth
+#'   for threshold tuning instead of the integer phase transition.
 #' @param exSeason Optional character vector of seasons to exclude from tuning (but still evaluate afterward).
 #' @param miss_penalty Numeric. Penalty per missing detection. Default 0 (no misses occur due
 #'   to the \code{w_max} fallback in \code{detectIgnitionBySeason_M0v2}).
@@ -910,6 +946,9 @@ detectIgnition_oneSeason <- function(d_now, params) {
 #' @param kappa Numeric. Extra weight on late errors. Default 0 (symmetric scoring).
 #' @param gamma Numeric. Penalty for adjusted error exceeding 2 weeks.
 #' @param gamma_late Numeric. Extra penalty for being late >2 weeks. Default 0 (disabled).
+#' @param gamma_early Numeric. Extra penalty for being early by more than 2 weeks.
+#'   Default 0 preserves the historical objective. Gate-free M0-v2 tuning can
+#'   increase this to protect against catastrophic false-early ignition.
 #' @param iWeek Logical. Use \code{truth_col} if available; otherwise infer from \code{phase_col}.
 #' @param ncores Integer >= 1. Number of cores.
 #' @param verbose Logical. Print progress.
@@ -922,12 +961,14 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
                                   season_col = "season",
                                   phase_col = "phase",
                                   truth_col = "iWeek",
+                                  timing_truth = NULL,
                                   exSeason = NULL,
                                   miss_penalty = 0,
                                   lambda = 20,
                                   kappa = 0,
                                   gamma = 25,
                                   gamma_late = 0,
+                                  gamma_early = 0,
                                   iWeek = TRUE,
                                   timing_mode = c("legacy", "fractional"),
                                   ncores = 10L,
@@ -969,9 +1010,22 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
 
   DT_base <- DT_all[get(season_col) %in% seasons_tune]
 
-  # truth: all seasons
+  # truth: all seasons. Fractional mode uses the explicit decimal truth table
+  # when supplied; it must never silently fall back to an integerized phase target.
   truth_all <- NULL
-  if (isTRUE(iWeek) && truth_col %in% names(DT_all)) {
+  if (identical(timing_mode, "fractional") && !is.null(timing_truth)) {
+    if (!is.data.frame(timing_truth) ||
+        !all(c("season", "ignition_target_weekF") %in% names(timing_truth))) {
+      stop("`timing_truth` must contain season and ignition_target_weekF.", call. = FALSE)
+    }
+    tt <- timing_truth[, c("season", "ignition_target_weekF"), drop = FALSE]
+    tt$season <- as.character(tt$season)
+    if (anyDuplicated(tt$season) || any(!is.finite(tt$ignition_target_weekF))) {
+      stop("`timing_truth` must have one finite target per season.", call. = FALSE)
+    }
+    names(tt) <- c(season_col, "iWeek_true")
+    truth_all <- data.table::as.data.table(tt)
+  } else if (isTRUE(iWeek) && truth_col %in% names(DT_all)) {
     truth_all <- DT_all[!is.na(get(truth_col)), .(iWeek_true = get(truth_col)[1L]), by = season_col]
   }
   if (is.null(truth_all) || nrow(truth_all) == 0L) {
@@ -993,6 +1047,8 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
     eps       = 0,
     K_sum     = 4L,
     p_sum_thr = 0.04,
+    raw_nondec_n = 1L,
+    raw_drop_se_tol = 0,
     N_req     = 3L,
     w_min     = 13L,
     w_max     = 30L
@@ -1065,6 +1121,7 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
     joined[, score_late := pmax(score_diff, 0)]
     joined[, score_over2 := pmax(score_adj_diff - 2, 0)]
     joined[, score_late_over2 := pmax(score_diff - 2, 0)]
+    joined[, score_early_over2 := pmax(-score_diff - 2, 0)]
 
     n_miss <- sum(joined$miss)
     n_over2 <- sum(joined$score_adj_diff > 2, na.rm = TRUE)
@@ -1074,7 +1131,8 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
       joined$score_adj_diff +
         kappa * joined$score_late +
         gamma * joined$score_over2 +
-        gamma_late * joined$score_late_over2,
+        gamma_late * joined$score_late_over2 +
+        gamma_early * joined$score_early_over2,
       na.rm = TRUE
     )
 
@@ -1123,7 +1181,7 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
         varlist = c(
           "DT_base", "grid", "truth_tune", "score_col", "week_col", "season_col",
           "miss_penalty", "lambda", "kappa", "gamma", "gamma_late",
-          "detectIgnitionBySeason_M0v2", "score_one_i", "%||%"
+          "gamma_early", "detectIgnitionBySeason_M0v2", "score_one_i", "%||%"
         ),
         envir = environment()
       )
@@ -1143,7 +1201,8 @@ tuneIgnitionGrid_M0v2 <- function(ign_fit,
   best_row <- res[o[1], , drop = FALSE]
 
   best_params <- as.list(best_row[, c(
-    "cls_thr", "p_thr", "prev_thr", "n_consec", "L", "eps", "K_sum", "p_sum_thr", "N_req", "w_min", "w_max"
+    "cls_thr", "p_thr", "prev_thr", "n_consec", "L", "eps", "K_sum", "p_sum_thr",
+    "raw_nondec_n", "raw_drop_se_tol", "N_req", "w_min", "w_max"
   ), drop = FALSE])
 
   if ("use_cls" %in% names(best_row)) best_params$use_cls <- best_row$use_cls[[1L]]
@@ -1297,8 +1356,10 @@ loso_M0v2 <- function(dat,
                       checkpoint_dir = NULL,
                       previous_results = NULL,
                       timing_truth = NULL,
-                      timing_mode = c("legacy", "fractional")) {
+                      timing_mode = c("legacy", "fractional"),
+                      selection_policy = c("legacy", "mean_abs")) {
   timing_mode <- match.arg(timing_mode)
+  selection_policy <- match.arg(selection_policy)
   `%||%` <- function(x, y) if (!is.null(x)) x else y
   mode1 <- function(x) {
     x <- x[!is.na(x)]
@@ -1328,7 +1389,8 @@ loso_M0v2 <- function(dat,
       phase_col = phase_col, p_col = p_col, score_col = score_col,
       drop_seasons = drop_seasons, exSeason_tune = exSeason_tune,
       fit_args = fit_args, tune_args = tune_args,
-      timing_truth = timing_truth, timing_mode = timing_mode
+      timing_truth = timing_truth, timing_mode = timing_mode,
+      selection_policy = selection_policy
     ),
     algo = "sha256"
   )
@@ -1380,13 +1442,17 @@ loso_M0v2 <- function(dat,
     if (!is.data.frame(results) || !nrow(results)) {
       stop("M0 tuning produced no grid results.", call. = FALSE)
     }
-    ord <- with(results, order(n_over2, n_late_over2, max_abs, n_miss, score))
+    ord <- if (identical(selection_policy, "mean_abs")) {
+      with(results, order(n_over2, n_miss, mean_abs, max_abs, n_late_over2, score))
+    } else {
+      with(results, order(n_over2, n_late_over2, max_abs, n_miss, score))
+    }
     results[ord[1L], , drop = FALSE]
   }
 
   m0_param_names <- c(
     "cls_thr", "p_thr", "prev_thr", "n_consec", "L", "eps",
-    "K_sum", "p_sum_thr", "N_req", "w_min", "w_max", "use_cls"
+    "K_sum", "p_sum_thr", "raw_nondec_n", "raw_drop_se_tol", "N_req", "w_min", "w_max", "use_cls"
   )
 
   # Folds are independent given a fixed grid/data, but only the per-fold
@@ -1462,6 +1528,9 @@ loso_M0v2 <- function(dat,
       season_col = season_col,
       phase_col = phase_col,
       truth_col = tune_args_inner$truth_col %||% "iWeek",
+      timing_truth = if (identical(timing_mode, "fractional")) {
+        timing_truth[as.character(timing_truth$season) %in% as.character(DT_train[[season_col]]), , drop = FALSE]
+      } else NULL,
       exSeason = exSeason_tune,
       timing_mode = timing_mode
     ), tune_args_inner)
@@ -1528,11 +1597,19 @@ loso_M0v2 <- function(dat,
 
     comp <- det$compare
     comp <- comp[match(ss, comp[[season_col]]), , drop = FALSE]
-    if (timing_mode == "fractional" && "diffF" %in% names(comp)) {
-      comp$diff <- comp$diffF
+    if (timing_mode == "fractional") {
+      truth_value <- timing_truth$ignition_target_weekF[
+        match(as.character(ss), as.character(timing_truth$season))
+      ]
+      if (length(truth_value) != 1L || !is.finite(truth_value)) {
+        stop("Missing finite fractional timing truth for held-out season `", ss, "`.", call. = FALSE)
+      }
+      comp$iWeek_true <- as.numeric(truth_value)
       comp$iWeek_hatF <- det$by_season$iWeek_hatF[
         match(ss, det$by_season[[season_col]])
       ]
+      comp$diffF <- comp$iWeek_hatF - comp$iWeek_true
+      comp$diff <- comp$diffF
     }
 
     list(
@@ -1595,12 +1672,15 @@ loso_M0v2 <- function(dat,
   )
 
   # expected parameter names (only aggregate those that exist)
-  num_par <- intersect(c("cls_thr", "p_thr", "prev_thr", "p_sum_thr", "eps"), names(bp_df))
-  int_par <- intersect(c("n_consec", "L", "K_sum", "N_req", "w_min", "w_max"), names(bp_df))
+  num_par <- intersect(c("cls_thr", "p_thr", "prev_thr", "p_sum_thr", "raw_drop_se_tol", "eps"), names(bp_df))
+  int_par <- intersect(c("n_consec", "L", "K_sum", "raw_nondec_n", "N_req", "w_min", "w_max"), names(bp_df))
 
   best_params_loso <- list()
   for (nm in num_par) best_params_loso[[nm]] <- as.numeric(stats::median(as.numeric(bp_df[[nm]]), na.rm = TRUE))
   for (nm in int_par) best_params_loso[[nm]] <- as.integer(mode1(as.integer(bp_df[[nm]])))
+  if ("use_cls" %in% names(bp_df)) {
+    best_params_loso$use_cls <- isTRUE(mode1(as.logical(bp_df$use_cls)))
+  }
 
   # runtime
   elapsed_all <- unname((proc.time() - t0_all)[["elapsed"]])
@@ -1611,7 +1691,7 @@ loso_M0v2 <- function(dat,
     n_folds = length(seasons)
   )
 
-  list(
+  structure(list(
     folds = fold_out,
     compare = as.data.frame(comp_all),
     summary = summary,
@@ -1621,7 +1701,7 @@ loso_M0v2 <- function(dat,
     # NEW outputs
     best_params = best_params_loso,
     best_params_by_fold = as.data.frame(bp_df)
-  )
+  ), class = c("page_m0_loso_result", "list"))
 }
 
 #' Plot truth vs detected ignition week by season (faceted)

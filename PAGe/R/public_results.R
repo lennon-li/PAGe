@@ -47,6 +47,49 @@ validate_page_kit <- function(kit, mode = c("frozen", "weekly_refit")) {
     }
   }
 
+  if (!is.null(kit$m1_v2)) {
+    if (!inherits(kit$m1_v2, "page_m1_v2_stage")) {
+      stop("PAGe kit field `m1_v2` must be a `page_m1_v2_stage`.")
+    }
+    expected_m1_v2_id <- .m1_v2_stage_artifact_id(kit$m1_v2)
+    if (!identical(kit$m1_v2$artifact_id, expected_m1_v2_id)) {
+      stop("PAGe kit M1-v2 artifact identity integrity check failed.")
+    }
+    if (any(governed_present)) {
+      if (!setequal(kit$m1_v2$training_seasons, kit$season_selection$training_seasons)) {
+        stop("Governed PAGe kit M1-v2 training seasons do not match season selection.")
+      }
+      expected_m1_v2_governance_id <- digest::digest(
+        list(base_governance_id = kit$governance_id,
+             m1_v2_artifact_id = kit$m1_v2$artifact_id),
+        algo = "sha256"
+      )
+      if (!identical(kit$m1_v2_governance_id, expected_m1_v2_governance_id)) {
+        stop("Governed PAGe kit M1-v2 governance identity integrity check failed.")
+      }
+    }
+  }
+
+  if (!is.null(kit$m2_v2)) {
+    if (!inherits(kit$m2_v2, "page_m2_v2_c2_governed")) {
+      stop("PAGe kit field `m2_v2` must be a `page_m2_v2_c2_governed` artifact.")
+    }
+    validate_m2_v2_c2_governed_artifact(kit$m2_v2)
+    if (any(governed_present)) {
+      if (!setequal(kit$m2_v2$training_seasons, kit$season_selection$training_seasons)) {
+        stop("Governed PAGe kit M2-v2 training seasons do not match season selection.")
+      }
+      expected_m2_v2_governance_id <- digest::digest(
+        list(base_governance_id = kit$governance_id,
+             m2_v2_artifact_id = kit$m2_v2$artifact_id),
+        algo = "sha256"
+      )
+      if (!identical(kit$m2_v2_governance_id, expected_m2_v2_governance_id)) {
+        stop("Governed PAGe kit M2-v2 governance identity integrity check failed.")
+      }
+    }
+  }
+
   required <- c(
     "m0_params", "ref", "hyper", "M1_PARAMS", "m2_production", "best_spec"
   )

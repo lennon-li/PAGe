@@ -98,7 +98,10 @@ detectIgnitionBySeason_M0v2_timing <- function(ign_fit, params, ...) {
     )
     if (length(crossing)) crossing[[1L]] else usable[[1L]]
   })
-  by$iWeek_hatF <- vapply(estimates, `[[`, numeric(1L), "estimate")
+  eligible_lo <- as.numeric(params$w_min %||% -Inf)
+  eligible_hi <- as.numeric(params$w_max %||% Inf)
+  raw_estimate <- vapply(estimates, `[[`, numeric(1L), "estimate")
+  by$iWeek_hatF <- pmin(pmax(raw_estimate, eligible_lo), eligible_hi)
   by$iWeek_bracket <- I(lapply(estimates, `[[`, "bracket"))
   by$iWeek_bracket_lo <- vapply(estimates, function(x) x$bracket[1L], numeric(1L))
   by$iWeek_bracket_hi <- vapply(estimates, function(x) x$bracket[2L], numeric(1L))
@@ -110,11 +113,12 @@ detectIgnitionBySeason_M0v2_timing <- function(ign_fit, params, ...) {
   }
   det$timing <- list(
     mode = "fractional",
-    rule = "linear interpolation of the first active detector score crossing",
+    rule = "linear interpolation of the first active detector score crossing, clamped to the eligible window",
     thresholds = vapply(score_specs, `[[`, numeric(1L), "threshold"),
     score_candidates = vapply(score_specs, `[[`, character(1L), "column"),
     raw_integer_field = "iWeek_hat",
-    fractional_field = "iWeek_hatF"
+    fractional_field = "iWeek_hatF",
+    eligible_window = c(w_min = eligible_lo, w_max = eligible_hi)
   )
   if (!is.null(det$compare) && "iWeek_true" %in% names(det$compare)) {
     det$compare$diffF <- det$by_season$iWeek_hatF[

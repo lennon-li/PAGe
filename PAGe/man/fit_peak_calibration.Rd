@@ -55,13 +55,13 @@ to calibrate real-time peak estimates.
 }
 \examples{
 \dontrun{
-wf  <- readRDS("data/loso_wf_cache.rds")
+wf <- readRDS("data/loso_wf_cache.rds")
 allD <- read.csv("data/flu_testing_data.csv") |>
   mutate(p = pos_flua / test_flu, N = test_flu)
 cal <- fit_peak_calibration(wf$params_df, allD)
 # LOSO-safe usage (exclude held-out season):
 cal_fold <- fit_peak_calibration(wf$params_df, allD, holdout_season = "2022-23")
 # Use in production:
-ap  <- run_alignment_prospective(currentSeason, ref, hyper, params, cal = cal)
+ap <- run_alignment_prospective(currentSeason, ref, hyper, params, cal = cal)
 }
 }

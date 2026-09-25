@@ -1224,7 +1224,7 @@ default_m1_hard_caps <- function() {
 }
 
 .m0_integer_axes <- function() {
-  c("n_consec", "L", "K_sum", "N_req", "w_min", "w_max")
+  c("n_consec", "L", "K_sum", "raw_nondec_n", "N_req", "w_min", "w_max")
 }
 
 .normalize_m1_hard_caps <- function(hard_caps, n_weeks = 52L) {
@@ -1319,17 +1319,17 @@ default_m1_hard_caps <- function() {
     stop("M0 grid is empty.", call. = FALSE)
   }
   numeric_axes <- c(
-    "cls_thr", "p_thr", "prev_thr", "p_sum_thr", "eps"
+    "cls_thr", "p_thr", "prev_thr", "p_sum_thr", "raw_drop_se_tol", "eps"
   )
   for (parameter in intersect(numeric_axes, names(grid))) {
     values <- suppressWarnings(as.numeric(grid[[parameter]]))
     bad <- !is.finite(values) | values < 0
-    if (parameter != "eps") bad <- bad | values > 1
+    if (!parameter %in% c("eps", "raw_drop_se_tol")) bad <- bad | values > 1
     if (any(bad)) {
       stop(
         "M0 grid `", parameter, "` contains unsupported value(s): ",
         paste(unique(values[bad]), collapse = ", "),
-        ". Thresholds must be finite values in [0, 1] and eps must be non-negative.",
+        ". Probability thresholds must be finite values in [0, 1]; eps and raw_drop_se_tol must be finite and non-negative.",
         call. = FALSE
       )
     }
@@ -1367,7 +1367,7 @@ default_m1_hard_caps <- function() {
     if (!length(n_weeks) || any(n_weeks < 1L)) {
       stop("M0 data has no usable within-season week support.", call. = FALSE)
     }
-    max_required <- intersect(c("n_consec", "L", "K_sum"), names(grid))
+    max_required <- intersect(c("n_consec", "L", "K_sum", "raw_nondec_n"), names(grid))
     if (length(max_required) && any(vapply(max_required, function(nm) {
       any(as.numeric(grid[[nm]]) > min(n_weeks))
     }, logical(1)))) {
@@ -1431,10 +1431,13 @@ default_m1_hard_caps <- function() {
     if (parameter == "cls_thr") {
       return(value >= 0 && value <= 1)
     }
-    if (parameter %in% c("p_thr", "prev_thr", "p_sum_thr", "eps")) {
-      return(value >= 0 && (parameter == "eps" || value <= 1))
+    if (parameter %in% c("p_thr", "prev_thr", "p_sum_thr")) {
+      return(value >= 0 && value <= 1)
     }
-    if (parameter %in% c("n_consec", "L", "K_sum", "N_req", "w_min", "w_max")) {
+    if (parameter %in% c("raw_drop_se_tol", "eps")) {
+      return(value >= 0)
+    }
+    if (parameter %in% c("n_consec", "L", "K_sum", "raw_nondec_n", "N_req", "w_min", "w_max")) {
       return(value >= 1)
     }
     return(TRUE)

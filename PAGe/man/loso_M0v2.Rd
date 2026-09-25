@@ -23,7 +23,8 @@ loso_M0v2(
   checkpoint_dir = NULL,
   previous_results = NULL,
   timing_truth = NULL,
-  timing_mode = c("legacy", "fractional")
+  timing_mode = c("legacy", "fractional"),
+  selection_policy = c("legacy", "mean_abs")
 )
 }
 \arguments{
