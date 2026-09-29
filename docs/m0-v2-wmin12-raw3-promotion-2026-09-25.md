@@ -103,11 +103,11 @@ Using the fully refreshed weekF11 A history:
 - cumulative prevalence: pass;
 - sustained smoothed trend: pass;
 - four evidence votes active: 4/4;
-- raw-3 persistence: **fail** because weekF11 is slightly below weekF10;
+- raw-3 persistence with the frozen **1-SE drop tolerance**: **pass**; the weekF10→11 decline is within the allowed sampling-noise tolerance (`raw_drop_z ≈ -0.446`, threshold `-1`);
 - eligible-week condition: **fail** because current origin is week 11 and `w_min = 12`;
-- ignition: **not declared**.
+- ignition: **not declared** at weekF11 solely because the origin is before the eligible window.
 
-Because weekF10 positivity (1.8482%) exceeds weekF11 positivity (1.7427%), the three-week non-decreasing condition cannot be satisfied at weekF12 regardless of the weekF12 value. For the current season, the earliest possible signal-qualified ignition is therefore weekF13, but this is now a consequence of the observed trajectory rather than a hard week-13 calendar rule.
+At weekF12, ignition is possible if the remaining level/trend votes continue to pass. A direct frozen-detector diagnostic using the current M2 weekF12 A forecast (~1.677%) returns ignition at weekF12. This does not make the M2 forecast an observed ignition; it shows that the prior statement that weekF12 was impossible under raw persistence was incorrect because it ignored the governed 1-SE raw-drop tolerance.
 
 A full-history M1-v2 shadow stage trained only through 2025-26 has been built at:
 

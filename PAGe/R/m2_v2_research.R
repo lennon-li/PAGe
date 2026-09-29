@@ -350,7 +350,7 @@ m2_v2_c2_predict <- function(model, newdata) {
 #' @param peak_mean Soft posterior mean B peak week; may be `NA`.
 #' @param timing_available Logical flag indicating whether B timing is available.
 #' @param source_artifact_id Nonempty upstream B timing artifact identity when available.
-#' @param interval_width_90 Optional 90% timing interval width.
+#' @param interval_width_90 Optional 90 percent timing interval width.
 #' @param prob_peak_passed Optional posterior probability that the B peak has passed.
 #' @return A validated provisional type-B timing handoff list.
 #' @export

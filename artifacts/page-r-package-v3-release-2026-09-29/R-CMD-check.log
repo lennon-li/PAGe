@@ -1,0 +1,372 @@
+* using log directory ‘/workspace/PAGe-m1-v2/PAGe.Rcheck’
+* using R version 4.6.1 (2026-06-24)
+* using platform: x86_64-pc-linux-gnu
+* R was compiled by
+    x86_64-linux-gnu-gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+    GNU Fortran (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+* using session charset: UTF-8
+* current time: 2026-09-29 17:54:47 UTC
+* using option ‘--no-manual’
+* checking for file ‘PAGe/DESCRIPTION’ ... OK
+* checking extension type ... Package
+* this is package ‘PAGe’ version ‘0.3.0’
+* package encoding: UTF-8
+* checking package namespace information ... OK
+* checking package dependencies ... OK
+* checking if this is a source package ... OK
+* checking if there is a namespace ... OK
+* checking for executable files ... OK
+* checking for hidden files and directories ... OK
+* checking for portable file names ... OK
+* checking for sufficient/correct file permissions ... OK
+* checking whether package ‘PAGe’ can be installed ... OK
+* checking installed package size ... OK
+* checking package directory ... OK
+* checking ‘build’ directory ... OK
+* checking DESCRIPTION meta-information ... OK
+* checking top-level files ... OK
+* checking for left-over files ... OK
+* checking index information ... OK
+* checking package subdirectories ... OK
+* checking code files for non-ASCII characters ... OK
+* checking R files for syntax errors ... OK
+* checking whether the package can be loaded ... OK
+* checking whether the package can be loaded with stated dependencies ... OK
+* checking whether the package can be unloaded cleanly ... OK
+* checking whether the namespace can be loaded with stated dependencies ... OK
+* checking whether the namespace can be unloaded cleanly ... OK
+* checking loading without being on the library search path ... OK
+* checking dependencies in R code ... OK
+* checking S3 generic/method consistency ... OK
+* checking replacement functions ... OK
+* checking foreign function calls ... OK
+* checking R code for possible problems ... NOTE
+.m2_subset_fit_scaled_gam: no visible binding for global variable
+  ‘.page_scaled_fit_weight’
+.nested_exclusion_sets: no visible global function definition for
+  ‘combn’
+alignIgnition: no visible binding for global variable ‘newWeek_raw’
+alignIgnition: no visible binding for global variable
+  ‘alignment_in_domain’
+alignIgnition: no visible binding for global variable
+  ‘alignment_out_of_domain’
+detectIgnitionBySeason_M0v2: no visible binding for global variable
+  ‘raw_p_prev’
+detectIgnitionBySeason_M0v2: no visible binding for global variable
+  ‘raw_N_prev’
+detectIgnitionBySeason_M0v2: no visible binding for global variable
+  ‘raw_dp’
+detectIgnitionBySeason_M0v2: no visible binding for global variable
+  ‘raw_diff_se’
+detectIgnitionBySeason_M0v2: no visible binding for global variable
+  ‘raw_drop_z’
+detectIgnitionBySeason_M0v2: no visible binding for global variable
+  ‘raw_step_stable’
+detectIgnitionBySeason_M0v2: no visible binding for global variable
+  ‘cond_raw_nondec’
+detectIgnitionBySeason_M0v2: no visible binding for global variable
+  ‘cond_raw_stable’
+detectIgnitionBySeason_M0v2: no visible binding for global variable
+  ‘detection_failed’
+fit_m1_v2_bias_calibrator: no visible global function definition for
+  ‘head’
+fit_m1_v2_bias_calibrator: no visible global function definition for
+  ‘ave’
+stage2_predict_series : pred_one: no visible binding for global
+  variable ‘timing_mode’
+tuneIgnitionGrid_M0v2 : score_one_i: no visible binding for global
+  variable ‘score_diff’
+tuneIgnitionGrid_M0v2 : score_one_i: no visible binding for global
+  variable ‘score_adj_diff’
+tuneIgnitionGrid_M0v2 : score_one_i: no visible binding for global
+  variable ‘score_late’
+tuneIgnitionGrid_M0v2 : score_one_i: no visible binding for global
+  variable ‘score_over2’
+tuneIgnitionGrid_M0v2 : score_one_i: no visible binding for global
+  variable ‘score_late_over2’
+tuneIgnitionGrid_M0v2 : score_one_i: no visible binding for global
+  variable ‘score_early_over2’
+Undefined global functions or variables:
+  .page_scaled_fit_weight alignment_in_domain alignment_out_of_domain
+  ave combn cond_raw_nondec cond_raw_stable detection_failed head
+  newWeek_raw raw_diff_se raw_dp raw_drop_z raw_N_prev raw_p_prev
+  raw_step_stable score_adj_diff score_diff score_early_over2
+  score_late score_late_over2 score_over2 timing_mode
+Consider adding
+  importFrom("stats", "ave")
+  importFrom("utils", "combn", "head")
+to your NAMESPACE file.
+* checking Rd files ... NOTE
+checkRd: (-1) build_retrospective_peak_truth_v1.Rd:28: Lost braces; missing escapes or markup?
+    28 | Uses k=8 for the point estimate and k in {5,6,8,10} to quantify smoothing
+       |                                          ^
+checkRd: (-1) decide_m2_vs_m1.Rd:78: Lost braces
+    78 | \item{scoring}{Scoring contract: code{"page_v2"} uses the retrospective
+       |                                      ^
+checkRd: (-1) decide_m2_vs_m1.Rd:79: Lost braces
+    79 | phase weights (default), while code{"legacy_0_12"} retains the old
+       |                                    ^
+checkRd: (-1) decide_m2_vs_m1.Rd:83: Lost braces
+    83 | omitted, code{weight_page_v2} or code{weight_legacy} is used when
+       |              ^
+checkRd: (-1) decide_m2_vs_m1.Rd:83: Lost braces
+    83 | omitted, code{weight_page_v2} or code{weight_legacy} is used when
+       |                                      ^
+checkRd: (-1) getCurrentD.Rd:64: Lost braces
+    64 | With no code{data}, the previous/current and current/next feed names are
+       |             ^
+checkRd: (-1) getCurrentD.Rd:21: Lost braces
+    21 | \item{data}{URL or local file path to an ORVT CSV, or code{NULL} for default
+       |                                                           ^
+checkRd: (-1) getCurrentD.Rd:25: Lost braces
+    25 | code{PAGe.orvt_base_url} option overrides the package default.}
+       |     ^
+checkRd: (-1) getCurrentD.Rd:28: Lost braces
+    28 | code{PAGe.orvt_file_name} is also supported.}
+       |     ^
+checkRd: (-1) getCurrentD.Rd:34: Lost braces
+    34 | \item{lastWeek}{Integer or code{NA}; drop rows with MMWR week greater than it.}
+       |                                ^
+checkRd: (-1) getCurrentD.Rd:36: Lost braces
+    36 | \item{virus}{Character string matching the PHO code{Virus} column.}
+       |                                                    ^
+checkRd: (-1) getCurrentD.Rd:38: Lost braces
+    38 | \item{season}{Character season in code{"YYYY-YY"}; defaults to the season
+       |                                       ^
+checkRd: (-1) getCurrentD.Rd:39: Lost braces
+    39 | containing code{Sys.Date()} under the PAGe origin.}
+       |                ^
+checkRd: (-1) getCurrentD.Rd:42: Lost braces
+    42 | season. Defaults to code{TRUE} for backward compatibility.}
+       |                         ^
+checkRd: (-1) getCurrentD.Rd:50: Lost braces
+    50 | A data frame with code{season}, code{week}, code{N}, code{y},
+       |                       ^
+checkRd: (-1) getCurrentD.Rd:50: Lost braces
+    50 | A data frame with code{season}, code{week}, code{N}, code{y},
+       |                                     ^
+checkRd: (-1) getCurrentD.Rd:50: Lost braces
+    50 | A data frame with code{season}, code{week}, code{N}, code{y},
+       |                                                 ^
+checkRd: (-1) getCurrentD.Rd:50: Lost braces
+    50 | A data frame with code{season}, code{week}, code{N}, code{y},
+       |                                                          ^
+checkRd: (-1) getCurrentD.Rd:51: Lost braces
+    51 |   code{neg}, code{p}, code{weekS}, code{weekF}, code{cYear},
+       |       ^
+checkRd: (-1) getCurrentD.Rd:51: Lost braces
+    51 |   code{neg}, code{p}, code{weekS}, code{weekF}, code{cYear},
+       |                  ^
+checkRd: (-1) getCurrentD.Rd:51: Lost braces
+    51 |   code{neg}, code{p}, code{weekS}, code{weekF}, code{cYear},
+       |                           ^
+checkRd: (-1) getCurrentD.Rd:51: Lost braces
+    51 |   code{neg}, code{p}, code{weekS}, code{weekF}, code{cYear},
+       |                                        ^
+checkRd: (-1) getCurrentD.Rd:51: Lost braces
+    51 |   code{neg}, code{p}, code{weekS}, code{weekF}, code{cYear},
+       |                                                     ^
+checkRd: (-1) getCurrentD.Rd:52: Lost braces
+    52 |   code{newWeek}, and code{date}, plus PHO audit columns. The PHU-only
+       |       ^
+checkRd: (-1) getCurrentD.Rd:52: Lost braces
+    52 |   code{newWeek}, and code{date}, plus PHO audit columns. The PHU-only
+       |                          ^
+checkRd: (-1) getCurrentD.Rd:54: Lost braces
+    54 |   code{phu_N}, code{phu_y}, code{source_has_ontario},
+       |       ^
+checkRd: (-1) getCurrentD.Rd:54: Lost braces
+    54 |   code{phu_N}, code{phu_y}, code{source_has_ontario},
+       |                    ^
+checkRd: (-1) getCurrentD.Rd:54: Lost braces
+    54 |   code{phu_N}, code{phu_y}, code{source_has_ontario},
+       |                                 ^
+checkRd: (-1) getCurrentD.Rd:55: Lost braces
+    55 |   code{source_ontario_consistent}, and code{provincial_value_source}.
+       |       ^
+checkRd: (-1) getCurrentD.Rd:55: Lost braces
+    55 |   code{source_ontario_consistent}, and code{provincial_value_source}.
+       |                                            ^
+checkRd: (-1) getCurrentD.Rd:57: Lost braces
+    57 |   code{source_url_or_path}, code{retrieved_utc}, code{sha256},
+       |       ^
+checkRd: (-1) getCurrentD.Rd:57: Lost braces
+    57 |   code{source_url_or_path}, code{retrieved_utc}, code{sha256},
+       |                                 ^
+checkRd: (-1) getCurrentD.Rd:57: Lost braces
+    57 |   code{source_url_or_path}, code{retrieved_utc}, code{sha256},
+       |                                                      ^
+checkRd: (-1) getCurrentD.Rd:58: Lost braces
+    58 |   code{pho_layout}, code{n_weeks}, and code{last_week_end_date}.
+       |       ^
+checkRd: (-1) getCurrentD.Rd:58: Lost braces
+    58 |   code{pho_layout}, code{n_weeks}, and code{last_week_end_date}.
+       |                         ^
+checkRd: (-1) getCurrentD.Rd:58: Lost braces
+    58 |   code{pho_layout}, code{n_weeks}, and code{last_week_end_date}.
+       |                                            ^
+checkRd: (-1) page_scoring_weights.Rd:27: Lost braces
+    27 | the turning window begins. The default is code{-1}.}
+       |                                               ^
+checkRd: (-1) page_scoring_weights.Rd:30: Lost braces
+    30 | the turning window ends. The default is code{3}.}
+       |                                             ^
+* checking Rd metadata ... OK
+* checking Rd cross-references ... OK
+* checking for missing documentation entries ... OK
+* checking for code/documentation mismatches ... OK
+* checking Rd \usage sections ... WARNING
+Undocumented arguments in Rd file 'align_multi_template.Rd'
+  ‘timing_mode’ ‘prep’ ‘return_prep’
+
+Undocumented arguments in Rd file 'build_m0.Rd'
+  ‘timing_truth’
+
+Undocumented arguments in Rd file 'build_m1.Rd'
+  ‘timing_mode’ ‘timing_truth’
+
+Undocumented arguments in Rd file 'build_m2.Rd'
+  ‘timing_mode’ ‘timing_truth’
+
+Undocumented arguments in Rd file 'build_stage2_pseudo_prospective_list.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'compact_m1_cache_for_m2.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'compile_expert_ignition_annotations.Rd'
+  ‘annotations’
+
+Documented arguments not in \usage in Rd file 'dot-page_alignment_failure.Rd':
+  ‘par’ ‘t’ ‘y’ ‘n’ ‘gfun’ ‘allow_scale’ ‘lam’ ‘w’
+
+Undocumented arguments in Rd file 'expert_ignition_annotation_sheet.Rd'
+  ‘data’ ‘annotator’ ‘annotation_version’ ‘positivity_version’
+
+Undocumented arguments in Rd file 'finalize_expert_ignition_review.Rd'
+  ‘review’ ‘ignition_week_decimal’ ‘annotator’ ‘annotation_version’
+  ‘positivity_version’ ‘ignition_interval’ ‘comment’ ‘annotated_at’
+
+Undocumented arguments in Rd file 'format_current_for_stage2.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'loso_walkforward.Rd'
+  ‘timing_mode’ ‘timing_truth’ ‘checkpoint_identity’
+
+Undocumented arguments in Rd file 'm1_walkforward_multi.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'm1_walkforward_predictions.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'nested_loso_build_fold.Rd'
+  ‘timing_mode’ ‘timing_truth’
+
+Undocumented arguments in Rd file 'nested_loso_m1_test.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'nested_loso_m1_train.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'nested_loso_m2_eval_weekly_refit.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'nested_loso_m2_train.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'new_expert_ignition_annotation.Rd'
+  ‘season’ ‘ignition_week_decimal’ ‘n_weeks’ ‘ignition_interval’
+  ‘annotator’ ‘annotation_version’ ‘annotated_at’ ‘data_snapshot_id’
+  ‘positivity_version’ ‘comment’
+
+Undocumented arguments in Rd file 'page_phase_weights.Rd'
+  ‘y_col’ ‘n_col’ ‘completed_col’
+
+Undocumented arguments in Rd file 'prep_stage2_joint.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'prepare_page_data.Rd'
+  ‘date_col’ ‘mmwr_year_col’
+
+Undocumented arguments in Rd file 'refit_stage2_weekly.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'replay_season_holdout.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'retrospective_gam_peak_sensitivity.Rd'
+  ‘data’ ‘season’ ‘k_values’ ‘grid_step’
+
+Undocumented arguments in Rd file 'review_expert_ignition.Rd'
+  ‘data’ ‘season’ ‘existing_annotation’ ‘weekF_start’ ‘weekF_end’
+  ‘show_counts’
+
+Undocumented arguments in Rd file 'review_expert_ignition_set.Rd'
+  ‘data’ ‘seasons’ ‘existing_annotations’ ‘...’
+
+Undocumented arguments in Rd file 'run_alignment_prospective.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'run_alignment_prospective_multi.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'run_ignition_weekly.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'run_m0_detection.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'run_m1_alignment.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'run_m2_forecast.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'run_outer_fold.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'train_m2.Rd'
+  ‘timing_mode’ ‘timing_truth’
+
+Undocumented arguments in Rd file 'train_outer_fold.Rd'
+  ‘scoring’ ‘timing_mode’
+
+Undocumented arguments in Rd file 'train_pipeline.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'train_stage2_joint.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'tuneIgnitionGrid_M0v2.Rd'
+  ‘timing_mode’
+
+Undocumented arguments in Rd file 'tune_m0.Rd'
+  ‘timing_truth’ ‘timing_mode’
+
+Undocumented arguments in Rd file 'tune_m1.Rd'
+  ‘timing_truth’ ‘timing_mode’
+
+Undocumented arguments in Rd file 'validate_expert_ignition_annotation.Rd'
+  ‘x’
+
+Undocumented arguments in Rd file 'write_expert_ignition_annotations.Rd'
+  ‘annotations’ ‘path’ ‘overwrite’
+
+Functions with \usage entries need to have the appropriate \alias
+entries, and all their arguments documented.
+The \usage entries must correspond to syntactically valid R code.
+See chapter ‘Writing R documentation files’ in the ‘Writing R
+Extensions’ manual.
+* checking Rd contents ... OK
+* checking for unstated dependencies in examples ... OK
+* checking installed files from ‘inst/doc’ ... OK
+* checking files in ‘vignettes’ ... OK
+* checking examples ... OK
+* checking for unstated dependencies in ‘tests’ ... OK
+* checking tests ... OK
+  Running ‘testthat.R’
+* checking for unstated dependencies in vignettes ... OK
+* checking package vignettes ... OK
+* checking re-building of vignette outputs ... OK
+* DONE
+Status: 1 WARNING, 2 NOTEs

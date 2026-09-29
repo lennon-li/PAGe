@@ -1,0 +1,39 @@
+# SUPERSEDED historical API v2 template; current deployment is page-weekly-api-v3.service.
+[Unit]
+Description=PAGe weekly shadow API v1
+After=network-online.target remote-fs.target
+Wants=network-online.target remote-fs.target
+
+[Service]
+Type=simple
+User=page
+Group=page
+WorkingDirectory=/opt/page/PAGe-m1-v2
+EnvironmentFile=/etc/page/weekly-api.env
+ExecStart=/usr/bin/Rscript --vanilla 2026/run_page_weekly_api_v2.R
+Restart=on-failure
+RestartSec=10s
+KillMode=control-group
+TimeoutStopSec=30s
+UMask=0077
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RuntimeDirectory=page-weekly-api
+RuntimeDirectoryMode=0700
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadOnlyPaths=/opt/page/PAGe-m1-v2
+# Site deployment MUST add the configured private artifact/source mounts here.
+# ReadWritePaths=/private/nfs/page-api-jobs /private/nfs/page-weekly-shadow
+
+[Install]
+WantedBy=multi-user.target

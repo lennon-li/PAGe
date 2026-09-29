@@ -286,6 +286,7 @@ preflight_support_audit <- function(data,
   )
 }
 
+#' @method print page_preflight_audit
 #' @export
 print.page_preflight_audit <- function(x, ...) {
   stages <- names(x)

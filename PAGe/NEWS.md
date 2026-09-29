@@ -1,3 +1,10 @@
+# PAGe 0.3.0
+
+- Adds a self-contained canonical v3 weekF12 runtime via `page_v3_models()` and `page_v3_forecast()`, with frozen model artifacts bundled and SHA-256 validated inside the installed package.
+- Adds interactive/reproducible expert ignition labeling with `page_label_ignitions()` and the end-to-end `page_train_workflow()` training wrapper.
+- Adds validated frozen-kit persistence helpers `page_save_kit()` / `page_load_kit()`.
+- Adds training, deployment, and canonical-v3 vignettes.
+
 # PAGe 0.2.0
 
 - Adds independently guarded M0, M1, and M2 lifecycles:

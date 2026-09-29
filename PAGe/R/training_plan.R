@@ -153,6 +153,7 @@ plan_training <- function(
   )
 }
 
+#' @method print page_training_plan
 #' @export
 print.page_training_plan <- function(x, ...) {
   cat("PAGe Training Plan (read-only)\n")

@@ -1,6 +1,11 @@
-gov_test_root <- if (file.exists("PAGe/R/m2_v2_c2_governed.R")) "PAGe" else "../.."
-source(file.path(gov_test_root, "R", "m2_v2_research.R"), local = TRUE)
-source(file.path(gov_test_root, "R", "m2_v2_c2_governed.R"), local = TRUE)
+.page_test_ns <- asNamespace("PAGe")
+m2_v2_c2_fit <- get("m2_v2_c2_fit", envir = .page_test_ns, inherits = FALSE)
+new_m2_v2_c2_governed_artifact <- get("new_m2_v2_c2_governed_artifact", envir = .page_test_ns, inherits = FALSE)
+validate_m2_v2_c2_governed_artifact <- get("validate_m2_v2_c2_governed_artifact", envir = .page_test_ns, inherits = FALSE)
+new_m2_v2_b_soft_timing_handoff <- get("new_m2_v2_b_soft_timing_handoff", envir = .page_test_ns, inherits = FALSE)
+run_m2_v2_c2_governed_runtime <- get("run_m2_v2_c2_governed_runtime", envir = .page_test_ns, inherits = FALSE)
+new_m2_v2_b_gate_review <- get("new_m2_v2_b_gate_review", envir = .page_test_ns, inherits = FALSE)
+rm(.page_test_ns)
 
 make_governed_c2_fixture <- function() {
   seasons <- paste0(2012:2016, "-", sprintf("%02d", 13:17))

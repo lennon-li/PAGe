@@ -200,6 +200,7 @@ boundary_action_plan <- function(
   )
 }
 
+#' @method print page_boundary_action_plan
 #' @export
 print.page_boundary_action_plan <- function(x, ...) {
   cat("PAGe Boundary Action Plan\n")

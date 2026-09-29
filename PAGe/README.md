@@ -14,6 +14,93 @@ remotes::install_github("lennon-li/PAGe", subdir = "PAGe")
 devtools::install("PAGe")
 ```
 
+## Quick start: canonical PAGe v3
+
+PAGe 0.3.0 ships the audited weekF12 Influenza A/B v3 shadow models inside the
+R package. No repository scripts or external model directory are required after
+installation.
+
+```r
+library(PAGe)
+
+result <- page_v3_forecast(
+  "/authorized/path/hist_olis.RData",
+  season = "2026-27"
+)
+
+result
+result$monitoring$A$m0
+result$monitoring$A$m1
+result$monitoring$B$m1
+result$forecasts
+```
+
+The canonical runtime does not issue before weekF12. At weekF12+ it returns A
+ignition state, A peak timing, B timing state, and A/B one- and two-week-ahead
+forecasts from the frozen content-validated runtime bundle. M2 is distributed as
+a deterministic runtime-only projection that retains canonical source identities but
+omits historical target-count frames. The canonical v3 release remains shadow-only.
+
+## Train PAGe on your own seasonal data
+
+The end-to-end training workflow begins with expert ignition review. In an
+interactive R session PAGe plots each season and asks for the decimal ignition
+week before fitting anything:
+
+```r
+# One call: plots each season, prompts for ignition, then trains.
+fit <- page_train_workflow(
+  allD,
+  annotator = "your-name",
+  interactive = TRUE,
+  mode = "refresh",
+  prospective_holdout = NULL
+)
+
+# Or review/save the ignition labels separately first.
+labels <- page_label_ignitions(
+  allD,
+  annotator = "your-name",
+  interactive = TRUE
+)
+
+page_save_kit(fit, "my-page-kit.rds")
+```
+
+For a reproducible non-interactive run, pass a named decimal vector instead:
+
+```r
+labels <- page_label_ignitions(
+  allD,
+  ignition_weeks = c(
+    "2022-23" = 15.6,
+    "2023-24" = 20.2,
+    "2024-25" = 23.0,
+    "2025-26" = 19.3
+  ),
+  annotator = "your-name",
+  interactive = FALSE
+)
+```
+
+The decimal expert annotation is retained for provenance; the current training
+contract explicitly uses the containing integer week (`floor()`) as its M0/M1
+training anchor. The workflow does not fabricate peak labels or forecast truth.
+When `prospective_holdout` or `exclude` is supplied, those seasons are not shown
+during automatic ignition review and any pre-supplied labels for them are stripped
+before `train_pipeline()` is called.
+
+Version-comparison evidence is available directly from the package:
+
+```r
+page_version_metrics()
+```
+
+See `vignette("train-your-own-page", package = "PAGe")`,
+`vignette("deploy-and-forecast", package = "PAGe")`,
+`vignette("canonical-v3-week12", package = "PAGe")`, and
+`vignette("model-version-comparison", package = "PAGe")`.
+
 ## Safe data workflow
 
 Surveillance observations are not bundled. Supply an authorized historical

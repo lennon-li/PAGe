@@ -13,7 +13,10 @@ run_prospective_pipeline(
   mode = c("frozen", "weekly_refit"),
   season = NULL,
   verbose = TRUE,
-  timing_mode = c("legacy", "fractional")
+  timing_mode = c("legacy", "fractional"),
+  m2_v2_weekly_data = NULL,
+  m2_v2_b_handoff = NULL,
+  m2_v2_b_gate_review = NULL
 )
 
 run_pipeline(kit, current_data, timing_mode = c("legacy", "fractional"), ...)
@@ -38,6 +41,14 @@ production GAM; \code{"weekly_refit"} refits using kit history.}
 
 \item{timing_mode}{Character. \code{"legacy"} preserves integer timing;
 \code{"fractional"} carries numeric ignition and aligned-week coordinates.}
+
+\item{m2_v2_weekly_data}{Optional typed A/B weekly panel for the governed
+M2-v2 shadow path. If absent, M2-v2 is reported unavailable and legacy M2
+behavior is unchanged.}
+
+\item{m2_v2_b_handoff}{Optional type-B soft-timing handoff.}
+
+\item{m2_v2_b_gate_review}{Optional reviewed B gate-opening object.}
 
 \item{...}{Additional arguments passed by the \code{run_pipeline()} alias.}
 }

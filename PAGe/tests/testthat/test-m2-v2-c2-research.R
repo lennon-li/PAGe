@@ -1,15 +1,12 @@
-m2_v2_test_source <- if (file.exists(file.path("PAGe", "R", "m2_v2_research.R"))) {
-  file.path("PAGe", "R", "m2_v2_research.R")
-} else {
-  file.path("..", "..", "R", "m2_v2_research.R")
-}
-source(m2_v2_test_source, local = TRUE)
-m1_v2_test_source <- if (file.exists(file.path("PAGe", "R", "m1_v2.R"))) {
-  file.path("PAGe", "R", "m1_v2.R")
-} else {
-  file.path("..", "..", "R", "m1_v2.R")
-}
-source(m1_v2_test_source, local = TRUE)
+.page_test_ns <- asNamespace("PAGe")
+m2_v2_c2_fit <- get("m2_v2_c2_fit", envir = .page_test_ns, inherits = FALSE)
+m2_v2_c2_predict <- get("m2_v2_c2_predict", envir = .page_test_ns, inherits = FALSE)
+validate_m2_v2_c2_research_fit <- get("validate_m2_v2_c2_research_fit", envir = .page_test_ns, inherits = FALSE)
+new_m2_v2_b_soft_timing_handoff <- get("new_m2_v2_b_soft_timing_handoff", envir = .page_test_ns, inherits = FALSE)
+run_m2_v2_c2_research_runtime <- get("run_m2_v2_c2_research_runtime", envir = .page_test_ns, inherits = FALSE)
+.m2_v2_runtime_gate_b <- get(".m2_v2_runtime_gate_b", envir = .page_test_ns, inherits = FALSE)
+validate_m1_v2_handoff <- get("validate_m1_v2_handoff", envir = .page_test_ns, inherits = FALSE)
+rm(.page_test_ns)
 
 make_m2_v2_c2_fixture <- function() {
   ledger <- expand.grid(

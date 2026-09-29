@@ -53,17 +53,21 @@ enough observations arrive.}
 list with \code{by_season} and optionally \code{data} and \code{compare}.
 }
 \description{
-Applies a prospective-safe ignition detector across all seasons. The detector uses five gates:
-\enumerate{
-  \item classifier score gate: \code{score_col >= cls_thr}
-  \item rolling-sum evidence gate: \code{p_sumK >= p_sum_thr} where \code{p_sumK = rollsum(p, K_sum)}
-  \item smoothed positivity level gate: \code{p_sm >= p_thr} where \code{p_sm = rollmean(p, L)}
-  \item cumulative prevalence gate: \code{prev >= prev_thr} where \code{prev = cumsum(y)/cumsum(N)}
-  \item noise-tolerant trend gate on \code{p_sm} requiring sustained increases with tolerance \code{eps}
-}
+Applies a prospective-safe ignition detector across all seasons. The detector
+has five possible evidence votes: classifier score, rolling positivity sum,
+smoothed positivity level, cumulative prevalence, and smoothed trend. The
+classifier vote is optional and is disabled in the current M0-v2 policy.
 }
 \details{
-Within the eligible window \code{w_min <= week <= w_max}, ignition is declared at the earliest
-week where at least \code{N_req} of the five gates are satisfied (N-of-5 voting). The classifier
-gate is a vote (not mandatory).
+A separate raw-positivity persistence safeguard can be enabled with
+\code{raw_nondec_n > 1}. Each week-to-week decrease in the most recent
+\code{raw_nondec_n} observations must be no larger than
+\code{raw_drop_se_tol} standard errors of the difference between the two
+weekly binomial proportions. The current M0-v2 policy uses 1 SE. This
+safeguard is mandatory in addition to the N-of-votes rule; it is not an
+interchangeable vote. Setting \code{raw_nondec_n = 1} disables it.
+
+Within the eligible window \code{w_min <= week <= w_max}, ignition is declared
+at the earliest week where the raw-persistence safeguard passes and at least
+\code{N_req} evidence votes are satisfied.
 }

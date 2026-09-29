@@ -197,6 +197,7 @@ validate_page_kit <- function(kit, mode = c("frozen", "weekly_refit")) {
   kit
 }
 
+#' @method print page_training_result
 #' @export
 print.page_training_result <- function(x, ...) {
   cat("<PAGe training result>\n")
@@ -229,6 +230,7 @@ print.page_training_result <- function(x, ...) {
   invisible(nesting)
 }
 
+#' @method print page_outer_training
 #' @export
 print.page_outer_training <- function(x, ...) {
   cat("<PAGe outer-fold training>\n")
@@ -240,6 +242,7 @@ print.page_outer_training <- function(x, ...) {
   invisible(x)
 }
 
+#' @method print page_outer_fold_result
 #' @export
 print.page_outer_fold_result <- function(x, ...) {
   cat("<PAGe outer-fold result>\n")
@@ -248,6 +251,7 @@ print.page_outer_fold_result <- function(x, ...) {
   invisible(x)
 }
 
+#' @method print page_nested_season_evaluation
 #' @export
 print.page_nested_season_evaluation <- function(x, ...) {
   cat("<PAGe nested season evaluation>\n")
@@ -256,6 +260,7 @@ print.page_nested_season_evaluation <- function(x, ...) {
   invisible(x)
 }
 
+#' @method summary page_forecast
 #' @export
 summary.page_forecast <- function(object, ...) {
   pred <- object$pred_df
@@ -282,6 +287,7 @@ summary.page_forecast <- function(object, ...) {
   )
 }
 
+#' @method print page_forecast
 #' @export
 print.page_forecast <- function(x, ...) {
   info <- summary.page_forecast(x)

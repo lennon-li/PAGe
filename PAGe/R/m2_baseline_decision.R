@@ -446,6 +446,7 @@ decide_m2_vs_m1 <- function(
   )
 }
 
+#' @method print page_m2_baseline_decision
 #' @export
 print.page_m2_baseline_decision <- function(x, ...) {
   cat("M2 versus M1 decision: ", x$decision, "\n", sep = "")

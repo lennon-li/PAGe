@@ -1,0 +1,102 @@
+openapi: 3.1.0
+info:
+  title: PAGe Weekly Shadow API
+  version: 4.0.0
+  description: Internal shadow-only API wrapping the governed PAGe weekly v2/v3 transaction and exposing validated M0/M1 monitoring plus M2 forecasts.
+servers:
+  - url: http://127.0.0.1:8088
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    Monitoring:
+      type: object
+      description: Disclosure-safe monitoring projection sourced only from validated v3 child-run artifacts.
+      properties:
+        A:
+          type: object
+          properties:
+            m0: {type: object, description: A ignition state; eligible from weekF12}
+            m1: {type: object, description: A peak timing mean, 90% interval, and passage/near-peak probabilities}
+        B:
+          type: object
+          properties:
+            m1: {type: object, description: B activity/timing state and posterior peak fields when available}
+    Result:
+      type: object
+      required: [run_id, season, origin_weekF, release_id, effective_panel_sha256, monitoring, forecasts]
+      properties:
+        monitoring: {$ref: '#/components/schemas/Monitoring'}
+        forecasts: {type: array}
+    Trigger:
+      type: object
+      additionalProperties: false
+      required: [season, expected_release_id]
+      properties:
+        season: {type: string, const: '2026-27'}
+        expected_release_id: {type: string, const: '5472d08992b5a9da40a9419b75c7427847ff7b1999070041d5e38b0a71da853b'}
+paths:
+  /healthz:
+    get:
+      responses:
+        '200': {description: Process liveness only}
+  /readyz:
+    get:
+      responses:
+        '200': {description: Ready}
+        '503': {description: Not ready}
+  /v1/release:
+    get:
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Pinned shadow release and API deployment identity}
+  /v1/weekly-runs:
+    post:
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 128}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Trigger'}
+      responses:
+        '202': {description: New or active job accepted}
+        '200': {description: Idempotent replay of terminal existing job}
+        '400': {description: Invalid request}
+        '401': {description: Unauthorized}
+        '409': {description: Idempotency conflict or season busy}
+        '503': {description: API not ready}
+  /v1/weekly-runs/{run_id}:
+    get:
+      security: [{bearerAuth: []}]
+      parameters:
+        - {in: path, name: run_id, required: true, schema: {type: string, pattern: '^wr_[0-9a-f]{32}$'}}
+      responses:
+        '200': {description: Durable job state}
+        '404': {description: Unknown run}
+  /v1/weekly-runs/{run_id}/result:
+    get:
+      security: [{bearerAuth: []}]
+      parameters:
+        - {in: path, name: run_id, required: true, schema: {type: string, pattern: '^wr_[0-9a-f]{32}$'}}
+      responses:
+        '200':
+          description: Immutable disclosure-safe result projection with M0/M1 monitoring and M2 forecasts
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Result'}
+        '409': {description: Job not succeeded}
+  /v1/weekly-runs/{run_id}/provenance:
+    get:
+      security: [{bearerAuth: []}]
+      parameters:
+        - {in: path, name: run_id, required: true, schema: {type: string, pattern: '^wr_[0-9a-f]{32}$'}}
+      responses:
+        '200': {description: Immutable disclosure-safe provenance projection}
+        '409': {description: Job not succeeded}

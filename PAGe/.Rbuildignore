@@ -3,3 +3,17 @@
 ^inst/extdata/flu_hist\.csv$
 ^_pkgdown\.yml$
 ^vignettes/\.quarto$
+^tests/testthat/test-m1-b-v3-shadow-contract.*\.R$
+^tests/testthat/test-m2-b-v3-shadow-contract.*\.R$
+^tests/testthat/test-v3-early-origin.*\.R$
+^tests/testthat/test-v3-governance-ops-hardening\.R$
+^tests/testthat/test-v3-shadow-release-governance\.R$
+^tests/testthat/test-v3-week12-lower-bound-runner\.R$
+^tests/testthat/test-v3-week12-release-v3\.R$
+^tests/testthat/test-v3-weekly-api-.*\.R$
+^tests/testthat/test-weekly-m2-b-v3-runner\.R$
+^tests/testthat/test-weekly-shadow-.*\.R$
+^tests/testthat/test-builder-calendar\.R$
+^tests/testthat/test-publication-comparators\.R$
+^tests/testthat/test-timing-contract-v3-governance\.R$
+^tests/testthat/test-v3-m2-b-posterior-c2-contract.*\.R$

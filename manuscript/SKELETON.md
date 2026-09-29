@@ -2,7 +2,46 @@
 
 > **Status (2026-09-15): restructured for Epidemics (protocol v2.0 draft)**
 
-Last updated: 2026-09-15
+Last updated: 2026-09-28
+
+> **Controlling v3 authoring update (2026-09-28).** This skeleton's earlier
+> generic M0→M1→GAM and package-out-of-scope framing is superseded by the
+> current architecture below and in [`METHODS.md`](METHODS.md). Keep the
+> *Epidemics* application-first framing, Ontario influenza-only scope, and
+> descriptive interpretation. The package is a reproducibility and operational
+> asset, not a headline scientific contribution.
+
+### Current architecture and comparison boundary
+
+After the shared surveillance input contract, A and B follow different
+stage-specific paths. A uses frozen M0-A ignition, frozen M1-A timing, and
+exact A1 state forecasts at both horizons. B uses B-specific activity and
+peak-location timing; B+1 is exact B1, and B+2 uses posterior C2 only when
+causal timing is available, otherwise exact B1. The forecast issuance floor is
+weekF12; this operational eligibility rule does not define or imply ignition
+or timing. All components remain shadow-only.
+
+Use a component-specific comparison account, not a global version ranking:
+
+| Evidence | Result | Comparison scope and limitation |
+|---|---:|---|
+| Legacy vs v2 M1 timing | MAE 1.375 vs 1.093 weeks; 81 matched rows / 10 seasons | M1 timing only; common ledger |
+| Legacy vs v2 M2-A +1 | 8.4087 vs 1.7757 pp (state/growth); 1.5435 pp (fixed C2) | Matched target counts across 10 seasons; training vintages differ |
+| Legacy vs v2 M2-A +2 | 9.2056 vs 2.4124 pp (state/growth); 2.1531 pp (fixed C2) | Same matched-target caveat |
+| M0-A legacy vs v2 | Not established | No verified common-ledger performance metric |
+| v3 increment | B-specific timing/routing and weekF12 operational evidence | A components are inherited/shared frozen v2; no three-way A ranking |
+
+Historical prior-cycle replay values in `RESULTS.md` remain intact and must not
+be relabeled as v3 findings. Use the current CSV score-to-date values, not the
+stale A+2/B+2 prose in the older end-to-end audit. WeekF12 replay metrics are
+support-only. The 1.677% M0 result is a counterfactual ignition diagnostic, not
+an observation. No overall legacy/v2/v3 ranking is supported.
+
+The package subsection should describe `page_label_ignitions()` for plotted
+expert decimal labels, `page_train_workflow()` delegating to governed
+`train_pipeline()` without hidden labels, `page_save_kit()`/
+`page_load_kit()`, and the bundled canonical artifacts used by
+`page_v3_forecast()`. Source-tree and clean installed-package equivalence are verified; the three new vignettes render successfully. A terminal full `R CMD check` summary remains open because long check calls in the current AgentPorter/R 4.6 sandbox terminate at the transport layer after passing install/load/namespace stages.
 
 Status: **authoring guide; the standalone Methods draft and reporting schemas
 are finalized, while numerical Results remain blocked by the evidence gates in

@@ -1,6 +1,36 @@
 # PAGe manuscript plan
 
-Last updated: 2026-09-15
+Last updated: 2026-09-28
+
+> **Controlling amendment 2026-09-28: audited v3 manuscript scope**
+>
+> This dated amendment supersedes conflicting 2026-09-15 planning text below;
+> that prior text is retained as a historical record. The target remains
+> *Epidemics*, application-first and descriptive, with Ontario influenza as the
+> sole empirical application. The package is the reproducibility and operating
+> surface; it is not the paper's headline scientific claim. Do not make
+> superiority claims, p-value claims, or inferential claims.
+>
+> - Canonical shadow forecast release:
+>   `5472d08992b5a9da40a9419b75c7427847ff7b1999070041d5e38b0a71da853b`;
+>   minimum issued origin weekF12; `production_eligible=FALSE`.
+> - The weekF12 operational floor controls forecast issuance separately from
+>   M0 ignition and B timing semantics. WeekF12 support-only scores are not
+>   promotion evidence or accuracy claims.
+> - A uses frozen M0-A/M1-A and exact A1 state forecasts at +1/+2. B uses its
+>   own activity and peak-timing path; +1 is exact B1, while +2 uses posterior
+>   C2 only when causal timing is available and otherwise falls back exactly to
+>   B1. M0-A, M1-A, and M2-A are shared/frozen v2 components, not new v3 A
+>   model gains.
+> - See [`V3_IMPLEMENTATION_UPDATE_2026-09-28.md`](V3_IMPLEMENTATION_UPDATE_2026-09-28.md)
+>   for the current evidence ledger, comparisons, caveats, and remaining gates.
+> - Ontario RSV and multi-pathogen validation are superseded for this paper.
+>   Keep their prior rationale below as history; do not carry their tasks or
+>   claims into the active manuscript plan.
+> - Active submission gates: obtain a terminal full `R CMD check` summary in a stable environment,
+>   reconcile manuscript values against current
+>   machine-readable results, and report the first observed 2026-27 weekF12+
+>   run when available. No weekF12 observed result exists yet.
 
 > **Amendment 2026-09-15: Epidemics target and new-cycle evidence**
 >

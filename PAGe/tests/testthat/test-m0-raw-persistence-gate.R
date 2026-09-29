@@ -1,7 +1,11 @@
-source(if (file.exists("PAGe/R/stage_contracts.R")) "PAGe/R/stage_contracts.R" else "../../R/stage_contracts.R", local = TRUE)
-source(if (file.exists("PAGe/R/m0_training.R")) "PAGe/R/m0_training.R" else "../../R/m0_training.R", local = TRUE)
-source(if (file.exists("PAGe/R/timing_pipeline_v2.R")) "PAGe/R/timing_pipeline_v2.R" else "../../R/timing_pipeline_v2.R", local = TRUE)
-source(if (file.exists("PAGe/R/pipeline_training.R")) "PAGe/R/pipeline_training.R" else "../../R/pipeline_training.R", local = TRUE)
+.page_test_ns <- asNamespace("PAGe")
+detectIgnitionBySeason_M0v2 <- get("detectIgnitionBySeason_M0v2", envir = .page_test_ns, inherits = FALSE)
+tuneIgnitionGrid_M0v2 <- get("tuneIgnitionGrid_M0v2", envir = .page_test_ns, inherits = FALSE)
+.default_m0_params <- get(".default_m0_params", envir = .page_test_ns, inherits = FALSE)
+.default_m0_grid <- get(".default_m0_grid", envir = .page_test_ns, inherits = FALSE)
+detectIgnitionBySeason_M0v2_timing <- get("detectIgnitionBySeason_M0v2_timing", envir = .page_test_ns, inherits = FALSE)
+.validate_m0_grid_support <- get(".validate_m0_grid_support", envir = .page_test_ns, inherits = FALSE)
+rm(.page_test_ns)
 
 testthat::test_that("M0 raw persistence defaults off and can block spike-collapse pattern", {
   d <- data.frame(

@@ -89,9 +89,10 @@ test_that("locked refresh defaults match the deployed production settings", {
   expect_equal(
     PAGe:::.default_m0_params(),
     list(
-      cls_thr = 0.26, p_thr = 0.005, prev_thr = 0.001,
+      cls_thr = 0.26, use_cls = FALSE, p_thr = 0.005, prev_thr = 0.001,
       p_sum_thr = 0.06, eps = 0, n_consec = 5L, L = 2L,
-      K_sum = 5L, N_req = 4L, w_min = 13L, w_max = 26L
+      K_sum = 5L, raw_nondec_n = 3L, raw_drop_se_tol = 1.0,
+      N_req = 4L, w_min = 12L, w_max = 26L
     )
   )
 

@@ -1,6 +1,86 @@
 # Methods draft
 
-Last updated: 2026-09-11
+Last updated: 2026-09-28
+
+> **Current manuscript-facing v3 implementation (2026-09-28).** The prior-cycle
+> methods and replay below are retained as historical evidence, not as the
+> methods/results of the audited v3 release. For current architecture and
+> evidence precedence, this block controls over conflicting earlier prose.
+>
+> ### Current forecast architecture
+>
+> The canonical shadow release is
+> `5472d08992b5a9da40a9419b75c7427847ff7b1999070041d5e38b0a71da853b`, with
+> an operational forecast-origin floor of weekF12 and
+> `production_eligible=FALSE`. Forecast issuance eligibility is distinct from
+> biological or operational timing: the floor neither declares M0 ignition
+> nor makes B timing available.
+>
+> Following one validated weekly surveillance contract, influenza A and B use
+> different downstream routes. A retains frozen M0-A (`w_min=12`,
+> `m0-v2-wmin12-raw3-se1-decimal-loso-v1`), frozen M1-A v2 timing, and exact
+> A1 state forecasts at +1 and +2. The M0 detector uses raw-3 evidence with a
+> one-standard-error drop tolerance; the small weekF10-to-weekF11 decline
+> remains stable under that rule. A direct diagnostic at predicted positivity
+> near 1.677% would ignite M0 at weekF12, but this is a counterfactual
+> diagnostic and not observed evidence. M2-A remains exact A1 state-only
+> because the governed posterior-C2 gain of about 4.04% at +2 did not meet its
+> 5% promotion threshold.
+>
+> B uses its B-specific activity/timing contract over weeks 12–40. The
+> historical detector behavior is preserved relative to the prior 8–40
+> archive. The 2018–19 season is a no-event timing season, and 2019–20 is
+> excluded from B timing training and scoring. M1-B v10 uses a continuous
+> B-specific peak-location posterior with fitted-library behavior preserving
+> v9. On chronological season-balanced evaluation, peak-location MAE was
+> about 1.6573 weeks, early-weighted MAE 1.6580 weeks, and mean 90% interval
+> coverage 0.80; 2022–23 remains a known weak season. M2-B v5 routes +1 to
+> exact B1 and +2 to posterior C2 only when causal timing is available,
+> otherwise falling back exactly to B1. In the governed historical evaluation,
+> +2 season-balanced MAE was 0.514552 pp for B1 and 0.436010 pp for posterior
+> C2 (15.26% lower); among timing-active seasons the descriptive difference
+> was 24.91%, and worst-season MAE was 1.172716 to 0.763391 pp. This comparison
+> retains the lower-bound saturation caveat: it supports continuous phase /
+> post-peak correction, not finely resolved calibrated peak timing.
+>
+> ### Package workflow and reproducibility surface
+>
+> The primary user-facing product is the `PAGe` R package. `page_label_ignitions()`
+> plots seasons for expert review and collects explicit decimal ignition
+> labels. `page_train_workflow()` delegates to governed `train_pipeline()`;
+> it does not insert hidden default labels. `page_save_kit()` and
+> `page_load_kit()` preserve and restore a trained kit. `page_v3_forecast()`
+> uses the bundled frozen v3 artifacts under `PAGe/inst/models/v3-week12/`.
+> Vignettes document canonical weekF12 forecasting, deployment, and training.
+> The package is the reproducibility and operating interface, rather than the
+> paper's primary scientific claim. Source-tree package tests and equivalence
+> checks are green, including exact route/state agreement and a maximum
+> forecast difference of 4.44e-15 percentage points between package-native
+> weekF12 and the audited v4 transaction; OLIS and typed-panel inputs produce
+> identical results. The exact built tarball installs into an isolated library and the installed package passes the 52/52 v3 runtime tests plus 16/16 training-workflow tests. All three new vignettes render successfully. A terminal full `R CMD check` summary remains unresolved because the current AgentPorter/R 4.6 sandbox interrupts long check calls after passing install/load/namespace stages.
+>
+> API v4 is an operational monitoring layer and belongs in implementation
+> detail or supplement. Its core (94/94), HTTP (43/43), and monitoring (34/34)
+> suites passed; monitoring semantics audit was approved, deployment evidence
+> approved with external-host caveats, and installer audit approved. These
+> checks do not change shadow-only status or make the API the primary user
+> product.
+>
+> ### Historical and prospective evidence boundaries
+>
+> WeekF12 support-only replay MAE was A+1 0.246866 pp (8 seasons), A+2
+> 0.327263 pp (8), B+1 0.154921 pp (7), and B+2 state/fallback 0.154897 pp
+> (7), with zero B timing activations. This is support evidence only, not an
+> accuracy or promotion claim. The 2026–27 weekF8–11 report is diagnostic and
+> pre-issuance. Current authoritative score-to-date values are A+1 0.4121391
+> pp (n=3), A+2 0.6495239 pp (n=2), B+1 0.02855612 pp (n=3), and B+2
+> 0.04773192 pp (n=2). These current CSV values supersede stale A+2/B+2
+> numbers in an older end-to-end audit document. The first observed weekF12+
+> run has not yet occurred; it is prospective follow-up, not a result in this
+> manuscript.
+
+The dated v3 evidence ledger and component-specific comparison rules are in
+[`V3_IMPLEMENTATION_UPDATE_2026-09-28.md`](V3_IMPLEMENTATION_UPDATE_2026-09-28.md).
 
 This document is the canonical manuscript-facing Methods draft. It converts the
 frozen decisions in [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md) and the

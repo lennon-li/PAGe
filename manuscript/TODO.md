@@ -1,6 +1,44 @@
 # PAGe manuscript execution TODO
 
-Last updated: 2026-09-02
+Last updated: 2026-09-28
+
+## Active v3 manuscript gates
+
+Current scope is *Epidemics*, Ontario influenza only, application-first and
+descriptive. The canonical weekF12 release is shadow-only; no inferential or
+superiority claims are planned. Package-native implementation is the
+reproducibility and operating surface.
+
+- [x] Reconcile the manuscript architecture and results to the audited v3
+  release and keep prior-cycle results separately labeled.
+- [x] Add bounded legacy/v2 comparisons only where a common ledger or matched
+  target design is verified; document the M2-A training-vintage caveat and
+  absence of a common-ledger M0 comparison.
+- [x] Document package-native training, frozen-kit, and forecasting workflow.
+- [x] Install the exact built tarball into an isolated library and rerun the v3 runtime and training-workflow suites (52/52 + 16/16).
+- [ ] Obtain a terminal full `R CMD check` summary in a stable environment; the current AgentPorter/R 4.6 sandbox interrupts long check calls after install/load/namespace stages.
+- [x] Build and review the three new package vignettes (`train-your-own-page`, `deploy-and-forecast`, `canonical-v3-week12`).
+- [ ] Reconcile every manuscript result/table against its current
+  machine-readable artifact, including the authoritative 2026–27 CSV values.
+- [ ] Run and preserve the first observed 2026–27 weekF12+ shadow transaction;
+  score only after its target observations are available. Do not call the
+  current weekF8–11 diagnostic a prospective issuance result.
+- [ ] Pin package version, repository commit, dependencies, data vintage, and
+  runtime for the submitted manuscript analysis.
+- [ ] Complete data-custodian publication authorization and applicable ethics /
+  REB determination before submission.
+
+WeekF12 support-only replay is not an accuracy or promotion claim. All outputs
+remain `production_eligible=FALSE`. The exact release and scientific caveats
+are summarized in [`V3_IMPLEMENTATION_UPDATE_2026-09-28.md`](V3_IMPLEMENTATION_UPDATE_2026-09-28.md).
+
+## Archived prior-cycle checklist (superseded; rationale retained)
+
+The checklist below records the earlier multi-pathogen proposal and prior-cycle
+gates. It is retained as historical rationale only. Ontario RSV, RSV fitting,
+RSV reporting, multi-pathogen harmonization, and RSV-specific package tests are
+superseded and are not active work for this Ontario-influenza-only manuscript.
+Do not treat unchecked boxes below as current v3 tasks.
 
 Authoritative consolidated plan: [`PLAN.md`](PLAN.md)
 

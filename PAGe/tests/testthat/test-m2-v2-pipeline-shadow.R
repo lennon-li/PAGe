@@ -1,7 +1,9 @@
-shadow_test_root <- if (file.exists("PAGe/R/m2_v2_research.R")) "PAGe" else "../.."
-source(file.path(shadow_test_root, "R", "m2_v2_research.R"), local = TRUE)
-source(file.path(shadow_test_root, "R", "m2_v2_c2_governed.R"), local = TRUE)
-source(file.path(shadow_test_root, "R", "pipeline_runtime.R"), local = TRUE)
+.page_test_ns <- asNamespace("PAGe")
+.run_m2_v2_pipeline_shadow <- get(".run_m2_v2_pipeline_shadow", envir = .page_test_ns, inherits = FALSE)
+m2_v2_c2_fit <- get("m2_v2_c2_fit", envir = .page_test_ns, inherits = FALSE)
+new_m2_v2_b_soft_timing_handoff <- get("new_m2_v2_b_soft_timing_handoff", envir = .page_test_ns, inherits = FALSE)
+new_m2_v2_c2_governed_artifact <- get("new_m2_v2_c2_governed_artifact", envir = .page_test_ns, inherits = FALSE)
+rm(.page_test_ns)
 
 make_pipeline_shadow_artifact <- function() {
   seasons <- c("2012-13", "2013-14", "2014-15", "2016-17", "2017-18")

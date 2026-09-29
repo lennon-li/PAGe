@@ -2,6 +2,107 @@
 
 # Results
 
+## Current audited v3 evidence (2026-09-28)
+
+This section reports current v3 implementation and prospective shadow evidence.
+The prior-cycle table below is retained unchanged and is not a v3 result. The
+canonical forecast release is
+`5472d08992b5a9da40a9419b75c7427847ff7b1999070041d5e38b0a71da853b`, with
+weekF12 as the minimum forecast origin and `production_eligible=FALSE`.
+
+### Component-specific legacy and v2 comparisons
+
+Available comparisons are stage-specific and use the evidence designs shown;
+they do not establish a global ranking of legacy, v2, and v3.
+
+| Comparison | Legacy | v2 | Evidence scope and caveat |
+|---|---:|---:|---|
+| M1 timing MAE | 1.375 weeks | 1.093 weeks | About 0.283 weeks lower for v2; 81 matched rows across 10 seasons; common ledger; M1 timing only |
+| M2-A +1 MAE | 8.4087 pp | 1.7757 pp state/growth; 1.5435 pp fixed C2 | 10 seasons with identical target counts; training vintages not perfectly matched |
+| M2-A +2 MAE | 9.2056 pp | 2.4124 pp state/growth; 2.1531 pp fixed C2 | Same matched-target and training-vintage caveat |
+| M0 | Not available | Not available | No verified common-ledger legacy/v2 M0 performance metric |
+
+The M1 result is from
+[`common_ledger_vs_legacy_v16_strict_future_release.csv`](../artifacts/m1-v2-lowrank-posterior-v10-release-consistent/common_ledger_vs_legacy_v16_strict_future_release.csv).
+The M2-A benchmark and its full target-count details are recorded in
+[`m2-v2-legacy-matched-a-benchmark-2026-09-25.md`](../docs/m2-v2-legacy-matched-a-benchmark-2026-09-25.md).
+These are descriptive matched historical differences, not inferential or
+superiority claims. v3 does not replace all A components: M0-A, M1-A, and
+M2-A are frozen/shared v2. The v3 increment is primarily its B-specific
+timing/routing and governed weekF12 operation. No three-way A comparison is
+presented.
+
+### Current component evaluation
+
+M0-A is frozen as `m0-v2-wmin12-raw3-se1-decimal-loso-v1` with `w_min=12`.
+The raw-3 detector with one-SE drop tolerance retains the small weekF10-to-11
+decline as stable. A direct diagnostic using predicted positivity near 1.677%
+would ignite at weekF12; this is a counterfactual diagnostic, not observed
+evidence. M2-A remains exact A1 state-only: governed posterior-C2 gain of about
+4.04% at +2 did not clear the 5% promotion threshold.
+
+For B, the activity/timing window is weeks 12–40; 2018–19 is a no-event timing
+season and 2019–20 is excluded from B timing training and scoring. M1-B v10
+preserves fitted-library behavior relative to v9 and gives chronological,
+season-balanced peak-location MAE about 1.6573 weeks, early-weighted MAE 1.6580
+weeks, and mean 90% coverage 0.80. The 2022–23 season is a known weak season.
+M2-B v5 uses exact B1 at +1 and posterior C2 at +2 only when causal timing is
+available; otherwise +2 is exact B1 fallback. Governed historical +2
+season-balanced MAE was 0.514552 pp for B1 and 0.436010 pp for posterior C2
+(15.26% lower); timing-active improvement was 24.91%; worst-season MAE was
+1.172716 to 0.763391 pp. Lower-bound posterior saturation limits interpretation:
+this supports a continuous phase/post-peak correction and does not establish
+fine-grained calibrated peak timing.
+
+At weekF12, support-only replay MAE was A+1 0.246866 pp (8 seasons), A+2
+0.327263 pp (8), B+1 0.154921 pp (7), and B+2 state/fallback 0.154897 pp (7).
+There were zero B timing activations at weekF12, so B+2 used exact B1. These
+values describe support at the operational floor only; they are not promotion
+evidence or an accuracy claim.
+
+### 2026–27 diagnostic and prospective status
+
+The weekF8–11 report is diagnostic and pre-issuance; the canonical release
+does not issue forecasts before weekF12. The current authoritative CSV
+score-to-date values are:
+
+| Target | MAE (percentage points) | Scored targets |
+|---|---:|---:|
+| A +1 | 0.4121391 | 3 |
+| A +2 | 0.6495239 | 2 |
+| B +1 | 0.02855612 | 3 |
+| B +2 | 0.04773192 | 2 |
+
+These are diagnostic partial-season scores, not a completed prospective
+evaluation. They supersede stale A+2/B+2 prose in the older end-to-end audit;
+use the current machine-readable CSV. No observed weekF12+ result is available
+yet. The prospective plan is to begin shadow issuance at the first eligible
+weekF12+ origin, preserve the as-issued input/release provenance, and score only
+after target observations become available. The release remains shadow-only.
+
+### Package integration evidence
+
+The primary user-facing product is the `PAGe` package. The package-native v3
+workflow, bundled frozen artifacts, and vignettes are implemented. Source-tree and clean installed-package tests both report 52/52 v3 assertions and 16/16 training-workflow assertions green.
+Package-native weekF12 output is equivalence-verified against the audited v4
+transaction (maximum forecast absolute difference 4.44e-15 percentage points,
+with exact route/state agreement); OLIS and typed-panel inputs return identical
+results. These establish source-tree integration and equivalence, not final
+installed-package readiness. The exact tarball installs and executes successfully from an isolated library, and all three new vignettes render successfully. A terminal full `R CMD check` summary remains open because the current sandbox interrupts long check calls after install/load/namespace stages. The earlier full check logged 28 test
+failures, while the later `check-final` log has no terminal summary; an
+installed smoke test passed, but neither record establishes a clean final
+check against the current source tree.
+
+API v4 is reported as implementation detail or supplement. Its core tests were
+94/94, HTTP 43/43, and monitoring 34/34; independent monitoring semantics and
+installer audits were approved, and deployment evidence was approved with
+external-host caveats. API evidence does not change the package's role as the
+reproducibility surface or the shadow-only status.
+
+> **Evidence reconciliation note.** Values in this section come from current
+> machine-readable v3 evidence and dated dispositions. They do not overwrite
+> or reinterpret the prior-cycle replay that follows.
+
 ## Governed replay artifact completeness
 
 The governed Ontario influenza replay was completed for all 11 declared
