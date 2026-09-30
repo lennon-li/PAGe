@@ -58,7 +58,7 @@ options(stringsAsFactors=FALSE)
   repo <- normalizePath(wc$repo_root,winslash='/',mustWork=TRUE); setwd(repo)
   dep <- normalizePath(wc$api_deployment_dir,winslash='/',mustWork=TRUE)
   .bootstrap_deployment_id(dep)
-  boot <- c('scripts/v3_weekly_api_deployment_helpers_v4.R','scripts/v3_weekly_api_helpers_v4.R','scripts/v3_shadow_release_helpers_v1.R','scripts/v3_shadow_ops_helpers_v1.R','2026/run_weekly_shadow_release_v5.R')
+  boot <- c('scripts/v3_weekly_api_deployment_helpers_v4.R','scripts/v3_weekly_api_helpers_v4.R','scripts/v3_shadow_release_helpers_v1.R','scripts/v3_shadow_ops_helpers_v1.R','2026/run_weekly_shadow_release_v5.R','scripts/v3_probability_helpers_v1.R','2026/run_page_probability_snapshot_v1.R')
   .bootstrap_validate(dep,repo,boot)
   source('scripts/v3_weekly_api_deployment_helpers_v4.R')
   source('scripts/v3_weekly_api_helpers_v4.R')
@@ -126,6 +126,21 @@ options(stringsAsFactors=FALSE)
     f <- .api_safe_failure('forecast_transaction_failed')
     .api_atomic_write_json(list(status='failed',exit_code=as.integer(run$status),failure_code=f$code,failure_message=f$message,finished_utc=.api_now()),.api_worker_result_path(cfg,opt$run_id),immutable=TRUE)
     return(invisible(FALSE))
+  }
+  # Probability diagnostics are an API-layer projection, not part of the
+  # governed forecast transaction. Generate them best-effort after the
+  # canonical transaction succeeds; failure disables only probability queries.
+  tx_dir <- tryCatch(.api_find_published_transaction(cfg,opt$run_id),error=function(e) NULL)
+  if (!is.null(tx_dir)) {
+    prob_args <- c('--vanilla','2026/run_page_probability_snapshot_v1.R',
+      paste0('--transaction-dir=',tx_dir),paste0('--job-dir=',job_dir),
+      paste0('--expected-release-id=',cfg$forecast_release_id))
+    prob_run <- tryCatch(processx::run(cfg$rscript,prob_args,wd=repo,env=child_env,
+      stdout=file.path(job_dir,'probability-worker.stdout.log'),
+      stderr=file.path(job_dir,'probability-worker.stderr.log'),timeout=min(180L,cfg$max_runtime_seconds),
+      cleanup_tree=TRUE,error_on_status=FALSE),error=function(e) NULL)
+    if (is.null(prob_run) || !identical(as.integer(prob_run$status),0L))
+      cat('experimental probability snapshot unavailable for run ',opt$run_id,'\n',sep='',file=stderr())
   }
   proj <- tryCatch(.api_validate_and_project_transaction(cfg,opt$run_id,persist=TRUE),error=identity)
   if (inherits(proj,'error')) {

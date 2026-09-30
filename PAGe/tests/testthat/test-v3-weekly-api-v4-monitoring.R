@@ -117,3 +117,68 @@ test_that('v4 monitoring fails closed on malformed B timing_available type', {
   write.csv(x,file.path(child,'combined_predictions.csv'),row.names=FALSE)
   expect_error(.api_validate_and_project_transaction(c$cfg,c$run_id,persist=FALSE),'column type mismatch')
 })
+
+
+.materialize_probability_snapshot <- function(case) {
+  jd <- .api_job_dir(case$cfg,case$run_id); dir.create(jd,recursive=TRUE,showWarnings=FALSE)
+  r <- system2(Sys.which('Rscript'),c('--vanilla','2026/run_page_probability_snapshot_v1.R',
+    paste0('--transaction-dir=',case$tx),paste0('--job-dir=',jd),
+    paste0('--expected-release-id=',.PAGE_FORECAST_RELEASE_ID)),stdout=TRUE,stderr=TRUE)
+  expect_identical(attr(r,'status') %||% 0L,0L,info=paste(r,collapse='\n'))
+  jd
+}
+
+test_that('v4 probability snapshot binds exactly to the governed transaction', {
+  c <- .copy_case(); jd <- .materialize_probability_snapshot(c)
+  p <- .api_validate_and_project_transaction(c$cfg,c$run_id,persist=FALSE)
+  expect_identical(p$result$probabilities$status,'experimental')
+  expect_identical(p$result$probabilities$validation,'valid')
+  expect_match(p$provenance$probability_snapshot_sha256,'^[0-9a-f]{64}$')
+  receipt_schema <- .api_transaction_schema(c$cfg$transaction_schema)
+  receipt <- .api_read_tsv_kv_exact(file.path(c$tx,'source_transaction.tsv'),receipt_schema$name[receipt_schema$surface=='parent_receipt'])
+  cmp <- read.csv(file.path(c$tx,'v2_v3_comparison.csv'),stringsAsFactors=FALSE,check.names=FALSE)
+  prob <- .api_probability_snapshot(jd,receipt,cmp)
+  a <- .api_probability_query(prob,'positivity','A',1L,.02)
+  expect_identical(a$operator,'>'); expect_true(a$probability>=0 && a$probability<=1)
+  pk <- .api_probability_query(prob,'peak','A',NULL,14)
+  expect_identical(pk$operator,'<'); expect_true(pk$probability>=0 && pk$probability<=1)
+  bpk <- .api_probability_query(prob,'peak','B',NULL,14)
+  expect_false(bpk$available); expect_null(bpk$probability)
+})
+
+test_that('tampered probability snapshot fails closed without invalidating forecast result', {
+  c <- .copy_case(); jd <- .materialize_probability_snapshot(c)
+  cat('tamper',file=file.path(jd,'probability_snapshot.rds'),append=TRUE)
+  p <- .api_validate_and_project_transaction(c$cfg,c$run_id,persist=FALSE)
+  expect_identical(p$result$probabilities$status,'unavailable')
+  expect_identical(p$result$probabilities$validation,'invalid')
+  expect_null(p$provenance$probability_snapshot_sha256)
+  expect_length(p$result$forecasts,4L)
+})
+
+
+test_that('v4 HTTP probability endpoints expose strict immutable queries', {
+  source('2026/page_weekly_api_v4.R',local=environment())
+  c <- .copy_case(); jd <- .materialize_probability_snapshot(c)
+  .api_init_store(c$cfg)
+  .api_atomic_write_json(list(run_id=c$run_id,season='2026-27',expected_release_id=.PAGE_FORECAST_RELEASE_ID,created_utc=.api_now()),.api_request_path(c$cfg,c$run_id),TRUE)
+  .api_write_state(c$cfg,c$run_id,list(state='succeeded',finished_utc=.api_now()))
+  tok <- paste(rep('f',64),collapse='')
+  ctx <- .page_api_create_context(c$cfg,'dep-probability-test',tok,strict_mount=FALSE)
+  h <- list(authorization=paste('Bearer',tok))
+  r <- .page_api_handle(ctx,'GET',paste0('/v1/weekly-runs/',c$run_id,'/probability/positivity?type=A&horizon=1&threshold=0.02'),h)
+  expect_identical(r$status,200L)
+  b <- jsonlite::fromJSON(r$body,simplifyVector=FALSE)
+  expect_identical(b$operator,'>'); expect_identical(b$threshold_scale,'proportion')
+  expect_true(as.numeric(b$probability)>=0 && as.numeric(b$probability)<=1)
+  pk <- .page_api_handle(ctx,'GET',paste0('/v1/weekly-runs/',c$run_id,'/probability/peak?type=A&week=14'),h)
+  expect_identical(pk$status,200L)
+  pb <- jsonlite::fromJSON(pk$body,simplifyVector=FALSE)
+  expect_identical(pb$operator,'<'); expect_true(isTRUE(pb$available))
+  bpk <- .page_api_handle(ctx,'GET',paste0('/v1/weekly-runs/',c$run_id,'/probability/peak?type=B&week=14'),h)
+  expect_identical(bpk$status,200L); expect_false(isTRUE(jsonlite::fromJSON(bpk$body,simplifyVector=FALSE)$available))
+  bad <- .page_api_handle(ctx,'GET',paste0('/v1/weekly-runs/',c$run_id,'/probability/positivity?type=A&horizon=1&threshold=2'),h)
+  expect_identical(bad$status,400L)
+  fractional_h <- .page_api_handle(ctx,'GET',paste0('/v1/weekly-runs/',c$run_id,'/probability/positivity?type=A&horizon=1.5&threshold=0.02'),h)
+  expect_identical(fractional_h$status,400L)
+})

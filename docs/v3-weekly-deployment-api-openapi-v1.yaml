@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: PAGe Weekly Shadow API
-  version: 4.0.0
-  description: Internal shadow-only API wrapping the governed PAGe weekly v2/v3 transaction and exposing validated M0/M1 monitoring plus M2 forecasts.
+  version: 4.1.0
+  description: Internal shadow-only API wrapping the governed PAGe weekly v2/v3 transaction and exposing validated M0/M1 monitoring, M2 forecasts, and experimental immutable probability queries.
 servers:
   - url: http://127.0.0.1:8088
 components:
@@ -26,10 +26,24 @@ components:
             m1: {type: object, description: B activity/timing state and posterior peak fields when available}
     Result:
       type: object
-      required: [run_id, season, origin_weekF, release_id, effective_panel_sha256, monitoring, forecasts]
+      required: [run_id, season, origin_weekF, release_id, effective_panel_sha256, monitoring, forecasts, probabilities]
       properties:
         monitoring: {$ref: '#/components/schemas/Monitoring'}
         forecasts: {type: array}
+        probabilities: {type: object, description: Experimental probability snapshot availability and query endpoints}
+    ProbabilityQuery:
+      type: object
+      required: [status, available, kind, type, operator, threshold, threshold_scale, probability]
+      properties:
+        status: {type: string, enum: [experimental, unavailable]}
+        available: {type: boolean}
+        kind: {type: string, enum: [positivity, peak]}
+        type: {type: string, enum: [A, B]}
+        horizon: {type: [integer, 'null']}
+        operator: {type: string, enum: ['>', '<']}
+        threshold: {type: number}
+        threshold_scale: {type: string, enum: [proportion, weekF]}
+        probability: {type: [number, 'null'], minimum: 0, maximum: 1}
     Trigger:
       type: object
       additionalProperties: false
@@ -100,3 +114,29 @@ paths:
       responses:
         '200': {description: Immutable disclosure-safe provenance projection}
         '409': {description: Job not succeeded}
+
+  /v1/weekly-runs/{run_id}/probability/positivity:
+    get:
+      security: [{bearerAuth: []}]
+      description: Experimental immutable P(p > threshold) query from the run-bound OOS residual snapshot. Threshold is a proportion, e.g. 0.02 = 2%.
+      parameters:
+        - {in: path, name: run_id, required: true, schema: {type: string, pattern: '^wr_[0-9a-f]{32}$'}}
+        - {in: query, name: type, required: true, schema: {type: string, enum: [A, B]}}
+        - {in: query, name: horizon, required: true, schema: {type: integer, enum: [1, 2]}}
+        - {in: query, name: threshold, required: true, schema: {type: number, minimum: 0, maximum: 1}}
+      responses:
+        '200': {description: Experimental strict exceedance probability, content: {application/json: {schema: {$ref: '#/components/schemas/ProbabilityQuery'}}}}
+        '400': {description: Invalid query}
+        '409': {description: Run not succeeded or probability snapshot unavailable}
+  /v1/weekly-runs/{run_id}/probability/peak:
+    get:
+      security: [{bearerAuth: []}]
+      description: Experimental immutable P(peak week < week) query from the run-bound M1 passage posterior snapshot.
+      parameters:
+        - {in: path, name: run_id, required: true, schema: {type: string, pattern: '^wr_[0-9a-f]{32}$'}}
+        - {in: query, name: type, required: true, schema: {type: string, enum: [A, B]}}
+        - {in: query, name: week, required: true, schema: {type: number}}
+      responses:
+        '200': {description: Experimental strict peak timing probability or explicit unavailable projection, content: {application/json: {schema: {$ref: '#/components/schemas/ProbabilityQuery'}}}}
+        '400': {description: Invalid query}
+        '409': {description: Run not succeeded or probability snapshot unavailable}

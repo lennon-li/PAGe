@@ -821,6 +821,78 @@
   )
   list(monitoring = monitoring, file_sha256 = hashes)
 }
+
+.api_probability_distribution_validate <- function(d,label,type,horizon=NULL,allow_unavailable=FALSE) {
+  req <- c('type','horizon','status','outcome','scale','support','atoms','weights','calibration','provenance')
+  if (!is.list(d) || !identical(names(d),req)) stop('Probability snapshot distribution schema mismatch: ',label,call.=FALSE)
+  if (!identical(as.character(d$type),type)) stop('Probability snapshot type mismatch: ',label,call.=FALSE)
+  if (is.null(horizon)) {
+    if (!is.null(d$horizon)) stop('Peak probability snapshot must not declare a horizon.',call.=FALSE)
+  } else {
+    h <- suppressWarnings(as.integer(d$horizon)); if (is.na(h) || !identical(h,as.integer(horizon))) stop('Probability snapshot horizon mismatch: ',label,call.=FALSE)
+  }
+  status <- as.character(d$status)
+  if (allow_unavailable && identical(status,'unavailable')) {
+    if (length(d$atoms) || length(d$weights)) stop('Unavailable probability distribution contains atoms.',call.=FALSE)
+    return(invisible(TRUE))
+  }
+  if (!identical(status,'experimental')) stop('Probability snapshot status is not experimental: ',label,call.=FALSE)
+  atoms <- as.numeric(unlist(d$atoms,use.names=FALSE)); weights <- as.numeric(unlist(d$weights,use.names=FALSE))
+  support <- as.numeric(unlist(d$support,use.names=FALSE))
+  if (!length(atoms) || length(atoms)!=length(weights) || any(!is.finite(atoms)) || any(!is.finite(weights)) || any(weights<0) || !is.finite(sum(weights)) || abs(sum(weights)-1)>1e-10) stop('Probability snapshot atoms/weights invalid: ',label,call.=FALSE)
+  if (length(support)!=2L || any(!is.finite(support)) || support[1]>=support[2] || any(atoms<support[1] | atoms>support[2])) stop('Probability snapshot support invalid: ',label,call.=FALSE)
+  invisible(TRUE)
+}
+
+.api_probability_snapshot <- function(snapshot_dir,receipt,cmp) {
+  path <- file.path(snapshot_dir,'probability_snapshot.rds')
+  sha_path <- file.path(snapshot_dir,'probability_snapshot.sha256')
+  if (!file.exists(path) || !file.exists(sha_path)) stop('Probability snapshot files are missing.',call.=FALSE)
+  sha_lines <- readLines(sha_path,warn=FALSE,encoding='UTF-8')
+  if (length(sha_lines)!=1L || !.api_is_sha(sha_lines[[1L]])) stop('Probability snapshot SHA sidecar is invalid.',call.=FALSE)
+  got_sha <- .api_sha256_file(path)
+  if (!identical(got_sha,sha_lines[[1L]])) stop('Probability snapshot SHA mismatch.',call.=FALSE)
+  x <- readRDS(path)
+  req <- c('schema_version','status','season','origin_weekF','release_id','issued','semantics','positivity','peak')
+  if (!is.list(x) || !identical(names(x),req)) stop('Probability snapshot top-level schema mismatch.',call.=FALSE)
+  if (!identical(x$schema_version,'page-v3-probability-snapshot-v1') || !identical(x$status,'experimental') || !identical(as.character(x$season),receipt[['season']]) || !identical(as.integer(x$origin_weekF),as.integer(receipt[['origin_weekF']])) || !identical(as.character(x$release_id),receipt[['release_id']]) || !isTRUE(x$issued)) stop('Probability snapshot identity mismatch.',call.=FALSE)
+  if (!is.list(x$positivity) || !identical(names(x$positivity),c('A_h1','A_h2','B_h1','B_h2'))) stop('Probability positivity key set mismatch.',call.=FALSE)
+  for (type in c('A','B')) for (h in 1:2) {
+    key <- paste0(type,'_h',h); d <- x$positivity[[key]]
+    .api_probability_distribution_validate(d,key,type,h,FALSE)
+    if (!identical(as.character(d$outcome),'positivity_jeffreys_smoothed') || !identical(as.character(d$scale),'proportion')) stop('Positivity probability semantics mismatch.',call.=FALSE)
+    r <- cmp[cmp$type==type & cmp$horizon==h,,drop=FALSE]
+    pf <- suppressWarnings(as.numeric(d$provenance$point_forecast))
+    if (nrow(r)!=1L || !is.finite(pf) || abs(pf-r$v3_forecast_pct[[1L]]/100)>1e-12 || !identical(as.character(d$provenance$route),as.character(r$v3_route[[1L]]))) stop('Probability snapshot point-forecast parity mismatch.',call.=FALSE)
+  }
+  if (!is.list(x$peak) || !identical(names(x$peak),c('A','B'))) stop('Peak probability key set mismatch.',call.=FALSE)
+  for (type in c('A','B')) {
+    d <- x$peak[[type]]
+    .api_probability_distribution_validate(d,paste0('peak_',type),type,NULL,TRUE)
+    if (!identical(as.character(d$outcome),'season_peak_week') || !identical(as.character(d$scale),'weekF')) stop('Peak probability semantics mismatch.',call.=FALSE)
+  }
+  list(snapshot=x,sha256=got_sha,path=path)
+}
+
+.api_probability_query <- function(prob,kind,type,horizon=NULL,threshold) {
+  if (!kind %in% c('positivity','peak') || !type %in% c('A','B')) stop('Invalid probability query.',call.=FALSE)
+  if (!is.numeric(threshold) || length(threshold)!=1L || !is.finite(threshold)) stop('Probability threshold must be finite.',call.=FALSE)
+  if (kind=='positivity') {
+    h <- suppressWarnings(as.integer(horizon)); if (is.na(h) || !h %in% c(1L,2L)) stop('Positivity horizon must be 1 or 2.',call.=FALSE)
+    if (threshold < 0 || threshold > 1) stop('Positivity threshold must be in [0,1].',call.=FALSE)
+    d <- prob$snapshot$positivity[[paste0(type,'_h',h)]]
+    atoms <- as.numeric(unlist(d$atoms,use.names=FALSE)); w <- as.numeric(unlist(d$weights,use.names=FALSE))
+    return(list(status='experimental',available=TRUE,kind='positivity',type=type,horizon=h,
+                operator='>',threshold=as.numeric(threshold),threshold_scale='proportion',
+                probability=as.numeric(sum(w[atoms>threshold])),outcome=d$outcome,
+                probability_snapshot_sha256=prob$sha256,calibration=d$calibration))
+  }
+  d <- prob$snapshot$peak[[type]]
+  if (identical(d$status,'unavailable')) return(list(status='unavailable',available=FALSE,kind='peak',type=type,operator='<',threshold=as.numeric(threshold),threshold_scale='weekF',probability=NULL,reason=d$provenance$reason %||% 'timing_unavailable',probability_snapshot_sha256=prob$sha256))
+  atoms <- as.numeric(unlist(d$atoms,use.names=FALSE)); w <- as.numeric(unlist(d$weights,use.names=FALSE))
+  list(status='experimental',available=TRUE,kind='peak',type=type,operator='<',threshold=as.numeric(threshold),threshold_scale='weekF',probability=as.numeric(sum(w[atoms<threshold])),outcome=d$outcome,probability_snapshot_sha256=prob$sha256,calibration=d$calibration)
+}
+
 .api_validate_and_project_transaction <- function(config,run_id,persist=TRUE) {
   schema <- .api_transaction_schema(config$transaction_schema)
   tx_dir <- .api_find_published_transaction(config,run_id)
@@ -858,15 +930,26 @@
   ref <- list(transaction_id=tx_id,season=config$season,origin_weekF=origin,release_id=config$forecast_release_id,effective_panel_sha256=receipt[['effective_panel_sha256']])
   forecasts <- lapply(seq_len(nrow(cmp)),function(i) list(type=cmp$type[[i]],horizon=as.integer(cmp$horizon[[i]]),v2_pct=as.numeric(cmp$v2_forecast_pct[[i]]),v3_pct=as.numeric(cmp$v3_forecast_pct[[i]]),delta_pp=as.numeric(cmp$delta_v3_minus_v2_pp[[i]]),v3_route=cmp$v3_route[[i]]))
   mon <- .api_monitoring_projection(tx_dir,receipt,cmp,config)
-  result <- list(run_id=run_id,season=config$season,origin_weekF=origin,release_id=config$forecast_release_id,effective_panel_sha256=receipt[['effective_panel_sha256']],monitoring=mon$monitoring,forecasts=forecasts)
-  provenance <- list(run_id=run_id,season=config$season,origin_weekF=origin,release_id=config$forecast_release_id,release_manifest_sha256=manifest_sha,source_mode=receipt[['source_mode']],raw_source_sha256=receipt[['raw_source_sha256']],supplied_typed_panel_sha256=receipt[['supplied_typed_panel_sha256']],effective_panel_sha256=receipt[['effective_panel_sha256']],transaction_id=tx_id,v2_child_run=basename(receipt[['v2_child_run']]),v3_child_run=basename(receipt[['v3_child_run']]),monitoring_file_sha256=mon$file_sha256,api_contract_version=.PAGE_API_CONTRACT)
+  jd <- .api_job_dir(config,run_id)
+  prob_files <- c(file.path(jd,'probability_snapshot.rds'),file.path(jd,'probability_snapshot.sha256'))
+  prob <- NULL
+  prob_validation <- 'missing'
+  if (all(file.exists(prob_files))) {
+    prob_try <- tryCatch(.api_probability_snapshot(jd,receipt,cmp),error=identity)
+    if (!inherits(prob_try,'error')) { prob <- prob_try; prob_validation <- 'valid' } else prob_validation <- 'invalid'
+  } else if (any(file.exists(prob_files))) prob_validation <- 'partial'
+  prob_projection <- if (is.null(prob)) list(status='unavailable',validation=prob_validation) else list(status='experimental',validation='valid',positivity_query=paste0('/v1/weekly-runs/',run_id,'/probability/positivity'),peak_query=paste0('/v1/weekly-runs/',run_id,'/probability/peak'),probability_snapshot_sha256=prob$sha256)
+  result <- list(run_id=run_id,season=config$season,origin_weekF=origin,release_id=config$forecast_release_id,effective_panel_sha256=receipt[['effective_panel_sha256']],monitoring=mon$monitoring,forecasts=forecasts,probabilities=prob_projection)
+  provenance <- list(run_id=run_id,season=config$season,origin_weekF=origin,release_id=config$forecast_release_id,release_manifest_sha256=manifest_sha,source_mode=receipt[['source_mode']],raw_source_sha256=receipt[['raw_source_sha256']],supplied_typed_panel_sha256=receipt[['supplied_typed_panel_sha256']],effective_panel_sha256=receipt[['effective_panel_sha256']],transaction_id=tx_id,v2_child_run=basename(receipt[['v2_child_run']]),v3_child_run=basename(receipt[['v3_child_run']]),monitoring_file_sha256=mon$file_sha256,probability_snapshot_validation=prob_validation,probability_snapshot_sha256=if(is.null(prob)) NULL else prob$sha256,api_contract_version=.PAGE_API_CONTRACT)
   if (persist) {
     jd <- .api_job_dir(config,run_id)
     .api_atomic_write_json(ref,file.path(jd,'transaction_ref.json'),immutable=TRUE)
     .api_atomic_write_json(result,file.path(jd,'result.json'),immutable=TRUE)
     .api_atomic_write_json(provenance,file.path(jd,'provenance.json'),immutable=TRUE)
   }
-  list(transaction_ref=ref,result=result,provenance=provenance)
+  # Private in-memory validation state: never persisted in public JSON. The
+  # HTTP query uses this exact SHA/schema/route-validated snapshot object.
+  list(transaction_ref=ref,result=result,provenance=provenance,probability_snapshot=prob)
 }
 
 .api_reconcile_job <- function(config,run_id,current_instance_id,process_registry=NULL) {

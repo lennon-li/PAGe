@@ -1,6 +1,6 @@
 # PAGe v3 manuscript implementation update
 
-Date: 2026-09-28  
+Date: 2026-09-29
 Scope: current manuscript-facing evidence and implementation status  
 Status: audited shadow release; manuscript update; no promotion
 
@@ -94,11 +94,31 @@ route/state equivalence, and identical OLIS versus typed-panel results.
 These establish both source-tree and clean installed-package integration/equivalence. The exact built tarball installs successfully, all six new exports are present, and the installed package passes the same 52/52 v3 runtime plus 16/16 training-workflow assertions. The three new vignettes render successfully. A terminal full `R CMD check` summary remains incomplete in this sandbox because long check calls are interrupted after install/load/namespace/static stages; no package error is present in the partial terminal log.
 
 API v4 is an operational monitoring layer for supplement/implementation
-detail, not the primary user product. Its core suite was 94/94, HTTP 43/43,
-and monitoring 34/34. Independent monitoring semantics audit: APPROVE;
-deployment evidence: APPROVE WITH CAVEATS (external-host only); installer
-audit: APPROVE. The API remains shadow-only and does not authorize production
-serving.
+detail, not the primary user product. Its current focused regression suites are
+core 94/94, HTTP 43/43, monitoring/probability 64/64, package probability
+26/26, and canonical package runtime 62/62. Independent monitoring semantics
+audit: APPROVE; deployment evidence: APPROVE WITH CAVEATS (external-host only);
+installer audit: APPROVE. The API remains shadow-only and does not authorize
+production serving.
+
+As of 2026-09-29, API v4 also exposes experimental immutable probability
+queries for `P(p > x)` at A/B +1/+2 horizons and `P(T_peak < t)` when the
+corresponding M1 timing posterior is available. Positivity probabilities use a
+season-balanced empirical logit-residual distribution built only from
+chronological/out-of-season forecasts; peak probabilities use exact weighted
+mass from the current M1 passage posterior. These distributions are generated
+after a governed weekly transaction succeeds, are bound to that transaction by
+SHA-256 and exact point-forecast/route parity checks, and are not used for
+ignition, passage, routing, model selection, or promotion. Their calibration is
+adequate for experimental shadow diagnostics but has not been prospectively
+qualified for decision gates.
+
+This addition does **not** revise the manuscript's retrospective uncertainty
+claim: the historical M2 `eta +/- 1.96 * se.fit` bands remain conditional
+fitted-mean bands rather than validated full predictive distributions. The new
+API probability layer is an operational implementation supplement and is not a
+replacement for the manuscript's prespecified retrospective probabilistic
+estimands or scoring protocol.
 
 ## Manuscript actions and open evidence
 
@@ -112,5 +132,3 @@ Results remain separate and unchanged. The remaining manuscript gates are:
 3. Reconcile all manuscript tables and text to machine-readable current artifacts.
 4. Capture the first observed weekF12+ run and later score its forecasts when target observations are available.
 5. Complete data-custodian publication authorization and the applicable research-ethics/REB determination before submission.
-
-No commit or push was made as part of this manuscript update.

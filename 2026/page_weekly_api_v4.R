@@ -78,8 +78,45 @@
   list(release_id=ctx$config$forecast_release_id,release_basename=basename(ctx$config$forecast_release_dir),status='shadow_only',api_contract_version=.PAGE_API_CONTRACT,api_deployment_id=ctx$deployment_id,api_environment_sha256=.api_sha256_file(ctx$config$api_environment),M1_B_version=get_version('M1_B'),M2_B_version=get_version('M2_B'))
 }
 
+
+.page_api_split_query <- function(raw_path) {
+  if (!is.character(raw_path) || length(raw_path)!=1L || is.na(raw_path) || !nzchar(raw_path)) stop('Invalid request path.',call.=FALSE)
+  parts <- strsplit(raw_path,'?',fixed=TRUE)[[1L]]
+  if (length(parts)>2L) stop('Invalid query string.',call.=FALSE)
+  path <- parts[[1L]]; query <- list()
+  if (length(parts)==2L && nzchar(parts[[2L]])) {
+    fields <- strsplit(parts[[2L]],'&',fixed=TRUE)[[1L]]
+    for (field in fields) {
+      kv <- strsplit(field,'=',fixed=TRUE)[[1L]]
+      if (length(kv)!=2L || !nzchar(kv[[1L]])) stop('Invalid query parameter.',call.=FALSE)
+      k <- utils::URLdecode(kv[[1L]]); v <- utils::URLdecode(kv[[2L]])
+      if (k %in% names(query)) stop('Duplicate query parameter.',call.=FALSE)
+      query[[k]] <- v
+    }
+  }
+  list(path=path,query=query)
+}
+
+.page_api_probability_params <- function(query,kind) {
+  required <- if (identical(kind,'positivity')) c('type','horizon','threshold') else c('type','week')
+  if (!is.list(query) || !setequal(names(query),required) || length(query)!=length(required)) stop('Invalid probability query parameters.',call.=FALSE)
+  type <- as.character(query$type); if (length(type)!=1L || !type %in% c('A','B')) stop('Invalid probability type.',call.=FALSE)
+  if (identical(kind,'positivity')) {
+    h_num <- suppressWarnings(as.numeric(query$horizon)); x <- suppressWarnings(as.numeric(query$threshold))
+    if (!is.finite(h_num) || h_num != as.integer(h_num)) stop('Invalid positivity probability query.',call.=FALSE)
+    h <- as.integer(h_num)
+    if (!h %in% c(1L,2L) || !is.finite(x) || x<0 || x>1) stop('Invalid positivity probability query.',call.=FALSE)
+    return(list(type=type,horizon=h,threshold=x))
+  }
+  week <- suppressWarnings(as.numeric(query$week)); if (!is.finite(week)) stop('Invalid peak probability query.',call.=FALSE)
+  list(type=type,threshold=week)
+}
+
 .page_api_handle <- function(ctx,method,path,headers=list(),body='') {
-  method <- toupper(method); path <- sub('[?].*$','',path)
+  method <- toupper(method)
+  parsed_path <- tryCatch(.page_api_split_query(path),error=function(e) NULL)
+  if (is.null(parsed_path)) return(.page_json_response(400,list(error='invalid_request')))
+  path <- parsed_path$path; query <- parsed_path$query
   if (identical(path,'/healthz') && method=='GET') return(.page_json_response(200,list(status='ok')))
   if (identical(path,'/readyz') && method=='GET') {
     ok <- .page_api_refresh_ready(ctx,FALSE); return(.page_json_response(if(ok)200 else 503,list(ready=ok)))
@@ -102,6 +139,25 @@
     pr$status_url <- paste0('/v1/weekly-runs/',a$run_id)
     return(.page_json_response(if(a$status=='existing' && pr$status %in% c('succeeded','failed'))200 else 202,pr))
   }
+  pm <- regexec('^/v1/weekly-runs/(wr_[0-9a-f]{32})/probability/(positivity|peak)$',path); phit <- regmatches(path,pm)[[1]]
+  if (length(phit)) {
+    if (!identical(method,'GET')) return(.page_json_response(405,list(error='method_not_allowed')))
+    run_id <- phit[[2L]]; kind <- phit[[3L]]
+    jd <- .api_job_dir(ctx$config,run_id); if (!dir.exists(jd)) return(.page_json_response(404,list(error='not_found')))
+    .page_api_reconcile(ctx,run_id)
+    st <- .api_job_projection(ctx$config,run_id); if (!identical(st$status,'succeeded')) return(.page_json_response(409,list(error='run_not_succeeded',status=st$status)))
+    params <- tryCatch(.page_api_probability_params(query,kind),error=function(e) NULL)
+    if (is.null(params)) return(.page_json_response(400,list(error='invalid_request')))
+    proj <- tryCatch(.api_validate_and_project_transaction(ctx$config,run_id,FALSE),error=identity)
+    if (inherits(proj,'error')) return(.page_json_response(500,list(error='internal_error')))
+    if (is.null(proj$provenance$probability_snapshot_sha256)) return(.page_json_response(409,list(error='probability_unavailable')))
+    prob <- proj$probability_snapshot
+    if (is.null(prob) || !identical(prob$sha256,proj$provenance$probability_snapshot_sha256)) return(.page_json_response(500,list(error='internal_error')))
+    ans <- tryCatch(if (kind=='positivity') .api_probability_query(prob,kind,params$type,params$horizon,params$threshold) else .api_probability_query(prob,kind,params$type,NULL,params$threshold),error=identity)
+    if (inherits(ans,'error')) return(.page_json_response(400,list(error='invalid_request')))
+    ans$run_id <- run_id; ans$season <- ctx$config$season; ans$origin_weekF <- proj$result$origin_weekF; ans$release_id <- ctx$config$forecast_release_id
+    return(.page_json_response(200,ans))
+  }
   m <- regexec('^/v1/weekly-runs/(wr_[0-9a-f]{32})(/(result|provenance))?$',path); hit <- regmatches(path,m)[[1]]
   if (length(hit)) {
     if (!identical(method,'GET')) return(.page_json_response(405,list(error='method_not_allowed')))
@@ -123,7 +179,7 @@
 .page_api_httpuv_app <- function(ctx) {
   list(call=function(req) {
     len <- suppressWarnings(as.integer(req$CONTENT_LENGTH %||% '0')); if (!is.na(len) && len>16384L) return(.page_json_response(413,list(error='request_too_large')))
-    method <- req$REQUEST_METHOD %||% 'GET'; path <- req$PATH_INFO %||% '/'; headers <- list(authorization=req$HTTP_AUTHORIZATION,idempotency_key=req$HTTP_IDEMPOTENCY_KEY)
+    method <- req$REQUEST_METHOD %||% 'GET'; path <- req$PATH_INFO %||% '/'; qs <- req$QUERY_STRING %||% ''; if (nzchar(qs)) path <- paste0(path,'?',qs); headers <- list(authorization=req$HTTP_AUTHORIZATION,idempotency_key=req$HTTP_IDEMPOTENCY_KEY)
     headers[['idempotency-key']] <- req$HTTP_IDEMPOTENCY_KEY
     body <- ''
     if (method=='POST') {

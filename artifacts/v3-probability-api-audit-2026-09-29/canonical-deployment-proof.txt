@@ -1,0 +1,7 @@
+Canonical source commit: f982746ecb4bad7da7552af64f6d0afd1b318930
+Canonical release ID: 5472d08992b5a9da40a9419b75c7427847ff7b1999070041d5e38b0a71da853b
+Managed proof job: job_6efce95c9e924d3ab7021f7e
+Canonical release validation: PASS
+Fresh test API deployment build: PASS
+Deployment ID: 3230697c021721f7c3a7add5d5d6b46d974c8ccfdec818bbdde042028c293efb
+Architecture: canonical release bytes + API-side probability overlay only; no PAGe/R probability modifications.
