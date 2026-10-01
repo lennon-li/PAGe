@@ -1,0 +1,126 @@
+{
+  "seed": 20260908,
+  "grids": {
+    "calendar": [
+      {
+        "k_week": 6,
+        "k_signal": 4,
+        "id": "week06_signal04",
+        "complexity": 20
+      },
+      {
+        "k_week": 8,
+        "k_signal": 4,
+        "id": "week08_signal04",
+        "complexity": 24
+      },
+      {
+        "k_week": 6,
+        "k_signal": 6,
+        "id": "week06_signal06",
+        "complexity": 28
+      },
+      {
+        "k_week": 10,
+        "k_signal": 4,
+        "id": "week10_signal04",
+        "complexity": 28
+      },
+      {
+        "k_week": 8,
+        "k_signal": 6,
+        "id": "week08_signal06",
+        "complexity": 32
+      },
+      {
+        "k_week": 6,
+        "k_signal": 8,
+        "id": "week06_signal08",
+        "complexity": 36
+      },
+      {
+        "k_week": 10,
+        "k_signal": 6,
+        "id": "week10_signal06",
+        "complexity": 36
+      },
+      {
+        "k_week": 8,
+        "k_signal": 8,
+        "id": "week08_signal08",
+        "complexity": 40
+      },
+      {
+        "k_week": 10,
+        "k_signal": 8,
+        "id": "week10_signal08",
+        "complexity": 44
+      }
+    ],
+    "analogue": [
+      {
+        "k": 5,
+        "window": 4,
+        "id": "k05_window04",
+        "complexity": 4
+      },
+      {
+        "k": 5,
+        "window": 6,
+        "id": "k05_window06",
+        "complexity": 6
+      },
+      {
+        "k": 5,
+        "window": 8,
+        "id": "k05_window08",
+        "complexity": 8
+      },
+      {
+        "k": 3,
+        "window": 4,
+        "id": "k03_window04",
+        "complexity": 24
+      },
+      {
+        "k": 3,
+        "window": 6,
+        "id": "k03_window06",
+        "complexity": 26
+      },
+      {
+        "k": 3,
+        "window": 8,
+        "id": "k03_window08",
+        "complexity": 28
+      },
+      {
+        "k": 1,
+        "window": 4,
+        "id": "k01_window04",
+        "complexity": 44
+      },
+      {
+        "k": 1,
+        "window": 6,
+        "id": "k01_window06",
+        "complexity": 46
+      },
+      {
+        "k": 1,
+        "window": 8,
+        "id": "k01_window08",
+        "complexity": 48
+      }
+    ]
+  },
+  "training": "all available h1/h2 origin-lag-target rows in permitted training seasons",
+  "inner_scoring": "h2 archived ignition offsets 0:12, observed targets only",
+  "cyclic_knots": [0.5, 53.5],
+  "logit_clip": 9.9999999999999998e-13,
+  "calendar_formula": "cbind(y,N-y) ~ horizon + s(target_week,bs='cc',k=k_week,by=horizon) + s(z,bs='tp',k=k_signal,by=horizon) + s(dz,bs='tp',k=k_signal,by=horizon)",
+  "calendar_method": "REML",
+  "analogue_distance": "mean squared logit difference",
+  "analogue_complexity": "more neighbours first, then shorter window",
+  "boundary_policy": "frozen protocol grid; flag boundary winners, no expansion in diagnostic"
+}

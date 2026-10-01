@@ -1,0 +1,16 @@
+Warning message:
+D-Bus service not found!
+
+- If you are in a container environment, please consider adding the
+  following to your configuration to silence this warning:
+
+  options(bspm.sudo = TRUE)
+
+- If you are in a desktop/server environment, please remove any 'bspm'
+  installation from the user library and force a new system
+  installation as follows:
+
+  $ sudo Rscript --vanilla -e 'install.packages("bspm", repos="https://cran.r-project.org")' 
+Error in run_experiment() : 
+  Refusing to overwrite completed output: /home/yeli/repos/PAGe/manuscript/results/publication-repair-20260908/m2-subsets-20260908-native-01
+Execution halted

@@ -95,11 +95,17 @@ test_that("an extreme correction is clamped and flagged, leaving M1 dominant", {
 })
 
 # ---------------------------------------------------------------------------
-# Fix 3: spec selection is degradation-aware. Ranking on mean NLL alone could
-# pick a spec that beats all-off on average while being far worse than it in
-# one season -- which the downstream adoption gate then rejects outright
-# (max_season_degradation = 0). Selection now prefers specs that never
-# underperform all-off in any single season.
+# Fix 3, corrected 2026-09-18 (Claude review of the Opus M2 audit): ranking on
+# mean NLL alone can pick a spec that beats all-off on average while being far
+# worse than it in one season -- exactly what the downstream adoption gate's
+# max_season_degradation = 0 then rejects. The Opus audit's fix made tuner
+# *selection* itself degradation-aware (preferring specs that never
+# underperform all-off), but that applies the gate's zero-tolerance rule a
+# second time inside the tuner, hiding non-robust candidates from the gate's
+# own judgment before it ever sees them. Selection now ranks on mean NLL alone
+# again (unfiltered); `worst_season_excess_vs_all_off` is still computed and
+# reported per candidate as a diagnostic, so the gate has the information
+# without the tuner pre-filtering on it.
 # ---------------------------------------------------------------------------
 
 m2_fix_test_training_data <- function(seasons = c("S1", "S2", "S3")) {
@@ -114,14 +120,16 @@ m2_fix_test_training_data <- function(seasons = c("S1", "S2", "S3")) {
 
 # Per-season NLL by spec. "risky" has the best mean (0.3667) but is
 # catastrophically worse than all-off in S3; "safe" is uniformly better than
-# all-off. A mean-only ranking selects "risky"; the fix must select "safe".
+# all-off. Selection ranks on mean NLL alone, so "risky" wins the tuner stage
+# on its own merits; worst_season_excess_vs_all_off still flags "risky" as
+# degrading a season and "safe" as never degrading, for the gate to use.
 m2_fix_test_nll <- list(
   alloff = c(S1 = 0.50, S2 = 0.50, S3 = 0.50),
   risky  = c(S1 = 0.10, S2 = 0.10, S3 = 0.90),
   safe   = c(S1 = 0.45, S2 = 0.45, S3 = 0.45)
 )
 
-test_that("selection rejects a better-mean spec that degrades a single season", {
+test_that("selection ranks on mean NLL alone; degradation is reported, not filtered", {
   expect_lt(mean(m2_fix_test_nll$risky), mean(m2_fix_test_nll$safe))
 
   grid <- data.frame(
@@ -164,11 +172,11 @@ test_that("selection rejects a better-mean spec that degrades a single season", 
     alpha_state = 0.2, gamma = 1.4, n_cores = 1L
   )
 
-  expect_equal(res$selected[[1L]]$id, "safe")
-  expect_equal(res$selected[[2L]]$id, "safe")
+  expect_equal(res$selected[[1L]]$id, "risky")
+  expect_equal(res$selected[[2L]]$id, "risky")
 
-  # The diagnostic that drove the decision must be reported, and must carry
-  # the right sign for each spec.
+  # The degradation diagnostic is still reported alongside the selection (for
+  # the gate to act on), even though it no longer filters the selection.
   s1 <- res$summary[res$summary$horizon == 1L, , drop = FALSE]
   excess <- stats::setNames(
     s1$worst_season_excess_vs_all_off, s1$spec_id
@@ -179,8 +187,8 @@ test_that("selection rejects a better-mean spec that degrades a single season", 
 })
 
 test_that("with no degrading season the best mean still wins", {
-  # Guard against the filter being over-eager: when every candidate is robust,
-  # selection must fall through to ordinary mean-NLL ranking.
+  # Selection is unfiltered mean-NLL ranking regardless of degradation status;
+  # this fixture just confirms that holds when every candidate is robust too.
   local_nll <- list(
     alloff = c(S1 = 0.50, S2 = 0.50, S3 = 0.50),
     risky  = c(S1 = 0.10, S2 = 0.10, S3 = 0.30),
@@ -227,4 +235,47 @@ test_that("with no degrading season the best mean still wins", {
   )
 
   expect_equal(res$selected[[1L]]$id, "risky")
+})
+
+# ---------------------------------------------------------------------------
+# Fix, 2026-09-18 (Claude review of the Opus M2 audit): the GAM's fitting
+# weights (.fit_weight, m2_subset_correction.R) previously balanced only
+# season trial totals, while spec selection and the adoption gate score on
+# the 0/2/3/1 phase weight (weight_page_v2) -- a real train/score mismatch.
+# .fit_weight must now multiply in weight_page_v2 when it is present, and
+# fall back to season-balance-only (matching the pre-fix behavior) when it is
+# absent, so isolated unit fixtures without that column are unaffected.
+# ---------------------------------------------------------------------------
+
+test_that(".fit_weight multiplies in weight_page_v2 when present", {
+  d <- data.frame(
+    season = rep(c("a", "b"), each = 4),
+    lead = rep(c("h1", "h2"), 4),
+    m1_logit = seq(-3, 1, length.out = 8),
+    y_lead = c(1, 2, 4, 5, 2, 3, 5, 6), N_lead = 20,
+    weight_page_v2 = c(0, 0, 2, 3, 0, 0, 2, 3)
+  )
+  spec <- PAGe:::m2_subset_spec(intercept = TRUE)
+  fit <- PAGe:::m2_subset_fit(d, spec)
+  # Equal N_lead and equal season totals here, so the season-balance term is
+  # 1 for every row; prior.weights = fit_weight * N_lead should therefore
+  # track weight_page_v2 * N_lead exactly, including the zero-weighted rows.
+  expect_equal(
+    as.numeric(fit$fit$prior.weights),
+    d$weight_page_v2 * d$N_lead
+  )
+})
+
+test_that(".fit_weight falls back to season-balance only when weight_page_v2 is absent", {
+  d <- data.frame(
+    season = rep(c("a", "b"), each = 4),
+    lead = rep(c("h1", "h2"), 4),
+    m1_logit = seq(-3, 1, length.out = 8),
+    y_lead = c(1, 2, 4, 5, 2, 3, 5, 6), N_lead = 20
+  )
+  spec <- PAGe:::m2_subset_spec(intercept = TRUE)
+  fit <- PAGe:::m2_subset_fit(d, spec)
+  # Equal season totals -> season-balance term is 1 everywhere -> prior
+  # weights reduce to plain N_lead, matching pre-fix behavior exactly.
+  expect_equal(as.numeric(fit$fit$prior.weights), d$N_lead)
 })

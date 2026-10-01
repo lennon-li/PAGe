@@ -1,0 +1,13 @@
+{
+  "status": "diagnostic_only",
+  "training_calls": 0,
+  "tuning_calls": 0,
+  "input_sha256": "fa8add1b253944df5d853a2fb0456d7ac368657e073da0d97f909be95ca59c54",
+  "replay_root": "manuscript/results/publication-repair-20260908/replay/20260908T125939/private",
+  "script_sha256": "7da9d42d12104cb9de3179fa11bf1f1c23520b2fb34c2d7f806f3d1d0eac928e",
+  "elapsed_seconds": 41.052,
+  "score_definition": "h1/h2 origins 0:12 after declaration; trial-weight within, equal-season across",
+  "effect_definition": "Within-season 10th-to-90th percentile smooth contribution span in log-odds; not causal importance",
+  "slope_definition": "d raw GAM logit / d supplied M1 logit, holding EMA/spread fixed and updating z_resid; no online adjustment or cap derivative",
+  "limitations": "Post-holdout diagnostic; correlated predictors; no offset fit evaluated; 2025-26 partial"
+}

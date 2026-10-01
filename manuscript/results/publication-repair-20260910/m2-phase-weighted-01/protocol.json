@@ -1,0 +1,192 @@
+{
+  "status": "running",
+  "purpose": "M2 development-only optional-term subset experiment",
+  "grid": [
+    {
+      "id": "i0_z0_u0_d0",
+      "intercept": false,
+      "z": false,
+      "u": false,
+      "d": false,
+      "enabled_count": 0
+    },
+    {
+      "id": "i0_z0_u0_d1",
+      "intercept": false,
+      "z": false,
+      "u": false,
+      "d": true,
+      "enabled_count": 1
+    },
+    {
+      "id": "i0_z0_u1_d0",
+      "intercept": false,
+      "z": false,
+      "u": true,
+      "d": false,
+      "enabled_count": 1
+    },
+    {
+      "id": "i0_z1_u0_d0",
+      "intercept": false,
+      "z": true,
+      "u": false,
+      "d": false,
+      "enabled_count": 1
+    },
+    {
+      "id": "i1_z0_u0_d0",
+      "intercept": true,
+      "z": false,
+      "u": false,
+      "d": false,
+      "enabled_count": 1
+    },
+    {
+      "id": "i0_z0_u1_d1",
+      "intercept": false,
+      "z": false,
+      "u": true,
+      "d": true,
+      "enabled_count": 2
+    },
+    {
+      "id": "i0_z1_u0_d1",
+      "intercept": false,
+      "z": true,
+      "u": false,
+      "d": true,
+      "enabled_count": 2
+    },
+    {
+      "id": "i0_z1_u1_d0",
+      "intercept": false,
+      "z": true,
+      "u": true,
+      "d": false,
+      "enabled_count": 2
+    },
+    {
+      "id": "i1_z0_u0_d1",
+      "intercept": true,
+      "z": false,
+      "u": false,
+      "d": true,
+      "enabled_count": 2
+    },
+    {
+      "id": "i1_z0_u1_d0",
+      "intercept": true,
+      "z": false,
+      "u": true,
+      "d": false,
+      "enabled_count": 2
+    },
+    {
+      "id": "i1_z1_u0_d0",
+      "intercept": true,
+      "z": true,
+      "u": false,
+      "d": false,
+      "enabled_count": 2
+    },
+    {
+      "id": "i0_z1_u1_d1",
+      "intercept": false,
+      "z": true,
+      "u": true,
+      "d": true,
+      "enabled_count": 3
+    },
+    {
+      "id": "i1_z0_u1_d1",
+      "intercept": true,
+      "z": false,
+      "u": true,
+      "d": true,
+      "enabled_count": 3
+    },
+    {
+      "id": "i1_z1_u0_d1",
+      "intercept": true,
+      "z": true,
+      "u": false,
+      "d": true,
+      "enabled_count": 3
+    },
+    {
+      "id": "i1_z1_u1_d0",
+      "intercept": true,
+      "z": true,
+      "u": true,
+      "d": false,
+      "enabled_count": 3
+    },
+    {
+      "id": "i1_z1_u1_d1",
+      "intercept": true,
+      "z": true,
+      "u": true,
+      "d": true,
+      "enabled_count": 4
+    }
+  ],
+  "exact_grid_size": 16,
+  "offset": "saved M1 logit; no M1 coefficient",
+  "terms": ["horizon intercept", "z EMA logit positivity", "u weeks since first M0 declaration", "d adjacent observed-week z difference"],
+  "horizon_switches_shared": true,
+  "k": 3,
+  "smooth_basis": "ts",
+  "method": "REML",
+  "gamma": 1.3999999999999999,
+  "intercept_penalty": "mgcv paraPen ridge on included lead factor; REML-estimated sp",
+  "selection": "minimum equal-season inner Bernoulli NLL separately by horizon; ties fewer enabled terms then id",
+  "all_off": "exact M1 offset; no GAM fit",
+  "fit_weighting": "equal total trial weight per season",
+  "fit_window": "all eligible origins u >= 0; primary scoring u in 0:12",
+  "feature_definition": "z EMA of clipped observed y/N initialized at first observed logit; d before any range clamp only when adjacent weekF; u=weekF-first saved M0 ignite_ok_now declaration",
+  "declaration_provenance": "training phase uses corresponding outer kit frozen M0 applied to each training prefix through each M1 origin; target uses its own unseen replay declaration; no retrospective phase label used",
+  "exclusions": ["2011-12", "2015-16", "2020-21", "2021-22"],
+  "target_seasons": ["2012-13", "2013-14", "2014-15", "2016-17", "2017-18", "2018-19", "2019-20", "2022-23", "2023-24", "2024-25", "2025-26"],
+  "input_sha256": "fa8add1b253944df5d853a2fb0456d7ac368657e073da0d97f909be95ca59c54",
+  "registry_sha256": "73545ea2ad2cd5de19f3f99e0e7ed7a1edb7c15adb672a8da91d2e216a3b4e83",
+  "previous_run": "/home/yeli/repos/PAGe/manuscript/results/publication-repair-20260908/m2-simplified-20260908-native-02",
+  "source_sha256": {
+    "PAGe/R/m2_subset_correction.R": "5a9c63f14eb5dc6b10cc4da875da37fb4d17474efae8a74c978f76bd98b0bca0",
+    "scripts/publication_m2_subsets.R": "f5374aa74b10e30644b774de4a9541a354d222375e777740f66606d08707728d",
+    "scripts/publication_m2_simplified.R": "2bf273dbb8b9541b2b2b9beb9d3ba1caed582746885c7525120b616449a5ab88",
+    "scripts/publication_m2_offset_two_seasons.R": "e3a8a48b77a627715f0b1380bec7e261ef957bc34537795bd4446b5f4c0f915a",
+    "scripts/publication_m2_subsets_watchdog.sh": "97faa384c4964dcc5e30874588cb1f41cdc34c4bdc774e19679b1f8dd7ba2ce9"
+  },
+  "kit_sha256": {
+    "2012-13": "c50da9164d740f83772fbda59b491269e67bf6d1e66ee080b3a1f18e1c6646c6",
+    "2013-14": "114ffda1f8044b27e33b34a818c25b3501811462aae0203bec5051a05270e074",
+    "2014-15": "970f67a1dc973a659c7cb2fdf6b1daa805fb819869bb7a42ae728393a1b2d4c6",
+    "2016-17": "0684be4810ddc77c6a481b507edd00148b9cf2863a21067bc8eeafb8d72f972d",
+    "2017-18": "1030d47fb2e791476f6fe8073d353e3bc0eefb792ce32b561e0fcb5c6a0b5bd9",
+    "2018-19": "e62def57e82d1f851b96c499303796fe8ef2cb54e500de7ad96d28284709ab89",
+    "2019-20": "0a9786f14e5b864780d7c16a3f08d6fc8d8e10e34c3fc0bbd778c3e73dc7f1d7",
+    "2022-23": "af0e2fbff6c1f2e67b2a6b459e65756ad83d40fbf37c69f8611817a6b0ac23e3",
+    "2023-24": "eb1445e78d142b390a2a54b96d8bd8fd7932501705550a530da6f78604e82709",
+    "2024-25": "4df0d94e72962ec2e52808ea6f77ec98c3a3fb016061ea7e5a054511d8a25b52",
+    "2025-26": "1889cdcf5863563a51c76e4123191d452d695ed535f07ec16364ef68d32846ee"
+  },
+  "replay_sha256": {
+    "2012-13": "8cf0e6a610d0fedf7f09d16730cd35973c497ace92737429e8b0f3ed7533e7b1",
+    "2013-14": "47a854180ef86b9aedc02df9e9f8d79978afbb8994582ab155b4d8510335c2f8",
+    "2014-15": "6d67d50998b6b7587c18cf4b9c5855e3925998407a5d75aa4cda4a3788c8cfdc",
+    "2016-17": "e04c8eb800d9daf31ee0883ddc3a8d09e8c86d54745734e31a7207fcb91b529f",
+    "2017-18": "eb08ebfff66ebe4a050de4770191a11f5a227d6b649901218078e2a19f8e74d2",
+    "2018-19": "e4e089876ab9b48ff5765def2502bcafa7a5fcf83e8789925c6e1a0b8649912d",
+    "2019-20": "6c391a868341225f2d0b52308f7805956866f58d7f221a1e77850153937e7735",
+    "2022-23": "56435ea43b196fc7557a4e2c29569e36f4a994f7f7152c638f30aa8fd9fec440",
+    "2023-24": "38dae1937abd1b25daad3fced116d916d05f33f894857fadcc6f27cb5648e144",
+    "2024-25": "81f037081ab21bb4bd2d93d0f89acbaf3bca3c1747c69b8015ae82b8e694f2bb",
+    "2025-26": "62f0dfbce827b32c9b3cda6cff31fa104cb1f8b0490afaebcbcf559458dbbfc9"
+  },
+  "no_m0_refit": true,
+  "no_m1_refit": true,
+  "no_promotion": true,
+  "outer_outcomes_used_for_primary_selection": false,
+  "session": ["R version 4.6.1 (2026-06-24)", "Platform: x86_64-pc-linux-gnu", "Running under: Ubuntu 24.04.5 LTS", "", "Matrix products: default", "BLAS:   /usr/lib/x86_64-linux-gnu/blas/libblas.so.3.12.0 ", "LAPACK: /usr/lib/x86_64-linux-gnu/lapack/liblapack.so.3.12.0  LAPACK version 3.12.0", "", "locale:", " [1] LC_CTYPE=C.UTF-8       LC_NUMERIC=C           LC_TIME=C.UTF-8       ", " [4] LC_COLLATE=C.UTF-8     LC_MONETARY=C.UTF-8    LC_MESSAGES=C.UTF-8   ", " [7] LC_PAPER=C.UTF-8       LC_NAME=C              LC_ADDRESS=C          ", "[10] LC_TELEPHONE=C         LC_MEASUREMENT=C.UTF-8 LC_IDENTIFICATION=C   ", "", "time zone: America/Toronto", "tzcode source: system (glibc)", "", "attached base packages:", "[1] stats     graphics  grDevices utils     datasets  methods   base     ", "", "loaded via a namespace (and not attached):", " [1] Matrix_1.7-6        jsonlite_2.0.0      gtable_0.3.6       ", " [4] dplyr_1.2.1         compiler_4.6.1      tidyselect_1.2.1   ", " [7] Rcpp_1.1.2          tidyr_1.3.2         splines_4.6.1      ", "[10] scales_1.4.0        fastmap_1.2.0       boot_1.3-32        ", "[13] lattice_0.22-9      ggplot2_4.0.3       R6_2.6.1           ", "[16] MMWRweek_0.1.3      generics_0.1.4      PAGe_0.2.0         ", "[19] htmlwidgets_1.6.4   rbibutils_2.4.1     MASS_7.3-66        ", "[22] tibble_3.3.1        nloptr_2.2.1        gamm4_0.3-0        ", "[25] minqa_1.2.8         RColorBrewer_1.1-3  pillar_1.11.1      ", "[28] rlang_1.3.0         S7_0.2.2            viridisLite_0.4.3  ", "[31] plotly_4.12.1       cli_3.6.6           magrittr_2.0.5     ", "[34] mgcv_1.9-4          Rdpack_2.6.6        digest_0.6.39      ", "[37] grid_4.6.1          lme4_2.0-6          lifecycle_1.0.5    ", "[40] nlme_3.1-170        reformulas_0.4.4    vctrs_0.7.3        ", "[43] glue_1.8.1          data.table_1.18.2.1 farver_2.1.2       ", "[46] purrr_1.2.2         httr_1.4.8          htmltools_0.5.9    ", "[49] tools_4.6.1         pkgconfig_2.0.3    "]
+}

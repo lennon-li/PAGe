@@ -1,0 +1,607 @@
+[
+  {
+    "season": "2012-13",
+    "training_seasons": ["2013-14", "2014-15", "2016-17", "2017-18", "2018-19", "2019-20", "2022-23", "2023-24", "2024-25", "2025-26"],
+    "configs": {
+      "calendar": [
+        {
+          "k_week": 6,
+          "k_signal": 4,
+          "id": "week06_signal04",
+          "complexity": 20
+        }
+      ],
+      "analogue": [
+        {
+          "k": 5,
+          "window": 4,
+          "id": "k05_window04",
+          "complexity": 4
+        }
+      ]
+    },
+    "selection": {
+      "calendar": {
+        "id": "week06_signal04",
+        "index": 1,
+        "best_id": "week06_signal04",
+        "best_index": 1,
+        "threshold": 0.478301587818517,
+        "se": 0.027942290699047304,
+        "mean_nll": 0.4503592971194697,
+        "minimum_nll": 0.4503592971194697
+      },
+      "analogue": {
+        "id": "k05_window04",
+        "index": 1,
+        "best_id": "k03_window06",
+        "best_index": 5,
+        "threshold": 0.50541457909854826,
+        "se": 0.030990562787332931,
+        "mean_nll": 0.4761882955525279,
+        "minimum_nll": 0.47442401631121534
+      }
+    },
+    "calendar_coefficient_sha256": "fff5fdebedb7fa9abb1dcc39b2171feb7be77d421752a7f72baecac5e2b1cc7d",
+    "selected_at_grid_edge": {
+      "calendar": {
+        "k_week": true,
+        "k_signal": true
+      },
+      "analogue": {
+        "k": true,
+        "window": true
+      }
+    }
+  },
+  {
+    "season": "2013-14",
+    "training_seasons": ["2012-13", "2014-15", "2016-17", "2017-18", "2018-19", "2019-20", "2022-23", "2023-24", "2024-25", "2025-26"],
+    "configs": {
+      "calendar": [
+        {
+          "k_week": 6,
+          "k_signal": 4,
+          "id": "week06_signal04",
+          "complexity": 20
+        }
+      ],
+      "analogue": [
+        {
+          "k": 5,
+          "window": 4,
+          "id": "k05_window04",
+          "complexity": 4
+        }
+      ]
+    },
+    "selection": {
+      "calendar": {
+        "id": "week06_signal04",
+        "index": 1,
+        "best_id": "week06_signal04",
+        "best_index": 1,
+        "threshold": 0.49047307679578966,
+        "se": 0.030491818256468153,
+        "mean_nll": 0.45998125853932154,
+        "minimum_nll": 0.45998125853932154
+      },
+      "analogue": {
+        "id": "k05_window04",
+        "index": 1,
+        "best_id": "k01_window06",
+        "best_index": 8,
+        "threshold": 0.50288115010859646,
+        "se": 0.02720002417883103,
+        "mean_nll": 0.48357155835069443,
+        "minimum_nll": 0.47568112592976541
+      }
+    },
+    "calendar_coefficient_sha256": "9e6d0f44fdd3ad4b483b482c05e7a4fefee167103b6242cb8714ed548d95b797",
+    "selected_at_grid_edge": {
+      "calendar": {
+        "k_week": true,
+        "k_signal": true
+      },
+      "analogue": {
+        "k": true,
+        "window": true
+      }
+    }
+  },
+  {
+    "season": "2014-15",
+    "training_seasons": ["2012-13", "2013-14", "2016-17", "2017-18", "2018-19", "2019-20", "2022-23", "2023-24", "2024-25", "2025-26"],
+    "configs": {
+      "calendar": [
+        {
+          "k_week": 6,
+          "k_signal": 4,
+          "id": "week06_signal04",
+          "complexity": 20
+        }
+      ],
+      "analogue": [
+        {
+          "k": 5,
+          "window": 4,
+          "id": "k05_window04",
+          "complexity": 4
+        }
+      ]
+    },
+    "selection": {
+      "calendar": {
+        "id": "week06_signal04",
+        "index": 1,
+        "best_id": "week06_signal04",
+        "best_index": 1,
+        "threshold": 0.4773347519579158,
+        "se": 0.027489690219935147,
+        "mean_nll": 0.44984506173798067,
+        "minimum_nll": 0.44984506173798067
+      },
+      "analogue": {
+        "id": "k05_window04",
+        "index": 1,
+        "best_id": "k01_window06",
+        "best_index": 8,
+        "threshold": 0.49064412706885879,
+        "se": 0.025427855184052838,
+        "mean_nll": 0.47224016341698105,
+        "minimum_nll": 0.46521627188480597
+      }
+    },
+    "calendar_coefficient_sha256": "53c76eec4086770e314aa0c1772b779321a35b4b73855d644c7e85076a88eb69",
+    "selected_at_grid_edge": {
+      "calendar": {
+        "k_week": true,
+        "k_signal": true
+      },
+      "analogue": {
+        "k": true,
+        "window": true
+      }
+    }
+  },
+  {
+    "season": "2016-17",
+    "training_seasons": ["2012-13", "2013-14", "2014-15", "2017-18", "2018-19", "2019-20", "2022-23", "2023-24", "2024-25", "2025-26"],
+    "configs": {
+      "calendar": [
+        {
+          "k_week": 6,
+          "k_signal": 4,
+          "id": "week06_signal04",
+          "complexity": 20
+        }
+      ],
+      "analogue": [
+        {
+          "k": 5,
+          "window": 4,
+          "id": "k05_window04",
+          "complexity": 4
+        }
+      ]
+    },
+    "selection": {
+      "calendar": {
+        "id": "week06_signal04",
+        "index": 1,
+        "best_id": "week06_signal04",
+        "best_index": 1,
+        "threshold": 0.48646280427312527,
+        "se": 0.029896732680283651,
+        "mean_nll": 0.45656607159284163,
+        "minimum_nll": 0.45656607159284163
+      },
+      "analogue": {
+        "id": "k05_window04",
+        "index": 1,
+        "best_id": "k01_window06",
+        "best_index": 8,
+        "threshold": 0.501320187141304,
+        "se": 0.028881911359722189,
+        "mean_nll": 0.47964633007084639,
+        "minimum_nll": 0.47243827578158182
+      }
+    },
+    "calendar_coefficient_sha256": "7bd70bb606369cd47000802a97e2e8ab2c8fece20964f4504bcfbf9bcf6251a4",
+    "selected_at_grid_edge": {
+      "calendar": {
+        "k_week": true,
+        "k_signal": true
+      },
+      "analogue": {
+        "k": true,
+        "window": true
+      }
+    }
+  },
+  {
+    "season": "2017-18",
+    "training_seasons": ["2012-13", "2013-14", "2014-15", "2016-17", "2018-19", "2019-20", "2022-23", "2023-24", "2024-25", "2025-26"],
+    "configs": {
+      "calendar": [
+        {
+          "k_week": 6,
+          "k_signal": 4,
+          "id": "week06_signal04",
+          "complexity": 20
+        }
+      ],
+      "analogue": [
+        {
+          "k": 5,
+          "window": 4,
+          "id": "k05_window04",
+          "complexity": 4
+        }
+      ]
+    },
+    "selection": {
+      "calendar": {
+        "id": "week06_signal04",
+        "index": 1,
+        "best_id": "week06_signal04",
+        "best_index": 1,
+        "threshold": 0.49849572463362246,
+        "se": 0.028903092712746679,
+        "mean_nll": 0.4695926319208758,
+        "minimum_nll": 0.4695926319208758
+      },
+      "analogue": {
+        "id": "k05_window04",
+        "index": 1,
+        "best_id": "k01_window06",
+        "best_index": 8,
+        "threshold": 0.50890927433911315,
+        "se": 0.025952285924112105,
+        "mean_nll": 0.49200155884224644,
+        "minimum_nll": 0.48295698841500101
+      }
+    },
+    "calendar_coefficient_sha256": "7a5def64e40f8559667d5f3722b1b416bfad1b284a70ce2f609c626efd2ce181",
+    "selected_at_grid_edge": {
+      "calendar": {
+        "k_week": true,
+        "k_signal": true
+      },
+      "analogue": {
+        "k": true,
+        "window": true
+      }
+    }
+  },
+  {
+    "season": "2018-19",
+    "training_seasons": ["2012-13", "2013-14", "2014-15", "2016-17", "2017-18", "2019-20", "2022-23", "2023-24", "2024-25", "2025-26"],
+    "configs": {
+      "calendar": [
+        {
+          "k_week": 6,
+          "k_signal": 4,
+          "id": "week06_signal04",
+          "complexity": 20
+        }
+      ],
+      "analogue": [
+        {
+          "k": 5,
+          "window": 4,
+          "id": "k05_window04",
+          "complexity": 4
+        }
+      ]
+    },
+    "selection": {
+      "calendar": {
+        "id": "week06_signal04",
+        "index": 1,
+        "best_id": "week06_signal04",
+        "best_index": 1,
+        "threshold": 0.49722278499368966,
+        "se": 0.029498821018305053,
+        "mean_nll": 0.46772396397538463,
+        "minimum_nll": 0.46772396397538463
+      },
+      "analogue": {
+        "id": "k05_window04",
+        "index": 1,
+        "best_id": "k01_window06",
+        "best_index": 8,
+        "threshold": 0.51034133317058661,
+        "se": 0.025175682768324711,
+        "mean_nll": 0.49045297891048045,
+        "minimum_nll": 0.48516565040226195
+      }
+    },
+    "calendar_coefficient_sha256": "2bf44cb8dba0df5540e8ea1666836a70b35b3fa723061013ca98eac79d643655",
+    "selected_at_grid_edge": {
+      "calendar": {
+        "k_week": true,
+        "k_signal": true
+      },
+      "analogue": {
+        "k": true,
+        "window": true
+      }
+    }
+  },
+  {
+    "season": "2019-20",
+    "training_seasons": ["2012-13", "2013-14", "2014-15", "2016-17", "2017-18", "2018-19", "2022-23", "2023-24", "2024-25", "2025-26"],
+    "configs": {
+      "calendar": [
+        {
+          "k_week": 6,
+          "k_signal": 4,
+          "id": "week06_signal04",
+          "complexity": 20
+        }
+      ],
+      "analogue": [
+        {
+          "k": 5,
+          "window": 4,
+          "id": "k05_window04",
+          "complexity": 4
+        }
+      ]
+    },
+    "selection": {
+      "calendar": {
+        "id": "week06_signal04",
+        "index": 1,
+        "best_id": "week06_signal04",
+        "best_index": 1,
+        "threshold": 0.49663973940474454,
+        "se": 0.029527354053155794,
+        "mean_nll": 0.46711238535158872,
+        "minimum_nll": 0.46711238535158872
+      },
+      "analogue": {
+        "id": "k05_window04",
+        "index": 1,
+        "best_id": "k01_window06",
+        "best_index": 8,
+        "threshold": 0.50815629595648726,
+        "se": 0.026516784559499025,
+        "mean_nll": 0.48902079513583202,
+        "minimum_nll": 0.48163951139698824
+      }
+    },
+    "calendar_coefficient_sha256": "c21997a56c806b8001d95db6ce71c84e7bbcef57b890e9f9456fc89e99e3a1ef",
+    "selected_at_grid_edge": {
+      "calendar": {
+        "k_week": true,
+        "k_signal": true
+      },
+      "analogue": {
+        "k": true,
+        "window": true
+      }
+    }
+  },
+  {
+    "season": "2022-23",
+    "training_seasons": ["2012-13", "2013-14", "2014-15", "2016-17", "2017-18", "2018-19", "2019-20", "2023-24", "2024-25", "2025-26"],
+    "configs": {
+      "calendar": [
+        {
+          "k_week": 6,
+          "k_signal": 4,
+          "id": "week06_signal04",
+          "complexity": 20
+        }
+      ],
+      "analogue": [
+        {
+          "k": 5,
+          "window": 4,
+          "id": "k05_window04",
+          "complexity": 4
+        }
+      ]
+    },
+    "selection": {
+      "calendar": {
+        "id": "week06_signal04",
+        "index": 1,
+        "best_id": "week06_signal04",
+        "best_index": 1,
+        "threshold": 0.496023725579255,
+        "se": 0.026956042819419185,
+        "mean_nll": 0.46906768275983579,
+        "minimum_nll": 0.46906768275983579
+      },
+      "analogue": {
+        "id": "k05_window04",
+        "index": 1,
+        "best_id": "k01_window06",
+        "best_index": 8,
+        "threshold": 0.50496257180009729,
+        "se": 0.027370471288697438,
+        "mean_nll": 0.48120890314076553,
+        "minimum_nll": 0.47759210051139989
+      }
+    },
+    "calendar_coefficient_sha256": "8ede9fe56a84799645ca7bc3d66a810e6fdc3898662f4b558e5e501c19809957",
+    "selected_at_grid_edge": {
+      "calendar": {
+        "k_week": true,
+        "k_signal": true
+      },
+      "analogue": {
+        "k": true,
+        "window": true
+      }
+    }
+  },
+  {
+    "season": "2023-24",
+    "training_seasons": ["2012-13", "2013-14", "2014-15", "2016-17", "2017-18", "2018-19", "2019-20", "2022-23", "2024-25", "2025-26"],
+    "configs": {
+      "calendar": [
+        {
+          "k_week": 6,
+          "k_signal": 4,
+          "id": "week06_signal04",
+          "complexity": 20
+        }
+      ],
+      "analogue": [
+        {
+          "k": 5,
+          "window": 4,
+          "id": "k05_window04",
+          "complexity": 4
+        }
+      ]
+    },
+    "selection": {
+      "calendar": {
+        "id": "week06_signal04",
+        "index": 1,
+        "best_id": "week06_signal04",
+        "best_index": 1,
+        "threshold": 0.50063491983732222,
+        "se": 0.026525081915729488,
+        "mean_nll": 0.47410983792159278,
+        "minimum_nll": 0.47410983792159278
+      },
+      "analogue": {
+        "id": "k05_window04",
+        "index": 1,
+        "best_id": "k01_window06",
+        "best_index": 8,
+        "threshold": 0.50844803918128056,
+        "se": 0.023792520630880637,
+        "mean_nll": 0.49394054350405042,
+        "minimum_nll": 0.48465551855039996
+      }
+    },
+    "calendar_coefficient_sha256": "b6fdf792a45ee96b9128be19fb7acdeb2ebf8cbfd5febdf2d9bd93b37add9e0f",
+    "selected_at_grid_edge": {
+      "calendar": {
+        "k_week": true,
+        "k_signal": true
+      },
+      "analogue": {
+        "k": true,
+        "window": true
+      }
+    }
+  },
+  {
+    "season": "2024-25",
+    "training_seasons": ["2012-13", "2013-14", "2014-15", "2016-17", "2017-18", "2018-19", "2019-20", "2022-23", "2023-24", "2025-26"],
+    "configs": {
+      "calendar": [
+        {
+          "k_week": 6,
+          "k_signal": 4,
+          "id": "week06_signal04",
+          "complexity": 20
+        }
+      ],
+      "analogue": [
+        {
+          "k": 5,
+          "window": 4,
+          "id": "k05_window04",
+          "complexity": 4
+        }
+      ]
+    },
+    "selection": {
+      "calendar": {
+        "id": "week06_signal04",
+        "index": 1,
+        "best_id": "week06_signal04",
+        "best_index": 1,
+        "threshold": 0.49229848421767192,
+        "se": 0.030275684801414512,
+        "mean_nll": 0.4620227994162574,
+        "minimum_nll": 0.4620227994162574
+      },
+      "analogue": {
+        "id": "k05_window04",
+        "index": 1,
+        "best_id": "k01_window06",
+        "best_index": 8,
+        "threshold": 0.50295127259888672,
+        "se": 0.027626313194090958,
+        "mean_nll": 0.48140036486709126,
+        "minimum_nll": 0.47532495940479574
+      }
+    },
+    "calendar_coefficient_sha256": "df107113cb82e7999c598e3152016b7174d8fc2013d4b0174780cde5fc863103",
+    "selected_at_grid_edge": {
+      "calendar": {
+        "k_week": true,
+        "k_signal": true
+      },
+      "analogue": {
+        "k": true,
+        "window": true
+      }
+    }
+  },
+  {
+    "season": "2025-26",
+    "training_seasons": ["2012-13", "2013-14", "2014-15", "2016-17", "2017-18", "2018-19", "2019-20", "2022-23", "2023-24", "2024-25"],
+    "configs": {
+      "calendar": [
+        {
+          "k_week": 6,
+          "k_signal": 4,
+          "id": "week06_signal04",
+          "complexity": 20
+        }
+      ],
+      "analogue": [
+        {
+          "k": 5,
+          "window": 4,
+          "id": "k05_window04",
+          "complexity": 4
+        }
+      ]
+    },
+    "selection": {
+      "calendar": {
+        "id": "week06_signal04",
+        "index": 1,
+        "best_id": "week06_signal04",
+        "best_index": 1,
+        "threshold": 0.47698645195227934,
+        "se": 0.026916860997956673,
+        "mean_nll": 0.4500695909543227,
+        "minimum_nll": 0.4500695909543227
+      },
+      "analogue": {
+        "id": "k05_window04",
+        "index": 1,
+        "best_id": "k03_window06",
+        "best_index": 5,
+        "threshold": 0.49124182051752535,
+        "se": 0.026098429348771202,
+        "mean_nll": 0.46636890022962052,
+        "minimum_nll": 0.46514339116875414
+      }
+    },
+    "calendar_coefficient_sha256": "bb9e96671136f8b688442b6eee07a6bb3f3b690ce4d9fa209ca1777d17efeeea",
+    "selected_at_grid_edge": {
+      "calendar": {
+        "k_week": true,
+        "k_signal": true
+      },
+      "analogue": {
+        "k": true,
+        "window": true
+      }
+    }
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "season": "2014-15",
+  "design": "Identical saved M1 and kit; only residual logging differs",
+  "corrected_reproduction_max_abs": 0,
+  "max_controlled_difference": -0.0082473593804067713,
+  "origin": 28,
+  "horizon": 1,
+  "week28_h1_corrected": 0.31078219118897127,
+  "week28_h1_legacy": 0.31902955056937804,
+  "kit_sha256": "970f67a1dc973a659c7cb2fdf6b1daa805fb819869bb7a42ae728393a1b2d4c6",
+  "script_sha256": "212a7aa6acf9db6eccae1730eb0ed53b27381dd0910ce6c5734e5bfeb65a62b2",
+  "archived_week28_h1": 0.31902962830974702,
+  "legacy_minus_archive_week28_h1": -7.7740368975565133e-08
+}

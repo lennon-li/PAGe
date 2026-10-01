@@ -1,0 +1,50 @@
+{
+  "generated_utc": "2026-09-08 18:37:50 UTC",
+  "finished_utc": "2026-09-08 18:37:50 UTC",
+  "elapsed_seconds": 1.8061740398406982,
+  "replay_root": "manuscript/results/publication-repair-20260908/replay/20260908T125939",
+  "replay_state": "complete_diagnostic_only",
+  "replay_elapsed_seconds": 1734.8051311969757,
+  "input_sha256": "fa8add1b253944df5d853a2fb0456d7ac368657e073da0d97f909be95ca59c54",
+  "replay_manifest_sha256": "2e251cc6b4655c55f3eae0e47bf93d81b6ee7c49c20755029394707de99f1cb2",
+  "replay_status_sha256": "98de1875d3c5e03a7af5a337f834eb14396b5e1189139f8ddbf6a88953a290b1",
+  "source_script_sha256": "c0cba121353588ef448074da2809f912634778bc6ae9d3f4b901fbad973ef8ee",
+  "comparator_helper_sha256": "cf71a5c3d784ab5cf95abf4a96fb61e1ff4f8d4a418cc564c2f4636618c35386",
+  "replay_private_rds_sha256": {
+    "2012-13": "8cf0e6a610d0fedf7f09d16730cd35973c497ace92737429e8b0f3ed7533e7b1",
+    "2013-14": "47a854180ef86b9aedc02df9e9f8d79978afbb8994582ab155b4d8510335c2f8",
+    "2014-15": "6d67d50998b6b7587c18cf4b9c5855e3925998407a5d75aa4cda4a3788c8cfdc",
+    "2016-17": "e04c8eb800d9daf31ee0883ddc3a8d09e8c86d54745734e31a7207fcb91b529f",
+    "2017-18": "eb08ebfff66ebe4a050de4770191a11f5a227d6b649901218078e2a19f8e74d2",
+    "2018-19": "e4e089876ab9b48ff5765def2502bcafa7a5fcf83e8789925c6e1a0b8649912d",
+    "2019-20": "6c391a868341225f2d0b52308f7805956866f58d7f221a1e77850153937e7735",
+    "2022-23": "56435ea43b196fc7557a4e2c29569e36f4a994f7f7152c638f30aa8fd9fec440",
+    "2023-24": "38dae1937abd1b25daad3fced116d916d05f33f894857fadcc6f27cb5648e144",
+    "2024-25": "81f037081ab21bb4bd2d93d0f89acbaf3bca3c1747c69b8015ae82b8e694f2bb",
+    "2025-26": "62f0dfbce827b32c9b3cda6cff31fa104cb1f8b0490afaebcbcf559458dbbfc9"
+  },
+  "archive_manifest_rds_sha256": {
+    "2012-13": "31b4c18419c7a4806ac0de763476fc890ee51700294a215ecafb793f42cfe990",
+    "2013-14": "2e33c912b6d5ff3b080da74a1dd8726c1d48b39869096b522112777c0f853a88",
+    "2014-15": "6c4d92e95d8fd67815dfc3667482757c60d59cb01599c08094501191cb208dce",
+    "2016-17": "c17ecc24c409ddd7755014861538098a6a0862cb1ce6ebbdbfd9df220524c3c6",
+    "2017-18": "da3a2e81aa0ae8d03f99b488bfc6439d387947407ff45bb790f6d280e04a8f18",
+    "2018-19": "0d0a3d836d8b1f526ab21026c6d4e3e4447b2d7c26a8a5d6f2ed01024c6f8ed3",
+    "2019-20": "7aa30ec18ee8b10f3a54fdc79eb36e26fe1814ad38b6a580020bbce652c82d51",
+    "2022-23": "55e71e47c13d9e9c6d5bf87b33ab69d5f9fb748fa134ed22aadace12d03ef396",
+    "2023-24": "810273655ff5fe84b0c01187587ca369538ed181166c99dc4eb11bd72e06991d",
+    "2024-25": "630fb8d2632338ca8e35c7e0c45d2736ecdef11a32fb71b80693f2cf045af91f",
+    "2025-26": "e2ad7e0f98e7661443b596260fe58374b5462867abda79f6c204b10372e72831"
+  },
+  "source_data_seasons": ["2012-13", "2013-14", "2014-15", "2016-17", "2017-18", "2018-19", "2019-20", "2022-23", "2023-24", "2024-25", "2025-26"],
+  "excluded_seasons": ["2011-12", "2015-16", "2020-21", "2021-22"],
+  "calls": {
+    "replay_rds_reads": 11,
+    "archived_manifest_reads": 11,
+    "source_csv_reads": 1,
+    "retraining_calls": 0,
+    "tuning_calls": 0,
+    "replay_call_count": "not recorded in source artifacts"
+  },
+  "synthetic_checks": true
+}

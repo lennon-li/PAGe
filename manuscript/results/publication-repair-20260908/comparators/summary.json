@@ -1,0 +1,1026 @@
+{
+  "aggregate": [
+    {
+      "model": "analogue",
+      "seasons": 11,
+      "rows": 138,
+      "equal_season_nll": 0.48090126026048152,
+      "pooled_trial_nll": 0.4731587560304174,
+      "equal_season_weighted_mae": 0.073234291339441773,
+      "_row": "analogue"
+    },
+    {
+      "model": "calendar_gam",
+      "seasons": 11,
+      "rows": 138,
+      "equal_season_nll": 0.46133385058411175,
+      "pooled_trial_nll": 0.43640927869116791,
+      "equal_season_weighted_mae": 0.04758129243652523,
+      "_row": "calendar_gam"
+    },
+    {
+      "model": "PAGe_archived_pre_repair",
+      "seasons": 11,
+      "rows": 138,
+      "equal_season_nll": 0.46283986163303786,
+      "pooled_trial_nll": 0.4381868963462125,
+      "equal_season_weighted_mae": 0.054086602373159785,
+      "_row": "PAGe_archived_pre_repair"
+    },
+    {
+      "model": "persistence",
+      "seasons": 11,
+      "rows": 138,
+      "equal_season_nll": 0.46844859703824959,
+      "pooled_trial_nll": 0.4439117115348436,
+      "equal_season_weighted_mae": 0.055588964295770101,
+      "_row": "persistence"
+    },
+    {
+      "model": "seasonal_naive",
+      "seasons": 11,
+      "rows": 138,
+      "equal_season_nll": 0.49165126377722562,
+      "pooled_trial_nll": 0.48431454706165472,
+      "equal_season_weighted_mae": 0.084075015404711767,
+      "_row": "seasonal_naive"
+    }
+  ],
+  "season_scores": [
+    {
+      "season": "2012-13",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 27623,
+      "nll": 0.56626978545947071,
+      "weighted_mae": 0.086186713559669142,
+      "_row": "2012-13.analogue"
+    },
+    {
+      "season": "2013-14",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 25732,
+      "nll": 0.47215469262938908,
+      "weighted_mae": 0.067126551823381134,
+      "_row": "2013-14.analogue"
+    },
+    {
+      "season": "2014-15",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 36259,
+      "nll": 0.58894506855103523,
+      "weighted_mae": 0.084389667166914845,
+      "_row": "2014-15.analogue"
+    },
+    {
+      "season": "2016-17",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 34233,
+      "nll": 0.52446075566653683,
+      "weighted_mae": 0.064017164117213476,
+      "_row": "2016-17.analogue"
+    },
+    {
+      "season": "2017-18",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 32065,
+      "nll": 0.38267005536414228,
+      "weighted_mae": 0.020987412099076522,
+      "_row": "2017-18.analogue"
+    },
+    {
+      "season": "2018-19",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 26301,
+      "nll": 0.40009890746737042,
+      "weighted_mae": 0.016885709037316704,
+      "_row": "2018-19.analogue"
+    },
+    {
+      "season": "2019-20",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 40768,
+      "nll": 0.41134517565268186,
+      "weighted_mae": 0.044161840850963148,
+      "_row": "2019-20.analogue"
+    },
+    {
+      "season": "2022-23",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 180698,
+      "nll": 0.44327010749292289,
+      "weighted_mae": 0.13239855962295852,
+      "_row": "2022-23.analogue"
+    },
+    {
+      "season": "2023-24",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 175849,
+      "nll": 0.36189097796999925,
+      "weighted_mae": 0.075027561365350673,
+      "_row": "2023-24.analogue"
+    },
+    {
+      "season": "2024-25",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 179071,
+      "nll": 0.47601069061951801,
+      "weighted_mae": 0.054869553833558779,
+      "_row": "2024-25.analogue"
+    },
+    {
+      "season": "2025-26",
+      "model": "analogue",
+      "rows": 8,
+      "trials": 122859,
+      "nll": 0.66279764599223012,
+      "weighted_mae": 0.15952647125745659,
+      "_row": "2025-26.analogue"
+    },
+    {
+      "season": "2012-13",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 27623,
+      "nll": 0.57374338865347352,
+      "weighted_mae": 0.083749225501670327,
+      "_row": "2012-13.calendar_gam"
+    },
+    {
+      "season": "2013-14",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 25732,
+      "nll": 0.47877455371131777,
+      "weighted_mae": 0.058142203237713935,
+      "_row": "2013-14.calendar_gam"
+    },
+    {
+      "season": "2014-15",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 36259,
+      "nll": 0.58178604530501621,
+      "weighted_mae": 0.061202270795386711,
+      "_row": "2014-15.calendar_gam"
+    },
+    {
+      "season": "2016-17",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 34233,
+      "nll": 0.51500410102600991,
+      "weighted_mae": 0.04489103002342229,
+      "_row": "2016-17.calendar_gam"
+    },
+    {
+      "season": "2017-18",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 32065,
+      "nll": 0.38162999140917497,
+      "weighted_mae": 0.019837753315445461,
+      "_row": "2017-18.calendar_gam"
+    },
+    {
+      "season": "2018-19",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 26301,
+      "nll": 0.40053797470523972,
+      "weighted_mae": 0.023952751816272495,
+      "_row": "2018-19.calendar_gam"
+    },
+    {
+      "season": "2019-20",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 40768,
+      "nll": 0.4046539493221154,
+      "weighted_mae": 0.018940021239408578,
+      "_row": "2019-20.calendar_gam"
+    },
+    {
+      "season": "2022-23",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 180698,
+      "nll": 0.35714766233877138,
+      "weighted_mae": 0.076702683656216658,
+      "_row": "2022-23.calendar_gam"
+    },
+    {
+      "season": "2023-24",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 175849,
+      "nll": 0.33925837609981407,
+      "weighted_mae": 0.024022720837486737,
+      "_row": "2023-24.calendar_gam"
+    },
+    {
+      "season": "2024-25",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 179071,
+      "nll": 0.46759778914524891,
+      "weighted_mae": 0.039827034691534029,
+      "_row": "2024-25.calendar_gam"
+    },
+    {
+      "season": "2025-26",
+      "model": "calendar_gam",
+      "rows": 8,
+      "trials": 122859,
+      "nll": 0.57453852470904754,
+      "weighted_mae": 0.072126521687220321,
+      "_row": "2025-26.calendar_gam"
+    },
+    {
+      "season": "2012-13",
+      "model": "PAGe_archived_pre_repair",
+      "rows": 13,
+      "trials": 27623,
+      "nll": 0.55950553170942796,
+      "weighted_mae": 0.078303871718956378,
+      "_row": "2012-13.PAGe_archived_pre_repair"
+    },
+    {
+      "season": "2013-14",
+      "model": "PAGe_archived_pre_repair",
+      "rows": 13,
+      "trials": 25732,
+      "nll": 0.4783565491046482,
+      "weighted_mae": 0.069321932837531436,
+      "_row": "2013-14.PAGe_archived_pre_repair"
+    },
+    {
+      "season": "2014-15",
+      "model": "PAGe_archived_pre_repair",
+      "rows": 13,
+      "trials": 36259,
+      "nll": 0.57838003795757686,
+      "weighted_mae": 0.05538834770496423,
+      "_row": "2014-15.PAGe_archived_pre_repair"
+    },
+    {
+      "season": "2016-17",
+      "model": "PAGe_archived_pre_repair",
+      "rows": 13,
+      "trials": 34233,
+      "nll": 0.52266410274109809,
+      "weighted_mae": 0.066607502317906311,
+      "_row": "2016-17.PAGe_archived_pre_repair"
+    },
+    {
+      "season": "2017-18",
+      "model": "PAGe_archived_pre_repair",
+      "rows": 13,
+      "trials": 32065,
+      "nll": 0.38575002566317607,
+      "weighted_mae": 0.025561699287131711,
+      "_row": "2017-18.PAGe_archived_pre_repair"
+    },
+    {
+      "season": "2018-19",
+      "model": "PAGe_archived_pre_repair",
+      "rows": 13,
+      "trials": 26301,
+      "nll": 0.40628605604632628,
+      "weighted_mae": 0.032895822284218848,
+      "_row": "2018-19.PAGe_archived_pre_repair"
+    },
+    {
+      "season": "2019-20",
+      "model": "PAGe_archived_pre_repair",
+      "rows": 13,
+      "trials": 40768,
+      "nll": 0.41088359477232589,
+      "weighted_mae": 0.041292947763081803,
+      "_row": "2019-20.PAGe_archived_pre_repair"
+    },
+    {
+      "season": "2022-23",
+      "model": "PAGe_archived_pre_repair",
+      "rows": 13,
+      "trials": 180698,
+      "nll": 0.34134811628442951,
+      "weighted_mae": 0.046957781535434819,
+      "_row": "2022-23.PAGe_archived_pre_repair"
+    },
+    {
+      "season": "2023-24",
+      "model": "PAGe_archived_pre_repair",
+      "rows": 13,
+      "trials": 175849,
+      "nll": 0.35061623335649905,
+      "weighted_mae": 0.045717869651091626,
+      "_row": "2023-24.PAGe_archived_pre_repair"
+    },
+    {
+      "season": "2024-25",
+      "model": "PAGe_archived_pre_repair",
+      "rows": 13,
+      "trials": 179071,
+      "nll": 0.47242646836547281,
+      "weighted_mae": 0.047496936396240835,
+      "_row": "2024-25.PAGe_archived_pre_repair"
+    },
+    {
+      "season": "2025-26",
+      "model": "PAGe_archived_pre_repair",
+      "rows": 8,
+      "trials": 122859,
+      "nll": 0.58502176196243572,
+      "weighted_mae": 0.085407914608199631,
+      "_row": "2025-26.PAGe_archived_pre_repair"
+    },
+    {
+      "season": "2012-13",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 27623,
+      "nll": 0.56664394677395524,
+      "weighted_mae": 0.08399001678108961,
+      "_row": "2012-13.persistence"
+    },
+    {
+      "season": "2013-14",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 25732,
+      "nll": 0.48680815488026469,
+      "weighted_mae": 0.076047051706322311,
+      "_row": "2013-14.persistence"
+    },
+    {
+      "season": "2014-15",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 36259,
+      "nll": 0.58900626504501485,
+      "weighted_mae": 0.063573439194824929,
+      "_row": "2014-15.persistence"
+    },
+    {
+      "season": "2016-17",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 34233,
+      "nll": 0.52256349730285179,
+      "weighted_mae": 0.058022311236103137,
+      "_row": "2016-17.persistence"
+    },
+    {
+      "season": "2017-18",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 32065,
+      "nll": 0.38485357281497679,
+      "weighted_mae": 0.020661043586753493,
+      "_row": "2017-18.persistence"
+    },
+    {
+      "season": "2018-19",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 26301,
+      "nll": 0.40629857718700979,
+      "weighted_mae": 0.026897082630501792,
+      "_row": "2018-19.persistence"
+    },
+    {
+      "season": "2019-20",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 40768,
+      "nll": 0.4171689343732754,
+      "weighted_mae": 0.043880075690339887,
+      "_row": "2019-20.persistence"
+    },
+    {
+      "season": "2022-23",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 180698,
+      "nll": 0.35133766095243235,
+      "weighted_mae": 0.049333401918981508,
+      "_row": "2022-23.persistence"
+    },
+    {
+      "season": "2023-24",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 175849,
+      "nll": 0.34450860410552941,
+      "weighted_mae": 0.033284412634723808,
+      "_row": "2023-24.persistence"
+    },
+    {
+      "season": "2024-25",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 179071,
+      "nll": 0.47349273181275497,
+      "weighted_mae": 0.04281096516552986,
+      "_row": "2024-25.persistence"
+    },
+    {
+      "season": "2025-26",
+      "model": "persistence",
+      "rows": 8,
+      "trials": 122859,
+      "nll": 0.6102526221726805,
+      "weighted_mae": 0.11297880670830074,
+      "_row": "2025-26.persistence"
+    },
+    {
+      "season": "2012-13",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 27623,
+      "nll": 0.57922933557448875,
+      "weighted_mae": 0.099171402460014477,
+      "_row": "2012-13.seasonal_naive"
+    },
+    {
+      "season": "2013-14",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 25732,
+      "nll": 0.47426760842616394,
+      "weighted_mae": 0.066377843987917934,
+      "_row": "2013-14.seasonal_naive"
+    },
+    {
+      "season": "2014-15",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 36259,
+      "nll": 0.6205985181348016,
+      "weighted_mae": 0.12818598715100304,
+      "_row": "2014-15.seasonal_naive"
+    },
+    {
+      "season": "2016-17",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 34233,
+      "nll": 0.5445893308817078,
+      "weighted_mae": 0.097871790000641085,
+      "_row": "2016-17.seasonal_naive"
+    },
+    {
+      "season": "2017-18",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 32065,
+      "nll": 0.38974786543087497,
+      "weighted_mae": 0.036238809245238229,
+      "_row": "2017-18.seasonal_naive"
+    },
+    {
+      "season": "2018-19",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 26301,
+      "nll": 0.40642460841918115,
+      "weighted_mae": 0.037972697316106745,
+      "_row": "2018-19.seasonal_naive"
+    },
+    {
+      "season": "2019-20",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 40768,
+      "nll": 0.40888590346145043,
+      "weighted_mae": 0.033004078869302185,
+      "_row": "2019-20.seasonal_naive"
+    },
+    {
+      "season": "2022-23",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 180698,
+      "nll": 0.46888103233833617,
+      "weighted_mae": 0.13486761640302705,
+      "_row": "2022-23.seasonal_naive"
+    },
+    {
+      "season": "2023-24",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 175849,
+      "nll": 0.34725625927572318,
+      "weighted_mae": 0.052949218946153245,
+      "_row": "2023-24.seasonal_naive"
+    },
+    {
+      "season": "2024-25",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 179071,
+      "nll": 0.50475080917360804,
+      "weighted_mae": 0.088026544456807146,
+      "_row": "2024-25.seasonal_naive"
+    },
+    {
+      "season": "2025-26",
+      "model": "seasonal_naive",
+      "rows": 8,
+      "trials": 122859,
+      "nll": 0.6635326304331457,
+      "weighted_mae": 0.15015918061561828,
+      "_row": "2025-26.seasonal_naive"
+    }
+  ],
+  "differences": [
+    {
+      "season": "2012-13",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 27623,
+      "nll": 0.56626978545947071,
+      "weighted_mae": 0.086186713559669142,
+      "delta_archived_minus_comparator": -0.006764253750042748,
+      "_row": "2012-13.analogue"
+    },
+    {
+      "season": "2013-14",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 25732,
+      "nll": 0.47215469262938908,
+      "weighted_mae": 0.067126551823381134,
+      "delta_archived_minus_comparator": 0.0062018564752591154,
+      "_row": "2013-14.analogue"
+    },
+    {
+      "season": "2014-15",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 36259,
+      "nll": 0.58894506855103523,
+      "weighted_mae": 0.084389667166914845,
+      "delta_archived_minus_comparator": -0.010565030593458369,
+      "_row": "2014-15.analogue"
+    },
+    {
+      "season": "2016-17",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 34233,
+      "nll": 0.52446075566653683,
+      "weighted_mae": 0.064017164117213476,
+      "delta_archived_minus_comparator": -0.0017966529254387353,
+      "_row": "2016-17.analogue"
+    },
+    {
+      "season": "2017-18",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 32065,
+      "nll": 0.38267005536414228,
+      "weighted_mae": 0.020987412099076522,
+      "delta_archived_minus_comparator": 0.0030799702990337852,
+      "_row": "2017-18.analogue"
+    },
+    {
+      "season": "2018-19",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 26301,
+      "nll": 0.40009890746737042,
+      "weighted_mae": 0.016885709037316704,
+      "delta_archived_minus_comparator": 0.0061871485789558589,
+      "_row": "2018-19.analogue"
+    },
+    {
+      "season": "2019-20",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 40768,
+      "nll": 0.41134517565268186,
+      "weighted_mae": 0.044161840850963148,
+      "delta_archived_minus_comparator": -0.00046158088035597178,
+      "_row": "2019-20.analogue"
+    },
+    {
+      "season": "2022-23",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 180698,
+      "nll": 0.44327010749292289,
+      "weighted_mae": 0.13239855962295852,
+      "delta_archived_minus_comparator": -0.10192199120849338,
+      "_row": "2022-23.analogue"
+    },
+    {
+      "season": "2023-24",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 175849,
+      "nll": 0.36189097796999925,
+      "weighted_mae": 0.075027561365350673,
+      "delta_archived_minus_comparator": -0.011274744613500198,
+      "_row": "2023-24.analogue"
+    },
+    {
+      "season": "2024-25",
+      "model": "analogue",
+      "rows": 13,
+      "trials": 179071,
+      "nll": 0.47601069061951801,
+      "weighted_mae": 0.054869553833558779,
+      "delta_archived_minus_comparator": -0.0035842222540451996,
+      "_row": "2024-25.analogue"
+    },
+    {
+      "season": "2025-26",
+      "model": "analogue",
+      "rows": 8,
+      "trials": 122859,
+      "nll": 0.66279764599223012,
+      "weighted_mae": 0.15952647125745659,
+      "delta_archived_minus_comparator": -0.077775884029794407,
+      "_row": "2025-26.analogue"
+    },
+    {
+      "season": "2012-13",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 27623,
+      "nll": 0.57374338865347352,
+      "weighted_mae": 0.083749225501670327,
+      "delta_archived_minus_comparator": -0.014237856944045557,
+      "_row": "2012-13.calendar_gam"
+    },
+    {
+      "season": "2013-14",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 25732,
+      "nll": 0.47877455371131777,
+      "weighted_mae": 0.058142203237713935,
+      "delta_archived_minus_comparator": -0.00041800460666957528,
+      "_row": "2013-14.calendar_gam"
+    },
+    {
+      "season": "2014-15",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 36259,
+      "nll": 0.58178604530501621,
+      "weighted_mae": 0.061202270795386711,
+      "delta_archived_minus_comparator": -0.0034060073474393437,
+      "_row": "2014-15.calendar_gam"
+    },
+    {
+      "season": "2016-17",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 34233,
+      "nll": 0.51500410102600991,
+      "weighted_mae": 0.04489103002342229,
+      "delta_archived_minus_comparator": 0.0076600017150881827,
+      "_row": "2016-17.calendar_gam"
+    },
+    {
+      "season": "2017-18",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 32065,
+      "nll": 0.38162999140917497,
+      "weighted_mae": 0.019837753315445461,
+      "delta_archived_minus_comparator": 0.0041200342540010926,
+      "_row": "2017-18.calendar_gam"
+    },
+    {
+      "season": "2018-19",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 26301,
+      "nll": 0.40053797470523972,
+      "weighted_mae": 0.023952751816272495,
+      "delta_archived_minus_comparator": 0.0057480813410865639,
+      "_row": "2018-19.calendar_gam"
+    },
+    {
+      "season": "2019-20",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 40768,
+      "nll": 0.4046539493221154,
+      "weighted_mae": 0.018940021239408578,
+      "delta_archived_minus_comparator": 0.0062296454502104859,
+      "_row": "2019-20.calendar_gam"
+    },
+    {
+      "season": "2022-23",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 180698,
+      "nll": 0.35714766233877138,
+      "weighted_mae": 0.076702683656216658,
+      "delta_archived_minus_comparator": -0.015799546054341862,
+      "_row": "2022-23.calendar_gam"
+    },
+    {
+      "season": "2023-24",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 175849,
+      "nll": 0.33925837609981407,
+      "weighted_mae": 0.024022720837486737,
+      "delta_archived_minus_comparator": 0.011357857256684978,
+      "_row": "2023-24.calendar_gam"
+    },
+    {
+      "season": "2024-25",
+      "model": "calendar_gam",
+      "rows": 13,
+      "trials": 179071,
+      "nll": 0.46759778914524891,
+      "weighted_mae": 0.039827034691534029,
+      "delta_archived_minus_comparator": 0.0048286792202238971,
+      "_row": "2024-25.calendar_gam"
+    },
+    {
+      "season": "2025-26",
+      "model": "calendar_gam",
+      "rows": 8,
+      "trials": 122859,
+      "nll": 0.57453852470904754,
+      "weighted_mae": 0.072126521687220321,
+      "delta_archived_minus_comparator": 0.010483237253388178,
+      "_row": "2025-26.calendar_gam"
+    },
+    {
+      "season": "2012-13",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 27623,
+      "nll": 0.56664394677395524,
+      "weighted_mae": 0.08399001678108961,
+      "delta_archived_minus_comparator": -0.0071384150645272815,
+      "_row": "2012-13.persistence"
+    },
+    {
+      "season": "2013-14",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 25732,
+      "nll": 0.48680815488026469,
+      "weighted_mae": 0.076047051706322311,
+      "delta_archived_minus_comparator": -0.0084516057756164886,
+      "_row": "2013-14.persistence"
+    },
+    {
+      "season": "2014-15",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 36259,
+      "nll": 0.58900626504501485,
+      "weighted_mae": 0.063573439194824929,
+      "delta_archived_minus_comparator": -0.010626227087437989,
+      "_row": "2014-15.persistence"
+    },
+    {
+      "season": "2016-17",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 34233,
+      "nll": 0.52256349730285179,
+      "weighted_mae": 0.058022311236103137,
+      "delta_archived_minus_comparator": 0.00010060543824630397,
+      "_row": "2016-17.persistence"
+    },
+    {
+      "season": "2017-18",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 32065,
+      "nll": 0.38485357281497679,
+      "weighted_mae": 0.020661043586753493,
+      "delta_archived_minus_comparator": 0.00089645284819928062,
+      "_row": "2017-18.persistence"
+    },
+    {
+      "season": "2018-19",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 26301,
+      "nll": 0.40629857718700979,
+      "weighted_mae": 0.026897082630501792,
+      "delta_archived_minus_comparator": -1.2521140683507959e-05,
+      "_row": "2018-19.persistence"
+    },
+    {
+      "season": "2019-20",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 40768,
+      "nll": 0.4171689343732754,
+      "weighted_mae": 0.043880075690339887,
+      "delta_archived_minus_comparator": -0.0062853396009495133,
+      "_row": "2019-20.persistence"
+    },
+    {
+      "season": "2022-23",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 180698,
+      "nll": 0.35133766095243235,
+      "weighted_mae": 0.049333401918981508,
+      "delta_archived_minus_comparator": -0.0099895446680028366,
+      "_row": "2022-23.persistence"
+    },
+    {
+      "season": "2023-24",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 175849,
+      "nll": 0.34450860410552941,
+      "weighted_mae": 0.033284412634723808,
+      "delta_archived_minus_comparator": 0.0061076292509696373,
+      "_row": "2023-24.persistence"
+    },
+    {
+      "season": "2024-25",
+      "model": "persistence",
+      "rows": 13,
+      "trials": 179071,
+      "nll": 0.47349273181275497,
+      "weighted_mae": 0.04281096516552986,
+      "delta_archived_minus_comparator": -0.0010662634472821675,
+      "_row": "2024-25.persistence"
+    },
+    {
+      "season": "2025-26",
+      "model": "persistence",
+      "rows": 8,
+      "trials": 122859,
+      "nll": 0.6102526221726805,
+      "weighted_mae": 0.11297880670830074,
+      "delta_archived_minus_comparator": -0.025230860210244788,
+      "_row": "2025-26.persistence"
+    },
+    {
+      "season": "2012-13",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 27623,
+      "nll": 0.57922933557448875,
+      "weighted_mae": 0.099171402460014477,
+      "delta_archived_minus_comparator": -0.019723803865060785,
+      "_row": "2012-13.seasonal_naive"
+    },
+    {
+      "season": "2013-14",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 25732,
+      "nll": 0.47426760842616394,
+      "weighted_mae": 0.066377843987917934,
+      "delta_archived_minus_comparator": 0.0040889406784842541,
+      "_row": "2013-14.seasonal_naive"
+    },
+    {
+      "season": "2014-15",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 36259,
+      "nll": 0.6205985181348016,
+      "weighted_mae": 0.12818598715100304,
+      "delta_archived_minus_comparator": -0.042218480177224738,
+      "_row": "2014-15.seasonal_naive"
+    },
+    {
+      "season": "2016-17",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 34233,
+      "nll": 0.5445893308817078,
+      "weighted_mae": 0.097871790000641085,
+      "delta_archived_minus_comparator": -0.021925228140609709,
+      "_row": "2016-17.seasonal_naive"
+    },
+    {
+      "season": "2017-18",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 32065,
+      "nll": 0.38974786543087497,
+      "weighted_mae": 0.036238809245238229,
+      "delta_archived_minus_comparator": -0.0039978397676989075,
+      "_row": "2017-18.seasonal_naive"
+    },
+    {
+      "season": "2018-19",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 26301,
+      "nll": 0.40642460841918115,
+      "weighted_mae": 0.037972697316106745,
+      "delta_archived_minus_comparator": -0.0001385523728548721,
+      "_row": "2018-19.seasonal_naive"
+    },
+    {
+      "season": "2019-20",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 40768,
+      "nll": 0.40888590346145043,
+      "weighted_mae": 0.033004078869302185,
+      "delta_archived_minus_comparator": 0.0019976913108754601,
+      "_row": "2019-20.seasonal_naive"
+    },
+    {
+      "season": "2022-23",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 180698,
+      "nll": 0.46888103233833617,
+      "weighted_mae": 0.13486761640302705,
+      "delta_archived_minus_comparator": -0.12753291605390665,
+      "_row": "2022-23.seasonal_naive"
+    },
+    {
+      "season": "2023-24",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 175849,
+      "nll": 0.34725625927572318,
+      "weighted_mae": 0.052949218946153245,
+      "delta_archived_minus_comparator": 0.0033599740807758738,
+      "_row": "2023-24.seasonal_naive"
+    },
+    {
+      "season": "2024-25",
+      "model": "seasonal_naive",
+      "rows": 13,
+      "trials": 179071,
+      "nll": 0.50475080917360804,
+      "weighted_mae": 0.088026544456807146,
+      "delta_archived_minus_comparator": -0.032324340808135232,
+      "_row": "2024-25.seasonal_naive"
+    },
+    {
+      "season": "2025-26",
+      "model": "seasonal_naive",
+      "rows": 8,
+      "trials": 122859,
+      "nll": 0.6635326304331457,
+      "weighted_mae": 0.15015918061561828,
+      "delta_archived_minus_comparator": -0.078510868470709982,
+      "_row": "2025-26.seasonal_naive"
+    }
+  ],
+  "descriptive_differences": {
+    "analogue": {
+      "mean": -0.018061398627443659,
+      "median": -0.0035842222540451996,
+      "sd": 0.036381090812141144,
+      "iqr": 0.01222908231281819,
+      "min": -0.10192199120849338,
+      "max": 0.0062018564752591154,
+      "leave_one_season_out_mean": [-0.019191113115183751, -0.020487724137713936, -0.018811035430842189, -0.019687873197644153, -0.020175535520091402, -0.02048625334808361, -0.019821380402152429, -0.0096753393693386862, -0.018740064028838006, -0.019509116264783504, -0.012089950087208584]
+    },
+    "calendar_gam": {
+      "mean": 0.0015060110489260945,
+      "median": 0.0048286792202238971,
+      "sd": 0.0092134881318872534,
+      "iqr": 0.0088568295597037938,
+      "min": -0.015799546054341862,
+      "max": 0.011357857256684978,
+      "leave_one_season_out_mean": [0.0030803978482232598, 0.0016984126144856614, 0.0019972128885626383, 0.0008906119823098857, 0.0012446087284185947, 0.0010818040197100476, 0.0010336476087976555, 0.0032365667592528903, 0.00052082642815020621, 0.0011737442317963144, 0.00060828842847988614]
+    },
+    "persistence": {
+      "mean": -0.0056087354052117592,
+      "median": -0.0062853396009495133,
+      "sd": 0.0083929317458322928,
+      "iqr": 0.0092646173705910606,
+      "min": -0.025230860210244788,
+      "max": 0.0061076292509696373,
+      "leave_one_season_out_mean": [-0.0054557674392802071, -0.0053244483681712858, -0.0051069862369891358, -0.0061796694895575651, -0.0062592542305528629, -0.0061683568316645843, -0.0055410749856379836, -0.0051706544789326516, -0.006780371870829899, -0.006062982601004718, -0.0036465229247084562]
+    },
+    "seasonal_naive": {
+      "mean": -0.028811402144187755,
+      "median": -0.019723803865060785,
+      "sd": 0.04128261621251799,
+      "iqr": 0.038200979961690279,
+      "min": -0.12753291605390665,
+      "max": 0.0040889406784842541,
+      "leave_one_season_out_mean": [-0.029720161972100451, -0.032101436426454952, -0.027470694340884054, -0.029500019544545557, -0.031292758381836636, -0.031678687121321041, -0.031892311489694077, -0.018939250753215862, -0.032028539766684114, -0.028460108277793005, -0.02384145551153553]
+    }
+  }
+}

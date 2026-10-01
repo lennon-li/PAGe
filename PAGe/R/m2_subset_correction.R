@@ -441,7 +441,18 @@ m2_subset_fit <- function(data, spec, method = "REML", gamma = 1.4,
   if (any(!is.finite(season_totals) | season_totals <= 0)) {
     stop("Season trial totals must be finite and positive.", call. = FALSE)
   }
-  dat$.fit_weight <- unname(mean(season_totals) / season_totals[as.character(dat$season)])
+  # Fit on the same phase weight (weight_page_v2) that spec selection and the
+  # adoption gate score on, not season balance alone -- otherwise the GAM is
+  # optimized for a different objective than it is judged on. Falls back to 1
+  # when the column is absent (isolated unit-test fixtures), matching prior
+  # behavior for those callers.
+  phase_weight <- if ("weight_page_v2" %in% names(dat)) {
+    as.numeric(dat$weight_page_v2)
+  } else {
+    rep(1, nrow(dat))
+  }
+  dat$.fit_weight <- unname(mean(season_totals) / season_totals[as.character(dat$season)]) *
+    phase_weight
   para_pen <- if (isTRUE(spec$intercept)) {
     list(lead = list(diag(2L), sp = intercept_sp))
   } else {
@@ -1447,17 +1458,16 @@ m2_subset_score <- function(data, prediction, weights = NULL) {
     if (!nrow(agg) || any(!is.finite(agg$bernoulli_nll))) {
       stop(label, " has no complete h", h, " candidates.", call. = FALSE)
     }
-    # Selection previously ranked on mean NLL alone, which can select a spec
-    # that beats the all-off baseline on average while being catastrophically
-    # worse than it in one held-out season -- exactly the mean-vs-worst-fold
-    # mismatch (Opus audit, 2026-09-18) between this ranking and the
-    # downstream adoption gate's zero-tolerance max_season_degradation rule:
-    # the search could propose, and the gate would then have to reject, a
-    # spec whose worst season is strictly worse than not correcting at all.
-    # Prefer any candidate that never underperforms all-off in a single
-    # season; only fall back to the full candidate set if none qualify (the
-    # all-off spec itself always qualifies trivially, so this fallback path
-    # is unreachable in practice, but is kept explicit rather than assumed).
+    # worst_season_excess_vs_all_off is reported as a diagnostic on every
+    # candidate (how much worse than all-off its single worst held-out season
+    # is), so the adoption gate's max_season_degradation check has this
+    # evidence available. It does NOT narrow the candidate set considered for
+    # selection here: doing that in both the tuner and the gate applies the
+    # same zero-tolerance rule twice (Claude review, 2026-09-18, correcting
+    # the 2026-09-18 Opus audit that motivated the now-removed narrowing) --
+    # the tuner's job is to rank candidates on the tuning objective, and the
+    # gate is the sole place that decides whether a season-degradation this
+    # size is acceptable for adoption.
     all_off_id <- grid$id[which(grid$enabled_count == 0)[1L]]
     worst_excess <- stats::setNames(rep(NA_real_, nrow(agg)), agg$spec_id)
     if (!is.na(all_off_id) && all_off_id %in% valid$spec_id) {
@@ -1472,12 +1482,8 @@ m2_subset_score <- function(data, prediction, weights = NULL) {
         if (!length(delta) || all(is.na(delta))) NA_real_ else max(delta, na.rm = TRUE)
       }, numeric(1L))
     }
-    robust <- is.finite(worst_excess) & worst_excess <= 0
-    candidate_idx <- if (any(robust)) which(robust) else seq_len(nrow(agg))
     enabled <- grid$enabled_count[match(agg$spec_id, grid$id)]
-    ord <- candidate_idx[order(
-      agg$bernoulli_nll[candidate_idx], enabled[candidate_idx], agg$spec_id[candidate_idx]
-    )]
+    ord <- order(agg$bernoulli_nll, enabled, agg$spec_id)
     best <- agg[ord[1L], , drop = FALSE]
     selected[[h]] <- grid[match(best$spec_id, grid$id), , drop = FALSE]
     summary_rows[[h]] <- data.frame(

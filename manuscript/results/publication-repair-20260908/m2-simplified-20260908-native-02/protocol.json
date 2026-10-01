@@ -1,0 +1,19 @@
+{
+  "status": "running",
+  "candidates": ["m1", "offset_intercept", "offset_smooth"],
+  "k_z": 3,
+  "k_sp": 0,
+  "gamma": 1.3999999999999999,
+  "intercept_penalty": "REML estimated ridge",
+  "training_weight": "equal total trial weight per season",
+  "runtime": "native Codex in-session worker",
+  "external_worker_or_service": false,
+  "selection": "minimum equal-season inner NLL separately by horizon; exact ties prefer simpler model",
+  "validation_window": "origin t_since 0 through 12",
+  "feature_clamping": "fit range recomputed from each inner training split; outer target clamped to full outer-training range",
+  "limitations": "Conditional on archived M0/M1 and historical M2 EMA settings; M1 features are not newly season-cross-fitted. Previously inspected outer seasons are development data.",
+  "no_m1_refit": true,
+  "no_online_correction": true,
+  "no_post_peak_switch": true,
+  "seasons": ["2012-13", "2013-14", "2014-15", "2016-17", "2017-18", "2018-19", "2019-20", "2022-23", "2023-24", "2024-25", "2025-26"]
+}

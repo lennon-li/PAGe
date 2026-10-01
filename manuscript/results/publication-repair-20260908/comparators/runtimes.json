@@ -1,0 +1,68 @@
+[
+  {
+    "season": "2012-13",
+    "training_seconds": 87.191999999999993,
+    "prediction_batch_seconds": 0.11900000000001398,
+    "seconds_per_origin_all_models": 0.0091538461538472303
+  },
+  {
+    "season": "2013-14",
+    "training_seconds": 72.637,
+    "prediction_batch_seconds": 0.11000000000001364,
+    "seconds_per_origin_all_models": 0.0084615384615395108
+  },
+  {
+    "season": "2014-15",
+    "training_seconds": 91.978000000000009,
+    "prediction_batch_seconds": 0.10399999999998499,
+    "seconds_per_origin_all_models": 0.0079999999999988448
+  },
+  {
+    "season": "2016-17",
+    "training_seconds": 79.885999999999996,
+    "prediction_batch_seconds": 0.10399999999998499,
+    "seconds_per_origin_all_models": 0.0079999999999988448
+  },
+  {
+    "season": "2017-18",
+    "training_seconds": 75.282000000000039,
+    "prediction_batch_seconds": 0.10499999999996135,
+    "seconds_per_origin_all_models": 0.0080769230769201037
+  },
+  {
+    "season": "2018-19",
+    "training_seconds": 90.701999999999998,
+    "prediction_batch_seconds": 0.10500000000001819,
+    "seconds_per_origin_all_models": 0.0080769230769244769
+  },
+  {
+    "season": "2019-20",
+    "training_seconds": 64.526999999999987,
+    "prediction_batch_seconds": 0.10199999999997544,
+    "seconds_per_origin_all_models": 0.0078461538461519573
+  },
+  {
+    "season": "2022-23",
+    "training_seconds": 62.206999999999994,
+    "prediction_batch_seconds": 0.10200000000008913,
+    "seconds_per_origin_all_models": 0.0078461538461607021
+  },
+  {
+    "season": "2023-24",
+    "training_seconds": 96.874000000000024,
+    "prediction_batch_seconds": 0.10300000000006548,
+    "seconds_per_origin_all_models": 0.0079230769230819609
+  },
+  {
+    "season": "2024-25",
+    "training_seconds": 81.404999999999973,
+    "prediction_batch_seconds": 0.10500000000001819,
+    "seconds_per_origin_all_models": 0.0080769230769244769
+  },
+  {
+    "season": "2025-26",
+    "training_seconds": 68.947999999999979,
+    "prediction_batch_seconds": 0.071000000000026375,
+    "seconds_per_origin_all_models": 0.0088750000000032969
+  }
+]

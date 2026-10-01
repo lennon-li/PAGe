@@ -1,0 +1,7 @@
+{
+  "decision": "insufficient_evidence",
+  "reasons": "peak_not_evaluated",
+  "tolerance": 0,
+  "deltas": [-0.0026, -0.0007],
+  "rule": "use_m2 requires all requested loss deltas <= tolerance and one strict improvement"
+}

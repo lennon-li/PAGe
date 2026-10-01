@@ -331,6 +331,45 @@ source_hashes <- stats::setNames(
   vapply(r_files, digest::digest, character(1), file = TRUE, algo = "sha256"),
   basename(r_files)
 )
+
+# ---- Code identity contract (added 2026-09-18) ----
+# This runner loads PAGe with devtools::load_all(), so the WORKING TREE is the
+# code that runs -- not the installed library, and not necessarily git_head.
+# On 2026-09-18 an outer fold was rebuilt against a library that had been
+# deliberately pinned to the campaign commit, while load_all silently ran a
+# newer working tree carrying different M2 numerics; every provenance check
+# performed at the time inspected the installed library and therefore agreed
+# with itself while being wrong. git_head alone cannot detect this: a dirty
+# tree makes it a statement about what was committed, not about what ran.
+#
+# So record a single rollup fingerprint of the actual loaded sources, plus the
+# dirty state, and refuse by default to start a campaign run from a dirty
+# tree -- an eleven-run evidence set has to be attributable to one code state.
+source_fingerprint <- digest::digest(
+  paste(names(source_hashes), source_hashes, collapse = "\n"),
+  algo = "sha256"
+)
+git_dirty_files <- tryCatch(
+  system("git status --porcelain -- PAGe/ 2>/dev/null", intern = TRUE),
+  error = function(e) character(0)
+)
+git_dirty <- length(git_dirty_files) > 0L
+allow_dirty <- identical(Sys.getenv("PAGE_ALLOW_DIRTY_TREE", ""), "1")
+cat(sprintf(
+  "[code] PAGe source fingerprint %s | tree %s\n",
+  substr(source_fingerprint, 1L, 16L),
+  if (git_dirty) "DIRTY" else "clean"
+))
+if (git_dirty) {
+  msg <- paste0(
+    "PAGe/ working tree is dirty, so git_head does not identify the code that ",
+    "will run (this runner uses devtools::load_all()). Uncommitted:\n",
+    paste(" ", git_dirty_files, collapse = "\n"),
+    "\nCommit or stash before a campaign run, or set PAGE_ALLOW_DIRTY_TREE=1 ",
+    "to proceed deliberately (the dirty state is recorded either way)."
+  )
+  if (allow_dirty) message("[code] WARNING: ", msg) else stop(msg, call. = FALSE)
+}
 manifest <- list(
   run_id = run_id,
   created_utc = format(Sys.time(), tz = "UTC", usetz = TRUE),
@@ -345,6 +384,12 @@ manifest <- list(
     error = function(e) NA_character_
   ),
   package_source_sha256 = source_hashes,
+  # The identity of the code that actually ran, since load_all() means the
+  # working tree is authoritative rather than git_head.
+  package_source_fingerprint = source_fingerprint,
+  git_tree_dirty = git_dirty,
+  git_dirty_files = git_dirty_files,
+  loaded_via = "devtools::load_all",
   input_path = normalizePath(hist_path),
   input_sha256 = digest::digest(file = hist_path, algo = "sha256"),
   data_entry = "load_flu_hist() -> canonical mutate -> prepare_surveillance_data(); prepare_page_data() remapping not required (canonical schema)",

@@ -1,0 +1,72 @@
+{
+  "status": "complete_diagnostic_only",
+  "purpose": "Post-holdout bounded M2 offset/residual-correction prototype; not prospective confirmation",
+  "provider": "OpenAI",
+  "model": "gpt-5.6-luna",
+  "route": "Liz Codex CLI",
+  "reasoning_effort": "high",
+  "permission_envelope": "Level 1; autonomous; may modify files within scope",
+  "target_seasons": ["2014-15", "2016-17"],
+  "training_seasons_by_target": {
+    "2014-15": ["2012-13", "2013-14", "2016-17", "2017-18", "2018-19", "2019-20", "2022-23", "2023-24", "2024-25", "2025-26"],
+    "2016-17": ["2012-13", "2013-14", "2014-15", "2017-18", "2018-19", "2019-20", "2022-23", "2023-24", "2024-25", "2025-26"]
+  },
+  "target_outcomes_in_training": false,
+  "target_outcome_check": "Each d_train was built from the frozen kit hist_data and m1_train_preds, then asserted to exclude its outer target season.",
+  "no_m1_tuning": true,
+  "no_m1_refit": true,
+  "no_online_correction_primary": true,
+  "no_post_peak_switch_primary": true,
+  "formula": {
+    "2014-15": "cbind(y_lead, N_lead - y_lead) ~ -1 + lead + offset(logit_f_eff) +      s(z_ema, by = lead, bs = \"ts\", k = 2)",
+    "2016-17": "cbind(y_lead, N_lead - y_lead) ~ -1 + lead + offset(logit_f_eff) +      s(z_ema, by = lead, bs = \"ts\", k = 2)"
+  },
+  "formula_contract": "cbind(y_lead, N_lead - y_lead) ~ -1 + lead + offset(logit_f_eff) + horizon-specific regularized s(z_ema, by=lead, bs='ts', k=2)",
+  "fitted_edf": {
+    "2014-15": {
+      "total_edf": 4.9372886365639692,
+      "smooth_edf": [0.95444641787210582, 1.9828422186918599]
+    },
+    "2016-17": {
+      "total_edf": 5.9663153508309845,
+      "smooth_edf": [1.9707888748065936, 1.995526476024394]
+    }
+  },
+  "convergence": {
+    "2014-15": true,
+    "2016-17": true
+  },
+  "fit_warnings": {
+    "2014-15": "basis dimension, k, increased to minimum possible\n",
+    "2016-17": "basis dimension, k, increased to minimum possible\n"
+  },
+  "score_definition": "Origins with 0 <= t_since <= 12; N-weighted NLL and MAE within each target season; equal-season mean also reported.",
+  "rows": {
+    "predictions": 52,
+    "comparison": 18,
+    "h1_per_target": {
+      "2014-15": 13,
+      "2016-17": 13
+    },
+    "h2_per_target": {
+      "2014-15": 13,
+      "2016-17": 13
+    }
+  },
+  "elapsed_seconds": 12.186211109161377,
+  "input_sha256": "fa8add1b253944df5d853a2fb0456d7ac368657e073da0d97f909be95ca59c54",
+  "registry_sha256": "73545ea2ad2cd5de19f3f99e0e7ed7a1edb7c15adb672a8da91d2e216a3b4e83",
+  "source_sha256": {
+    "offset_helper": "f715fdf961d028adc7e52f2f6acb517c38339645fa96d14225d863667a485491",
+    "runner": "d20bc5b6daf13e8ff68e0fca40e261abe83bb0116a3c3d6d117dd61f00ca8f12"
+  },
+  "kit_sha256": {
+    "2014-15": "970f67a1dc973a659c7cb2fdf6b1daa805fb819869bb7a42ae728393a1b2d4c6",
+    "2016-17": "0684be4810ddc77c6a481b507edd00148b9cf2863a21067bc8eeafb8d72f972d"
+  },
+  "replay_sha256": {
+    "2014-15": "6d67d50998b6b7587c18cf4b9c5855e3925998407a5d75aa4cda4a3788c8cfdc",
+    "2016-17": "e04c8eb800d9daf31ee0883ddc3a8d09e8c86d54745734e31a7207fcb91b529f"
+  },
+  "session": ["R version 4.6.1 (2026-06-24)", "Platform: x86_64-pc-linux-gnu", "Running under: Ubuntu 24.04.4 LTS", "", "Matrix products: default", "BLAS:   /usr/lib/x86_64-linux-gnu/blas/libblas.so.3.12.0 ", "LAPACK: /usr/lib/x86_64-linux-gnu/lapack/liblapack.so.3.12.0  LAPACK version 3.12.0", "", "locale:", " [1] LC_CTYPE=C.UTF-8       LC_NUMERIC=C           LC_TIME=C.UTF-8       ", " [4] LC_COLLATE=C.UTF-8     LC_MONETARY=C.UTF-8    LC_MESSAGES=C.UTF-8   ", " [7] LC_PAPER=C.UTF-8       LC_NAME=C              LC_ADDRESS=C          ", "[10] LC_TELEPHONE=C         LC_MEASUREMENT=C.UTF-8 LC_IDENTIFICATION=C   ", "", "time zone: America/Toronto", "tzcode source: system (glibc)", "", "attached base packages:", "[1] stats     graphics  grDevices utils     datasets  methods   base     ", "", "loaded via a namespace (and not attached):", " [1] Matrix_1.7-6        jsonlite_2.0.0      gtable_0.3.6       ", " [4] dplyr_1.2.1         compiler_4.6.1      tidyselect_1.2.1   ", " [7] Rcpp_1.1.2          tidyr_1.3.2         splines_4.6.1      ", "[10] scales_1.4.0        fastmap_1.2.0       boot_1.3-32        ", "[13] lattice_0.22-9      ggplot2_4.0.3       R6_2.6.1           ", "[16] MMWRweek_0.1.3      generics_0.1.4      PAGe_0.2.0         ", "[19] htmlwidgets_1.6.4   rbibutils_2.4.1     MASS_7.3-66        ", "[22] tibble_3.3.1        nloptr_2.2.1        gamm4_0.3-0        ", "[25] minqa_1.2.8         pillar_1.11.1       RColorBrewer_1.1-3 ", "[28] rlang_1.3.0         S7_0.2.2            viridisLite_0.4.3  ", "[31] plotly_4.12.1       cli_3.6.6           withr_3.0.3        ", "[34] magrittr_2.0.5      mgcv_1.9-4          Rdpack_2.6.6       ", "[37] digest_0.6.39       grid_4.6.1          lme4_2.0-6         ", "[40] lifecycle_1.0.5     nlme_3.1-170        reformulas_0.4.4   ", "[43] vctrs_0.7.3         glue_1.8.1          data.table_1.18.2.1", "[46] farver_2.1.2        purrr_1.2.2         httr_1.4.8         ", "[49] htmltools_0.5.9     tools_4.6.1         pkgconfig_2.0.3    "]
+}

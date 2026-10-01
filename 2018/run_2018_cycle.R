@@ -99,6 +99,23 @@ m0_grid <- data.table::CJ(
   w_min = 13L, w_max = 26L, K_dp = 3L, dp_thr = 0.01,
   sorted = FALSE
 )
+m1_grid <- NULL
+if (identical(Sys.getenv("PAGE_M1_GRID_PROFILE"), "expanded_slope_lower")) {
+  # Recovery profile for a governed lower-edge slope winner.  Include zero
+  # and the adjacent lower step so a non-null winner at 4 or 8 is bracketed;
+  # the current default grid remains unchanged for the initial attempt.
+  m1_grid <- tidyr::crossing(
+    k_ref             = c(20L, 25L, 30L, 40L, 50L),
+    multi_temperature = 0.25,
+    template_shift    = 0L,
+    align_rise_weight = 1.0,
+    slope_window      = 6L,
+    slope_weight      = c(0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 30.0)
+  )
+}
+if (is.null(m1_grid)) {
+  m1_grid <- PAGe::default_m1_grid()
+}
 saveRDS(selection, file.path(artifact_dir, "season_selection.rds"))
 saveRDS(
   list(
@@ -111,7 +128,9 @@ saveRDS(
     exclude_seasons = permanent_exclusions,
     holdout_seasons = holdout_season,
     application_seasons = character(0),
-    n_cores = parallel::detectCores(), m0_grid_n = nrow(m0_grid)
+    n_cores = parallel::detectCores(), m0_grid_n = nrow(m0_grid),
+    m1_grid_n = nrow(m1_grid),
+    m1_grid_profile = Sys.getenv("PAGE_M1_GRID_PROFILE", "default")
   ),
   file.path(artifact_dir, "run_manifest.rds")
 )
@@ -122,6 +141,7 @@ result <- PAGe::train_pipeline(
   allD = allD, mode = "retune", prospective_holdout = holdout_season,
   loso_seasons = training_seasons, exclude = permanent_exclusions,
   m0_grid = m0_grid,
+  m1_grid = m1_grid,
   selection_method = "min_nll", racing = FALSE,
   n_cores = parallel::detectCores(), checkpoint_dir = checkpoint_dir,
   verbose = TRUE

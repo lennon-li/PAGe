@@ -1,0 +1,728 @@
+{
+  "2012-13": {
+    "season": "2012-13",
+    "status": "unseen_replay_complete",
+    "ignition_week": 18,
+    "reference_ignition": 18,
+    "metrics": [
+      {
+        "window": "full",
+        "n": 67,
+        "trials": 96481,
+        "nll": 0.38469647549807512,
+        "mae": 0.045065507457649298,
+        "aggregate_positivity_mse": 0.0041094387754964865,
+        "bernoulli_brier": 0.12185277415670673
+      },
+      {
+        "window": "h2_0_12",
+        "n": 13,
+        "trials": 27623,
+        "nll": 0.55950630862607242,
+        "mae": 0.07830560778412568,
+        "aggregate_positivity_mse": 0.0089609869221201274,
+        "bernoulli_brier": 0.18644755946273397
+      },
+      {
+        "window": "h1_0_12",
+        "n": 13,
+        "trials": 26859,
+        "nll": 0.54857356599353413,
+        "mae": 0.065299590714740272,
+        "aggregate_positivity_mse": 0.0052863879453119164,
+        "bernoulli_brier": 0.18287832027589526
+      },
+      {
+        "window": "h2_full",
+        "n": 33,
+        "trials": 47954,
+        "nll": 0.38888092506246563,
+        "mae": 0.04952499364185748,
+        "aggregate_positivity_mse": 0.0052379303710967055,
+        "bernoulli_brier": 0.1234070401248382
+      }
+    ],
+    "comparison": {
+      "summary": [
+        {
+          "n_matched": 67,
+          "mean_delta": -1.0224381885874116e-06,
+          "max_abs_delta": 0.00020921417426833511
+        }
+      ],
+      "counts": {
+        "new_only": 0,
+        "old_only": 0
+      }
+    },
+    "ledger": {
+      "not_emitted": 34,
+      "scored": 67,
+      "target_unavailable": 3
+    },
+    "kit_sha256": "c50da9164d740f83772fbda59b491269e67bf6d1e66ee080b3a1f18e1c6646c6",
+    "archive_run": "2012-13-current-api-20260901",
+    "elapsed_seconds": 183.21544909477234,
+    "warnings": []
+  },
+  "2013-14": {
+    "season": "2013-14",
+    "status": "unseen_replay_complete",
+    "ignition_week": 20,
+    "reference_ignition": 20,
+    "metrics": [
+      {
+        "window": "full",
+        "n": 63,
+        "trials": 98664,
+        "nll": 0.3013119181987472,
+        "mae": 0.038508320677765259,
+        "aggregate_positivity_mse": 0.0032377853359871912,
+        "bernoulli_brier": 0.088920252190880261
+      },
+      {
+        "window": "h2_0_12",
+        "n": 13,
+        "trials": 25732,
+        "nll": 0.47835664298321973,
+        "mae": 0.069322344810612752,
+        "aggregate_positivity_mse": 0.0069729230239319838,
+        "bernoulli_brier": 0.14973038863862129
+      },
+      {
+        "window": "h1_0_12",
+        "n": 13,
+        "trials": 24901,
+        "nll": 0.47321514015232158,
+        "mae": 0.060439432813587095,
+        "aggregate_positivity_mse": 0.0053085331753527174,
+        "bernoulli_brier": 0.14997507573588506
+      },
+      {
+        "window": "h2_full",
+        "n": 31,
+        "trials": 48849,
+        "nll": 0.30603598172446067,
+        "mae": 0.042041482431073883,
+        "aggregate_positivity_mse": 0.0037620412895545486,
+        "bernoulli_brier": 0.090061889073734247
+      }
+    ],
+    "comparison": {
+      "summary": [
+        {
+          "n_matched": 63,
+          "mean_delta": 1.9809923224489267e-06,
+          "max_abs_delta": 3.2702757105818048e-05
+        }
+      ],
+      "counts": {
+        "new_only": 0,
+        "old_only": 0
+      }
+    },
+    "ledger": {
+      "not_emitted": 38,
+      "scored": 63,
+      "target_unavailable": 3
+    },
+    "kit_sha256": "114ffda1f8044b27e33b34a818c25b3501811462aae0203bec5051a05270e074",
+    "archive_run": "2013-14-current-api-20260901",
+    "elapsed_seconds": 187.39666628837585,
+    "warnings": []
+  },
+  "2014-15": {
+    "season": "2014-15",
+    "status": "unseen_replay_complete",
+    "ignition_week": 20,
+    "reference_ignition": 20,
+    "metrics": [
+      {
+        "window": "full",
+        "n": 65,
+        "trials": 120892,
+        "nll": 0.41958343547487498,
+        "mae": 0.033628741831405774,
+        "aggregate_positivity_mse": 0.0027436053624745843,
+        "bernoulli_brier": 0.13539030806977001
+      },
+      {
+        "window": "h2_0_12",
+        "n": 13,
+        "trials": 36259,
+        "nll": 0.57837916332864603,
+        "mae": 0.05538798856505673,
+        "aggregate_positivity_mse": 0.0053985756607943568,
+        "bernoulli_brier": 0.1941074200758186
+      },
+      {
+        "window": "h1_0_12",
+        "n": 13,
+        "trials": 35291,
+        "nll": 0.56106862128264445,
+        "mae": 0.041225941757828101,
+        "aggregate_positivity_mse": 0.0034785538261014647,
+        "bernoulli_brier": 0.18864057548488064
+      },
+      {
+        "window": "h2_full",
+        "n": 32,
+        "trials": 59827,
+        "nll": 0.42480272896857058,
+        "mae": 0.039097880674039361,
+        "aggregate_positivity_mse": 0.0034027168447221994,
+        "bernoulli_brier": 0.13712186538570156
+      }
+    ],
+    "comparison": {
+      "summary": [
+        {
+          "n_matched": 65,
+          "mean_delta": -0.00012581666869097185,
+          "max_abs_delta": 0.0082474371207757469
+        }
+      ],
+      "counts": {
+        "new_only": 0,
+        "old_only": 0
+      }
+    },
+    "ledger": {
+      "not_emitted": 38,
+      "scored": 65,
+      "target_unavailable": 3
+    },
+    "kit_sha256": "970f67a1dc973a659c7cb2fdf6b1daa805fb819869bb7a42ae728393a1b2d4c6",
+    "archive_run": "2014-15-current-api-20260902-r4",
+    "elapsed_seconds": 160.35976099967957,
+    "warnings": []
+  },
+  "2016-17": {
+    "season": "2016-17",
+    "status": "unseen_replay_complete",
+    "ignition_week": 19,
+    "reference_ignition": 19,
+    "metrics": [
+      {
+        "window": "full",
+        "n": 65,
+        "trials": 121734,
+        "nll": 0.39790564530581551,
+        "mae": 0.038081398075356321,
+        "aggregate_positivity_mse": 0.0028050070547932186,
+        "bernoulli_brier": 0.12508832474554527
+      },
+      {
+        "window": "h2_0_12",
+        "n": 13,
+        "trials": 34233,
+        "nll": 0.52266840369299128,
+        "mae": 0.066615470673897823,
+        "aggregate_positivity_mse": 0.0062230594773043813,
+        "bernoulli_brier": 0.17107265435903771
+      },
+      {
+        "window": "h1_0_12",
+        "n": 13,
+        "trials": 33088,
+        "nll": 0.49588212121385644,
+        "mae": 0.046866481999818035,
+        "aggregate_positivity_mse": 0.0032618016834528125,
+        "bernoulli_brier": 0.16149490776809353
+      },
+      {
+        "window": "h2_full",
+        "n": 32,
+        "trials": 60166,
+        "nll": 0.4038931382436512,
+        "mae": 0.044677178729994632,
+        "aggregate_positivity_mse": 0.0037414222386157217,
+        "bernoulli_brier": 0.12719755065935229
+      }
+    ],
+    "comparison": {
+      "summary": [
+        {
+          "n_matched": 65,
+          "mean_delta": 2.5986512135350432e-07,
+          "max_abs_delta": 5.4962755586657891e-05
+        }
+      ],
+      "counts": {
+        "new_only": 0,
+        "old_only": 0
+      }
+    },
+    "ledger": {
+      "not_emitted": 36,
+      "scored": 65,
+      "target_unavailable": 3
+    },
+    "kit_sha256": "0684be4810ddc77c6a481b507edd00148b9cf2863a21067bc8eeafb8d72f972d",
+    "archive_run": "2016-17-current-api-20260902-r4",
+    "elapsed_seconds": 158.61947822570801,
+    "warnings": []
+  },
+  "2017-18": {
+    "season": "2017-18",
+    "status": "unseen_replay_complete",
+    "ignition_week": 20,
+    "reference_ignition": 20,
+    "metrics": [
+      {
+        "window": "full",
+        "n": 63,
+        "trials": 111499,
+        "nll": 0.3376831789470367,
+        "mae": 0.019192311099262446,
+        "aggregate_positivity_mse": 0.00063604430484517471,
+        "bernoulli_brier": 0.09689571943722676
+      },
+      {
+        "window": "h2_0_12",
+        "n": 13,
+        "trials": 32065,
+        "nll": 0.3855305875094599,
+        "mae": 0.025293343384801999,
+        "aggregate_positivity_mse": 0.0010501673099518086,
+        "bernoulli_brier": 0.11274571431551181
+      },
+      {
+        "window": "h1_0_12",
+        "n": 13,
+        "trials": 30391,
+        "nll": 0.36684586178041334,
+        "mae": 0.018481468831157661,
+        "aggregate_positivity_mse": 0.00054189671885351875,
+        "bernoulli_brier": 0.10677573193982147
+      },
+      {
+        "window": "h2_full",
+        "n": 31,
+        "trials": 55147,
+        "nll": 0.34136701753793708,
+        "mae": 0.021994115102146643,
+        "aggregate_positivity_mse": 0.00082316814008707919,
+        "bernoulli_brier": 0.097929960184394024
+      }
+    ],
+    "comparison": {
+      "summary": [
+        {
+          "n_matched": 63,
+          "mean_delta": -1.1276845420979107e-05,
+          "max_abs_delta": 0.0022444180556279864
+        }
+      ],
+      "counts": {
+        "new_only": 0,
+        "old_only": 0
+      }
+    },
+    "ledger": {
+      "not_emitted": 38,
+      "scored": 63,
+      "target_unavailable": 3
+    },
+    "kit_sha256": "1030d47fb2e791476f6fe8073d353e3bc0eefb792ce32b561e0fcb5c6a0b5bd9",
+    "archive_run": "2017-18-current-api-20260902-r3",
+    "elapsed_seconds": 143.94506287574768,
+    "warnings": []
+  },
+  "2018-19": {
+    "season": "2018-19",
+    "status": "unseen_replay_complete",
+    "ignition_week": 19,
+    "reference_ignition": 19,
+    "metrics": [
+      {
+        "window": "full",
+        "n": 65,
+        "trials": 102952,
+        "nll": 0.35882804573728311,
+        "mae": 0.026304968736456491,
+        "aggregate_positivity_mse": 0.00095706736520520508,
+        "bernoulli_brier": 0.10488771596993551
+      },
+      {
+        "window": "h2_0_12",
+        "n": 13,
+        "trials": 26301,
+        "nll": 0.40628753594114586,
+        "mae": 0.032894992125994178,
+        "aggregate_positivity_mse": 0.0013836873699821979,
+        "bernoulli_brier": 0.12116663458528291
+      },
+      {
+        "window": "h1_0_12",
+        "n": 13,
+        "trials": 25559,
+        "nll": 0.38331118912285528,
+        "mae": 0.026736234982575203,
+        "aggregate_positivity_mse": 0.0009532271965134178,
+        "bernoulli_brier": 0.11371391338207147
+      },
+      {
+        "window": "h2_full",
+        "n": 32,
+        "trials": 50827,
+        "nll": 0.36326120793831779,
+        "mae": 0.029214878939594464,
+        "aggregate_positivity_mse": 0.0011430757286181557,
+        "bernoulli_brier": 0.10616906481694126
+      }
+    ],
+    "comparison": {
+      "summary": [
+        {
+          "n_matched": 65,
+          "mean_delta": 4.2972735489802235e-06,
+          "max_abs_delta": 0.00012526144181304252
+        }
+      ],
+      "counts": {
+        "new_only": 0,
+        "old_only": 0
+      }
+    },
+    "ledger": {
+      "not_emitted": 36,
+      "scored": 65,
+      "target_unavailable": 3
+    },
+    "kit_sha256": "e62def57e82d1f851b96c499303796fe8ef2cb54e500de7ad96d28284709ab89",
+    "archive_run": "2018-19-current-api-20260902-r3",
+    "elapsed_seconds": 153.5012092590332,
+    "warnings": []
+  },
+  "2019-20": {
+    "season": "2019-20",
+    "status": "unseen_replay_complete",
+    "ignition_week": 22,
+    "reference_ignition": 22,
+    "metrics": [
+      {
+        "window": "full",
+        "n": 59,
+        "trials": 177596,
+        "nll": 0.21392160054360743,
+        "mae": 0.021928076203575408,
+        "aggregate_positivity_mse": 0.0011930027899884868,
+        "bernoulli_brier": 0.061588397656699156
+      },
+      {
+        "window": "h2_0_12",
+        "n": 13,
+        "trials": 40768,
+        "nll": 0.41088419614675864,
+        "mae": 0.041293401454700743,
+        "aggregate_positivity_mse": 0.002699867206756123,
+        "bernoulli_brier": 0.12376159564291932
+      },
+      {
+        "window": "h1_0_12",
+        "n": 13,
+        "trials": 39299,
+        "nll": 0.41067323157331415,
+        "mae": 0.033878361792425746,
+        "aggregate_positivity_mse": 0.0022943345605196848,
+        "bernoulli_brier": 0.12422364162272033
+      },
+      {
+        "window": "h2_full",
+        "n": 29,
+        "trials": 87760,
+        "nll": 0.21520768198981954,
+        "mae": 0.024410501226698456,
+        "aggregate_positivity_mse": 0.0013285491879257841,
+        "bernoulli_brier": 0.061952956989576029
+      }
+    ],
+    "comparison": {
+      "summary": [
+        {
+          "n_matched": 59,
+          "mean_delta": -9.3419762483520056e-06,
+          "max_abs_delta": 0.00032816990634039543
+        }
+      ],
+      "counts": {
+        "new_only": 0,
+        "old_only": 0
+      }
+    },
+    "ledger": {
+      "not_emitted": 42,
+      "scored": 59,
+      "target_unavailable": 3
+    },
+    "kit_sha256": "0a9786f14e5b864780d7c16a3f08d6fc8d8e10e34c3fc0bbd778c3e73dc7f1d7",
+    "archive_run": "2019-20-current-api-20260902-r3",
+    "elapsed_seconds": 157.62279272079468,
+    "warnings": []
+  },
+  "2022-23": {
+    "season": "2022-23",
+    "status": "unseen_replay_complete",
+    "ignition_week": 15,
+    "reference_ignition": 15,
+    "metrics": [
+      {
+        "window": "full",
+        "n": 73,
+        "trials": 779847,
+        "nll": 0.17309295370668487,
+        "mae": 0.019565852404561251,
+        "aggregate_positivity_mse": 0.0010693042174661094,
+        "bernoulli_brier": 0.048626513460079193
+      },
+      {
+        "window": "h2_0_12",
+        "n": 13,
+        "trials": 180698,
+        "nll": 0.34134923966505171,
+        "mae": 0.046962826984104845,
+        "aggregate_positivity_mse": 0.0029463836772344416,
+        "bernoulli_brier": 0.099881217538034722
+      },
+      {
+        "window": "h1_0_12",
+        "n": 13,
+        "trials": 176270,
+        "nll": 0.34981608627522243,
+        "mae": 0.033486653479164796,
+        "aggregate_positivity_mse": 0.0016954783075886853,
+        "bernoulli_brier": 0.10282857643124177
+      },
+      {
+        "window": "h2_full",
+        "n": 36,
+        "trials": 385863,
+        "nll": 0.17424447118979491,
+        "mae": 0.023093974021658619,
+        "aggregate_positivity_mse": 0.0013829088292615886,
+        "bernoulli_brier": 0.048910564211294187
+      }
+    ],
+    "comparison": {
+      "summary": [
+        {
+          "n_matched": 73,
+          "mean_delta": 2.5580940591921281e-06,
+          "max_abs_delta": 4.5996443486906458e-05
+        }
+      ],
+      "counts": {
+        "new_only": 0,
+        "old_only": 0
+      }
+    },
+    "ledger": {
+      "not_emitted": 28,
+      "scored": 73,
+      "target_unavailable": 3
+    },
+    "kit_sha256": "af0e2fbff6c1f2e67b2a6b459e65756ad83d40fbf37c69f8611817a6b0ac23e3",
+    "archive_run": "2022-23-current-api-20260902-r3",
+    "elapsed_seconds": 234.72797918319702,
+    "warnings": []
+  },
+  "2023-24": {
+    "season": "2023-24",
+    "status": "unseen_replay_complete",
+    "ignition_week": 21,
+    "reference_ignition": 20,
+    "metrics": [
+      {
+        "window": "full",
+        "n": 61,
+        "trials": 668467,
+        "nll": 0.23039510110822656,
+        "mae": 0.022673019684130581,
+        "aggregate_positivity_mse": 0.0012471953149982811,
+        "bernoulli_brier": 0.061136132705841402
+      },
+      {
+        "window": "h2_0_12",
+        "n": 13,
+        "trials": 175849,
+        "nll": 0.35061625377440037,
+        "mae": 0.045717930631372562,
+        "aggregate_positivity_mse": 0.0032839347215446449,
+        "bernoulli_brier": 0.097519873291185485
+      },
+      {
+        "window": "h1_0_12",
+        "n": 13,
+        "trials": 176799,
+        "nll": 0.3364274395965004,
+        "mae": 0.027995450231358261,
+        "aggregate_positivity_mse": 0.0013369866487001937,
+        "bernoulli_brier": 0.094194992535021366
+      },
+      {
+        "window": "h2_full",
+        "n": 30,
+        "trials": 327913,
+        "nll": 0.23375271460793798,
+        "mae": 0.027711009066622171,
+        "aggregate_positivity_mse": 0.0017904560910838047,
+        "bernoulli_brier": 0.061940246110352842
+      }
+    ],
+    "comparison": {
+      "summary": [
+        {
+          "n_matched": 61,
+          "mean_delta": -9.8713546334954779e-09,
+          "max_abs_delta": 6.6068491792747874e-07
+        }
+      ],
+      "counts": {
+        "new_only": 0,
+        "old_only": 0
+      }
+    },
+    "ledger": {
+      "not_emitted": 40,
+      "scored": 61,
+      "target_unavailable": 3
+    },
+    "kit_sha256": "eb1445e78d142b390a2a54b96d8bd8fd7932501705550a530da6f78604e82709",
+    "archive_run": "2023-24-current-api-20260902-r3",
+    "elapsed_seconds": 148.33956050872803,
+    "warnings": []
+  },
+  "2024-25": {
+    "season": "2024-25",
+    "status": "unseen_replay_complete",
+    "ignition_week": 23,
+    "reference_ignition": 23,
+    "metrics": [
+      {
+        "window": "full",
+        "n": 57,
+        "trials": 623357,
+        "nll": 0.33628570285657117,
+        "mae": 0.026721742531592627,
+        "aggregate_positivity_mse": 0.001803028313900037,
+        "bernoulli_brier": 0.10067652713769748
+      },
+      {
+        "window": "h2_0_12",
+        "n": 13,
+        "trials": 179071,
+        "nll": 0.47243128171096643,
+        "mae": 0.047508225855299444,
+        "aggregate_positivity_mse": 0.003569117216368049,
+        "bernoulli_brier": 0.1475812446616796
+      },
+      {
+        "window": "h1_0_12",
+        "n": 13,
+        "trials": 178931,
+        "nll": 0.45295401021883419,
+        "mae": 0.039383771345411989,
+        "aggregate_positivity_mse": 0.0026607016003990088,
+        "bernoulli_brier": 0.14133278909638375
+      },
+      {
+        "window": "h2_full",
+        "n": 28,
+        "trials": 305808,
+        "nll": 0.34041055100768242,
+        "mae": 0.029343455950224064,
+        "aggregate_positivity_mse": 0.0020980174353907961,
+        "bernoulli_brier": 0.10202726004993298
+      }
+    ],
+    "comparison": {
+      "summary": [
+        {
+          "n_matched": 57,
+          "mean_delta": -3.8150436499180653e-06,
+          "max_abs_delta": 0.0001740139369329069
+        }
+      ],
+      "counts": {
+        "new_only": 0,
+        "old_only": 0
+      }
+    },
+    "ledger": {
+      "not_emitted": 44,
+      "scored": 57,
+      "target_unavailable": 3
+    },
+    "kit_sha256": "4df0d94e72962ec2e52808ea6f77ec98c3a3fb016061ea7e5a054511d8a25b52",
+    "archive_run": "2024-25-current-api-20260902-r3",
+    "elapsed_seconds": 148.29714584350586,
+    "warnings": []
+  },
+  "2025-26": {
+    "season": "2025-26",
+    "status": "unseen_replay_complete",
+    "ignition_week": 19,
+    "reference_ignition": 19,
+    "metrics": [
+      {
+        "window": "full",
+        "n": 17,
+        "trials": 254858,
+        "nll": 0.56355192304198276,
+        "mae": 0.065552595912681214,
+        "aggregate_positivity_mse": 0.0066717856951544153,
+        "bernoulli_brier": 0.18899942472785353
+      },
+      {
+        "window": "h2_0_12",
+        "n": 8,
+        "trials": 122859,
+        "nll": 0.58502199471200822,
+        "mae": 0.085408308713333492,
+        "aggregate_positivity_mse": 0.010375915475537845,
+        "bernoulli_brier": 0.19728563686728362
+      },
+      {
+        "window": "h1_0_12",
+        "n": 9,
+        "trials": 131999,
+        "nll": 0.54356850244555677,
+        "mae": 0.047071751217074909,
+        "aggregate_positivity_mse": 0.0032241407835404815,
+        "bernoulli_brier": 0.1812869743514246
+      },
+      {
+        "window": "h2_full",
+        "n": 8,
+        "trials": 122859,
+        "nll": 0.58502199471200822,
+        "mae": 0.085408308713333492,
+        "aggregate_positivity_mse": 0.010375915475537845,
+        "bernoulli_brier": 0.19728563686728362
+      }
+    ],
+    "comparison": {
+      "summary": [
+        {
+          "n_matched": 17,
+          "mean_delta": -4.3266312904265545e-07,
+          "max_abs_delta": 4.8316016696414721e-06
+        }
+      ],
+      "counts": {
+        "new_only": 0,
+        "old_only": 0
+      }
+    },
+    "ledger": {
+      "not_emitted": 20,
+      "scored": 17,
+      "target_unavailable": 3
+    },
+    "kit_sha256": "1889cdcf5863563a51c76e4123191d452d695ed535f07ec16364ef68d32846ee",
+    "archive_run": "2025-26-current-api-20260902-r3",
+    "elapsed_seconds": 58.237785339355469,
+    "warnings": []
+  }
+}

@@ -1,0 +1,4 @@
+# Private rows and fitted objects are never publication artifacts.
+*.csv
+*.rds
+*.log

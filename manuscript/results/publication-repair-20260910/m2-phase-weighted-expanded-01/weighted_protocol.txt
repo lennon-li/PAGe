@@ -1,0 +1,12 @@
+M2 phase-weighted development run
+
+Primary development score: equal-season mean of equal-week Bernoulli cross-entropy.
+Within each season, target weeks with 0 <= target t_since <= 12 receive weight 2;
+later post-ignition target weeks receive weight 1. Both horizons are scored,
+with h2 retained as the primary reporting horizon and h1 secondary.
+
+Sensitivity: the same phase weights multiplied by target test count N_lead.
+The all-off candidate is the exact M1 offset and is retained in every fold.
+Existing unweighted/test-weighted artifacts were not overwritten.
+These are development and sensitivity results after prior outcome access;
+they do not replace the frozen confirmatory protocol retrospectively.

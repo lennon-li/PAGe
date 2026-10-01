@@ -1,0 +1,4 @@
+# Only aggregate summaries and provenance belong in publication artifacts.
+private/
+**/private/
+jobs/
