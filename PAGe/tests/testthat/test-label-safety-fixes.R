@@ -41,7 +41,7 @@ test_that("flagIgnition without manual_labels runs algorithmic detection", {
 })
 
 test_that("flagIgnition with page_manual_ignition_labels() bypasses detection", {
-  labels <- PAGe::page_manual_ignition_labels()
+  labels <- PAGe:::page_manual_ignition_labels()
   season <- "2023-24"
   expect_true(season %in% names(labels),
     label = "Item 5.2: 2023-24 should be in the historical labels")
@@ -60,7 +60,7 @@ test_that("flagIgnition with page_manual_ignition_labels() bypasses detection", 
 test_that("page_manual_ignition_labels is exported and returns named integers", {
   expect_true("page_manual_ignition_labels" %in% getNamespaceExports("PAGe"),
     label = "Item 5.2: accessor should be exported")
-  labs <- PAGe::page_manual_ignition_labels()
+  labs <- PAGe:::page_manual_ignition_labels()
   expect_type(labs, "integer")
   expect_true(!is.null(names(labs)))
   expect_true(length(labs) >= 8L,

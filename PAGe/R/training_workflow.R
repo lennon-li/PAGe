@@ -193,7 +193,6 @@ print.page_ignition_label_set <- function(x, ...) {
 #' @param ... Additional named arguments passed to [train_pipeline()].
 #'
 #' @return A `page_training_workflow` with labels, training result, and frozen kit.
-#' @export
 page_train_workflow <- function(
     data,
     labels = NULL,

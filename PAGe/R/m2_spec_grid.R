@@ -54,7 +54,6 @@
 #'   \item \code{spec$exclude_newseason} terms to exclude for new-season prediction
 #'   \item \code{spec$best_row} small data.frame for printing
 #' }
-#' @export
 stage2_make_spec <- function(
   delta = 0L,
   Kr = 3L,
@@ -342,7 +341,6 @@ expand_grid_specs <- function(
 #' @param trim_preign Logical; omit pre-ignition rows.
 #'
 #' @return A data.table with original columns plus derived feature columns.
-#' @export
 plot_stage2_joint_fit_by_season <- function(out_m1,
                                             feat_full,
                                             dat_raw = NULL,

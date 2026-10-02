@@ -7,7 +7,6 @@
 #' @inheritParams review_ignition_label
 #' @return An object of class \code{page_timing_review_v2}, retaining the
 #'   signals, candidate summaries, plot, and data provenance.
-#' @export
 review_season_timing_v2 <- function(data,
                                     season = NULL,
                                     smooth_window = 3L,
@@ -50,7 +49,6 @@ review_season_timing_v2 <- function(data,
 #' @param note Optional free-text rationale for the labels.
 #' @return An object of class \code{page_season_timing_v2} containing normalized
 #'   labels, scoring references, evidence rows, and review provenance.
-#' @export
 finalize_season_timing_v2 <- function(review, ignition, peak,
                                       n_weeks = NULL, calendar = NULL,
                                       annotator = NULL, note = NULL) {
@@ -118,7 +116,6 @@ finalize_season_timing_v2 <- function(review, ignition, peak,
 #' @return A new data frame with legacy integer \code{iWeek}, numeric
 #' \code{iWeekF}, \code{phase}, numeric \code{newWeek}, and observed
 #' \code{peak_weekF}, plus timing evidence attributes.
-#' @export
 apply_timing_labels_v2 <- function(data, labels, anchor_week = NULL,
                                    n_weeks_col = NULL, require_all = TRUE) {
   objects <- .timing_v2_as_objects(labels)

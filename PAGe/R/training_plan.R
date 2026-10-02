@@ -25,7 +25,6 @@
 #'
 #' @return A \code{page_training_plan} containing season selection, grids,
 #'   support audit, cap policy, and resource estimates.
-#' @export
 plan_training <- function(
   allD,
   mode = c("refresh", "retune"),

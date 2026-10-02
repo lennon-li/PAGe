@@ -36,5 +36,5 @@ test_that("public smoke workflow releases 2025-26 only after acceptance", {
   )
   expect_true(file.exists(result$promotion$promoted_kit_path))
   expect_true(file.exists(result$promotion$manifest_json_path))
-  expect_identical(PAGe::validate_page_kit(result$loaded_kit), result$loaded_kit)
+  expect_identical(PAGe::page_validate_kit(result$loaded_kit), result$loaded_kit)
 })

@@ -680,7 +680,6 @@ nested_loso_refit_best <- function(alignedD_prosp,
 #'
 #' @return A ggplot object.
 #'
-#' @export
 plot_nested_loso_predictions <- function(cv_result,
                                          dat_raw = NULL,
                                          y_max   = 0.5,

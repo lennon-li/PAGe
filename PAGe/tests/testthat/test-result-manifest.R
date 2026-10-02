@@ -1,5 +1,5 @@
 test_that("a disclosure-safe result manifest validates", {
-  manifest <- PAGe::new_result_manifest(
+  manifest <- PAGe:::new_result_manifest(
     artifact_role = "evaluation_summary",
     classification = "disclosure_safe",
     code_commit = "ab3aeb6",
@@ -22,11 +22,11 @@ test_that("a disclosure-safe result manifest validates", {
   expect_s3_class(manifest, "page_result_manifest")
   expect_identical(manifest$schema, "page_result_manifest")
   expect_identical(manifest$schema_version, 1L)
-  expect_true(PAGe::validate_result_manifest(manifest))
+  expect_true(PAGe:::validate_result_manifest(manifest))
 })
 
 test_that("result manifests fail precisely for required provenance fields", {
-  manifest <- PAGe::new_result_manifest(
+  manifest <- PAGe:::new_result_manifest(
     artifact_role = "evaluation_summary",
     classification = "disclosure_safe",
     code_commit = "ab3aeb6",
@@ -41,11 +41,11 @@ test_that("result manifests fail precisely for required provenance fields", {
   )
   manifest$provenance$code_commit <- NULL
 
-  expect_error(PAGe::validate_result_manifest(manifest), "code_commit")
+  expect_error(PAGe:::validate_result_manifest(manifest), "code_commit")
 })
 
 test_that("result manifests reject invalid hashes and row-level payloads", {
-  manifest <- PAGe::new_result_manifest(
+  manifest <- PAGe:::new_result_manifest(
     artifact_role = "evaluation_summary",
     classification = "disclosure_safe",
     code_commit = "ab3aeb6",
@@ -59,11 +59,11 @@ test_that("result manifests reject invalid hashes and row-level payloads", {
     fold_ids = "fold_2025-26", evaluation_seasons = "2025-26"
   )
   manifest$provenance$source_artifact_hashes[[1L]] <- "not-a-hash"
-  expect_error(PAGe::validate_result_manifest(manifest), "SHA-256")
+  expect_error(PAGe:::validate_result_manifest(manifest), "SHA-256")
 
   manifest$provenance$source_artifact_hashes[[1L]] <- paste(rep("b", 64L), collapse = "")
   manifest$predictions <- data.frame(p_hat = 0.2)
-  expect_error(PAGe::validate_result_manifest(manifest), "row-level")
+  expect_error(PAGe:::validate_result_manifest(manifest), "row-level")
 })
 
 test_that("file hashing uses the SHA-256 digest and reports missing paths", {
@@ -72,8 +72,8 @@ test_that("file hashing uses the SHA-256 digest and reports missing paths", {
   withr::defer(unlink(path))
 
   expect_identical(
-    PAGe::hash_file_sha256(path),
+    PAGe:::hash_file_sha256(path),
     "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
   )
-  expect_error(PAGe::hash_file_sha256(paste0(path, "-missing")), "does not exist")
+  expect_error(PAGe:::hash_file_sha256(paste0(path, "-missing")), "does not exist")
 })

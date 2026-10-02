@@ -60,7 +60,7 @@ test_that("assemble_kit uses every locked M1 default and stores correction metad
     spec_version = "v16_fresh"
   )
 
-  kit <- PAGe::assemble_kit(m0, m1, m2_model)
+  kit <- PAGe:::assemble_kit(m0, m1, m2_model)
 
   expect_identical(kit$M1_PARAMS, PAGe:::.default_m1_params())
   expect_identical(

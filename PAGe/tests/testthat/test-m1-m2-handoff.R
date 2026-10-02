@@ -14,7 +14,7 @@ test_that("M1 Phase 1 handoff drops M1-only payloads", {
     )
   )
 
-  compact <- PAGe::compact_m1_cache_for_m2(full)
+  compact <- PAGe:::compact_m1_cache_for_m2(full)
   expect_named(compact, "2024-25")
   expect_named(
     compact[[1]]$fold,
@@ -67,7 +67,7 @@ test_that("M0 handoff retains only the inputs M1 consumes", {
     grid = data.frame(p_thr = c(0.01, 0.02))
   )
 
-  handoff <- PAGe::compact_m0_artifact_for_m1(m0)
+  handoff <- PAGe:::compact_m0_artifact_for_m1(m0)
   expect_named(
     handoff,
     c("aligned", "seasons_used", "best_params", "manual_labels", "flag_args", "data_id")
@@ -80,10 +80,10 @@ test_that("M0 handoff retains only the inputs M1 consumes", {
 
 test_that("M0 handoff derives seasons and permits legacy minimal inputs", {
   aligned <- data.frame(season = c("2023-24", "2024-25"))
-  derived <- PAGe::compact_m0_artifact_for_m1(list(aligned = aligned))
+  derived <- PAGe:::compact_m0_artifact_for_m1(list(aligned = aligned))
   expect_identical(derived$seasons_used, c("2023-24", "2024-25"))
 
-  minimal <- PAGe::compact_m0_artifact_for_m1(list(best_params = list(x = 1)))
+  minimal <- PAGe:::compact_m0_artifact_for_m1(list(best_params = list(x = 1)))
   expect_null(minimal$aligned)
   expect_identical(minimal$best_params, list(x = 1))
 })
@@ -111,7 +111,7 @@ test_that("build_m1 reuses a season-matched M0 alignment", {
     .package = "PAGe"
   )
 
-  out <- PAGe::build_m1(
+  out <- PAGe:::build_m1(
     allD = data.frame(
       season = aligned$season, weekF = aligned$newWeek,
       y = aligned$y, N = aligned$y + aligned$neg
@@ -143,11 +143,11 @@ test_that("compact handoff preserves the full fold anchorWeek chain", {
     as.integer(fold$anchorWeek %||% fold$ref$anchorWeek %||% 20L)
   }
 
-  from_ref <- PAGe::compact_m1_cache_for_m2(list(`2024-25` = list(fold = make_fold(ref_week = 17L))))
+  from_ref <- PAGe:::compact_m1_cache_for_m2(list(`2024-25` = list(fold = make_fold(ref_week = 17L))))
   expect_identical(from_ref$`2024-25`$fold$anchorWeek, 17L)
   expect_identical(resolve(from_ref$`2024-25`$fold), resolve(make_fold(ref_week = 17L)))
 
-  top_wins <- PAGe::compact_m1_cache_for_m2(
+  top_wins <- PAGe:::compact_m1_cache_for_m2(
     list(`2024-25` = list(fold = make_fold(top_level = 23L, ref_week = 17L)))
   )
   expect_identical(top_wins$`2024-25`$fold$anchorWeek, 23L)
@@ -156,15 +156,15 @@ test_that("compact handoff preserves the full fold anchorWeek chain", {
     resolve(make_fold(top_level = 23L, ref_week = 17L))
   )
 
-  fallback <- PAGe::compact_m1_cache_for_m2(list(`2024-25` = list(fold = make_fold())))
+  fallback <- PAGe:::compact_m1_cache_for_m2(list(`2024-25` = list(fold = make_fold())))
   expect_identical(fallback$`2024-25`$fold$anchorWeek, 20L)
 
-  coerced <- PAGe::compact_m1_cache_for_m2(
+  coerced <- PAGe:::compact_m1_cache_for_m2(
     list(`2024-25` = list(fold = make_fold(top_level = 18)))
   )
   expect_identical(coerced$`2024-25`$fold$anchorWeek, 18L)
 
-  no_train_seasons <- PAGe::compact_m1_cache_for_m2(
+  no_train_seasons <- PAGe:::compact_m1_cache_for_m2(
     list(`2024-25` = list(fold = make_fold(ref_week = 19L)[c(
       "ref", "aligned_train", "template_df", "test_season"
     )]))
@@ -175,19 +175,19 @@ test_that("compact handoff preserves the full fold anchorWeek chain", {
 
 test_that("compact handoff validates the M1 cache contract", {
   expect_error(
-    PAGe::compact_m1_cache_for_m2("not-a-cache"),
+    PAGe:::compact_m1_cache_for_m2("not-a-cache"),
     "must be a named list"
   )
   expect_error(
-    PAGe::compact_m1_cache_for_m2(list(list(fold = list(test_season = "s")))),
+    PAGe:::compact_m1_cache_for_m2(list(list(fold = list(test_season = "s")))),
     "non-empty fold names"
   )
   expect_error(
-    PAGe::compact_m1_cache_for_m2(list(`2024-25` = "not-a-list")),
+    PAGe:::compact_m1_cache_for_m2(list(`2024-25` = "not-a-list")),
     "must contain a `fold` list"
   )
   expect_error(
-    PAGe::compact_m1_cache_for_m2(list(`2024-25` = list(aligned_train = data.frame(x = 1)))),
+    PAGe:::compact_m1_cache_for_m2(list(`2024-25` = list(aligned_train = data.frame(x = 1)))),
     "must contain a `fold` list"
   )
   incomplete_fold <- list(
@@ -195,7 +195,7 @@ test_that("compact handoff validates the M1 cache contract", {
     template_df = data.frame(newWeek = 1L, fit = 0.1)
   )
   expect_error(
-    PAGe::compact_m1_cache_for_m2(list(`2024-25` = list(fold = incomplete_fold))),
+    PAGe:::compact_m1_cache_for_m2(list(`2024-25` = list(fold = incomplete_fold))),
     "missing required M2 input\\(s\\): test_season"
   )
 })
@@ -218,7 +218,7 @@ test_that("build_m2 validates the M1 artifact path and handoff contract", {
   )
 
   expect_error(
-    PAGe::build_m2(
+    PAGe:::build_m2(
       allD = allD, m0 = m0, m1 = m1, grid = grid,
       m1_artifact_path = "", verbose = FALSE
     ),
@@ -240,7 +240,7 @@ test_that("build_m2 validates the M1 artifact path and handoff contract", {
   )
   PAGe:::.write_m1_phase1_artifact(file.path(dir, "m1_phase1.rds"), identity, cache)
   expect_error(
-    PAGe::build_m2(
+    PAGe:::build_m2(
       allD = allD, m0 = m0, m1 = m1, loso_seasons = "2024-25",
       grid = grid, checkpoint_dir = dir, verbose = FALSE
     ),

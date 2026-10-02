@@ -353,7 +353,6 @@ m2_v2_c2_predict <- function(model, newdata) {
 #' @param interval_width_90 Optional 90 percent timing interval width.
 #' @param prob_peak_passed Optional posterior probability that the B peak has passed.
 #' @return A validated provisional type-B timing handoff list.
-#' @export
 new_m2_v2_b_soft_timing_handoff <- function(season, origin_week,
                                              peak_mean = NA_real_,
                                              timing_available = is.finite(peak_mean),

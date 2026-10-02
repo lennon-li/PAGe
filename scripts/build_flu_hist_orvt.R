@@ -216,7 +216,7 @@ if (sys.nframe() == 0L) {
   if (!file.exists(input_path)) stop("Existing private CSV not found: ", input_path, call. = FALSE)
 
   if (requireNamespace("PAGe", quietly = TRUE)) {
-    get_current <- PAGe::getCurrentD
+    get_current <- PAGe:::getCurrentD
     cal <- PAGe::page_season_calendar
   } else {
     source("PAGe/R/season_calendar.R", local = TRUE)

@@ -1,5 +1,5 @@
 test_that("page-v2 scoring resolves defaults, fractional edges, and completed seasons", {
-  weights <- PAGe::page_scoring_weights()
+  weights <- PAGe:::page_scoring_weights()
   expect_equal(
     weights[c("pre_ignition", "rise", "turning", "decline")],
     list(pre_ignition = 0, rise = 2, turning = 3, decline = 1)
@@ -9,7 +9,7 @@ test_that("page-v2 scoring resolves defaults, fractional edges, and completed se
     ignition_weekF = 10, observed_peak_weekF = 30,
     stringsAsFactors = FALSE
   )
-  scored <- PAGe::page_phase_weights(rows, weights)
+  scored <- PAGe:::page_phase_weights(rows, weights)
   expect_equal(
     scored$phase,
     c("pre_ignition", "rise", "rise", "turning", "turning", "decline")
@@ -22,7 +22,7 @@ test_that("page-v2 scoring resolves defaults, fractional edges, and completed se
     ignition_weekF = 10.5, observed_peak_weekF = 30.25
   )
   expect_equal(
-    PAGe::page_phase_weights(fractional, weights)$phase,
+    PAGe:::page_phase_weights(fractional, weights)$phase,
     c("rise", "turning", "turning", "decline")
   )
 
@@ -99,7 +99,7 @@ test_that("tau is origin-time capped and confidence scaling is explicit", {
   expect_equal(row$confidence_scale, .5)
   expect_false(row$confidence_scale_missing)
 
-  grid <- PAGe::m2_subset_grid()
+  grid <- PAGe:::m2_subset_grid()
   expect_equal(nrow(grid), 686L)
   expect_true(any(grid$enabled_count == 0L))
   stage_b <- PAGe:::.m2_subset_stage_b_grid(

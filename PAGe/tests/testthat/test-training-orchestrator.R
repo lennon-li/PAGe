@@ -1,6 +1,6 @@
 test_that("the initial M2 plan is bounded, deterministic, and contains the current incumbent", {
-  first <- PAGe::plan_m2_grid(max_specs = 24L)
-  second <- PAGe::plan_m2_grid(max_specs = 24L)
+  first <- PAGe:::plan_m2_grid(max_specs = 24L)
+  second <- PAGe:::plan_m2_grid(max_specs = 24L)
 
   expect_identical(first, second)
   expect_lte(nrow(first), 24L)
@@ -19,7 +19,7 @@ test_that("the initial M2 plan is bounded, deterministic, and contains the curre
 })
 
 test_that("the default M2 gain caps cover every tuned parameter", {
-  caps <- PAGe::default_m2_nll_gain_caps()
+  caps <- PAGe:::default_m2_nll_gain_caps()
   expect_named(caps, c(
     "delta", "Kr", "k_f", "k_e", "alpha_state",
     "k_r", "k_de", "k_sp", "bias_alpha", "bias_beta",
@@ -49,7 +49,7 @@ test_that("the adaptive M2 plan retains diverse finalists and expands boundaries
   )
   previous <- list(grid = prior_grid, summary = prior_summary)
 
-  planned <- PAGe::plan_m2_grid(
+  planned <- PAGe:::plan_m2_grid(
     previous_results = previous,
     max_finalists = 3L,
     max_specs = 30L
@@ -143,7 +143,7 @@ test_that("refresh training uses a compatible prior best and skips tuning", {
     .package = "PAGe"
   )
 
-  result <- PAGe::train_pipeline(
+  result <- PAGe:::train_pipeline(
     workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L)),
     mode = "refresh",
     previous_results = list(best_spec = prior_spec),
@@ -172,7 +172,7 @@ test_that("refresh training uses a compatible prior best and skips tuning", {
     )
   )
   expect_error(
-    PAGe::train_pipeline(
+    PAGe:::train_pipeline(
       workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L)),
       mode = "refresh", previous_results = list(best_spec = prior_spec),
       promotion = failed, n_cores = 1L, verbose = FALSE,
@@ -212,7 +212,7 @@ test_that("refresh falls back to locked v16 for an incompatible prior best", {
     .package = "PAGe"
   )
 
-  PAGe::train_pipeline(
+  PAGe:::train_pipeline(
     workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L)),
     mode = "refresh",
     previous_results = list(best_spec = list(k_f = 99L)),
@@ -396,7 +396,7 @@ test_that("retune training runs all tuning stages and fits the winning M2 spec",
 
   training_data <- workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L))
   evidence <- training_promotion_evidence(training_data, passing_promotion)
-  result <- PAGe::train_pipeline(
+  result <- PAGe:::train_pipeline(
     training_data,
     mode = "retune",
     promotion = NULL,
@@ -575,7 +575,7 @@ test_that("retune keeps the prospective holdout out of every stage by default", 
     .package = "PAGe"
   )
 
-  result <- PAGe::train_pipeline(
+  result <- PAGe:::train_pipeline(
     workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L)),
     mode = "retune", n_cores = 1L, verbose = FALSE,
     m2_family = "legacy", allow_legacy = TRUE,
@@ -592,7 +592,7 @@ test_that("retune keeps the prospective holdout out of every stage by default", 
 
 test_that("malformed promotion reports fail closed", {
   expect_error(
-    PAGe::train_pipeline(
+    PAGe:::train_pipeline(
       workflow_surveillance("2025-26", 1L),
       mode = "refresh",
       promotion = list(pass = TRUE), verbose = FALSE
@@ -686,12 +686,12 @@ test_that("promotion evidence verifies every bound artifact hash", {
   fixture <- training_promotion_fixture(allD, PAGe::check_promotion(candidate, incumbent))
   withr::defer(unlink(fixture$root, recursive = TRUE))
 
-  evidence <- do.call(PAGe::verify_promotion_evidence, fixture$args)
+  evidence <- do.call(PAGe:::verify_promotion_evidence, fixture$args)
   expect_s3_class(evidence, "page_verified_promotion_evidence")
 
   saveRDS(list(tampered = TRUE), fixture$args$candidate_path)
   expect_error(
-    do.call(PAGe::verify_promotion_evidence, fixture$args),
+    do.call(PAGe:::verify_promotion_evidence, fixture$args),
     "candidate.*SHA-256"
   )
 })
@@ -715,7 +715,7 @@ test_that("promotion evidence requires the supplied saved decision bundle", {
   fixture$args$bundle$report$pass <- FALSE
 
   expect_error(
-    do.call(PAGe::verify_promotion_evidence, fixture$args),
+    do.call(PAGe:::verify_promotion_evidence, fixture$args),
     "does not match the saved decision bundle"
   )
 })
@@ -736,7 +736,7 @@ test_that("post-acceptance retuning is rejected", {
   )
   fixture <- training_promotion_fixture(allD, report)
   withr::defer(unlink(fixture$root, recursive = TRUE))
-  evidence <- do.call(PAGe::verify_promotion_evidence, fixture$args)
+  evidence <- do.call(PAGe:::verify_promotion_evidence, fixture$args)
 
   tampered_evidence <- evidence
   tampered_evidence$candidate_config$best_spec$k_f <- 99L
@@ -746,7 +746,7 @@ test_that("post-acceptance retuning is rejected", {
   ))
 
   expect_error(
-    PAGe::train_pipeline(allD, mode = "retune", promotion = evidence, verbose = FALSE),
+    PAGe:::train_pipeline(allD, mode = "retune", promotion = evidence, verbose = FALSE),
     "Post-acceptance retuning is not permitted"
   )
 })
@@ -767,10 +767,10 @@ test_that("post-acceptance refresh derives its configuration from promotion evid
   )
   fixture <- training_promotion_fixture(allD, report)
   withr::defer(unlink(fixture$root, recursive = TRUE))
-  evidence <- do.call(PAGe::verify_promotion_evidence, fixture$args)
+  evidence <- do.call(PAGe:::verify_promotion_evidence, fixture$args)
 
   expect_error(
-    PAGe::train_pipeline(
+    PAGe:::train_pipeline(
       allD,
       mode = "refresh", promotion = evidence,
       m0_params = list(p_thr = 1), verbose = FALSE
@@ -778,7 +778,7 @@ test_that("post-acceptance refresh derives its configuration from promotion evid
     "do not supply component overrides"
   )
   expect_error(
-    PAGe::train_pipeline(
+    PAGe:::train_pipeline(
       allD,
       mode = "refresh", promotion = evidence,
       exclude = "2024-25", verbose = FALSE
@@ -809,7 +809,7 @@ test_that("promotion evidence verifies kit identity and pre-holdout training", {
   saveRDS(candidate, leaked$args$candidate_path)
   leaked <- training_rebind_fixture(leaked)
   expect_error(
-    do.call(PAGe::verify_promotion_evidence, leaked$args),
+    do.call(PAGe:::verify_promotion_evidence, leaked$args),
     "includes the holdout"
   )
 
@@ -820,7 +820,7 @@ test_that("promotion evidence verifies kit identity and pre-holdout training", {
   saveRDS(candidate, mismatched$args$candidate_path)
   mismatched <- training_rebind_fixture(mismatched)
   expect_error(
-    do.call(PAGe::verify_promotion_evidence, mismatched$args),
+    do.call(PAGe:::verify_promotion_evidence, mismatched$args),
     "spec identity"
   )
 })
@@ -851,12 +851,12 @@ test_that("legacy incumbent identity requires an explicit compatibility option",
   fixture <- training_rebind_fixture(fixture)
 
   expect_error(
-    do.call(PAGe::verify_promotion_evidence, fixture$args),
+    do.call(PAGe:::verify_promotion_evidence, fixture$args),
     "legacy `m2`"
   )
   fixture$args$kit_compatibility <- "legacy_m2"
   expect_warning(
-    evidence <- do.call(PAGe::verify_promotion_evidence, fixture$args),
+    evidence <- do.call(PAGe:::verify_promotion_evidence, fixture$args),
     "legacy `m2` identity"
   )
   expect_s3_class(evidence, "page_verified_promotion_evidence")
@@ -864,22 +864,22 @@ test_that("legacy incumbent identity requires an explicit compatibility option",
 
 test_that("retune exposes every approved final selection method", {
   expect_identical(
-    eval(formals(PAGe::train_pipeline)$selection_method),
+    eval(formals(PAGe:::train_pipeline)$selection_method),
     c("min_nll", "one_se", "pareto")
   )
-  expect_false(eval(formals(PAGe::train_pipeline)$racing))
-  expect_identical(eval(formals(PAGe::build_m2)$holdout_season), "2025-26")
-  expect_identical(eval(formals(PAGe::build_m2)$bias_alpha), 0.05)
-  expect_identical(eval(formals(PAGe::stage2_make_spec)$bias_alpha), 0.05)
+  expect_false(eval(formals(PAGe:::train_pipeline)$racing))
+  expect_identical(eval(formals(PAGe:::build_m2)$holdout_season), "2025-26")
+  expect_identical(eval(formals(PAGe:::build_m2)$bias_alpha), 0.05)
+  expect_identical(eval(formals(PAGe:::stage2_make_spec)$bias_alpha), 0.05)
 })
 
 test_that("malformed prior tuning objects fail clearly", {
   expect_error(
-    PAGe::plan_m2_grid(list(summary = data.frame(spec_id = "x"))),
+    PAGe:::plan_m2_grid(list(summary = data.frame(spec_id = "x"))),
     "both `summary` and `grid`"
   )
   expect_error(
-    PAGe::plan_m2_grid(list(summary = "bad", grid = data.frame())),
+    PAGe:::plan_m2_grid(list(summary = "bad", grid = data.frame())),
     "data frames"
   )
 })
@@ -929,7 +929,7 @@ test_that("refresh governed path produces frozen chain and governed kit", {
     .package = "PAGe"
   )
 
-  result <- PAGe::train_pipeline(
+  result <- PAGe:::train_pipeline(
     allD,
     mode = "refresh",
     prospective_holdout = "2025-26",
@@ -956,7 +956,7 @@ test_that("refresh governed path rejects overlapping season sets", {
   allD <- workflow_surveillance(c("2024-25", "2025-26"), c(1L, 1L))
 
   expect_error(
-    PAGe::train_pipeline(
+    PAGe:::train_pipeline(
       allD,
       mode = "refresh",
       exclude = "2024-25",
@@ -1085,7 +1085,7 @@ test_that("retune routes offset subset M2 through its governed branch", {
     .package = "PAGe"
   )
 
-  result <- PAGe::train_pipeline(
+  result <- PAGe:::train_pipeline(
     data.frame(season = "2024-25", weekF = 1L, y = 1L, N = 10L),
     mode = "retune", m2_family = "offset_subset_v1", prospective_holdout = NULL,
     n_cores = 1L, verbose = FALSE

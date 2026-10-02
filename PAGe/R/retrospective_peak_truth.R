@@ -10,7 +10,6 @@
 #' @param grid_step Decimal-week resolution used to locate the fitted maximum.
 #' @return A list containing the fitted model, continuous peak week, fitted
 #'   peak positivity, grid predictions, and provenance.
-#' @export
 retrospective_gam_peak_truth <- function(data, season = NULL, k = 8L, grid_step = 0.01) {
   if (!requireNamespace("mgcv", quietly = TRUE)) stop("Package `mgcv` is required.", call. = FALSE)
   d <- prepare_surveillance_data(data, season = if ("season" %in% names(data)) NULL else season)
@@ -45,7 +44,6 @@ retrospective_gam_peak_truth <- function(data, season = NULL, k = 8L, grid_step 
 }
 
 #' Audit peak-location sensitivity across simple GAM basis dimensions
-#' @export
 retrospective_gam_peak_sensitivity <- function(data, season = NULL, k_values = c(5L, 6L, 8L, 10L), grid_step = 0.01) {
   fits <- lapply(k_values, function(k) retrospective_gam_peak_truth(data, season = season, k = k, grid_step = grid_step))
   out <- data.frame(
@@ -70,7 +68,6 @@ retrospective_gam_peak_sensitivity <- function(data, season = NULL, k_values = c
 #' @param ambiguity_threshold Weeks of smoothing-sensitivity range above which
 #'   the peak is flagged ambiguous.
 #' @return One-row-per-season data frame.
-#' @export
 build_retrospective_peak_truth_v1 <- function(data, seasons = NULL, grid_step = 0.01,
                                               ambiguity_threshold = 1.0) {
   d <- prepare_surveillance_data(data)

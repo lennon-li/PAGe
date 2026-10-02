@@ -73,7 +73,7 @@
 }
 
 .page_prob_predictive_distribution <- function(forecast,type=c('A','B'),horizon=1L) {
-  if (!inherits(forecast,'page_v3_forecast')) stop('Expected page_v3_forecast.',call.=FALSE)
+  if (!inherits(forecast,'page_forecast')) stop('Expected page_forecast.',call.=FALSE)
   type <- match.arg(type); horizon <- as.integer(horizon)
   if (!horizon %in% c(1L,2L)) stop('Horizon must be 1 or 2.',call.=FALSE)
   if (!isTRUE(forecast$issued)) return(.page_prob_new(numeric(),'positivity_jeffreys_smoothed','proportion',c(0,1),status='unavailable',provenance=list(reason='forecast_not_issued')))
@@ -92,7 +92,7 @@
 }
 
 .page_prob_peak_posterior <- function(forecast,type) {
-  models <- page_v3_models(); origin <- as.integer(forecast$origin_weekF)
+  models <- page_models(); origin <- as.integer(forecast$origin_weekF)
   panel <- forecast$panel[forecast$panel$weekF<=origin,,drop=FALSE]
   if (identical(type,'A')) {
     m0 <- forecast$monitoring$A$m0
@@ -109,7 +109,7 @@
 }
 
 .page_prob_peak_distribution <- function(forecast,type=c('A','B')) {
-  if (!inherits(forecast,'page_v3_forecast')) stop('Expected page_v3_forecast.',call.=FALSE)
+  if (!inherits(forecast,'page_forecast')) stop('Expected page_forecast.',call.=FALSE)
   type <- match.arg(type)
   if (!isTRUE(forecast$issued)) return(.page_prob_new(numeric(),'season_peak_week','weekF',c(0,60),status='unavailable',provenance=list(reason='forecast_not_issued',type=type)))
   x <- .page_prob_peak_posterior(forecast,type)
@@ -130,7 +130,7 @@
 }
 
 .page_v3_probability_snapshot <- function(forecast) {
-  if (!inherits(forecast,'page_v3_forecast')) stop('Expected page_v3_forecast.',call.=FALSE)
+  if (!inherits(forecast,'page_forecast')) stop('Expected page_forecast.',call.=FALSE)
   positivity <- list()
   for (type in c('A','B')) for (h in 1:2) {
     d <- .page_prob_predictive_distribution(forecast,type,h)

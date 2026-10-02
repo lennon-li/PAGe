@@ -981,10 +981,10 @@ test_that("assemble_kit accepts a complete frozen governed chain", {
   expect_s3_class(kit$season_selection, "page_season_selection")
   expect_named(kit$stage_artifact_ids, c("m0", "m1", "m2"))
   expect_identical(season_selection(kit), m0$selection)
-  expect_silent(validate_page_kit(kit))
+  expect_silent(page_validate_kit(kit))
 
   kit$stage_artifact_ids[["m1"]] <- "tampered"
-  expect_error(validate_page_kit(kit), "governance|identity|integrity")
+  expect_error(page_validate_kit(kit), "governance|identity|integrity")
 })
 
 # ============================================================

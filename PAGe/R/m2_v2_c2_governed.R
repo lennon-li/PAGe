@@ -6,7 +6,6 @@
 #' Returns the immutable shadow-runtime contract for fixed C2 shrinkage, timing
 #' handoffs, B-gate policy, denominator metadata, and output fields.
 #' @return A versioned governed M2-v2 C2 contract list.
-#' @export
 m2_v2_c2_governed_contract <- function() {
   list(
     artifact_schema = "page-m2-v2-c2-governed-v1",
@@ -109,7 +108,6 @@ new_m2_v2_c2_governed_artifact <- function(research_fit, provenance,
 #'
 #' @param x Object produced by the governed M2-v2 C2 artifact builder.
 #' @return `x` invisibly when contract and deterministic identity checks pass.
-#' @export
 validate_m2_v2_c2_governed_artifact <- function(x) {
   if (!inherits(x, "page_m2_v2_c2_governed") ||
     !identical(x$contract, m2_v2_c2_governed_contract())) {
@@ -135,7 +133,6 @@ validate_m2_v2_c2_governed_artifact <- function(x) {
 #' gate policy version, a nonempty `review_id`, and `decision = "open"`.
 #' @param review_path Path to the immutable JSON review decision.
 #' @return A hash-bound B gate review object.
-#' @export
 new_m2_v2_b_gate_review <- function(review_path) {
   .m2_v2_c2_require_digest()
   if (!is.character(review_path) || length(review_path) != 1L ||
@@ -175,7 +172,6 @@ new_m2_v2_b_gate_review <- function(review_path) {
 #' @param b_handoff Optional type-B soft-timing handoff.
 #' @param b_gate_review Optional reviewed gate opening from new_m2_v2_b_gate_review().
 #' @return Governed output contract with prediction rows and provenance.
-#' @export
 run_m2_v2_c2_governed_runtime <- function(artifact, weekly_data, origin_week,
                                           a_handoff = NULL, b_handoff = NULL,
                                           b_gate_review = NULL) {

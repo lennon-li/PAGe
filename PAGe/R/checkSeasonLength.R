@@ -14,7 +14,6 @@
 #'
 #' @return A tibble with one row per season and columns `season`,
 #'   `start_week`, `end_week`, and `season_length_weeks`.
-#' @export
 checkSeasonLength<-function(dat,thresh= 0.05,inclusive  = F) {
 
 

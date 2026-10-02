@@ -195,7 +195,6 @@
 #'
 #' @return A \code{page_verified_promotion_evidence} object accepted by
 #'   \code{train_pipeline()} for holdout release.
-#' @export
 verify_promotion_evidence <- function(bundle,
                                       manifest,
                                       data_path,

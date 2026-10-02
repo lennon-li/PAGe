@@ -8,7 +8,7 @@ preregistration or an amendment to the frozen primary analysis.
 The 11-season replay results and the 2026-09-07 publication audit were already
 visible when this record was written. Sources are the
 [publication audit](PUBLICATION_AUDIT_2026-09-07.md),
-[manuscript runner](../scripts/run_manuscript_holdout.R), and the selection and
+[manuscript runner](scripts/run_manuscript_holdout.R), and the selection and
 scoring implementations identified below. This is a documentation repair, not
 a rerun, candidate reselection, or independent verification of historical
 training. Current source does not substitute for a hash-bound executed snapshot.

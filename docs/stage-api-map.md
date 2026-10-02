@@ -3,8 +3,7 @@
 **Status:** guarded stage contracts and high-level orchestration integration
 implemented; governed release evidence remains outstanding.
 
-PAGe exposes validated M0, M1, and M2 stage contracts and `train_pipeline()`
-now composes them for both refresh and retune modes. The compatibility result
+PAGe contains validated M0, M1, and M2 stage contracts internally. The supported external training entry point is `page_train()`, which composes the governed lifecycle for refresh and retune modes. The compatibility result
 shape is preserved by unwrapping governed payloads, while the assembled kit
 retains the frozen stage identities and season selection. Optional M2 racing
 routes its full evaluator through governed `tune_m2()`.
@@ -27,12 +26,11 @@ data, so those checks are explicitly marked `deferred` until the data exists.
    artifact until it passes its stage gate.
 4. M0/M1/M2 specifications and tuning methodology remain unchanged. This work
    makes their inputs, outputs, and failure states explicit.
-5. Existing exports remain available as compatibility wrappers until the
-   stable replacement is documented and tested.
+5. Low-level stage helpers remain available inside the package namespace for repository-owned reproduction, but they are not exported. Stable external replacements are documented in `public-api.qmd`.
 
-## Existing public functions
+## Historical/internal implementation functions
 
-### Shared data, artifacts, and orchestration
+### Shared data, artifacts, and orchestration internals
 
 | Existing function | Current role | Relationship to guarded design |
 |---|---|---|
@@ -40,9 +38,9 @@ data, so those checks are explicitly marked `deferred` until the data exists.
 | `prepare_page_data()` | Maps arbitrary source column names and optional MMWR weeks to the canonical surveillance input. | Use before `prepare_surveillance_data()`/`train_pipeline()` when data do not use PAGe's canonical names. It does not fetch or aggregate data. |
 | `validate_surveillance_data()` | Validates canonical surveillance data. | Retain. |
 | `simulate_flu_seasons()` | Produces public synthetic example/test data. | Supporting utility only; not a production stage API. Later make its output canonical. |
-| `train_pipeline()` | Runs M0/M1/M2 tuning or fixed refresh in one call. | Compatibility orchestrator that now composes the guarded lifecycle and preserves the legacy result shape. Use the explicit stage calls when each gate must be inspected manually. |
+| `train_pipeline()` | Internal high-level implementation for M0/M1/M2 refresh/retune. | Called through the exported `page_train()` wrapper; retained internally for exact reproduction and developer testing. |
 | `assemble_kit()` | Combines M0/M1/M2 objects. | Accepts the legacy objects or an all-governed chain. If any input is governed, all three must be frozen, selection-matched, and identity-linked. |
-| `validate_page_kit()` | Validates runtime fields of a kit. | Also checks completeness and integrity of governance metadata when present. |
+| `page_validate_kit()` | Public kit validator. | Stable exported wrapper around the internal kit validator. |
 | `new_result_manifest()` / `validate_result_manifest()` | Records disclosure-safe provenance. | Retain; versioned extension is needed before it carries all season-set identities. |
 | `plan_training()` | Read-only dry run of season selection, grids, caps, support checks, and resource estimates. | Use before launching a manual or long-running retune. It creates no checkpoints or artifacts. |
 | `preflight_support_audit()` | Reuses stage support validators without fitting. | Run before each stage; deferred M1/M2 checks become executable once their upstream handoff data exists. |
@@ -80,7 +78,18 @@ data, so those checks are explicitly marked `deferred` until the data exists.
 | Existing function | Current role | Guarded status |
 |---|---|---|
 | `run_prospective_pipeline()` / `run_pipeline()` | Executes M0 → M1 → M2 for one current season. | Retained. A governed assembled kit carries integrity-checked stage identities; legacy kits remain supported. |
-| `replay_season_holdout()` | Replays one holdout season against an independent runner-supplied evaluation schedule (`params_df$eval_week`). | Requires unique `(origin, horizon)` keys, `target_weekF = origin + horizon`, an exact match to the schedule, and no other-season rows; keeps the compatibility result shape. |
+| `replay_season_holdout()` | Internal holdout replay implementation. | Exported externally as `replay_holdout()`. |
+
+## Stable external wrappers
+
+| Scientific role | Exported function | Internal implementation family |
+|---|---|---|
+| Full governed training | `page_train()` | training workflow, tuners, validators, fit/freeze helpers |
+| M0 fixed-config fit/runtime | `m0_fit()` / `m0_detect()` | `fit_m0()` / M0 runtime helpers |
+| M1 fixed-config fit/runtime | `m1_fit()` / `m1_predict()` | `fit_m1()` / current governed timing runtime |
+| M1 timing distributions | `m1_peak_posterior()` / `m1_passage_posterior()` | current internal M1 posterior implementation |
+| M2 fixed-config fit/runtime | `m2_fit()` / `m2_predict()` | `fit_m2()` / M2 runtime helpers |
+| Holdout evaluation | `evaluate_forecasts()` / `replay_holdout()` | nested evaluation and replay internals |
 
 ## Implemented stage contracts
 
@@ -90,7 +99,7 @@ data, so those checks are explicitly marked `deferred` until the data exists.
 |---|---|---|
 | `validate_season_selection(data, training_seasons, exclude_seasons = character(), holdout_seasons = character(), application_seasons = character())` | yes | Returns a normalized `page_season_selection`; checks existence, duplicates, stable order, and set disjointness. |
 | `season_selection(x)` | yes | Accessor for the normalized selection recorded in a stage result, kit, or replay result. |
-| `decide_m2_vs_m1(forecasts, ...)` | yes | Data-agnostic equal-season M2-versus-M1 adoption gate with configurable phase and denominator weights, season-level uncertainty, practical gain floors, and exact all-off M1 fallback. |
+| `decide_m2_vs_m1(forecasts, ...)` | no (internal) | Data-agnostic equal-season M2-versus-M1 adoption gate with configurable phase and denominator weights, season-level uncertainty, practical gain floors, and exact all-off M1 fallback. |
 | `.require_frozen_stage(x, stage)` | no | Internal guard used before a downstream stage or kit assembly consumes an artifact. |
 | `.record_stage_provenance(...)` | no | Internal constructor for selection, upstream identities, configuration, folds, and status. |
 
@@ -98,31 +107,31 @@ data, so those checks are explicitly marked `deferred` until the data exists.
 
 | Function | Export | Preconditions | Output / gate |
 |---|---|---|---|
-| `tune_m0(data, selection, grid, ...)` | yes | Canonical data; non-empty training seasons. | `page_m0_tuning`; every evaluated fold is recorded. |
-| `validate_m0_tuning(x)` | yes | M0 tuning result. | Rejects zero evaluable folds, non-finite selection metrics, missing selected configuration, or mismatched folds. |
-| `fit_m0(data, selection, config, ...)` | yes | Valid selection; a fixed M0 configuration. | `page_m0_fit` in `draft` state. |
-| `freeze_m0(fit, tuning = NULL)` | yes | Valid fit; if tuned, validated M0 tuning result with matching selection/configuration. | Immutable `page_m0_fit` in `frozen` state. |
-| `run_m0(m0, current_data, ...)` | yes | Frozen M0 artifact or a validated frozen kit. | Current ignition state. |
+| `tune_m0(data, selection, grid, ...)` | no (internal) | Canonical data; non-empty training seasons. | `page_m0_tuning`; every evaluated fold is recorded. |
+| `validate_m0_tuning(x)` | no (internal) | M0 tuning result. | Rejects zero evaluable folds, non-finite selection metrics, missing selected configuration, or mismatched folds. |
+| `fit_m0(data, selection, config, ...)` | no (internal) | Valid selection; a fixed M0 configuration. | `page_m0_fit` in `draft` state. |
+| `freeze_m0(fit, tuning = NULL)` | no (internal) | Valid fit; if tuned, validated M0 tuning result with matching selection/configuration. | Immutable `page_m0_fit` in `frozen` state. |
+| `run_m0(m0, current_data, ...)` | no (internal) | Frozen M0 artifact or a validated frozen kit. | Current ignition state. |
 
 ### M1 API
 
 | Function | Export | Preconditions | Output / gate |
 |---|---|---|---|
-| `tune_m1(data, selection, m0, grid, ...)` | yes | Frozen M0 with exactly matching training selection. | `page_m1_tuning`; all fold-level alignment results recorded. |
-| `validate_m1_tuning(x)` | yes | M1 tuning result. | Rejects zero evaluable seasons, all-missing metrics, non-finite selected metric, or missing selected configuration. This closes the current M1 failure mode. |
-| `fit_m1(data, selection, m0, config, ...)` | yes | Frozen M0 and valid fixed M1 configuration. | `page_m1_fit` in `draft` state. |
-| `freeze_m1(fit, tuning = NULL)` | yes | Valid fit and, when relevant, validated matching tuning. | Immutable `page_m1_fit` in `frozen` state. |
-| `run_m1(m1, current_data, m0_state, ...)` | yes | Frozen M1 and M0 runtime state with matching provenance. | Alignment and peak-state result. |
+| `tune_m1(data, selection, m0, grid, ...)` | no (internal) | Frozen M0 with exactly matching training selection. | `page_m1_tuning`; all fold-level alignment results recorded. |
+| `validate_m1_tuning(x)` | no (internal) | M1 tuning result. | Rejects zero evaluable seasons, all-missing metrics, non-finite selected metric, or missing selected configuration. This closes the current M1 failure mode. |
+| `fit_m1(data, selection, m0, config, ...)` | no (internal) | Frozen M0 and valid fixed M1 configuration. | `page_m1_fit` in `draft` state. |
+| `freeze_m1(fit, tuning = NULL)` | no (internal) | Valid fit and, when relevant, validated matching tuning. | Immutable `page_m1_fit` in `frozen` state. |
+| `run_m1(m1, current_data, m0_state, ...)` | no (internal) | Frozen M1 and M0 runtime state with matching provenance. | Alignment and peak-state result. |
 
 ### M2 API
 
 | Function | Export | Preconditions | Output / gate |
 |---|---|---|---|
-| `tune_m2(data, selection, m0, m1, grid, ...)` | yes | Frozen M0/M1 with matching selection. | `page_m2_tuning`; M2 fold summaries and candidate grid provenance. |
-| `validate_m2_tuning(x)` | yes | M2 tuning result. | Rejects invalid grid identity, incomplete folds, non-finite selected metric, or absent selected specification. |
-| `fit_m2(data, selection, m0, m1, config, ...)` | yes | Frozen M0/M1 and validated fixed M2 specification. | `page_m2_fit` in `draft` state. |
-| `freeze_m2(fit, tuning = NULL)` | yes | Valid fit and, when relevant, validated matching tuning. | Immutable `page_m2_fit` in `frozen` state. |
-| `run_m2(m2, current_data, m1_state, ...)` | yes | Frozen M2 and matching M1 runtime state. | One- and two-week forecasts. |
+| `tune_m2(data, selection, m0, m1, grid, ...)` | no (internal) | Frozen M0/M1 with matching selection. | `page_m2_tuning`; M2 fold summaries and candidate grid provenance. |
+| `validate_m2_tuning(x)` | no (internal) | M2 tuning result. | Rejects invalid grid identity, incomplete folds, non-finite selected metric, or absent selected specification. |
+| `fit_m2(data, selection, m0, m1, config, ...)` | no (internal) | Frozen M0/M1 and validated fixed M2 specification. | `page_m2_fit` in `draft` state. |
+| `freeze_m2(fit, tuning = NULL)` | no (internal) | Valid fit and, when relevant, validated matching tuning. | Immutable `page_m2_fit` in `frozen` state. |
+| `run_m2(m2, current_data, m1_state, ...)` | no (internal) | Frozen M2 and matching M1 runtime state. | One- and two-week forecasts. |
 
 ## Dependency and gate map
 
@@ -139,7 +148,7 @@ canonical data + season selection
       tune_m2 -> validate_m2_tuning -> fit_m2 -> freeze_m2
                                                   |
                                                   v
-                                   assemble_kit -> validate_page_kit
+                                   assemble_kit -> page_validate_kit
                                                   |
                                                   v
                       run_m0 -> run_m1 -> run_m2 -> run_pipeline

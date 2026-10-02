@@ -222,12 +222,12 @@ test_that("subset tuning prepares M1 predictions once for every candidate", {
 })
 
 test_that("train_pipeline exposes an explicit opt-in M2 family", {
-  expect_true("m2_family" %in% names(formals(PAGe::train_pipeline)))
+  expect_true("m2_family" %in% names(formals(PAGe:::train_pipeline)))
   expect_identical(
-    eval(formals(PAGe::train_pipeline)$m2_family)[[1L]],
+    eval(formals(PAGe:::train_pipeline)$m2_family)[[1L]],
     "offset_subset_v1"
   )
-  expect_identical(eval(formals(PAGe::train_pipeline)$allow_legacy), FALSE)
+  expect_identical(eval(formals(PAGe:::train_pipeline)$allow_legacy), FALSE)
 })
 
 test_that("subset frozen artifact serializes and existing provenance guards apply", {
@@ -265,14 +265,14 @@ test_that("subset frozen artifact serializes and existing provenance guards appl
     feature_ranges = list(h1 = list(), h2 = list()), m1_train_preds = data.frame(),
     spec = config, training_seasons = "a"
   ), upstream_ids = list(m0 = m0$artifact_id, m1 = m1$artifact_id), data_id = "data")
-  frozen <- PAGe::freeze_m2(m2)
+  frozen <- PAGe:::freeze_m2(m2)
   expect_equal(frozen$status, "frozen")
   path <- tempfile(fileext = ".rds")
   saveRDS(frozen, path)
   expect_identical(readRDS(path), frozen)
   tampered <- frozen
   tampered$fit$h1$type <- "gam"
-  expect_error(PAGe::assemble_kit(m0, m1, tampered), "integrity")
+  expect_error(PAGe:::assemble_kit(m0, m1, tampered), "integrity")
   wrong_chain <- frozen
   wrong_chain$upstream_ids$m1 <- "other"
   wrong_chain$artifact_id <- PAGe:::.stage_artifact_id(
@@ -280,13 +280,13 @@ test_that("subset frozen artifact serializes and existing provenance guards appl
     wrong_chain$upstream_ids, wrong_chain$data_id,
     PAGe:::.stage_fit_payload(wrong_chain)
   )
-  expect_error(PAGe::assemble_kit(m0, m1, wrong_chain), "identity mismatch")
+  expect_error(PAGe:::assemble_kit(m0, m1, wrong_chain), "identity mismatch")
 })
 
 test_that("invalid family and weekly refit are rejected explicitly", {
   expect_error(PAGe:::m2_subset_validate_config(list(family = "legacy")), "offset_subset_v1")
   expect_error(
-    PAGe::validate_page_kit(list(
+    PAGe::page_validate_kit(list(
       m0_params = list(x = 1), ref = list(anchorWeek = 20),
       hyper = list(), M1_PARAMS = list(
         temperature = .25, rise_weight = 1,
@@ -332,7 +332,7 @@ test_that("subset tuning selects h1 and h2 by complete inner-season NLL", {
     grid = PAGe:::m2_subset_grid()[1:2, , drop = FALSE],
     m1_train_preds = preds, detector = detector
   )
-  expect_silent(PAGe::validate_m2_tuning(tuning))
+  expect_silent(PAGe:::validate_m2_tuning(tuning))
   expect_true(all(c("h1", "h2") %in% names(tuning$selected_config)))
   expect_true(grepl("^h1:i", tuning$best_spec_id))
 })

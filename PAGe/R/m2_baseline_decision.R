@@ -55,7 +55,6 @@
 #' @return A \code{page_m2_baseline_decision} list with \code{decision},
 #'   \code{reasons}, \code{rule}, \code{overall}, \code{by_horizon},
 #'   \code{by_season}, and row-accounting entries.
-#' @export
 decide_m2_vs_m1 <- function(
   forecasts,
   outcome_col,

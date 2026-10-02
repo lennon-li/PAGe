@@ -14,7 +14,6 @@
 #' @param eps Probability clipping value.
 #'
 #' @return A list with overall, horizon, and phase tables.
-#' @export
 summarize_forecast_metrics <- function(predictions,
                                        phase_col = NULL,
                                        phase_break = 4,
@@ -164,7 +163,6 @@ summarize_forecast_metrics <- function(predictions,
 #' @return A list with one-row `overall` and aggregate `horizon` data frames.
 #'   Calibration and interval metrics use `NA` plus a status when they cannot be
 #'   estimated safely.
-#' @export
 summarize_replay_diagnostics <- function(predictions,
                                          interval_level = 0.90,
                                          eps = 1e-12) {
@@ -540,7 +538,6 @@ check_promotion <- function(candidate,
 #' @return Selection metadata including selected_spec_id and selected_spec.
 #'   Pareto ties are resolved by NLL, complexity, then
 #'   lexicographic specification ID.
-#' @export
 select_m2_candidate <- function(results,
                                 method = c("min_nll", "one_se", "pareto")) {
   method <- match.arg(method)
@@ -605,7 +602,6 @@ select_m2_candidate <- function(results,
 #' @param ... Additional callback arguments.
 #'
 #' @return Racing history, survivors, and the full evaluator result.
-#' @export
 race_m2_candidates <- function(grid,
                                evaluator,
                                stages = c(3L, 6L),
@@ -688,7 +684,6 @@ race_m2_candidates <- function(grid,
 #'   scorable rows has status \code{unseen_replay_failed}, a failure code, and
 #'   NULL metrics/diagnostics. Emitted intervals are conditional fitted-mean
 #'   bands, not validated full predictive intervals.
-#' @export
 replay_season_holdout <- function(kit,
                                   allD,
                                   season = "2025-26",
@@ -1132,7 +1127,6 @@ replay_season_holdout <- function(kit,
 #' @param path Path to a regular source artifact file.
 #'
 #' @return A lowercase SHA-256 hash string.
-#' @export
 hash_file_sha256 <- function(path) {
   if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path)) {
     stop("`path` must be one non-empty file path.", call. = FALSE)
@@ -1164,7 +1158,6 @@ hash_file_sha256 <- function(path) {
 #' @param fold_ids,evaluation_seasons Fold identifiers and evaluation seasons.
 #'
 #' @return A validated `page_result_manifest` object.
-#' @export
 new_result_manifest <- function(artifact_role,
                                 classification,
                                 code_commit,
@@ -1206,7 +1199,6 @@ new_result_manifest <- function(artifact_role,
 #' @param manifest A manifest created by [new_result_manifest()].
 #'
 #' @return `TRUE` if `manifest` is valid; otherwise an informative error.
-#' @export
 validate_result_manifest <- function(manifest) {
   expected <- c("schema", "schema_version", "artifact", "provenance")
   if (!is.list(manifest) || !identical(names(manifest), expected)) {

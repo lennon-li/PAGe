@@ -23,7 +23,6 @@
 #' @return An object of class \code{page_ignition_review} with \code{signals},
 #'   \code{summary}, \code{candidates}, \code{plot}, and a \code{provenance}
 #'   list. Pass it to \code{finalize_ignition_label()} after visual review.
-#' @export
 review_ignition_label <- function(data,
                                   season = NULL,
                                   smooth_window = 3L,
@@ -204,7 +203,6 @@ review_ignition_label <- function(data,
 #'   raw peak candidate.
 #' @return An object of class \code{page_peak_label} with a named \code{label}
 #'   vector and provenance.
-#' @export
 finalize_peak_label <- function(review, weekF, annotator = NULL, note = NULL,
                                 require_candidate = FALSE) {
   if (!inherits(review, "page_ignition_review")) {
@@ -248,7 +246,6 @@ finalize_peak_label <- function(review, weekF, annotator = NULL, note = NULL,
 #' @param note Optional rationale shared by both labels.
 #' @return A class \code{page_season_labels} object containing named
 #'   \code{ignition_labels} and \code{peak_labels} vectors.
-#' @export
 finalize_season_labels <- function(review, ignition_weekF, peak_weekF,
                                    annotator = NULL, note = NULL) {
   ignition <- finalize_ignition_label(review, ignition_weekF, annotator, note)
@@ -278,7 +275,6 @@ finalize_season_labels <- function(review, ignition_weekF, peak_weekF,
 #'
 #' @return An object of class \code{page_ignition_label}; its \code{labels}
 #'   element is a named integer vector suitable for training APIs.
-#' @export
 finalize_ignition_label <- function(review, weekF, annotator = NULL, note = NULL) {
   if (!inherits(review, "page_ignition_review")) {
     stop("`review` must be returned by `review_ignition_label()`.", call. = FALSE)
@@ -326,7 +322,6 @@ finalize_ignition_label <- function(review, weekF, annotator = NULL, note = NULL
 #' @param require_all Logical; require a label for every season in \code{data}.
 #'
 #' @return A new data frame with \code{iWeek}, \code{phase}, and \code{newWeek}.
-#' @export
 apply_ignition_labels <- function(data, labels, anchor_week = NULL,
                                   n_weeks_col = NULL, require_all = TRUE) {
   canonical <- prepare_surveillance_data(data)

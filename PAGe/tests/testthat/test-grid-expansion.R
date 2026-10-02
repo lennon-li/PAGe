@@ -12,12 +12,12 @@ test_that("boundary inspection warns and expansion preserves M1 rows", {
   )
 
   expect_warning(
-    report <- PAGe::inspect_tuning_boundaries(tuning, stage = "M1"),
+    report <- PAGe:::inspect_tuning_boundaries(tuning, stage = "M1"),
     class = "page_boundary_warning"
   )
   expect_true(all(report$decision == "expand_required"))
 
-  expanded <- PAGe::expand_tuning_grid(
+  expanded <- PAGe:::expand_tuning_grid(
     tuning,
     stage = "M1", steps = c(k_ref = 5, slope_weight = 4)
   )
@@ -41,7 +41,7 @@ test_that("M1 expansion stops at the governed reference cap", {
     class = "page_m1_tuning"
   )
 
-  expanded <- PAGe::expand_tuning_grid(tuning, stage = "M1")
+  expanded <- PAGe:::expand_tuning_grid(tuning, stage = "M1")
   expect_false(any(expanded$k_ref > 50L))
   expect_true(any(expanded$slope_weight == 3))
 })
@@ -55,7 +55,7 @@ test_that("M1 hard bounds accept an upper cap and expand a lower edge", {
     ),
     class = "page_m1_tuning"
   )
-  report <- PAGe::inspect_tuning_boundaries(
+  report <- PAGe:::inspect_tuning_boundaries(
     tuning,
     stage = "M1", hard_caps = list(k_ref = c(lower = 10, upper = 50))
   )
@@ -64,7 +64,7 @@ test_that("M1 hard bounds accept an upper cap and expand a lower edge", {
   lower <- tuning
   lower$best$k_ref <- 20L
   lower$grid <- data.frame(k_ref = c(20L, 30L), slope_weight = 8)
-  expanded <- PAGe::expand_tuning_grid(
+  expanded <- PAGe:::expand_tuning_grid(
     lower,
     stage = "M1", steps = c(k_ref = 5)
   )
@@ -84,7 +84,7 @@ test_that("M1 expansion respects the governed k_ref cap", {
     ),
     class = "page_m1_tuning"
   )
-  expanded <- PAGe::expand_tuning_grid(tuning, stage = "M1")
+  expanded <- PAGe:::expand_tuning_grid(tuning, stage = "M1")
   expect_false(any(expanded$k_ref > 50L))
 })
 
@@ -108,7 +108,7 @@ test_that("M1 candidate selection backs off within the practical gain", {
     ),
     class = "page_m1_tuning"
   )
-  selected <- PAGe::select_m1_candidate(tuning, min_gain = 0.05)
+  selected <- PAGe:::select_m1_candidate(tuning, min_gain = 0.05)
   expect_equal(selected$selected$k_ref, 40L)
   expect_equal(selected$selected_spec_id, "s2")
   expect_equal(selected$gain_to_best, 0.02)
@@ -135,7 +135,7 @@ test_that("M1 practical backoff skips unresolved edges", {
     ),
     class = "page_m1_tuning"
   )
-  selected <- PAGe::select_m1_candidate(
+  selected <- PAGe:::select_m1_candidate(
     tuning,
     min_gain = 0.05,
     hard_caps = list(k_ref = c(lower = 10L, upper = 52L))
@@ -154,7 +154,7 @@ test_that("zero slope weight is an accepted M1 drop", {
     ),
     class = "page_m1_tuning"
   )
-  report <- PAGe::inspect_tuning_boundaries(tuning, stage = "M1")
+  report <- PAGe:::inspect_tuning_boundaries(tuning, stage = "M1")
   expect_true(any(report$parameter == "slope_weight" &
     report$decision == "accept_null_drop"))
 })
@@ -172,7 +172,7 @@ test_that("M1 expansion rejects an already unsupported reference basis", {
     class = "page_m1_tuning"
   )
   expect_error(
-    PAGe::expand_tuning_grid(tuning, stage = "M1"),
+    PAGe:::expand_tuning_grid(tuning, stage = "M1"),
     "unsupported value|reference domain"
   )
 })
@@ -191,7 +191,7 @@ test_that("M0 expansion halves numeric spacing and validates detector support", 
     ),
     class = "page_m0_tuning"
   )
-  expanded <- PAGe::expand_tuning_grid(tuning, stage = "M0")
+  expanded <- PAGe:::expand_tuning_grid(tuning, stage = "M0")
   expect_true(any(abs(expanded$p_thr - 0.25) < 1e-8))
   expect_error(
     PAGe:::.validate_m0_grid_support(
@@ -227,7 +227,7 @@ test_that("M2 expansion is additive and keeps canonical identities", {
     ),
     class = "page_m2_tuning"
   )
-  expanded <- PAGe::expand_tuning_grid(tuning, stage = "M2")
+  expanded <- PAGe:::expand_tuning_grid(tuning, stage = "M2")
   expect_true(all(grid$spec_id %in% expanded$spec_id))
   expect_true(nrow(expanded) > nrow(grid))
   expect_equal(length(unique(expanded$spec_id)), nrow(expanded))

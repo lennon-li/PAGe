@@ -35,7 +35,7 @@ test_that("M1 tuning fail-fast returns the candidate and fold error", {
   )
 
   expect_error(
-    PAGe::tune_m1_alignment(
+    PAGe:::tune_m1_alignment(
       allD = dat,
       params = list(p_thr = 0.005),
       grid = data.frame(k_ref = 2L),

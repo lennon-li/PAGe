@@ -12,7 +12,6 @@
 #' @param mode Runtime mode: \code{"frozen"} or \code{"weekly_refit"}.
 #'
 #' @return The validated kit, unchanged.
-#' @export
 validate_page_kit <- function(kit, mode = c("frozen", "weekly_refit")) {
   mode <- match.arg(mode)
   if (!is.list(kit)) stop("`kit` must be a list of trained PAGe artifacts.")

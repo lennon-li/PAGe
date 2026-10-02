@@ -105,7 +105,6 @@ get_gam_cls <- function(ign_fit_or_gam) {
 #' @param valid_weeks Integer vector of valid week values. Default 1:52.
 #'
 #' @return A list with elements \code{final}, \code{est}, \code{overridden}, \code{override}.
-#' @export
 #'
 #' @examples
 #' resolve_week_override(18, NULL)

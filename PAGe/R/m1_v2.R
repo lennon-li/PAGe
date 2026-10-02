@@ -31,7 +31,6 @@
 #' @param amplitude_grid Positive candidate peak-amplitude values integrated
 #'   out by the timing likelihood. Defaults to the frozen Influenza-A grid.
 #' @return A `page_m1_v2_library` object.
-#' @export
 fit_m1_v2_library <- function(data, peak_truth, k = 8L, grid_step = 0.01,
                               tau_step = 0.1,
                               amplitude_grid = seq(0.08, 0.44, by = 0.02)) {
@@ -135,7 +134,6 @@ fit_m1_v2_library <- function(data, peak_truth, k = 8L, grid_step = 0.01,
 #' @param candidate_step Candidate peak-time grid spacing.
 #' @param max_future_weeks Maximum future support from the release boundary.
 #' @return A `page_m1_v2_forecast` object.
-#' @export
 m1_v2_peak_posterior <- function(library, current_data, activation_week,
                                  origin_week, candidate_step = 0.1,
                                  max_future_weeks = 14) {
@@ -184,7 +182,6 @@ m1_v2_peak_posterior <- function(library, current_data, activation_week,
 #' @param max_future_weeks Maximum future candidate support.
 #' @return A one-row data frame with passage probabilities plus the underlying
 #'   posterior as an attribute named `posterior`.
-#' @export
 m1_v2_passage_posterior <- function(library, current_data, activation_week,
                                     origin_week, candidate_step = 0.1,
                                     max_future_weeks = 12) {
@@ -251,7 +248,6 @@ m1_v2_passage_posterior <- function(library, current_data, activation_week,
 #' @param min_post_activation Minimum integer observed weeks after activation
 #'   before passage can be confirmed.
 #' @return A one-row data frame describing the passage state.
-#' @export
 m1_v2_passage_decision <- function(passage_history, current_data,
                                    activation_week, high_threshold = 0.95,
                                    low_threshold = 0.10,
@@ -348,7 +344,6 @@ m1_v2_passage_decision <- function(passage_history, current_data,
 #'
 #' @param m0_loso Result returned by `loso_M0v2()`.
 #' @return A `page_m1_v2_activation_table` data frame.
-#' @export
 m1_v2_activation_table_from_m0_loso <- function(m0_loso) {
   if (!inherits(m0_loso, "page_m0_loso_result") ||
       is.null(m0_loso$folds) || is.null(m0_loso$compare) ||
@@ -481,7 +476,6 @@ m1_v2_activation_table_from_m0_loso <- function(m0_loso) {
 #'   calibration. Default 4 is the frozen exploratory choice.
 #' @param candidate_step Candidate peak-time grid spacing for inner predictions.
 #' @return A `page_m1_v2_calibrator` object.
-#' @export
 fit_m1_v2_bias_calibrator <- function(library, data, peak_truth,
                                       activation_table, n_origins = 4L,
                                       candidate_step = 0.2) {
@@ -603,7 +597,6 @@ fit_m1_v2_bias_calibrator <- function(library, data, peak_truth,
 #' @param fast_drop_fraction Optional extra drop floor for the one-week fast
 #'   branch. Default 0 reproduces the validated rule family.
 #' @return A `page_m1_v2_passage_policy`.
-#' @export
 fit_m1_v2_passage_policy <- function(
     library, data, peak_truth, activation_table,
     candidate_step = 0.2,
@@ -807,7 +800,6 @@ fit_m1_v2_passage_policy <- function(
 #' @param calibrator A `page_m1_v2_calibrator` fitted for the same historical
 #'   library as `forecast`.
 #' @return A one-row data frame containing raw and calibrated peak summaries.
-#' @export
 m1_v2_apply_bias_calibration <- function(forecast, calibrator) {
   if (!inherits(forecast, "page_m1_v2_forecast")) {
     stop("`forecast` must be a `page_m1_v2_forecast`.", call. = FALSE)
@@ -895,7 +887,6 @@ m1_v2_apply_bias_calibration <- function(forecast, calibrator) {
 #'
 #' @param x M1-v2 handoff list.
 #' @return `x`, invisibly, if valid.
-#' @export
 validate_m1_v2_handoff <- function(x) {
   if (!is.list(x)) stop("M1-v2 handoff must be a list.", call. = FALSE)
   if (!identical(x$version, "m1-v2-to-m2-v1")) {

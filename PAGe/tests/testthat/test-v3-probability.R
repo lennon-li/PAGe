@@ -34,7 +34,7 @@ test_that('API-side weighted probability helpers implement strict/inclusive sema
 
 test_that('v3 positivity exceedance uses the frozen experimental OOS calibrator', {
   panel <- read.csv(.prob_fixture('ignition-panel.csv'),stringsAsFactors=FALSE,check.names=FALSE)
-  f <- page_v3_forecast(panel,season='2026-27',origin_weekF=12)
+  f <- page_forecast(panel,season='2026-27',origin_weekF=12)
   d <- .page_prob_predictive_distribution(f,'A',1L)
   expect_identical(d$status,'experimental')
   expect_identical(d$outcome,'positivity_jeffreys_smoothed')
@@ -49,7 +49,7 @@ test_that('v3 positivity exceedance uses the frozen experimental OOS calibrator'
 
 test_that('A peak distribution exactly reproduces existing passage monitoring', {
   panel <- read.csv(.prob_fixture('ignition-panel.csv'),stringsAsFactors=FALSE,check.names=FALSE)
-  f <- page_v3_forecast(panel,season='2026-27',origin_weekF=12)
+  f <- page_forecast(panel,season='2026-27',origin_weekF=12)
   d <- .page_prob_peak_distribution(f,'A')
   expect_identical(d$status,'experimental')
   asof <- f$origin_weekF+1
@@ -61,7 +61,7 @@ test_that('A peak distribution exactly reproduces existing passage monitoring', 
 
 test_that('inactive peak timing fails closed', {
   panel <- read.csv(.prob_fixture('no-ignition-panel.csv'),stringsAsFactors=FALSE,check.names=FALSE)
-  f <- page_v3_forecast(panel,season='2026-27',origin_weekF=12)
+  f <- page_forecast(panel,season='2026-27',origin_weekF=12)
   d <- .page_prob_peak_distribution(f,'A')
   expect_identical(d$status,'unavailable')
   expect_length(d$atoms,0L)
@@ -74,7 +74,7 @@ test_that('active B peak distribution exactly reproduces B passage monitoring', 
     y_A=rep(1,nrow(b)),N_A=b$N_B,p_A=1/b$N_B,
     y_B=b$y_B,N_B=b$N_B,p_B=b$p_B,
     denominator_regime='orvt_type_specific',stringsAsFactors=FALSE)
-  f <- page_v3_forecast(panel,season='2026-27',origin_weekF=45)
+  f <- page_forecast(panel,season='2026-27',origin_weekF=45)
   expect_true(f$monitoring$B$m1$available)
   d <- .page_prob_peak_distribution(f,'B')
   expect_identical(d$status,'experimental')

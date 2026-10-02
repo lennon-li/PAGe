@@ -35,9 +35,9 @@ training_promotion_fixture <- function(allD, report) {
     paths[["incumbent"]]
   )
   source_hashes <- c(
-    authorized_data = PAGe::hash_file_sha256(paths[["data"]]),
-    candidate = PAGe::hash_file_sha256(paths[["candidate"]]),
-    incumbent = PAGe::hash_file_sha256(paths[["incumbent"]])
+    authorized_data = PAGe:::hash_file_sha256(paths[["data"]]),
+    candidate = PAGe:::hash_file_sha256(paths[["candidate"]]),
+    incumbent = PAGe:::hash_file_sha256(paths[["incumbent"]])
   )
   bundle <- structure(
     list(
@@ -54,9 +54,9 @@ training_promotion_fixture <- function(allD, report) {
   saveRDS(bundle, paths[["bundle"]])
   manifest_hashes <- c(
     source_hashes,
-    promotion_bundle = PAGe::hash_file_sha256(paths[["bundle"]])
+    promotion_bundle = PAGe:::hash_file_sha256(paths[["bundle"]])
   )
-  manifest <- PAGe::new_result_manifest(
+  manifest <- PAGe:::new_result_manifest(
     artifact_role = "holdout_acceptance_decision",
     classification = "disclosure_safe",
     code_commit = "ab3aeb6",
@@ -92,12 +92,12 @@ training_rebind_fixture <- function(fixture) {
     candidate = fixture$args$candidate_path,
     incumbent = fixture$args$incumbent_path
   )
-  source_hashes <- vapply(paths, PAGe::hash_file_sha256, character(1))
+  source_hashes <- vapply(paths, PAGe:::hash_file_sha256, character(1))
   fixture$args$bundle$source_artifact_hashes <- source_hashes
   saveRDS(fixture$args$bundle, fixture$args$bundle_path)
   fixture$args$manifest$provenance$source_artifact_hashes <- c(
     source_hashes,
-    promotion_bundle = PAGe::hash_file_sha256(fixture$args$bundle_path)
+    promotion_bundle = PAGe:::hash_file_sha256(fixture$args$bundle_path)
   )
   fixture
 }
@@ -105,5 +105,5 @@ training_rebind_fixture <- function(fixture) {
 training_promotion_evidence <- function(allD, report) {
   fixture <- training_promotion_fixture(allD, report)
   on.exit(unlink(fixture$root, recursive = TRUE))
-  do.call(PAGe::verify_promotion_evidence, fixture$args)
+  do.call(PAGe:::verify_promotion_evidence, fixture$args)
 }

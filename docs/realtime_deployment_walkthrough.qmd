@@ -29,7 +29,7 @@ For a normal frozen kit saved by the package:
 library(PAGe)
 
 kit <- page_load_kit("/secure/PAGe/page_kit.rds")
-validate_page_kit(kit, mode = "frozen")
+page_validate_kit(kit, mode = "frozen")
 ```
 
 For a kit promoted through the immutable registry, load both the private kit and its disclosure-safe deployment manifest:
@@ -167,10 +167,10 @@ Pre-ignition seasons can legitimately return zero M2 forecast rows. That is a va
 
 ## 6. Generate the walk-forward HTML report from R
 
-The package can render the same interactive walk-forward report used for the current 2026-27 weekly review. Supply either a canonical typed A+B panel as a data frame or the official ORVT CSV path accepted by `page_v3_forecast()`.
+The package can render the same interactive walk-forward report used for the current 2026-27 weekly review. Supply either a canonical typed A+B panel as a data frame or the official ORVT CSV path accepted by `page_forecast()`.
 
 ```{r}
-report_file <- page_v3_walkforward_report(
+report_file <- page_walkforward_report(
   data = orvt_file,
   season = "2026-27",
   output_file = "PAGe_2026-27_week12_walkforward.html",
@@ -188,7 +188,7 @@ typed_panel <- read.csv(
   stringsAsFactors = FALSE
 )
 
-page_v3_walkforward_report(
+page_walkforward_report(
   data = typed_panel,
   season = "2026-27",
   output_file = "PAGe_2026-27_week12_walkforward.html"

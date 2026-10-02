@@ -6,7 +6,6 @@
 #' @param path Path to a manifest with a \code{.json} or \code{.rds} extension.
 #'
 #' @return A validated \code{page_result_manifest} object.
-#' @export
 read_result_manifest <- function(path) {
   extension <- .result_manifest_extension(path)
   if (!file.exists(path) || dir.exists(path)) {
@@ -52,7 +51,6 @@ read_result_manifest <- function(path) {
 #'   \code{FALSE}.
 #'
 #' @return Invisibly, the normalized path to the written manifest.
-#' @export
 write_result_manifest <- function(manifest, path, overwrite = FALSE) {
   validate_result_manifest(manifest)
   extension <- .result_manifest_extension(path)
@@ -118,7 +116,6 @@ write_result_manifest <- function(manifest, path, overwrite = FALSE) {
 #'   manifest.
 #'
 #' @return A kit validated by [validate_page_kit()] in frozen mode.
-#' @export
 load_promoted_kit <- function(kit_path, deployment_manifest_path) {
   manifest <- read_result_manifest(deployment_manifest_path)
   if (!identical(manifest$artifact$classification, "disclosure_safe")) {

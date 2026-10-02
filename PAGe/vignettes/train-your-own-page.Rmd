@@ -31,10 +31,10 @@ seasonal_data$p <- seasonal_data$y / seasonal_data$N
 
 ## One-call interactive workflow
 
-If you want PAGe to lead the workflow, omit `labels` and `ignition_weeks`. `page_train_workflow()` will plot each season first, prompt for the expert decimal ignition week, validate the complete label set, and only then start training:
+If you want PAGe to lead the workflow, omit `labels` and `ignition_weeks`. `page_train()` will plot each season first, prompt for the expert decimal ignition week, validate the complete label set, and only then start training:
 
 ```{r one-call, eval=FALSE}
-fit <- page_train_workflow(
+fit <- page_train(
   seasonal_data,
   annotator = "your-name",
   interactive = TRUE,
@@ -88,12 +88,12 @@ Expert input is limited to ignition timing in this workflow. PAGe does not ask t
 
 ## 3. Train a model
 
-`page_train_workflow()` reuses the package's governed `train_pipeline()` implementation. It does not create a second training engine.
+`page_train()` reuses the package's governed `train_pipeline()` implementation. It does not create a second training engine.
 
 A fixed-specification refresh is the fastest path when the model structure has already been selected:
 
 ```{r refresh, eval=FALSE}
-fit <- page_train_workflow(
+fit <- page_train(
   seasonal_data,
   labels = labels,
   mode = "refresh",
@@ -107,7 +107,7 @@ fit
 For model development, keep a prospective season out of all fitting, tuning, **and expert ignition review**. Let the workflow label only the trainable seasons, or supply ignition weeks that omit the holdout:
 
 ```{r holdout, eval=FALSE}
-fit <- page_train_workflow(
+fit <- page_train(
   seasonal_data,
   ignition_weeks = c(
     "2018-19" = 19.4,
@@ -125,7 +125,7 @@ fit <- page_train_workflow(
 )
 ```
 
-`page_train_workflow()` excludes unreleased holdout and explicitly excluded seasons before its interactive review step. If a pre-existing label set contains those seasons, their labels are retained in the returned provenance object but stripped before `train_pipeline()` is called.
+`page_train()` excludes unreleased holdout and explicitly excluded seasons before its interactive review step. If a pre-existing label set contains those seasons, their labels are retained in the returned provenance object but stripped before `train_pipeline()` is called.
 
 A governed retune is substantially more expensive because it performs leakage-safe leave-one-season-out model selection. Retuning and holdout release should follow the promotion/evaluation workflow documented elsewhere in PAGe; do not inspect the final holdout to choose hyperparameters and then report it as prospective evidence.
 
@@ -136,7 +136,7 @@ The training workflow returns the original expert label set, the complete `page_
 ```{r inspect, eval=FALSE}
 fit$labels$table
 fit$training_result
-validate_page_kit(fit$kit, mode = "frozen")
+page_validate_kit(fit$kit, mode = "frozen")
 
 page_save_kit(fit, "artifacts/my-page-kit.rds")
 ```

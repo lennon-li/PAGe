@@ -79,7 +79,6 @@ as_page_scoring_weights <- function(weights) {
 #' page_scoring_weights()
 #' page_scoring_weights(turning_before = 0L, turning_after = 0L, decline = 0)
 #'
-#' @export
 page_scoring_weights <- function(pre_ignition = 0, rise = 2, turning = 3,
                                  decline = 1, turning_before = -1L,
                                  turning_after = 3L) {
@@ -218,7 +217,6 @@ page_scoring_weights <- function(pre_ignition = 0, rise = 2, turning = 3,
 #'   "ignition", "peak"
 #' )
 #'
-#' @export
 page_phase_weights <- function(rows, weights, season_col = "season",
                                target_col = "target_weekF",
                                ignition_col = "ignition_weekF", peak_col = NULL,

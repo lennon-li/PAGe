@@ -39,7 +39,6 @@
 #'   \code{y}, \code{N}, \code{p}, and \code{neg}, followed by unmapped source
 #'   columns. The result can be passed directly to \code{train_pipeline()} or
 #'   the stage APIs.
-#' @export
 prepare_page_data <- function(data,
                               outcome_col,
                               week_col,

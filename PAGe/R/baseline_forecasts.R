@@ -123,7 +123,6 @@
 #'   `[1e-6, 1 - 1e-6]`. `outcome` and `N_lead` are `NA` when the target week is
 #'   not observed, and `t_since_target` is `NA` because persistence does not use
 #'   ignition timing.
-#' @export
 baseline_persistence <- function(data, season, origins, horizons = 1:2) {
   data <- .baseline_prepare(data)
   season <- .baseline_season_id(season)
@@ -177,7 +176,6 @@ baseline_persistence <- function(data, season, origins, horizons = 1:2) {
 #'   [baseline_persistence()], with `model` set to `"seasonal_mean"` and
 #'   `t_since_target` equal to `target - ignition[season]` when `ignition` is
 #'   supplied, otherwise `NA`.
-#' @export
 baseline_seasonal_mean <- function(data, season, train_seasons, origins,
                                    horizons = 1:2,
                                    align = c("calendar", "ignition"),

@@ -189,7 +189,7 @@ test_that("tune_m1_alignment shares one alignment pass across weighting-only spe
 
   dat <- data.frame(season = "b", weekF = 1:3, p = c(0.01, 0.05, 0.02), N = 100)
 
-  invisible(PAGe::tune_m1_alignment(
+  invisible(PAGe:::tune_m1_alignment(
     dat,
     params = list(),
     grid = data.frame(slope_weight = c(8, 20)),
@@ -202,7 +202,7 @@ test_that("tune_m1_alignment shares one alignment pass across weighting-only spe
   calls$single <- 0L
   calls$multi <- 0L
   calls$multi_sizes <- integer(0)
-  invisible(PAGe::tune_m1_alignment(
+  invisible(PAGe:::tune_m1_alignment(
     dat,
     params = list(),
     grid = data.frame(k_ref = c(10L, 20L)),
@@ -234,7 +234,7 @@ test_that("tune_m1_alignment does not group specs when multi-template is off", {
     .package = "PAGe"
   )
   dat <- data.frame(season = "b", weekF = 1:3, p = c(0.01, 0.05, 0.02), N = 100)
-  invisible(PAGe::tune_m1_alignment(
+  invisible(PAGe:::tune_m1_alignment(
     dat,
     params = list(),
     grid = data.frame(slope_weight = c(8, 20)),

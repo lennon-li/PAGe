@@ -8,7 +8,7 @@ promotion_test_metrics <- function(nll, mae) {
 
 promotion_test_manifest <- function(role, spec_id, training_seasons, hashes,
                                     evaluation_seasons = "none") {
-  PAGe::new_result_manifest(
+  PAGe:::new_result_manifest(
     artifact_role = role,
     classification = "disclosure_safe",
     code_commit = "abcdef1",
@@ -90,9 +90,9 @@ promotion_test_fixture <- function() {
     promotion_test_metrics(1.0, 1.0)
   )
   bundle_hashes <- c(
-    authorized_data = PAGe::hash_file_sha256(paths[["data"]]),
-    candidate = PAGe::hash_file_sha256(paths[["candidate"]]),
-    incumbent = PAGe::hash_file_sha256(paths[["incumbent"]])
+    authorized_data = PAGe:::hash_file_sha256(paths[["data"]]),
+    candidate = PAGe:::hash_file_sha256(paths[["candidate"]]),
+    incumbent = PAGe:::hash_file_sha256(paths[["incumbent"]])
   )
   bundle <- structure(
     list(
@@ -110,7 +110,7 @@ promotion_test_fixture <- function() {
 
   acceptance_hashes <- c(
     bundle_hashes,
-    promotion_bundle = PAGe::hash_file_sha256(paths[["acceptance_bundle"]])
+    promotion_bundle = PAGe:::hash_file_sha256(paths[["acceptance_bundle"]])
   )
   acceptance_manifest <- promotion_test_manifest(
     "holdout_acceptance_decision",
@@ -142,8 +142,8 @@ promotion_test_fixture <- function() {
     authorized_data = bundle_hashes[["authorized_data"]],
     candidate = bundle_hashes[["candidate"]],
     promotion_bundle = acceptance_hashes[["promotion_bundle"]],
-    promotion_manifest = PAGe::hash_file_sha256(paths[["acceptance_manifest"]]),
-    refit_artifact = PAGe::hash_file_sha256(paths[["refit_artifact"]])
+    promotion_manifest = PAGe:::hash_file_sha256(paths[["acceptance_manifest"]]),
+    refit_artifact = PAGe:::hash_file_sha256(paths[["refit_artifact"]])
   )
   refit_manifest <- promotion_test_manifest(
     "post_promotion_refit",
@@ -258,11 +258,11 @@ test_that("promotion publishes one immutable deployment and audit manifest", {
   expect_identical(basename(dirname(result$promoted_kit_path)), "deployment-test")
 
   manifest <- readRDS(result$manifest_json_path)
-  expect_true(PAGe::validate_result_manifest(manifest))
+  expect_true(PAGe:::validate_result_manifest(manifest))
   expect_identical(manifest$artifact$role, "promoted_deployment_kit")
   expect_identical(
     manifest$provenance$source_artifact_hashes[["promoted_kit"]],
-    PAGe::hash_file_sha256(result$promoted_kit_path)
+    PAGe:::hash_file_sha256(result$promoted_kit_path)
   )
   expect_setequal(
     names(manifest$provenance$source_artifact_hashes),
@@ -289,7 +289,7 @@ test_that("canonical manifest I/O produces a loadable promoted kit", {
     code_commit = "abcdef1"
   )
 
-  loaded <- PAGe::load_promoted_kit(
+  loaded <- PAGe:::load_promoted_kit(
     result$promoted_kit_path,
     result$manifest_json_path
   )
@@ -400,7 +400,7 @@ test_that("spec drift and destination collisions create no promotion", {
   saveRDS(refit, fixture$paths[["refit_artifact"]])
   refit_manifest <- readRDS(fixture$paths[["refit_manifest"]])
   refit_manifest$provenance$source_artifact_hashes[["refit_artifact"]] <-
-    PAGe::hash_file_sha256(fixture$paths[["refit_artifact"]])
+    PAGe:::hash_file_sha256(fixture$paths[["refit_artifact"]])
   saveRDS(refit_manifest, fixture$paths[["refit_manifest"]])
   expect_error(
     promote_post_refit(
@@ -452,7 +452,7 @@ test_that("fixed M0, M1, and runtime drift creates no promotion", {
   saveRDS(refit, fixture$paths[["refit_artifact"]])
   refit_manifest <- readRDS(fixture$paths[["refit_manifest"]])
   refit_manifest$provenance$source_artifact_hashes[["refit_artifact"]] <-
-    PAGe::hash_file_sha256(fixture$paths[["refit_artifact"]])
+    PAGe:::hash_file_sha256(fixture$paths[["refit_artifact"]])
   saveRDS(refit_manifest, fixture$paths[["refit_manifest"]])
 
   expect_error(

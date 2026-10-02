@@ -37,7 +37,6 @@
 #'   rows, equal-season and pooled summaries, and per-season summaries.
 #'   The recommendation contains `decision`, machine-readable `reasons`, and
 #'   the applied tolerance.
-#' @export
 compare_m1_m2 <- function(
   forecasts,
   outcome_col,

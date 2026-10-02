@@ -288,7 +288,6 @@
 #'   for a parameter-specific gain cap. Positive \code{adjacent_gain} means the
 #'   newer value reduced the metric; \code{gain_per_unit} divides that change by
 #'   the parameter step. The object has class \code{page_nll_sensitivity}.
-#' @export
 extract_nll_sensitivity <- function(x,
                                     metric = "bernoulli_nll",
                                     parameters = NULL) {
@@ -353,7 +352,6 @@ extract_nll_sensitivity <- function(x,
 #'   \code{"mean_metric"}, or \code{"adjacent_gain"}.
 #' @param facet_scales Passed to \code{ggplot2::facet_wrap()}.
 #' @return A \code{ggplot} object.
-#' @export
 plot_nll_sensitivity <- function(x,
                                  metric = "bernoulli_nll",
                                  parameters = NULL,

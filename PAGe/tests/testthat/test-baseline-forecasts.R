@@ -1,6 +1,6 @@
 baseline_persistence <- PAGe:::baseline_persistence
 baseline_seasonal_mean <- PAGe:::baseline_seasonal_mean
-simulate_flu_seasons <- PAGe::simulate_flu_seasons
+simulate_flu_seasons <- PAGe:::simulate_flu_seasons
 
 baseline_fixture <- function(S = 3L, weeks = 1:52, seed = 2025) {
   raw <- simulate_flu_seasons(S = S, weeks = weeks, seed = seed)
