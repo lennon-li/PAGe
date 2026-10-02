@@ -25,7 +25,8 @@ m2_predict_one(
   include_season_re = FALSE,
   soft_cap_fn = NULL,
   return_ci = FALSE,
-  bias_logit = 0
+  bias_logit = 0,
+  timing_mode = c("legacy", "fractional")
 )
 ```
 
@@ -46,11 +47,12 @@ m2_predict_one(
 
 - iWeek:
 
-  Integer. Locked ignition week.
+  Numeric. Locked ignition week; fractional in the opt-in fractional
+  timing mode.
 
 - anchorWeek:
 
-  Integer. Reference-curve anchor week.
+  Numeric. Reference-curve anchor week.
 
 - logit_f_eff:
 
@@ -106,7 +108,14 @@ m2_predict_one(
 
   Numeric online bias adjustment on the logit scale.
 
+- timing_mode:
+
+  Character. `"legacy"` uses integer aligned weeks; `"fractional"`
+  preserves numeric aligned weeks.
+
 ## Value
 
 A named list with `m2_p` (and `m2_lo`, `m2_hi` if `return_ci = TRUE`),
-or `NULL` on prediction failure.
+and `m2_eta_raw`, the GAM linear predictor before online correction or
+probability capping; or `NULL` on prediction failure. Bounds describe
+the conditional fitted mean.

@@ -32,6 +32,7 @@ fitIgnition(
   fit_slope = FALSE,
   fit_fs = FALSE,
   select = FALSE,
+  timing_truth = NULL,
   verbose = TRUE
 )
 ```
@@ -108,6 +109,14 @@ fitIgnition(
 
   Logical. Passed to `gamm4::gamm4(select=...)`. Default `FALSE`.
 
+- timing_truth:
+
+  Optional data frame from
+  [`as_timing_targets_v2()`](https://lennon-li.github.io/PAGe/reference/as_timing_targets_v2.md)
+  with `season` and `ignition_target_weekF`. When supplied, the
+  fractional target is used for the training and event windows. The
+  default `NULL` preserves the legacy phase-derived behavior.
+
 - verbose:
 
   Logical. Print progress messages. Default `TRUE`.
@@ -131,6 +140,11 @@ A list with:
 - fits:
 
   List of fitted objects for each enabled model.
+
+- basis_support:
+
+  Requested and effective basis dimensions with the explicit
+  support-based adjustment reason.
 
 **Added score columns (in `$data`).**
 

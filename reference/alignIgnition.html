@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -51,7 +51,8 @@
 <span>  <span class="va">outs</span>,</span>
 <span>  season_col <span class="op">=</span> <span class="st">"season"</span>,</span>
 <span>  week_col <span class="op">=</span> <span class="st">"weekF"</span>,</span>
-<span>  nweek_col <span class="op">=</span> <span class="st">"nW_true"</span></span>
+<span>  nweek_col <span class="op">=</span> <span class="st">"nW_true"</span>,</span>
+<span>  template_weeks <span class="op">=</span> <span class="fu">.page_template_weeks</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -72,7 +73,13 @@
 
 
 <dt id="arg-nweek-col">nweek_col<a class="anchor" aria-label="anchor" href="#arg-nweek-col"></a></dt>
-<dd><p>season length column name (default "nW_true"); if missing uses max(weekF) per season</p></dd>
+<dd><p>calendar length output column (default "nW_true"); derived from season start year</p></dd>
+
+
+<dt id="arg-template-weeks">template_weeks<a class="anchor" aria-label="anchor" href="#arg-template-weeks"></a></dt>
+<dd><p>Template domain used for fitting (default 52). Rows
+shifted outside this domain are retained and flagged, but are excluded by
+`estimateRef()` rather than wrapped back into the season.</p></dd>
 
 </dl></div>
     <div class="section level2">

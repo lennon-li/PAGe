@@ -1,0 +1,117 @@
+# Canonical PAGe v3: Ignition, Peak Timing, and A/B Forecasts
+
+PAGe ships the audited weekF12 canonical v3 shadow model as package
+data. The model bundle contains the frozen M0-A, M1-A, M2-A, M1-B, and
+M2-B artifacts and a hash manifest tied to release:
+
+`5472d08992b5a9da40a9419b75c7427847ff7b1999070041d5e38b0a71da853b`
+
+No repository-level [`source()`](https://rdrr.io/r/base/source.html)
+calls or external model directories are required after package
+installation.
+
+## Inspect the bundled model identity
+
+``` r
+
+library(PAGe)
+models <- page_models()
+attr(models, "release_id")
+attr(models, "manifest")
+```
+
+Every packaged runtime file is SHA-256 verified before use. The manifest
+also records the canonical source-artifact SHA-256 values. M2-A and M2-B
+are deterministic runtime-only projections: they preserve the frozen
+coefficients/contracts (and the learned normalized B shape template
+required for posterior-C2) while omitting historical target-count
+frames. The runtime remains `shadow_only` and
+`production_eligible = FALSE`.
+
+## Run from an OLIS snapshot
+
+``` r
+
+result <- page_forecast(
+  "path/to/hist_olis.RData",
+  season = "2026-27"
+)
+
+result
+```
+
+The returned object contains the full operational state:
+
+``` r
+
+result$monitoring$A$m0   # ignition decision and crossing week
+result$monitoring$A$m1   # peak mean, 90% interval, weeks-to-peak, probabilities
+result$monitoring$B$m1   # B activity/timing state
+result$forecasts         # A/B +1/+2 forecasts and routes
+result$provenance        # release/model/input identities
+```
+
+## Run from a typed A/B panel
+
+The package also accepts a data frame with one aligned row per week and
+these required columns:
+
+`season`, `weekF`, `y_A`, `N_A`, `p_A`, `y_B`, `N_B`, `p_B`.
+
+``` r
+
+result <- page_forecast(
+  typed_ab_panel,
+  season = "2026-27",
+  origin_weekF = 12
+)
+```
+
+Dates are optional for model execution but recommended for
+audit/reporting.
+
+## How routing works
+
+At weekF12 and later, the runtime requires the exact latest three
+consecutive observations through the requested origin.
+
+Influenza A:
+
+- M0-A determines ignition;
+- M1-A estimates peak timing after ignition;
+- M2-A +1 and +2 remain exact A1 state forecasts by frozen policy.
+
+Influenza B:
+
+- B+1 is exact B1 state;
+- B+2 uses posterior-C2 only when causal B timing is available;
+- otherwise B+2 is exact B1 fallback.
+
+Before weekF12,
+[`page_forecast()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
+returns a valid object with `issued = FALSE` and does not silently turn
+early diagnostics into issued forecasts.
+
+## Weekly operation
+
+A minimal weekly R job is simply:
+
+``` r
+
+library(PAGe)
+
+result <- page_forecast(
+  "/secure/path/hist_olis.RData",
+  season = "2026-27"
+)
+
+saveRDS(result, file = sprintf(
+  "results/page-v3-%s-weekF%02d.rds",
+  result$season, result$origin_weekF
+))
+```
+
+Scheduling (Posit Connect, cron, CI, or another orchestrator) is
+intentionally separate from the forecasting package. The model,
+validation, ignition/peak monitoring, and forecast routing all remain
+inside PAGe.

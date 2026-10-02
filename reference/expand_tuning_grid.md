@@ -27,9 +27,7 @@ expand_tuning_grid(
 
 - x:
 
-  A stage tuning result with a selected configuration and complete
-  tuning grid. A raw grid alone is not sufficient for M0 or M1
-  expansion.
+  A tuning result or a grid data frame.
 
 - stage:
 

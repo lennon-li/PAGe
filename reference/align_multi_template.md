@@ -32,7 +32,10 @@ align_multi_template(
   dynamic_temp = TRUE,
   dynamic_temp_pivot = 10L,
   gam_obj = NULL,
-  spread_method = c("between", "total")
+  spread_method = c("between", "total"),
+  timing_mode = c("legacy", "fractional"),
+  prep = NULL,
+  return_prep = FALSE
 )
 ```
 
@@ -149,8 +152,8 @@ align_multi_template(
 
   Character; `"between"` (default) computes `logit_spread` as the
   weighted between-template standard deviation on the logit scale,
-  preserving the incumbent behaviour. `"total"` adds weighted
-  per-template GAM SE\\2 (from `g_s_mu_se`) to the between-template
+  preserving the incumbent behaviour. `"total"` adds weighted squared
+  per-template GAM SE (from `g_s_mu_se`) to the between-template
   variance, yielding a total-variance spread. When per-template SEs are
   unavailable (zero or missing) the method falls back to between-only
   for that forecast week and increments `spread_fallback_count`.

@@ -24,7 +24,7 @@
 
     <a class="navbar-brand me-2" href="index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -71,10 +71,70 @@
 <span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">install</span><span class="op">(</span><span class="st">"PAGe"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
+<h2 id="quick-start-canonical-page-v3">Quick start: canonical PAGe v3<a class="anchor" aria-label="anchor" href="#quick-start-canonical-page-v3"></a>
+</h2>
+<p>PAGe 0.3.0 ships the audited weekF12 Influenza A/B v3 shadow models inside the R package. No repository scripts or external model directory are required after installation.</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://lennon-li.github.io/PAGe/">PAGe</a></span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/page_v3_forecast.html">page_v3_forecast</a></span><span class="op">(</span></span>
+<span>  <span class="st">"/authorized/path/hist_olis.RData"</span>,</span>
+<span>  season <span class="op">=</span> <span class="st">"2026-27"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">result</span></span>
+<span><span class="va">result</span><span class="op">$</span><span class="va">monitoring</span><span class="op">$</span><span class="va">A</span><span class="op">$</span><span class="va">m0</span></span>
+<span><span class="va">result</span><span class="op">$</span><span class="va">monitoring</span><span class="op">$</span><span class="va">A</span><span class="op">$</span><span class="va">m1</span></span>
+<span><span class="va">result</span><span class="op">$</span><span class="va">monitoring</span><span class="op">$</span><span class="va">B</span><span class="op">$</span><span class="va">m1</span></span>
+<span><span class="va">result</span><span class="op">$</span><span class="va">forecasts</span></span></code></pre></div>
+<p>The canonical runtime does not issue before weekF12. At weekF12+ it returns A ignition state, A peak timing, B timing state, and A/B one- and two-week-ahead forecasts from the frozen content-validated runtime bundle. M2 is distributed as a deterministic runtime-only projection that retains canonical source identities but omits historical target-count frames. The canonical v3 release remains shadow-only.</p>
+</div>
+<div class="section level2">
+<h2 id="train-page-on-your-own-seasonal-data">Train PAGe on your own seasonal data<a class="anchor" aria-label="anchor" href="#train-page-on-your-own-seasonal-data"></a>
+</h2>
+<p>The end-to-end training workflow begins with expert ignition review. In an interactive R session PAGe plots each season and asks for the decimal ignition week before fitting anything:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># One call: plots each season, prompts for ignition, then trains.</span></span>
+<span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/page_train_workflow.html">page_train_workflow</a></span><span class="op">(</span></span>
+<span>  <span class="va">allD</span>,</span>
+<span>  annotator <span class="op">=</span> <span class="st">"your-name"</span>,</span>
+<span>  interactive <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  mode <span class="op">=</span> <span class="st">"refresh"</span>,</span>
+<span>  prospective_holdout <span class="op">=</span> <span class="cn">NULL</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Or review/save the ignition labels separately first.</span></span>
+<span><span class="va">labels</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/page_label_ignitions.html">page_label_ignitions</a></span><span class="op">(</span></span>
+<span>  <span class="va">allD</span>,</span>
+<span>  annotator <span class="op">=</span> <span class="st">"your-name"</span>,</span>
+<span>  interactive <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="reference/page_save_kit.html">page_save_kit</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"my-page-kit.rds"</span><span class="op">)</span></span></code></pre></div>
+<p>For a reproducible non-interactive run, pass a named decimal vector instead:</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">labels</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/page_label_ignitions.html">page_label_ignitions</a></span><span class="op">(</span></span>
+<span>  <span class="va">allD</span>,</span>
+<span>  ignition_weeks <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>    <span class="st">"2022-23"</span> <span class="op">=</span> <span class="fl">15.6</span>,</span>
+<span>    <span class="st">"2023-24"</span> <span class="op">=</span> <span class="fl">20.2</span>,</span>
+<span>    <span class="st">"2024-25"</span> <span class="op">=</span> <span class="fl">23.0</span>,</span>
+<span>    <span class="st">"2025-26"</span> <span class="op">=</span> <span class="fl">19.3</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  annotator <span class="op">=</span> <span class="st">"your-name"</span>,</span>
+<span>  interactive <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>The decimal expert annotation is retained for provenance; the current training contract explicitly uses the containing integer week (<code><a href="https://rdrr.io/r/base/Round.html" class="external-link">floor()</a></code>) as its M0/M1 training anchor. The workflow does not fabricate peak labels or forecast truth. When <code>prospective_holdout</code> or <code>exclude</code> is supplied, those seasons are not shown during automatic ignition review and any pre-supplied labels for them are stripped before <code><a href="reference/train_pipeline.html">train_pipeline()</a></code> is called.</p>
+<p>Version-comparison evidence is available directly from the package:</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/page_version_metrics.html">page_version_metrics</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<p>See <code><a href="articles/train-your-own-page.html">vignette("train-your-own-page", package = "PAGe")</a></code>, <code><a href="articles/deploy-and-forecast.html">vignette("deploy-and-forecast", package = "PAGe")</a></code>, <code><a href="articles/canonical-v3-week12.html">vignette("canonical-v3-week12", package = "PAGe")</a></code>, and <code><a href="articles/model-version-comparison.html">vignette("model-version-comparison", package = "PAGe")</a></code>.</p>
+</div>
+<div class="section level2">
 <h2 id="safe-data-workflow">Safe data workflow<a class="anchor" aria-label="anchor" href="#safe-data-workflow"></a>
 </h2>
 <p>Surveillance observations are not bundled. Supply an authorized historical CSV explicitly or set <code>PAGE_FLU_HIST_FILE</code>, then validate the canonical data contract.</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://lennon-li.github.io/PAGe/">PAGe</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">allD</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/load_flu_hist.html">load_flu_hist</a></span><span class="op">(</span><span class="st">"/authorized/path/flu_history.csv"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -83,12 +143,26 @@
 <span><span class="co"># High-level compatibility refresh; 2025-26 remains a holdout by default.</span></span>
 <span><span class="va">training</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/train_pipeline.html">train_pipeline</a></span><span class="op">(</span><span class="va">allD</span>, mode <span class="op">=</span> <span class="st">"refresh"</span><span class="op">)</span></span>
 <span><span class="va">kit</span> <span class="op">&lt;-</span> <span class="va">training</span><span class="op">$</span><span class="va">kit</span></span></code></pre></div>
+<p>For another disease or surveillance source, map its data-frame columns before training:</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">page_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/prepare_page_data.html">prepare_page_data</a></span><span class="op">(</span></span>
+<span>  <span class="va">raw_data</span>,</span>
+<span>  outcome_col <span class="op">=</span> <span class="st">"positive_count"</span>,</span>
+<span>  week_col <span class="op">=</span> <span class="st">"mmwr_week"</span>,</span>
+<span>  season_col <span class="op">=</span> <span class="st">"season_id"</span>,</span>
+<span>  total_col <span class="op">=</span> <span class="st">"tested_count"</span>,</span>
+<span>  week_type <span class="op">=</span> <span class="st">"mmwr"</span>,</span>
+<span>  start_week <span class="op">=</span> <span class="fl">27L</span>,</span>
+<span>  start_year_col <span class="op">=</span> <span class="st">"season_start_year"</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">training</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/train_pipeline.html">train_pipeline</a></span><span class="op">(</span><span class="va">page_data</span>, mode <span class="op">=</span> <span class="st">"refresh"</span><span class="op">)</span></span></code></pre></div>
+<p>The input must already be weekly and aggregated to one row per season-week; <code><a href="reference/prepare_page_data.html">prepare_page_data()</a></code> maps and validates fields but does not fetch or aggregate.</p>
 </div>
 <div class="section level2">
 <h2 id="guarded-stages">Guarded stages<a class="anchor" aria-label="anchor" href="#guarded-stages"></a>
 </h2>
 <p>For explicit stage-by-stage training, declare mutually disjoint season sets and allow each stage to proceed only after its tuning gate and freeze gate pass:</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">selection</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/validate_season_selection.html">validate_season_selection</a></span><span class="op">(</span></span>
 <span>  <span class="va">allD</span>,</span>
 <span>  training_seasons <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span></span>
@@ -133,16 +207,17 @@
 <div class="section level2">
 <h2 id="holdout-gate">Holdout gate<a class="anchor" aria-label="anchor" href="#holdout-gate"></a>
 </h2>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">candidate</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/replay_season_holdout.html">replay_season_holdout</a></span><span class="op">(</span><span class="va">kit</span>, <span class="va">allD</span>, season <span class="op">=</span> <span class="st">"2025-26"</span><span class="op">)</span></span>
 <span><span class="va">incumbent</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/replay_season_holdout.html">replay_season_holdout</a></span><span class="op">(</span><span class="va">incumbent_kit</span>, <span class="va">allD</span>, season <span class="op">=</span> <span class="st">"2025-26"</span><span class="op">)</span></span>
 <span><span class="va">promotion</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/check_promotion.html">check_promotion</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">metrics</span>, <span class="va">incumbent</span><span class="op">$</span><span class="va">metrics</span><span class="op">)</span></span></code></pre></div>
+<p>Each replay validates the emitted forecasts against the runner’s independent evaluation schedule: forecast keys must be unique, must satisfy <code>target_weekF == origin + horizon</code>, and must match the schedule exactly. Duplicated, unmatched, or inconsistent keys fail the replay instead of being scored as a partial run.</p>
 <p>The default gates require 2% NLL improvement, no horizon MAE degradation over 5%, and no phase MAE degradation over 10%. This in-memory report is diagnostic only: it has no artifact provenance and cannot release the holdout. A governed release uses <code>scripts/acceptance/replay_2025_26.R</code>, preserves its decision bundle and manifest, performs the fixed-spec refresh with <code>season2526/run_retrain_venkata.R</code>, and registers the refreshed kit using <code>scripts/promotion/promote_post_refit.R</code>. A failed or malformed report keeps the holdout excluded.</p>
 </div>
 <div class="section level2">
 <h2 id="prospective-run">Prospective run<a class="anchor" aria-label="anchor" href="#prospective-run"></a>
 </h2>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">current</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/prepare_surveillance_data.html">prepare_surveillance_data</a></span><span class="op">(</span><span class="va">current_csv</span>, season <span class="op">=</span> <span class="st">"2026-27"</span><span class="op">)</span></span>
 <span><span class="va">forecast</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/run_prospective_pipeline.html">run_pipeline</a></span><span class="op">(</span><span class="va">kit</span>, <span class="va">current</span>, mode <span class="op">=</span> <span class="st">"frozen"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/plot_forecast.html">plot_forecast</a></span><span class="op">(</span><span class="va">forecast</span>, history <span class="op">=</span> <span class="va">allD</span><span class="op">)</span></span></code></pre></div>
@@ -151,7 +226,7 @@
 <div class="section level2">
 <h2 id="retuning-options">Retuning options<a class="anchor" aria-label="anchor" href="#retuning-options"></a>
 </h2>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">retuned</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/train_pipeline.html">train_pipeline</a></span><span class="op">(</span></span>
 <span>  <span class="va">allD</span>,</span>
 <span>  mode <span class="op">=</span> <span class="st">"retune"</span>,</span>

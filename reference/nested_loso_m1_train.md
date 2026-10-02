@@ -29,7 +29,8 @@ nested_loso_m1_train(
   blend_alpha = 1,
   spread_method = c("between", "total"),
   parallel = TRUE,
-  verbose = TRUE
+  verbose = TRUE,
+  timing_mode = c("legacy", "fractional")
 )
 ```
 

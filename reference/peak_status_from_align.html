@@ -11,7 +11,7 @@ already in the past."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -53,7 +53,14 @@ already in the past.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">peak_status_from_align</span><span class="op">(</span><span class="va">res</span>, <span class="va">currentD</span>, use_ci <span class="op">=</span> <span class="cn">TRUE</span>, buffer_weeks <span class="op">=</span> <span class="fl">0L</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">peak_status_from_align</span><span class="op">(</span></span>
+<span>  <span class="va">res</span>,</span>
+<span>  <span class="va">currentD</span>,</span>
+<span>  use_ci <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  buffer_weeks <span class="op">=</span> <span class="fl">0L</span>,</span>
+<span>  previous_peak_passed <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  peak_override <span class="op">=</span> <span class="cn">NULL</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -79,6 +86,16 @@ peak. If `FALSE`, we use the point estimate only.</p></dd>
 <dt id="arg-buffer-weeks">buffer_weeks<a class="anchor" aria-label="anchor" href="#arg-buffer-weeks"></a></dt>
 <dd><p>Non-negative integer; additional weeks beyond the
 peak (or upper CI) required before declaring the peak passed.</p></dd>
+
+
+<dt id="arg-previous-peak-passed">previous_peak_passed<a class="anchor" aria-label="anchor" href="#arg-previous-peak-passed"></a></dt>
+<dd><p>Logical scalar. A prior same-season passage
+decision that remains latched when the current origin is unavailable.</p></dd>
+
+
+<dt id="arg-peak-override">peak_override<a class="anchor" aria-label="anchor" href="#arg-peak-override"></a></dt>
+<dd><p>Optional peak list with `t_peak` and `t_peak_ci` to
+use in place of `res$peak`.</p></dd>
 
 </dl></div>
     <div class="section level2">

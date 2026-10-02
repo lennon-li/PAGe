@@ -15,7 +15,7 @@ winning M2 specification on all non-excluded seasons."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -73,6 +73,8 @@ winning M2 specification on all non-excluded seasons.</p>
 <span>  m0_grid <span class="op">=</span> <span class="fu">.default_m0_grid</span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  m1_grid <span class="op">=</span> <span class="fu"><a href="default_m1_grid.html">default_m1_grid</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  m2_grid <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  m2_family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"offset_subset_v1"</span>, <span class="st">"legacy"</span><span class="op">)</span>,</span>
+<span>  allow_legacy <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  max_m2_finalists <span class="op">=</span> <span class="fl">6L</span>,</span>
 <span>  max_m2_specs <span class="op">=</span> <span class="fl">64L</span>,</span>
 <span>  selection_method <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"min_nll"</span>, <span class="st">"one_se"</span>, <span class="st">"pareto"</span><span class="op">)</span>,</span>
@@ -81,11 +83,18 @@ winning M2 specification on all non-excluded seasons.</p>
 <span>  racing_stages <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">3L</span>, <span class="fl">6L</span><span class="op">)</span>,</span>
 <span>  racing_min_survivors <span class="op">=</span> <span class="fl">3L</span>,</span>
 <span>  manual_labels <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  timing_labels <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  timing_mode <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"legacy"</span>, <span class="st">"fractional"</span><span class="op">)</span>,</span>
 <span>  flag_args <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  m1_params <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  m1_min_gain <span class="op">=</span> <span class="fl">0.05</span>,</span>
-<span>  m1_hard_caps <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>k_ref <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>lower <span class="op">=</span> <span class="fl">10L</span>, upper <span class="op">=</span> <span class="fl">50L</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  m1_hard_caps <span class="op">=</span> <span class="fu"><a href="default_m1_hard_caps.html">default_m1_hard_caps</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  m2_min_nll_gain <span class="op">=</span> <span class="fu"><a href="default_m2_nll_gain_caps.html">default_m2_nll_gain_caps</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  early_weight <span class="op">=</span> <span class="fl">2</span>,</span>
+<span>  early_max_t_since <span class="op">=</span> <span class="fl">12</span>,</span>
+<span>  pre_ignition_weight <span class="op">=</span> <span class="fl">0</span>,</span>
+<span>  late_weight <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>  score_scale <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"equal_week"</span>, <span class="st">"test_count"</span><span class="op">)</span>,</span>
 <span>  m0_params <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  m2_spec_id <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -151,6 +160,16 @@ candidate, and incumbent artifacts is the safety boundary.</p></dd>
 <code>plan_m2_grid(previous_results)</code>.</p></dd>
 
 
+<dt id="arg-m-family">m2_family<a class="anchor" aria-label="anchor" href="#arg-m-family"></a></dt>
+<dd><p>M2 model family. The default <code>"offset_subset_v1"</code>
+is the governed subset family; <code>"legacy"</code> is research/compatibility
+only.</p></dd>
+
+
+<dt id="arg-allow-legacy">allow_legacy<a class="anchor" aria-label="anchor" href="#arg-allow-legacy"></a></dt>
+<dd><p>Logical; explicitly allow the legacy research path.</p></dd>
+
+
 <dt id="arg-max-m-finalists-max-m-specs">max_m2_finalists, max_m2_specs<a class="anchor" aria-label="anchor" href="#arg-max-m-finalists-max-m-specs"></a></dt>
 <dd><p>Adaptive M2 plan caps.</p></dd>
 
@@ -180,6 +199,13 @@ released holdout, these are derived exclusively from verified promotion
 evidence and explicit overrides are rejected.</p></dd>
 
 
+<dt id="arg-timing-labels">timing_labels<a class="anchor" aria-label="anchor" href="#arg-timing-labels"></a></dt>
+<dd><p>Optional timing-v2 label object or list of objects.
+When supplied, the earlier ignition weeks are converted to the existing
+M0/M1 training contract, while the complete timing-v2 object is retained
+in the result for provenance. Cannot be combined with <code>manual_labels</code>.</p></dd>
+
+
 <dt id="arg-m-min-gain">m1_min_gain<a class="anchor" aria-label="anchor" href="#arg-m-min-gain"></a></dt>
 <dd><p>Minimum M1 Weibull-MAE improvement, in weeks, required to
 justify a more flexible `k_ref` candidate (default 0.05).</p></dd>
@@ -187,7 +213,8 @@ justify a more flexible `k_ref` candidate (default 0.05).</p></dd>
 
 <dt id="arg-m-hard-caps">m1_hard_caps<a class="anchor" aria-label="anchor" href="#arg-m-hard-caps"></a></dt>
 <dd><p>Named M1 hard caps accepted by the boundary gate. The
-default bounds `k_ref` to 10–50 on the 52-week reference domain.</p></dd>
+default is returned by <code><a href="default_m1_hard_caps.html">default_m1_hard_caps()</a></code> and bounds `k_ref`
+to 10–50 on the 52-week reference domain.</p></dd>
 
 
 <dt id="arg-m-min-nll-gain">m2_min_nll_gain<a class="anchor" aria-label="anchor" href="#arg-m-min-nll-gain"></a></dt>
@@ -196,6 +223,30 @@ the M2 boundary gate. Defaults to <code><a href="default_m2_nll_gain_caps.html">
 covers every M2 axis. A scalar applies to every M2 axis. An edge is
 accepted only when its matched outward gain is at or below the threshold;
 missing matched evidence still requires expansion.</p></dd>
+
+
+<dt id="arg-early-weight">early_weight<a class="anchor" aria-label="anchor" href="#arg-early-weight"></a></dt>
+<dd><p>Weight for target-relative weeks zero through
+<code>early_max_t_since</code> in subset-M2 tuning (default 2).</p></dd>
+
+
+<dt id="arg-early-max-t-since">early_max_t_since<a class="anchor" aria-label="anchor" href="#arg-early-max-t-since"></a></dt>
+<dd><p>Last target-relative week receiving
+<code>early_weight</code> (default 12).</p></dd>
+
+
+<dt id="arg-pre-ignition-weight">pre_ignition_weight<a class="anchor" aria-label="anchor" href="#arg-pre-ignition-weight"></a></dt>
+<dd><p>Weight for pre-ignition targets (default 0).</p></dd>
+
+
+<dt id="arg-late-weight">late_weight<a class="anchor" aria-label="anchor" href="#arg-late-weight"></a></dt>
+<dd><p>Weight for targets after <code>early_max_t_since</code>
+(default 1).</p></dd>
+
+
+<dt id="arg-score-scale">score_scale<a class="anchor" aria-label="anchor" href="#arg-score-scale"></a></dt>
+<dd><p>Primary subset-M2 score denominator, either
+<code>"equal_week"</code> (default) or <code>"test_count"</code>.</p></dd>
 
 
 <dt id="arg-m-params">m0_params<a class="anchor" aria-label="anchor" href="#arg-m-params"></a></dt>
@@ -214,8 +265,10 @@ it is derived from promotion evidence after holdout acceptance.</p></dd>
     <p>A transparent list with <code>mode</code>, <code>components</code>,
   <code>tuning</code> (NULL for refresh), <code>grid</code>,
   <code>grid_provenance</code>, full-result <code>selection</code>, optional
-  <code>racing</code> diagnostics, transparent <code>holdout</code> release state, and
-  deployment <code>kit</code>.</p>
+  <code>racing</code> diagnostics, transparent <code>holdout</code> release state,
+  attached <code>preflight</code> and <code>boundary_actions</code> reports, and
+  deployment <code>kit</code>. When supplied, <code>timing_labels_v2</code> preserves
+  the complete timing-v2 label object or list used for training.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

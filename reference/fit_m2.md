@@ -6,7 +6,16 @@ matching identities and selection.
 ## Usage
 
 ``` r
-fit_m2(data, selection, m0, m1, config, ...)
+fit_m2(
+  data,
+  selection,
+  m0,
+  m1,
+  config,
+  family = NULL,
+  allow_legacy = FALSE,
+  ...
+)
 ```
 
 ## Arguments
@@ -30,6 +39,15 @@ fit_m2(data, selection, m0, m1, config, ...)
 - config:
 
   Named list of M2 specification parameters.
+
+- family:
+
+  Optional explicit model-family discriminator. When omitted it is read
+  from `config$family`; the governed subset family is the default.
+
+- allow_legacy:
+
+  Logical; explicitly allow the legacy research path.
 
 - ...:
 

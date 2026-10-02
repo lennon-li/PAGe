@@ -1,21 +1,10 @@
 # Prospective ignition detection (M0v2) across seasons
 
 Applies a prospective-safe ignition detector across all seasons. The
-detector uses five gates:
-
-1.  classifier score gate: `score_col >= cls_thr`
-
-2.  rolling-sum evidence gate: `p_sumK >= p_sum_thr` where
-    `p_sumK = rollsum(p, K_sum)`
-
-3.  smoothed positivity level gate: `p_sm >= p_thr` where
-    `p_sm = rollmean(p, L)`
-
-4.  cumulative prevalence gate: `prev >= prev_thr` where
-    `prev = cumsum(y)/cumsum(N)`
-
-5.  noise-tolerant trend gate on `p_sm` requiring sustained increases
-    with tolerance `eps`
+detector has five possible evidence votes: classifier score, rolling
+positivity sum, smoothed positivity level, cumulative prevalence, and
+smoothed trend. The classifier vote is optional and is disabled in the
+current M0-v2 policy.
 
 ## Usage
 
@@ -99,7 +88,14 @@ list with `by_season` and optionally `data` and `compare`.
 
 ## Details
 
+A separate raw-positivity persistence safeguard can be enabled with
+`raw_nondec_n > 1`. Each week-to-week decrease in the most recent
+`raw_nondec_n` observations must be no larger than `raw_drop_se_tol`
+standard errors of the difference between the two weekly binomial
+proportions. The current M0-v2 policy uses 1 SE. This safeguard is
+mandatory in addition to the N-of-votes rule; it is not an
+interchangeable vote. Setting `raw_nondec_n = 1` disables it.
+
 Within the eligible window `w_min <= week <= w_max`, ignition is
-declared at the earliest week where at least `N_req` of the five gates
-are satisfied (N-of-5 voting). The classifier gate is a vote (not
-mandatory).
+declared at the earliest week where the raw-persistence safeguard passes
+and at least `N_req` evidence votes are satisfied.

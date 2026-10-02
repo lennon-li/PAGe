@@ -8,7 +8,14 @@ model. Requires the output of
 ## Usage
 
 ``` r
-run_m1_alignment(kit, current_data, m0_result, walk_start = 5L, verbose = TRUE)
+run_m1_alignment(
+  kit,
+  current_data,
+  m0_result,
+  walk_start = 5L,
+  verbose = TRUE,
+  timing_mode = c("legacy", "fractional")
+)
 
 run_m1(kit, current_data, m0_result, ...)
 ```

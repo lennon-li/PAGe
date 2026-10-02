@@ -15,7 +15,7 @@ training-evaluation-deployment are fully consistent."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -75,7 +75,8 @@ training-evaluation-deployment are fully consistent.</p>
 <span>  include_season_re <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  soft_cap_fn <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  return_ci <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  bias_logit <span class="op">=</span> <span class="fl">0</span></span>
+<span>  bias_logit <span class="op">=</span> <span class="fl">0</span>,</span>
+<span>  timing_mode <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"legacy"</span>, <span class="st">"fractional"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -96,11 +97,12 @@ training-evaluation-deployment are fully consistent.</p>
 
 
 <dt id="arg-iweek">iWeek<a class="anchor" aria-label="anchor" href="#arg-iweek"></a></dt>
-<dd><p>Integer. Locked ignition week.</p></dd>
+<dd><p>Numeric. Locked ignition week; fractional in the opt-in
+fractional timing mode.</p></dd>
 
 
 <dt id="arg-anchorweek">anchorWeek<a class="anchor" aria-label="anchor" href="#arg-anchorweek"></a></dt>
-<dd><p>Integer. Reference-curve anchor week.</p></dd>
+<dd><p>Numeric. Reference-curve anchor week.</p></dd>
 
 
 <dt id="arg-logit-f-eff">logit_f_eff<a class="anchor" aria-label="anchor" href="#arg-logit-f-eff"></a></dt>
@@ -154,11 +156,18 @@ is included in the prediction (weekly-refit mode). If <code>FALSE</code>,
 <dt id="arg-bias-logit">bias_logit<a class="anchor" aria-label="anchor" href="#arg-bias-logit"></a></dt>
 <dd><p>Numeric online bias adjustment on the logit scale.</p></dd>
 
+
+<dt id="arg-timing-mode">timing_mode<a class="anchor" aria-label="anchor" href="#arg-timing-mode"></a></dt>
+<dd><p>Character. <code>"legacy"</code> uses integer aligned weeks;
+<code>"fractional"</code> preserves numeric aligned weeks.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A named list with <code>m2_p</code> (and <code>m2_lo</code>, <code>m2_hi</code>
-  if <code>return_ci = TRUE</code>), or <code>NULL</code> on prediction failure.</p>
+  if <code>return_ci = TRUE</code>), and <code>m2_eta_raw</code>, the GAM linear
+  predictor before online correction or probability capping; or <code>NULL</code>
+  on prediction failure. Bounds describe the conditional fitted mean.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

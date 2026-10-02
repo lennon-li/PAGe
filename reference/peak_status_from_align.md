@@ -7,7 +7,14 @@ already in the past.
 ## Usage
 
 ``` r
-peak_status_from_align(res, currentD, use_ci = TRUE, buffer_weeks = 0L)
+peak_status_from_align(
+  res,
+  currentD,
+  use_ci = TRUE,
+  buffer_weeks = 0L,
+  previous_peak_passed = FALSE,
+  peak_override = NULL
+)
 ```
 
 ## Arguments
@@ -32,6 +39,16 @@ peak_status_from_align(res, currentD, use_ci = TRUE, buffer_weeks = 0L)
 
   Non-negative integer; additional weeks beyond the peak (or upper CI)
   required before declaring the peak passed.
+
+- previous_peak_passed:
+
+  Logical scalar. A prior same-season passage decision that remains
+  latched when the current origin is unavailable.
+
+- peak_override:
+
+  Optional peak list with \`t_peak\` and \`t_peak_ci\` to use in place
+  of \`res\$peak\`.
 
 ## Value
 

@@ -3,7 +3,7 @@
 For each week `w` in `season_df`, fits `estimateDerivs` on the subset of
 rows with `weekF <= w` and records the derivative values for row `w`
 only. This prevents future weeks from influencing the GAM smoother at
-earlier time points — a requirement for honest LOSO evaluation.
+earlier time points – a requirement for honest LOSO evaluation.
 
 ## Usage
 

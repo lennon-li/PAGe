@@ -32,7 +32,10 @@ m1_walkforward_predictions(
   dynamic_temp_pivot = 10L,
   top_k = NULL,
   blend_alpha = 1,
-  spread_method = c("between", "total")
+  spread_method = c("between", "total"),
+  timing_mode = c("legacy", "fractional"),
+  peak_stabilization = c("legacy", "causal"),
+  stabilizer_max_jump_weeks = 2
 )
 ```
 
@@ -115,6 +118,14 @@ m1_walkforward_predictions(
   Character; `"between"` (default) or `"total"`. Passed to
   [`run_alignment_prospective_multi()`](https://lennon-li.github.io/PAGe/reference/run_alignment_prospective_multi.md)
   to select the `logit_spread` computation method.
+
+- peak_stabilization:
+
+  Character; `"legacy"` (default) or `"causal"`.
+
+- stabilizer_max_jump_weeks:
+
+  Positive maximum causal peak movement per origin (default 2 weeks).
 
 ## Value
 

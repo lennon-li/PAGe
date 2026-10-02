@@ -21,7 +21,7 @@ Residual bias GAM: after applying shrinkage, fits a smooth
 
     <a class="navbar-brand me-2" href="../index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -130,14 +130,14 @@ to calibrate real-time peak estimates.</p>
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
-<span class="r-in"><span><span class="va">wf</span>  <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"data/loso_wf_cache.rds"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">wf</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"data/loso_wf_cache.rds"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">allD</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/read.table.html" class="external-link">read.csv</a></span><span class="op">(</span><span class="st">"data/flu_testing_data.csv"</span><span class="op">)</span> <span class="op">|&gt;</span></span></span>
 <span class="r-in"><span>  <span class="fu">mutate</span><span class="op">(</span>p <span class="op">=</span> <span class="va">pos_flua</span> <span class="op">/</span> <span class="va">test_flu</span>, N <span class="op">=</span> <span class="va">test_flu</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">cal</span> <span class="op">&lt;-</span> <span class="fu">fit_peak_calibration</span><span class="op">(</span><span class="va">wf</span><span class="op">$</span><span class="va">params_df</span>, <span class="va">allD</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="co"># LOSO-safe usage (exclude held-out season):</span></span></span>
 <span class="r-in"><span><span class="va">cal_fold</span> <span class="op">&lt;-</span> <span class="fu">fit_peak_calibration</span><span class="op">(</span><span class="va">wf</span><span class="op">$</span><span class="va">params_df</span>, <span class="va">allD</span>, holdout_season <span class="op">=</span> <span class="st">"2022-23"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="co"># Use in production:</span></span></span>
-<span class="r-in"><span><span class="va">ap</span>  <span class="op">&lt;-</span> <span class="fu"><a href="run_alignment_prospective.html">run_alignment_prospective</a></span><span class="op">(</span><span class="va">currentSeason</span>, <span class="va">ref</span>, <span class="va">hyper</span>, <span class="va">params</span>, cal <span class="op">=</span> <span class="va">cal</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">ap</span> <span class="op">&lt;-</span> <span class="fu"><a href="run_alignment_prospective.html">run_alignment_prospective</a></span><span class="op">(</span><span class="va">currentSeason</span>, <span class="va">ref</span>, <span class="va">hyper</span>, <span class="va">params</span>, cal <span class="op">=</span> <span class="va">cal</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 </code></pre></div>
     </div>

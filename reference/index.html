@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -334,6 +334,13 @@
 
       <dl><dt>
 
+          <code><a href="PAGe-public-api.html">page_train()</a></code> <code><a href="PAGe-public-api.html">page_forecast()</a></code> <code><a href="PAGe-public-api.html">page_models()</a></code> <code><a href="PAGe-public-api.html">page_walkforward_report()</a></code> <code><a href="PAGe-public-api.html">page_validate_kit()</a></code> <code><a href="PAGe-public-api.html">aggregate_strata()</a></code> <code><a href="PAGe-public-api.html">aggregate_strata_draws()</a></code> <code><a href="PAGe-public-api.html">shared_denominator_correlation()</a></code> <code><a href="PAGe-public-api.html">m0_fit()</a></code> <code><a href="PAGe-public-api.html">m0_detect()</a></code> <code><a href="PAGe-public-api.html">m1_fit()</a></code> <code><a href="PAGe-public-api.html">m1_predict()</a></code> <code><a href="PAGe-public-api.html">m1_peak_posterior()</a></code> <code><a href="PAGe-public-api.html">m1_passage_posterior()</a></code> <code><a href="PAGe-public-api.html">m2_fit()</a></code> <code><a href="PAGe-public-api.html">m2_predict()</a></code> <code><a href="PAGe-public-api.html">evaluate_forecasts()</a></code> <code><a href="PAGe-public-api.html">replay_holdout()</a></code> <code><a href="PAGe-public-api.html">verify_promotion()</a></code>
+
+        </dt>
+        <dd>Stable PAGe public API</dd>
+
+        <dt>
+
           <code><a href="alignIgnition.html">alignIgnition()</a></code>
 
         </dt>
@@ -362,10 +369,24 @@
 
         <dt>
 
+          <code><a href="detectIgnitionBySeason_M0v2_timing.html">detectIgnitionBySeason_M0v2_timing()</a></code>
+
+        </dt>
+        <dd>Detect ignition with an opt-in fractional week estimate</dd>
+
+        <dt>
+
           <code><a href="detectIgnition_oneSeason.html">detectIgnition_oneSeason()</a></code>
 
         </dt>
         <dd>Single-season wrapper around detectIgnitionBySeason_M0v2</dd>
+
+        <dt>
+
+          <code><a href="detectIgnition_oneSeason_timing_v2.html">detectIgnition_oneSeason_timing_v2()</a></code>
+
+        </dt>
+        <dd>Single-season fractional M0 detector helper</dd>
 
         <dt>
 
@@ -404,6 +425,20 @@
 
         <dt>
 
+          <code><a href="fitIgnition_timing_v2.html">fitIgnition_timing_v2()</a></code>
+
+        </dt>
+        <dd>Fit the M0 classifier using fractional timing targets</dd>
+
+        <dt>
+
+          <code><a href="fit_final_pipeline.html">fit_final_pipeline()</a></code>
+
+        </dt>
+        <dd>Fit the final deployment pipeline after nested evaluation</dd>
+
+        <dt>
+
           <code><a href="fit_m0.html">fit_m0()</a></code>
 
         </dt>
@@ -418,10 +453,38 @@
 
         <dt>
 
+          <code><a href="fit_m1_v2_bias_calibrator.html">fit_m1_v2_bias_calibrator()</a></code>
+
+        </dt>
+        <dd>Fit the M1-v2 early-bias calibrator</dd>
+
+        <dt>
+
+          <code><a href="fit_m1_v2_library.html">fit_m1_v2_library()</a></code>
+
+        </dt>
+        <dd>Fit the M1-v2 peak-relative historical library</dd>
+
+        <dt>
+
+          <code><a href="fit_m1_v2_passage_policy.html">fit_m1_v2_passage_policy()</a></code>
+
+        </dt>
+        <dd>Fit the M1-v2 passage-confirmation policy</dd>
+
+        <dt>
+
           <code><a href="fit_m2.html">fit_m2()</a></code>
 
         </dt>
         <dd>Fit an M2 forecast configuration (draft artifact)</dd>
+
+        <dt>
+
+          <code><a href="fit_m2_offset_correction.html">fit_m2_offset_correction()</a></code>
+
+        </dt>
+        <dd>Fit a regularized binomial M2 offset correction.</dd>
 
         <dt>
 
@@ -474,6 +537,41 @@
 
         <dt>
 
+          <code><a href="m1_v2_activation_table_from_m0_loso.html">m1_v2_activation_table_from_m0_loso()</a></code>
+
+        </dt>
+        <dd>Construct governed M1-v2 activations from an M0 LOSO result</dd>
+
+        <dt>
+
+          <code><a href="m1_v2_apply_bias_calibration.html">m1_v2_apply_bias_calibration()</a></code>
+
+        </dt>
+        <dd>Apply M1-v2 early-bias calibration to forecast summaries</dd>
+
+        <dt>
+
+          <code><a href="m1_v2_passage_decision.html">m1_v2_passage_decision()</a></code>
+
+        </dt>
+        <dd>Decide whether M1-v2 peak passage is confirmed</dd>
+
+        <dt>
+
+          <code><a href="m1_v2_passage_posterior.html">m1_v2_passage_posterior()</a></code>
+
+        </dt>
+        <dd>Infer M1-v2 peak-passage probability</dd>
+
+        <dt>
+
+          <code><a href="m1_v2_peak_posterior.html">m1_v2_peak_posterior()</a></code>
+
+        </dt>
+        <dd>Infer a future peak-time posterior with M1-v2</dd>
+
+        <dt>
+
           <code><a href="m1_walkforward_multi.html">m1_walkforward_multi()</a></code>
 
         </dt>
@@ -488,10 +586,38 @@
 
         <dt>
 
+          <code><a href="m2_offset_baseline.html">m2_offset_baseline()</a></code>
+
+        </dt>
+        <dd>Return the exact no-correction M1 baseline on the probability scale</dd>
+
+        <dt>
+
           <code><a href="m2_predict_one.html">m2_predict_one()</a></code>
 
         </dt>
         <dd>Predict M2 positivity from a fitted Stage-2 GAM (single row)</dd>
+
+        <dt>
+
+          <code><a href="m2_subset_config.html">m2_subset_config()</a></code>
+
+        </dt>
+        <dd>Build a governed M2 offset-subset configuration</dd>
+
+        <dt>
+
+          <code><a href="m2_subset_grid.html">m2_subset_grid()</a></code>
+
+        </dt>
+        <dd>Build the governed M2 offset-subset candidate grid</dd>
+
+        <dt>
+
+          <code><a href="m2_v2_c2_governed_contract.html">m2_v2_c2_governed_contract()</a></code>
+
+        </dt>
+        <dd>Governed M2-v2 C2 contract</dd>
 
         <dt>
 
@@ -562,6 +688,13 @@
 
         </dt>
         <dd>Run a complete nested LOSO fold</dd>
+
+        <dt>
+
+          <code><a href="nested_season_evaluation.html">nested_season_evaluation()</a></code>
+
+        </dt>
+        <dd>Run the complete nested seasonal evaluation</dd>
 
         <dt>
 
@@ -637,6 +770,13 @@
 
       <dl><dt>
 
+          <code><a href="PAGe-public-api.html">page_train()</a></code> <code><a href="PAGe-public-api.html">page_forecast()</a></code> <code><a href="PAGe-public-api.html">page_models()</a></code> <code><a href="PAGe-public-api.html">page_walkforward_report()</a></code> <code><a href="PAGe-public-api.html">page_validate_kit()</a></code> <code><a href="PAGe-public-api.html">aggregate_strata()</a></code> <code><a href="PAGe-public-api.html">aggregate_strata_draws()</a></code> <code><a href="PAGe-public-api.html">shared_denominator_correlation()</a></code> <code><a href="PAGe-public-api.html">m0_fit()</a></code> <code><a href="PAGe-public-api.html">m0_detect()</a></code> <code><a href="PAGe-public-api.html">m1_fit()</a></code> <code><a href="PAGe-public-api.html">m1_predict()</a></code> <code><a href="PAGe-public-api.html">m1_peak_posterior()</a></code> <code><a href="PAGe-public-api.html">m1_passage_posterior()</a></code> <code><a href="PAGe-public-api.html">m2_fit()</a></code> <code><a href="PAGe-public-api.html">m2_predict()</a></code> <code><a href="PAGe-public-api.html">evaluate_forecasts()</a></code> <code><a href="PAGe-public-api.html">replay_holdout()</a></code> <code><a href="PAGe-public-api.html">verify_promotion()</a></code>
+
+        </dt>
+        <dd>Stable PAGe public API</dd>
+
+        <dt>
+
           <code><a href="add_prospective_derivs_link.html">add_prospective_derivs_link()</a></code>
 
         </dt>
@@ -665,10 +805,73 @@
 
         <dt>
 
+          <code><a href="apply_ignition_labels.html">apply_ignition_labels()</a></code>
+
+        </dt>
+        <dd>Apply finalized ignition labels to canonical training data</dd>
+
+        <dt>
+
+          <code><a href="apply_timing_labels_v2.html">apply_timing_labels_v2()</a></code>
+
+        </dt>
+        <dd>Apply timing-v2 labels to canonical surveillance data</dd>
+
+        <dt>
+
+          <code><a href="as_manual_labels_v2.html">as_manual_labels_v2()</a></code>
+
+        </dt>
+        <dd>Convert timing-v2 labels to the M0/M1 training label contract</dd>
+
+        <dt>
+
+          <code><a href="as_timing_targets_v2.html">as_timing_targets_v2()</a></code>
+
+        </dt>
+        <dd>Extract fractional timing targets from timing-v2 labels</dd>
+
+        <dt>
+
           <code><a href="assemble_kit.html">assemble_kit()</a></code>
 
         </dt>
         <dd>Bundle trained artifacts for prospective deployment</dd>
+
+        <dt>
+
+          <code><a href="assert_loso_test_season_absent.html">assert_loso_test_season_absent()</a></code>
+
+        </dt>
+        <dd>Assert a LOSO test season is absent from supplied ignition labels</dd>
+
+        <dt>
+
+          <code><a href="baseline_calendar_gam.html">baseline_calendar_gam()</a></code>
+
+        </dt>
+        <dd>Calendar-week binomial GAM comparator</dd>
+
+        <dt>
+
+          <code><a href="baseline_persistence.html">baseline_persistence()</a></code>
+
+        </dt>
+        <dd>Persistence baseline forecasts</dd>
+
+        <dt>
+
+          <code><a href="baseline_seasonal_mean.html">baseline_seasonal_mean()</a></code>
+
+        </dt>
+        <dd>Seasonal-mean baseline forecasts</dd>
+
+        <dt>
+
+          <code><a href="boundary_action_plan.html">boundary_action_plan()</a></code>
+
+        </dt>
+        <dd>Build the next action for a tuning result</dd>
 
         <dt>
 
@@ -686,10 +889,24 @@
 
         <dt>
 
+          <code><a href="build_m1_v2_timing.html">build_m1_v2_timing()</a></code>
+
+        </dt>
+        <dd>Build the governed M1-v2 timing artifact</dd>
+
+        <dt>
+
           <code><a href="build_m2.html">build_m2()</a></code>
 
         </dt>
         <dd>Build M2 forecast model via nested LOSO grid search</dd>
+
+        <dt>
+
+          <code><a href="build_retrospective_peak_truth_v1.html">build_retrospective_peak_truth_v1()</a></code>
+
+        </dt>
+        <dd>Build frozen retrospective peak truth v1 for one or more seasons</dd>
 
         <dt>
 
@@ -735,10 +952,38 @@
 
         <dt>
 
+          <code><a href="compare_m1_m2.html">compare_m1_m2()</a></code>
+
+        </dt>
+        <dd>Compare M1 and M2 forecasts</dd>
+
+        <dt>
+
+          <code><a href="compile_expert_ignition_annotations.html">compile_expert_ignition_annotations()</a></code>
+
+        </dt>
+        <dd>Compile expert ignition annotations to flat storage rows</dd>
+
+        <dt>
+
+          <code><a href="decide_m2_vs_m1.html">decide_m2_vs_m1()</a></code>
+
+        </dt>
+        <dd>Decide whether an M2 candidate earns adoption over M1</dd>
+
+        <dt>
+
           <code><a href="default_m1_grid.html">default_m1_grid()</a></code>
 
         </dt>
         <dd>Return the default M1 alignment tuning grid</dd>
+
+        <dt>
+
+          <code><a href="default_m1_hard_caps.html">default_m1_hard_caps()</a></code>
+
+        </dt>
+        <dd>Return the governed M1 hard-cap defaults</dd>
 
         <dt>
 
@@ -763,10 +1008,31 @@
 
         <dt>
 
+          <code><a href="detectIgnitionBySeason_M0v2_timing.html">detectIgnitionBySeason_M0v2_timing()</a></code>
+
+        </dt>
+        <dd>Detect ignition with an opt-in fractional week estimate</dd>
+
+        <dt>
+
           <code><a href="detectIgnition_oneSeason.html">detectIgnition_oneSeason()</a></code>
 
         </dt>
         <dd>Single-season wrapper around detectIgnitionBySeason_M0v2</dd>
+
+        <dt>
+
+          <code><a href="detectIgnition_oneSeason_timing_v2.html">detectIgnition_oneSeason_timing_v2()</a></code>
+
+        </dt>
+        <dd>Single-season fractional M0 detector helper</dd>
+
+        <dt>
+
+          <code><a href="dot-expert_timing_schema_version.html">.expert_timing_schema_version</a></code>
+
+        </dt>
+        <dd>Expert decimal ignition annotation contract</dd>
 
         <dt>
 
@@ -812,6 +1078,13 @@
 
         <dt>
 
+          <code><a href="expert_ignition_annotation_sheet.html">expert_ignition_annotation_sheet()</a></code>
+
+        </dt>
+        <dd>Create a blank ignition annotation sheet</dd>
+
+        <dt>
+
           <code><a href="extract_nll_sensitivity.html">extract_nll_sensitivity()</a></code>
 
         </dt>
@@ -819,10 +1092,59 @@
 
         <dt>
 
+          <code><a href="finalize_expert_ignition_review.html">finalize_expert_ignition_review()</a></code>
+
+        </dt>
+        <dd>Finalize numeric expert ignition after review</dd>
+
+        <dt>
+
+          <code><a href="finalize_ignition_label.html">finalize_ignition_label()</a></code>
+
+        </dt>
+        <dd>Finalize a reviewed ignition label</dd>
+
+        <dt>
+
+          <code><a href="finalize_peak_label.html">finalize_peak_label()</a></code>
+
+        </dt>
+        <dd>Finalize a reviewed peak label</dd>
+
+        <dt>
+
+          <code><a href="finalize_season_labels.html">finalize_season_labels()</a></code>
+
+        </dt>
+        <dd>Finalize ignition and peak labels together</dd>
+
+        <dt>
+
+          <code><a href="finalize_season_timing_v2.html">finalize_season_timing_v2()</a></code>
+
+        </dt>
+        <dd>Record user supplied ignition and peak timing labels</dd>
+
+        <dt>
+
           <code><a href="fitIgnition.html">fitIgnition()</a></code>
 
         </dt>
         <dd>Fit ignition classifier scores (Stage-1)</dd>
+
+        <dt>
+
+          <code><a href="fitIgnition_timing_v2.html">fitIgnition_timing_v2()</a></code>
+
+        </dt>
+        <dd>Fit the M0 classifier using fractional timing targets</dd>
+
+        <dt>
+
+          <code><a href="fit_final_pipeline.html">fit_final_pipeline()</a></code>
+
+        </dt>
+        <dd>Fit the final deployment pipeline after nested evaluation</dd>
 
         <dt>
 
@@ -840,10 +1162,38 @@
 
         <dt>
 
+          <code><a href="fit_m1_v2_bias_calibrator.html">fit_m1_v2_bias_calibrator()</a></code>
+
+        </dt>
+        <dd>Fit the M1-v2 early-bias calibrator</dd>
+
+        <dt>
+
+          <code><a href="fit_m1_v2_library.html">fit_m1_v2_library()</a></code>
+
+        </dt>
+        <dd>Fit the M1-v2 peak-relative historical library</dd>
+
+        <dt>
+
+          <code><a href="fit_m1_v2_passage_policy.html">fit_m1_v2_passage_policy()</a></code>
+
+        </dt>
+        <dd>Fit the M1-v2 passage-confirmation policy</dd>
+
+        <dt>
+
           <code><a href="fit_m2.html">fit_m2()</a></code>
 
         </dt>
         <dd>Fit an M2 forecast configuration (draft artifact)</dd>
+
+        <dt>
+
+          <code><a href="fit_m2_offset_correction.html">fit_m2_offset_correction()</a></code>
+
+        </dt>
+        <dd>Fit a regularized binomial M2 offset correction.</dd>
 
         <dt>
 
@@ -872,6 +1222,13 @@
 
         </dt>
         <dd>Format current-season observations for Stage-2 refit</dd>
+
+        <dt>
+
+          <code><a href="fractional_alignment_coordinates_v2.html">fractional_alignment_coordinates_v2()</a></code>
+
+        </dt>
+        <dd>Apply fractional timing to an M1 alignment result</dd>
 
         <dt>
 
@@ -1001,6 +1358,41 @@
 
         <dt>
 
+          <code><a href="m1_v2_activation_table_from_m0_loso.html">m1_v2_activation_table_from_m0_loso()</a></code>
+
+        </dt>
+        <dd>Construct governed M1-v2 activations from an M0 LOSO result</dd>
+
+        <dt>
+
+          <code><a href="m1_v2_apply_bias_calibration.html">m1_v2_apply_bias_calibration()</a></code>
+
+        </dt>
+        <dd>Apply M1-v2 early-bias calibration to forecast summaries</dd>
+
+        <dt>
+
+          <code><a href="m1_v2_passage_decision.html">m1_v2_passage_decision()</a></code>
+
+        </dt>
+        <dd>Decide whether M1-v2 peak passage is confirmed</dd>
+
+        <dt>
+
+          <code><a href="m1_v2_passage_posterior.html">m1_v2_passage_posterior()</a></code>
+
+        </dt>
+        <dd>Infer M1-v2 peak-passage probability</dd>
+
+        <dt>
+
+          <code><a href="m1_v2_peak_posterior.html">m1_v2_peak_posterior()</a></code>
+
+        </dt>
+        <dd>Infer a future peak-time posterior with M1-v2</dd>
+
+        <dt>
+
           <code><a href="m1_walkforward_multi.html">m1_walkforward_multi()</a></code>
 
         </dt>
@@ -1015,10 +1407,38 @@
 
         <dt>
 
+          <code><a href="m2_offset_baseline.html">m2_offset_baseline()</a></code>
+
+        </dt>
+        <dd>Return the exact no-correction M1 baseline on the probability scale</dd>
+
+        <dt>
+
           <code><a href="m2_predict_one.html">m2_predict_one()</a></code>
 
         </dt>
         <dd>Predict M2 positivity from a fitted Stage-2 GAM (single row)</dd>
+
+        <dt>
+
+          <code><a href="m2_subset_config.html">m2_subset_config()</a></code>
+
+        </dt>
+        <dd>Build a governed M2 offset-subset configuration</dd>
+
+        <dt>
+
+          <code><a href="m2_subset_grid.html">m2_subset_grid()</a></code>
+
+        </dt>
+        <dd>Build the governed M2 offset-subset candidate grid</dd>
+
+        <dt>
+
+          <code><a href="m2_v2_c2_governed_contract.html">m2_v2_c2_governed_contract()</a></code>
+
+        </dt>
+        <dd>Governed M2-v2 C2 contract</dd>
 
         <dt>
 
@@ -1141,6 +1561,34 @@
 
         <dt>
 
+          <code><a href="nested_season_evaluation.html">nested_season_evaluation()</a></code>
+
+        </dt>
+        <dd>Run the complete nested seasonal evaluation</dd>
+
+        <dt>
+
+          <code><a href="new_expert_ignition_annotation.html">new_expert_ignition_annotation()</a></code>
+
+        </dt>
+        <dd>Create one expert decimal ignition annotation</dd>
+
+        <dt>
+
+          <code><a href="new_m2_v2_b_gate_review.html">new_m2_v2_b_gate_review()</a></code>
+
+        </dt>
+        <dd>Bind a reviewed B timing gate decision document</dd>
+
+        <dt>
+
+          <code><a href="new_m2_v2_b_soft_timing_handoff.html">new_m2_v2_b_soft_timing_handoff()</a></code>
+
+        </dt>
+        <dd>Build a provisional type-B soft-timing handoff for M2-v2</dd>
+
+        <dt>
+
           <code><a href="new_result_manifest.html">new_result_manifest()</a></code>
 
         </dt>
@@ -1155,10 +1603,122 @@
 
         <dt>
 
+          <code><a href="page_aggregate_strata.html">page_aggregate_strata()</a></code>
+
+        </dt>
+        <dd>Aggregate stratified forecasts with explicit dependence</dd>
+
+        <dt>
+
+          <code><a href="page_aggregate_strata_draws.html">page_aggregate_strata_draws()</a></code>
+
+        </dt>
+        <dd>Aggregate joint posterior or simulation draws across strata</dd>
+
+        <dt>
+
+          <code><a href="page_forecast_now.html">page_forecast_now()</a></code>
+
+        </dt>
+        <dd>Produce a real-time forecast from a frozen kit and any supported source</dd>
+
+        <dt>
+
+          <code><a href="page_label_ignitions.html">page_label_ignitions()</a></code>
+
+        </dt>
+        <dd>Interactively review and label seasonal ignition weeks</dd>
+
+        <dt>
+
+          <code><a href="page_load_kit.html">page_load_kit()</a></code>
+
+        </dt>
+        <dd>Load and validate a frozen PAGe deployment kit</dd>
+
+        <dt>
+
+          <code><a href="page_load_surveillance.html">page_load_surveillance()</a></code>
+
+        </dt>
+        <dd>Load current-season surveillance data from any supported source</dd>
+
+        <dt>
+
           <code><a href="page_manual_ignition_labels.html">page_manual_ignition_labels()</a></code>
 
         </dt>
         <dd>Pre-verified historical manual ignition labels</dd>
+
+        <dt>
+
+          <code><a href="page_phase_weights.html">page_phase_weights()</a></code>
+
+        </dt>
+        <dd>Derive per-row phase weights from observed ignition and peak weeks</dd>
+
+        <dt>
+
+          <code><a href="page_save_kit.html">page_save_kit()</a></code>
+
+        </dt>
+        <dd>Save a validated frozen PAGe deployment kit</dd>
+
+        <dt>
+
+          <code><a href="page_scoring_weights.html">page_scoring_weights()</a></code>
+
+        </dt>
+        <dd>Construct a phase-based scoring-weight contract</dd>
+
+        <dt>
+
+          <code><a href="page_season_calendar.html">page_season_calendar()</a></code>
+
+        </dt>
+        <dd>Derive the PAGe July-start season calendar from surveillance dates</dd>
+
+        <dt>
+
+          <code><a href="page_shared_denominator_correlation.html">page_shared_denominator_correlation()</a></code>
+
+        </dt>
+        <dd>Multinomial correlation for mutually exclusive shared-denominator strata</dd>
+
+        <dt>
+
+          <code><a href="page_train_workflow.html">page_train_workflow()</a></code>
+
+        </dt>
+        <dd>Label ignition, train PAGe, and return a deployable frozen kit</dd>
+
+        <dt>
+
+          <code><a href="page_v3_forecast.html">page_v3_forecast()</a></code>
+
+        </dt>
+        <dd>Generate a shadow-only PAGe v3 two-pathogen forecast</dd>
+
+        <dt>
+
+          <code><a href="page_v3_models.html">page_v3_models()</a></code>
+
+        </dt>
+        <dd>Load and validate the frozen PAGe v3 weekF12 model bundle</dd>
+
+        <dt>
+
+          <code><a href="page_v3_walkforward_report.html">page_v3_walkforward_report()</a></code>
+
+        </dt>
+        <dd>Render the PAGe v3 walk-forward HTML report</dd>
+
+        <dt>
+
+          <code><a href="page_version_metrics.html">page_version_metrics()</a></code>
+
+        </dt>
+        <dd>Verified PAGe version-comparison metrics</dd>
 
         <dt>
 
@@ -1180,6 +1740,13 @@
 
         </dt>
         <dd>Plan a bounded M2 tuning grid</dd>
+
+        <dt>
+
+          <code><a href="plan_training.html">plan_training()</a></code>
+
+        </dt>
+        <dd>Plan a governed PAGe training run without fitting or launching workers</dd>
 
         <dt>
 
@@ -1267,6 +1834,20 @@
 
         <dt>
 
+          <code><a href="predict_m2_offset_correction.html">predict_m2_offset_correction()</a></code>
+
+        </dt>
+        <dd>Predict an M2 offset correction and return its residual link contribution.</dd>
+
+        <dt>
+
+          <code><a href="preflight_support_audit.html">preflight_support_audit()</a></code>
+
+        </dt>
+        <dd>Preflight support audit for M0/M1/M2</dd>
+
+        <dt>
+
           <code><a href="prep_stage2_joint.html">prep_stage2_joint()</a></code>
 
         </dt>
@@ -1274,10 +1855,24 @@
 
         <dt>
 
+          <code><a href="prepare_page_data.html">prepare_page_data()</a></code>
+
+        </dt>
+        <dd>Prepare arbitrary surveillance data for the PAGe pipeline</dd>
+
+        <dt>
+
           <code><a href="prepare_surveillance_data.html">prepare_surveillance_data()</a></code>
 
         </dt>
         <dd>Prepare surveillance data for PAGe</dd>
+
+        <dt>
+
+          <code><a href="prepare_timing_training_data_v2.html">prepare_timing_training_data_v2()</a></code>
+
+        </dt>
+        <dd>Build numeric timing targets for opt-in M0 training</dd>
 
         <dt>
 
@@ -1316,6 +1911,48 @@
 
         <dt>
 
+          <code><a href="retrospective_gam_peak_sensitivity.html">retrospective_gam_peak_sensitivity()</a></code>
+
+        </dt>
+        <dd>Audit peak-location sensitivity across simple GAM basis dimensions</dd>
+
+        <dt>
+
+          <code><a href="retrospective_gam_peak_truth.html">retrospective_gam_peak_truth()</a></code>
+
+        </dt>
+        <dd>Derive retrospective continuous peak truth from a completed season using GAM</dd>
+
+        <dt>
+
+          <code><a href="review_expert_ignition.html">review_expert_ignition()</a></code>
+
+        </dt>
+        <dd>Review one season for expert decimal ignition annotation</dd>
+
+        <dt>
+
+          <code><a href="review_expert_ignition_set.html">review_expert_ignition_set()</a></code>
+
+        </dt>
+        <dd>Build expert ignition review objects for all seasons</dd>
+
+        <dt>
+
+          <code><a href="review_ignition_label.html">review_ignition_label()</a></code>
+
+        </dt>
+        <dd>Review a season before assigning its retrospective ignition label</dd>
+
+        <dt>
+
+          <code><a href="review_season_timing_v2.html">review_season_timing_v2()</a></code>
+
+        </dt>
+        <dd>Review one season for timing-v2 labels</dd>
+
+        <dt>
+
           <code><a href="run_alignment_prospective.html">run_alignment_prospective()</a></code>
 
         </dt>
@@ -1337,6 +1974,13 @@
 
         <dt>
 
+          <code><a href="run_ignition_weekly_timing_v2.html">run_ignition_weekly_timing_v2()</a></code>
+
+        </dt>
+        <dd>Run prospective M0 with fractional ignition timing</dd>
+
+        <dt>
+
           <code><a href="run_m0_detection.html">run_m0_detection()</a></code> <code><a href="run_m0_detection.html">run_m0()</a></code>
 
         </dt>
@@ -1351,10 +1995,31 @@
 
         <dt>
 
+          <code><a href="run_m1_v2_timing.html">run_m1_v2_timing()</a></code>
+
+        </dt>
+        <dd>Run the redesigned M1-v2 timing stage</dd>
+
+        <dt>
+
           <code><a href="run_m2_forecast.html">run_m2_forecast()</a></code> <code><a href="run_m2_forecast.html">run_m2()</a></code>
 
         </dt>
         <dd>Run M2 forecast using M1 alignment outputs</dd>
+
+        <dt>
+
+          <code><a href="run_m2_v2_c2_governed_runtime.html">run_m2_v2_c2_governed_runtime()</a></code>
+
+        </dt>
+        <dd>Run the governed M2-v2 C2 forecast path</dd>
+
+        <dt>
+
+          <code><a href="run_outer_fold.html">run_outer_fold()</a></code>
+
+        </dt>
+        <dd>Train and replay one outer-held-out season</dd>
 
         <dt>
 
@@ -1365,10 +2030,24 @@
 
         <dt>
 
+          <code><a href="score_ignition_timing_v2.html">score_ignition_timing_v2()</a></code>
+
+        </dt>
+        <dd>Score fractional M0 detections against midpoint ignition labels</dd>
+
+        <dt>
+
           <code><a href="score_params.html">score_params()</a></code>
 
         </dt>
         <dd>Score an ignition-threshold grid on historical seasons</dd>
+
+        <dt>
+
+          <code><a href="score_peak_timing_v2.html">score_peak_timing_v2()</a></code>
+
+        </dt>
+        <dd>Score peak timing against the observed peak week</dd>
 
         <dt>
 
@@ -1456,6 +2135,13 @@
 
         <dt>
 
+          <code><a href="train_outer_fold.html">train_outer_fold()</a></code>
+
+        </dt>
+        <dd>Train a nested-tuned PAGe kit</dd>
+
+        <dt>
+
           <code><a href="train_pipeline.html">train_pipeline()</a></code>
 
         </dt>
@@ -1519,6 +2205,13 @@
 
         <dt>
 
+          <code><a href="validate_expert_ignition_annotation.html">validate_expert_ignition_annotation()</a></code>
+
+        </dt>
+        <dd>Validate an expert ignition annotation</dd>
+
+        <dt>
+
           <code><a href="validate_m0_tuning.html">validate_m0_tuning()</a></code>
 
         </dt>
@@ -1533,10 +2226,24 @@
 
         <dt>
 
+          <code><a href="validate_m1_v2_handoff.html">validate_m1_v2_handoff()</a></code>
+
+        </dt>
+        <dd>Validate the M1-v2 to M2 handoff contract</dd>
+
+        <dt>
+
           <code><a href="validate_m2_tuning.html">validate_m2_tuning()</a></code>
 
         </dt>
         <dd>Validate an M2 tuning result</dd>
+
+        <dt>
+
+          <code><a href="validate_m2_v2_c2_governed_artifact.html">validate_m2_v2_c2_governed_artifact()</a></code>
+
+        </dt>
+        <dd>Validate a governed M2-v2 C2 artifact</dd>
 
         <dt>
 
@@ -1572,6 +2279,13 @@
 
         </dt>
         <dd>Verify Artifact-Bound Holdout Promotion Evidence</dd>
+
+        <dt>
+
+          <code><a href="write_expert_ignition_annotations.html">write_expert_ignition_annotations()</a></code>
+
+        </dt>
+        <dd>Save versioned expert ignition annotations</dd>
 
         <dt>
 

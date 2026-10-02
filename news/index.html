@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -41,6 +41,13 @@
     </div>
 
     <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.3.0" id="page-030">PAGe 0.3.0<a class="anchor" aria-label="anchor" href="#page-030"></a></h2>
+<ul><li>Adds a self-contained canonical v3 weekF12 runtime via <code><a href="../reference/page_v3_models.html">page_v3_models()</a></code> and <code><a href="../reference/page_v3_forecast.html">page_v3_forecast()</a></code>, with frozen model artifacts bundled and SHA-256 validated inside the installed package.</li>
+<li>Adds interactive/reproducible expert ignition labeling with <code><a href="../reference/page_label_ignitions.html">page_label_ignitions()</a></code> and the end-to-end <code><a href="../reference/page_train_workflow.html">page_train_workflow()</a></code> training wrapper.</li>
+<li>Adds validated frozen-kit persistence helpers <code><a href="../reference/page_save_kit.html">page_save_kit()</a></code> / <code><a href="../reference/page_load_kit.html">page_load_kit()</a></code>.</li>
+<li>Adds training, deployment, and canonical-v3 vignettes.</li>
+</ul></div>
+    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.2.0" id="page-020">PAGe 0.2.0<a class="anchor" aria-label="anchor" href="#page-020"></a></h2>
 <ul><li>Adds independently guarded M0, M1, and M2 lifecycles: <code><a href="../reference/validate_season_selection.html">validate_season_selection()</a></code>, stage tuning validators, <code>fit_*()</code>, and <code>freeze_*()</code>. Downstream stages require frozen, selection-matched upstream artifacts with stable identities.</li>
 <li>Extends <code><a href="../reference/assemble_kit.html">assemble_kit()</a></code> and <code><a href="../reference/validate_page_kit.html">validate_page_kit()</a></code> with governed-stage provenance and tamper checks while retaining legacy kit compatibility.</li>
@@ -50,7 +57,8 @@
 <li>Treats 2025-26 as an external holdout by default and requires explicit, threshold-based promotion before it may enter the next training cycle.</li>
 <li>Removes private data-path assumptions. Historical surveillance data must be supplied explicitly or through <code>PAGE_FLU_HIST_FILE</code>.</li>
 </ul></div>
-  </main></div>
+  </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
+    </nav></aside></div>
 
 
     <footer><div class="pkgdown-footer-left">

@@ -1,20 +1,26 @@
 # Fetch and tidy current-season PHO respiratory surveillance data
 
-Downloads (or reads a local copy of) the Public Health Ontario
-lab-testing CSV, filters to one virus and the requested season plus its
-predecessor, aggregates weekly totals across all PHUs, and returns a
-tidy data frame ready for the M0/M1/M2 pipeline.
+Reads a Public Health Ontario ORVT lab-testing CSV from a URL or local
+path, maps seasons from dated MMWR weeks rather than the PHO label,
+aggregates the selected virus across public health units, and returns
+data ready for PAGe. With no codedata, the previous/current and
+current/next feed names are tried in that order. PHO labels and source
+dates are retained for audit.
 
 ## Usage
 
 ``` r
 getCurrentD(
-  data =
-    "https://ws1.publichealthontario.ca/appdata/powerbi/ORVT/ORVT_Lab_Testing_Data_2024-25_2025-26.csv",
+  data = NULL,
+  base_url = NULL,
+  file_name = NULL,
+  cache_dir = NULL,
   startWeek = 27L,
-  lastWeek = NA,
+  lastWeek = NA_integer_,
   virus = "Influenza A",
-  season = "2025-26"
+  season = NULL,
+  include_predecessor = TRUE,
+  source_calendar = NULL
 )
 ```
 
@@ -22,31 +28,58 @@ getCurrentD(
 
 - data:
 
-  URL or local file path to the PHO lab-testing CSV. Defaults to the
-  2024-25 / 2025-26 ORVT public feed.
+  URL or local file path to an ORVT CSV, or codeNULL for default feed
+  resolution.
+
+- base_url:
+
+  Base ORVT URL for default feed resolution. The codePAGe.orvt_base_url
+  option overrides the package default.
+
+- file_name:
+
+  Optional ORVT filename replacing the two default candidates;
+  codePAGe.orvt_file_name is also supported.
+
+- cache_dir:
+
+  Optional directory for timestamped downloaded raw CSV files.
 
 - startWeek:
 
-  Integer MMWR week used as the epidemic-year origin for computing
-  `weekF` (default 27L, early July).
+  Integer MMWR week used as the PAGe season origin (default 27).
 
 - lastWeek:
 
-  Integer or `NA`. When non-`NA`, rows with MMWR `week > lastWeek` are
-  dropped before returning.
+  Integer or codeNA; drop rows with MMWR week greater than it.
 
 - virus:
 
-  Character string matching the `Virus` column of the CSV (default
-  `"Influenza A"`).
+  Character string matching the PHO codeVirus column.
 
 - season:
 
-  Character season identifier in `"YYYY-YY"` format (default
-  `"2025-26"`).
+  Character season in code"YYYY-YY"; defaults to the season containing
+  codeSys.Date() under the PAGe origin.
+
+- include_predecessor:
+
+  Logical; also return the derived predecessor season. Defaults to
+  codeTRUE for backward compatibility.
+
+- source_calendar:
+
+  Optional explicit calendar for undated sources. It must be a data
+  frame, Date vector, or function mapping source season/week rows to
+  week-start dates (or MMWR years); labels alone are never used to guess
+  dates.
 
 ## Value
 
-A data frame with one row per MMWR week containing: `season`, `week`,
-`N` (total tests), `y` (positives), `neg`, `p` (positivity), `weekS`,
-`weekF`, `cYear`, `newWeek`, and `date`.
+A data frame with codeseason, codeweek, codeN, codey, codeneg, codep,
+codeweekS, codeweekF, codecYear, codenewWeek, and codedate, plus PHO
+audit columns. The PHU-only totals and the exact-Ontario-row provenance
+are retained in codephu_N, codephu_y, codesource_has_ontario,
+codesource_ontario_consistent, and codeprovincial_value_source.
+Attributes record codesource_url_or_path, coderetrieved_utc, codesha256,
+codepho_layout, coden_weeks, and codelast_week_end_date.

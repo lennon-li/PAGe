@@ -9,7 +9,7 @@ matching identities and selection."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -50,7 +50,16 @@ matching identities and selection.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">fit_m2</span><span class="op">(</span><span class="va">data</span>, <span class="va">selection</span>, <span class="va">m0</span>, <span class="va">m1</span>, <span class="va">config</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">fit_m2</span><span class="op">(</span></span>
+<span>  <span class="va">data</span>,</span>
+<span>  <span class="va">selection</span>,</span>
+<span>  <span class="va">m0</span>,</span>
+<span>  <span class="va">m1</span>,</span>
+<span>  <span class="va">config</span>,</span>
+<span>  family <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  allow_legacy <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  <span class="va">...</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -75,6 +84,16 @@ matching identities and selection.</p>
 
 <dt id="arg-config">config<a class="anchor" aria-label="anchor" href="#arg-config"></a></dt>
 <dd><p>Named list of M2 specification parameters.</p></dd>
+
+
+<dt id="arg-family">family<a class="anchor" aria-label="anchor" href="#arg-family"></a></dt>
+<dd><p>Optional explicit model-family discriminator. When omitted it
+is read from <code>config$family</code>; the governed subset family is the
+default.</p></dd>
+
+
+<dt id="arg-allow-legacy">allow_legacy<a class="anchor" aria-label="anchor" href="#arg-allow-legacy"></a></dt>
+<dd><p>Logical; explicitly allow the legacy research path.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>

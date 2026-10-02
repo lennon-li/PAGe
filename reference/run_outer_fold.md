@@ -1,0 +1,86 @@
+# Train and replay one outer-held-out season
+
+Combines \`train_outer_fold()\` with a strict
+\`replay_season_holdout()\` call. The outer season is first accessed for
+prediction only after the training procedure, grids, and M2-versus-M1
+decision are frozen.
+
+## Usage
+
+``` r
+run_outer_fold(
+  data,
+  holdout,
+  artifact_dir = NULL,
+  checkpoint_dir = NULL,
+  timing_labels = NULL,
+  timing_mode = c("legacy", "fractional"),
+  gate_nesting = c("full", "conditional"),
+  shadow_m2 = TRUE,
+  ...
+)
+```
+
+## Arguments
+
+- data:
+
+  Canonical multi-season surveillance data.
+
+- holdout:
+
+  Optional character scalar identifying the outer-held-out season. Use
+  \`NULL\` only to fit the final kit after the evaluation procedure has
+  been fixed.
+
+- artifact_dir:
+
+  Optional directory receiving grids, tuning objects, boundary reports,
+  decisions, frozen stages, and the final kit.
+
+- checkpoint_dir:
+
+  Optional resumable checkpoint directory.
+
+- timing_labels:
+
+  Optional timing-v2 label object or list of objects; passed through to
+  \`train_outer_fold()\` after holdout isolation.
+
+- gate_nesting:
+
+  Inner-gate nesting depth. \`"full"\` (default) re-runs selection,
+  inside each gate season's excluded dataset, for every upstream axis
+  the recipe actually tunes (M0 always; M1 only when its grid has more
+  than one value) before re-running the full M2 selection procedure.
+  \`"conditional"\` re-runs the full M2 selection procedure only and
+  passes the outer fold's selected M0/M1 settings through unchanged; its
+  evidence is labelled \`"conditional on upstream selection"\`. Both
+  options use nested M1 references (rows of \`r\` exclude \`r\` and the
+  gate season) and identical estimator settings, and both are recorded
+  in run provenance and kit metadata.
+
+- shadow_m2:
+
+  Logical; additionally fit and replay the tuned M2 candidate for
+  output-only comparison when an outer fold keeps M1. Defaults to
+  \`TRUE\`. Failures are recorded without failing the primary fold.
+  Final all-season fits never build a shadow. \`FALSE\` preserves the
+  original output schema.
+
+- ...:
+
+  Additional arguments passed to \`train_outer_fold()\`.
+
+## Value
+
+A \`page_outer_fold_result\` containing training evidence, replay,
+matched forecast rows, and phase-weighted M2-versus-M1 metrics. Before
+matching, the replay is checked for forecast-key completeness and
+consistency against its independent evaluation schedule; unmatched keys
+or matched rows with missing M1/M2 values are errors. With \`shadow_m2 =
+TRUE\`, predictions also contain \`m2_shadow_prediction\` and
+\`shadow_status\`, and the result includes \`shadow_metrics\` and
+\`shadow_m1_prediction_equal\`. Failed or absent shadows have missing
+predictions and no shadow metrics. Shadow metrics are also saved in
+\`outer_shadow_metrics.rds\`.

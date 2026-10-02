@@ -61,7 +61,7 @@ m2 <- fit_m2(allD, selection, m0, m1, m2_tuning$best_spec) |>
   freeze_m2(m2_tuning)
 
 kit <- assemble_kit(m0, m1, m2)
-validate_page_kit(kit)
+page_validate_kit(kit)
 ```
 
 A downstream stage rejects a draft or provenance-mismatched upstream
@@ -74,8 +74,8 @@ refactored to compose these stage contracts.
 
 ``` r
 
-candidate <- replay_season_holdout(kit, allD, season = "2025-26")
-incumbent <- replay_season_holdout(incumbent_kit, allD, season = "2025-26")
+candidate <- replay_holdout(kit, allD, season = "2025-26")
+incumbent <- replay_holdout(incumbent_kit, allD, season = "2025-26")
 promotion <- check_promotion(candidate$metrics, incumbent$metrics)
 ```
 

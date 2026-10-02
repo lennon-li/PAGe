@@ -11,7 +11,7 @@ extracts M1's template-based prediction at each forecast target week
 
     <a class="navbar-brand me-2" href="../index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -76,7 +76,10 @@ extracts M1's template-based prediction at each forecast target week
 <span>  dynamic_temp_pivot <span class="op">=</span> <span class="fl">10L</span>,</span>
 <span>  top_k <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  blend_alpha <span class="op">=</span> <span class="fl">1</span>,</span>
-<span>  spread_method <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"between"</span>, <span class="st">"total"</span><span class="op">)</span></span>
+<span>  spread_method <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"between"</span>, <span class="st">"total"</span><span class="op">)</span>,</span>
+<span>  timing_mode <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"legacy"</span>, <span class="st">"fractional"</span><span class="op">)</span>,</span>
+<span>  peak_stabilization <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"legacy"</span>, <span class="st">"causal"</span><span class="op">)</span>,</span>
+<span>  stabilizer_max_jump_weeks <span class="op">=</span> <span class="fl">2</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -156,6 +159,16 @@ alignment-loss controls.</p></dd>
 <dd><p>Character; <code>"between"</code> (default) or <code>"total"</code>.
 Passed to <code><a href="run_alignment_prospective_multi.html">run_alignment_prospective_multi()</a></code> to select the
 <code>logit_spread</code> computation method.</p></dd>
+
+
+<dt id="arg-peak-stabilization">peak_stabilization<a class="anchor" aria-label="anchor" href="#arg-peak-stabilization"></a></dt>
+<dd><p>Character; <code>"legacy"</code> (default) or
+<code>"causal"</code>.</p></dd>
+
+
+<dt id="arg-stabilizer-max-jump-weeks">stabilizer_max_jump_weeks<a class="anchor" aria-label="anchor" href="#arg-stabilizer-max-jump-weeks"></a></dt>
+<dd><p>Positive maximum causal peak movement per
+origin (default 2 weeks).</p></dd>
 
 </dl></div>
     <div class="section level2">

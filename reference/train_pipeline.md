@@ -24,6 +24,8 @@ train_pipeline(
   m0_grid = .default_m0_grid(),
   m1_grid = default_m1_grid(),
   m2_grid = NULL,
+  m2_family = c("offset_subset_v1", "legacy"),
+  allow_legacy = FALSE,
   max_m2_finalists = 6L,
   max_m2_specs = 64L,
   selection_method = c("min_nll", "one_se", "pareto"),
@@ -32,11 +34,18 @@ train_pipeline(
   racing_stages = c(3L, 6L),
   racing_min_survivors = 3L,
   manual_labels = NULL,
+  timing_labels = NULL,
+  timing_mode = c("legacy", "fractional"),
   flag_args = NULL,
   m1_params = NULL,
   m1_min_gain = 0.05,
-  m1_hard_caps = list(k_ref = c(lower = 10L, upper = 50L)),
+  m1_hard_caps = default_m1_hard_caps(),
   m2_min_nll_gain = default_m2_nll_gain_caps(),
+  early_weight = 2,
+  early_max_t_since = 12,
+  pre_ignition_weight = 0,
+  late_weight = 1,
+  score_scale = c("equal_week", "test_count"),
   m0_params = NULL,
   m2_spec_id = NULL
 )
@@ -103,6 +112,15 @@ train_pipeline(
   Optional explicit M2 grid; `NULL` uses
   `plan_m2_grid(previous_results)`.
 
+- m2_family:
+
+  M2 model family. The default `"offset_subset_v1"` is the governed
+  subset family; `"legacy"` is research/compatibility only.
+
+- allow_legacy:
+
+  Logical; explicitly allow the legacy research path.
+
 - max_m2_finalists, max_m2_specs:
 
   Adaptive M2 plan caps.
@@ -133,6 +151,13 @@ train_pipeline(
   exclusively from verified promotion evidence and explicit overrides
   are rejected.
 
+- timing_labels:
+
+  Optional timing-v2 label object or list of objects. When supplied, the
+  earlier ignition weeks are converted to the existing M0/M1 training
+  contract, while the complete timing-v2 object is retained in the
+  result for provenance. Cannot be combined with `manual_labels`.
+
 - m1_min_gain:
 
   Minimum M1 Weibull-MAE improvement, in weeks, required to justify a
@@ -140,8 +165,10 @@ train_pipeline(
 
 - m1_hard_caps:
 
-  Named M1 hard caps accepted by the boundary gate. The default bounds
-  \`k_ref\` to 10–50 on the 52-week reference domain.
+  Named M1 hard caps accepted by the boundary gate. The default is
+  returned by
+  [`default_m1_hard_caps()`](https://lennon-li.github.io/PAGe/reference/default_m1_hard_caps.md)
+  and bounds \`k_ref\` to 10–50 on the 52-week reference domain.
 
 - m2_min_nll_gain:
 
@@ -151,6 +178,28 @@ train_pipeline(
   and covers every M2 axis. A scalar applies to every M2 axis. An edge
   is accepted only when its matched outward gain is at or below the
   threshold; missing matched evidence still requires expansion.
+
+- early_weight:
+
+  Weight for target-relative weeks zero through `early_max_t_since` in
+  subset-M2 tuning (default 2).
+
+- early_max_t_since:
+
+  Last target-relative week receiving `early_weight` (default 12).
+
+- pre_ignition_weight:
+
+  Weight for pre-ignition targets (default 0).
+
+- late_weight:
+
+  Weight for targets after `early_max_t_since` (default 1).
+
+- score_scale:
+
+  Primary subset-M2 score denominator, either `"equal_week"` (default)
+  or `"test_count"`.
 
 - m0_params:
 
@@ -167,5 +216,7 @@ train_pipeline(
 
 A transparent list with `mode`, `components`, `tuning` (NULL for
 refresh), `grid`, `grid_provenance`, full-result `selection`, optional
-`racing` diagnostics, transparent `holdout` release state, and
-deployment `kit`.
+`racing` diagnostics, transparent `holdout` release state, attached
+`preflight` and `boundary_actions` reports, and deployment `kit`. When
+supplied, `timing_labels_v2` preserves the complete timing-v2 label
+object or list used for training.

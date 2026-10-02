@@ -24,7 +24,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -133,7 +133,7 @@
 <span>  <span class="fu"><a href="../reference/freeze_m2.html">freeze_m2</a></span><span class="op">(</span><span class="va">m2_tuning</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">kit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/assemble_kit.html">assemble_kit</a></span><span class="op">(</span><span class="va">m0</span>, <span class="va">m1</span>, <span class="va">m2</span><span class="op">)</span></span>
-<span><span class="fu"><a href="../reference/validate_page_kit.html">validate_page_kit</a></span><span class="op">(</span><span class="va">kit</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="../reference/PAGe-public-api.html">page_validate_kit</a></span><span class="op">(</span><span class="va">kit</span><span class="op">)</span></span></code></pre></div>
 </div>
 <p>Tuning, fitting, and freezing are distinct states. M1 requires a frozen, selection-matched M0; M2 requires the exact frozen M0/M1 chain; governed kit assembly rejects drafts and identity mismatches.</p>
 <p>For a locked-spec compatibility refresh:</p>
@@ -201,7 +201,7 @@
 <span>  <span class="fu"><a href="../reference/freeze_m2.html">freeze_m2</a></span><span class="op">(</span><span class="va">m2_tuning</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">candidate</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/assemble_kit.html">assemble_kit</a></span><span class="op">(</span><span class="va">m0</span>, <span class="va">m1</span>, <span class="va">m2</span><span class="op">)</span></span>
-<span><span class="fu"><a href="../reference/validate_page_kit.html">validate_page_kit</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/PAGe-public-api.html">page_validate_kit</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS</a></span><span class="op">(</span><span class="va">candidate</span>, <span class="st">"results/candidate_pre_holdout.rds"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <p>This candidate still excludes the untouched holdout and must be compared with the pre-holdout incumbent through the governed acceptance workflow.</p>

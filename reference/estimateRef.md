@@ -11,13 +11,14 @@ estimateRef(
   alignedD,
   exSeason = NULL,
   k = 10,
-  n_weeks = 52L,
+  n_weeks = .page_template_weeks(),
   nAGQ = 1,
   method = c("binomial", "binomial_weighted", "gaussian_logit", "median_smooth", "fs",
     "gaussian_logit_fs"),
   trough_weight = 0.1,
   peak_weight_boost = 3,
-  agg = c("median", "mean")
+  agg = c("median", "mean"),
+  timing_mode = c("legacy", "fractional")
 )
 ```
 
@@ -97,6 +98,11 @@ estimateRef(
   Character. Aggregation method for the `"fs"` method's population
   curve: `"median"` (default) takes pointwise median across seasons on
   logit scale; `"mean"` takes the mean. Ignored for other methods.
+
+- timing_mode:
+
+  Character. `"legacy"` preserves integer aligned coordinates;
+  `"fractional"` retains numeric aligned coordinates.
 
 ## Value
 

@@ -16,7 +16,10 @@ build_m0(
   manual_labels = .default_manual_labels(),
   flag_args = .default_flag_args(),
   best_params = .default_m0_params(),
-  k_deriv = 10L
+  k_deriv = 10L,
+  timing_truth = NULL,
+  peak_weight_boost = 1,
+  peak_weight_decay = 0.3
 )
 ```
 
@@ -49,6 +52,10 @@ build_m0(
 - k_deriv:
 
   Integer. GAM basis functions for derivative smoothing (default `10L`).
+
+- peak_weight_boost, peak_weight_decay:
+
+  Derivative smoothing rise boost and decay.
 
 ## Value
 

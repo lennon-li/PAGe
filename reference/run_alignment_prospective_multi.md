@@ -30,7 +30,11 @@ run_alignment_prospective_multi(
   slope_window = 6L,
   dynamic_temp = TRUE,
   dynamic_temp_pivot = 10L,
-  spread_method = c("between", "total")
+  spread_method = c("between", "total"),
+  timing_mode = c("legacy", "fractional"),
+  peak_stabilization = c("legacy", "causal"),
+  peak_state = NULL,
+  stabilizer_max_jump_weeks = 2
 )
 ```
 
@@ -116,6 +120,18 @@ run_alignment_prospective_multi(
   to select the `logit_spread` computation method. See
   [`align_multi_template`](https://lennon-li.github.io/PAGe/reference/align_multi_template.md)
   for details.
+
+- peak_stabilization:
+
+  Character; `"legacy"` (default) or `"causal"`.
+
+- peak_state:
+
+  Optional prior same-season stabilized state. Used only in causal mode.
+
+- stabilizer_max_jump_weeks:
+
+  Positive maximum causal peak movement per origin (default 2 weeks).
 
 ## Value
 

@@ -21,7 +21,7 @@ identities, and a deterministic governance identity."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -74,7 +74,9 @@ identities, and a deterministic governance identity.</p>
 <span>  <span class="va">m2_model</span>,</span>
 <span>  best_spec_id <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  save_ref_path <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  save_m2_path <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  save_m2_path <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  m1_v2 <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  m2_v2 <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -110,6 +112,16 @@ taken from <code>build_m2()$best_spec_id</code>).</p></dd>
 <dt id="arg-save-m-path">save_m2_path<a class="anchor" aria-label="anchor" href="#arg-save-m-path"></a></dt>
 <dd><p>Character. If set, saves the M2 bundle
 (<code>m2_production.rds</code> format) to this path.</p></dd>
+
+
+<dt id="arg-m-v-">m1_v2<a class="anchor" aria-label="anchor" href="#arg-m-v-"></a></dt>
+<dd><p>Optional `page_m1_v2_stage` from `build_m1_v2_timing()`.
+Carried alongside legacy M1 for the redesigned timing runtime and M2 handoff.</p></dd>
+
+
+<dt id="arg-m-v-">m2_v2<a class="anchor" aria-label="anchor" href="#arg-m-v-"></a></dt>
+<dd><p>Optional `page_m2_v2_c2_governed` shadow artifact. It is carried
+alongside legacy M2 and never replaces `m2_model`.</p></dd>
 
 </dl></div>
     <div class="section level2">

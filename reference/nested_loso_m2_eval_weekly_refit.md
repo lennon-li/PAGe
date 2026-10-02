@@ -23,7 +23,8 @@ nested_loso_m2_eval_weekly_refit(
   manual_labels_test = NULL,
   flag_args = list(p_thresh = 0.01, k1 = 0.4, k_c = 0.01, n_consec = 2L, min_window =
     10L, w_min = 21L, w_max = 21L, d2_relax = -0.01),
-  verbose = TRUE
+  verbose = TRUE,
+  timing_mode = c("legacy", "fractional")
 )
 ```
 
@@ -71,9 +72,9 @@ nested_loso_m2_eval_weekly_refit(
 - manual_labels_test:
 
   Optional named integer vector of manual ignition labels for the test
-  season. Default `NULL` uses prospective
+  season. Default `NULL` = use prospective
   [`flagIgnition()`](https://lennon-li.github.io/PAGe/reference/flagIgnition.md)
-  without override.
+  without override (no retrospective label leakage).
 
 - flag_args:
 

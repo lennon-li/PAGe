@@ -11,7 +11,7 @@ common newWeek coordinate via alignIgnition()."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -59,7 +59,10 @@ common <code>newWeek</code> coordinate via <code><a href="alignIgnition.html">al
 <span>  manual_labels <span class="op">=</span> <span class="fu">.default_manual_labels</span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  flag_args <span class="op">=</span> <span class="fu">.default_flag_args</span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  best_params <span class="op">=</span> <span class="fu">.default_m0_params</span><span class="op">(</span><span class="op">)</span>,</span>
-<span>  k_deriv <span class="op">=</span> <span class="fl">10L</span></span>
+<span>  k_deriv <span class="op">=</span> <span class="fl">10L</span>,</span>
+<span>  timing_truth <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  peak_weight_boost <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>  peak_weight_decay <span class="op">=</span> <span class="fl">0.3</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -94,6 +97,10 @@ fresh-run values and is returned for downstream M1/M2 training.</p></dd>
 <dt id="arg-k-deriv">k_deriv<a class="anchor" aria-label="anchor" href="#arg-k-deriv"></a></dt>
 <dd><p>Integer. GAM basis functions for derivative smoothing (default
 <code>10L</code>).</p></dd>
+
+
+<dt id="arg-peak-weight-boost-peak-weight-decay">peak_weight_boost, peak_weight_decay<a class="anchor" aria-label="anchor" href="#arg-peak-weight-boost-peak-weight-decay"></a></dt>
+<dd><p>Derivative smoothing rise boost and decay.</p></dd>
 
 </dl></div>
     <div class="section level2">

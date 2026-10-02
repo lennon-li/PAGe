@@ -13,7 +13,7 @@ numerical second derivative of the profile deviance."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -63,6 +63,8 @@ numerical second derivative of the profile <em>deviance</em>.</p>
 <span>  h <span class="op">=</span> <span class="fl">0.001</span>,</span>
 <span>  tau0 <span class="op">=</span> <span class="fl">0</span>,</span>
 <span>  tau_bounds <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">12</span>, <span class="fl">12</span><span class="op">)</span>,</span>
+<span>  support <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  weights <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  ab_prior <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -101,9 +103,15 @@ numerical second derivative of the profile <em>deviance</em>.</p>
 (default <code>c(-12, 12)</code>).</p></dd>
 
 
-<dt id="arg-ab-prior">ab_prior<a class="anchor" aria-label="anchor" href="#arg-ab-prior"></a></dt>
-<dd><p>Optional named calibration prior; NULL leaves calibration
-unregularized.</p></dd>
+<dt id="arg-support">support<a class="anchor" aria-label="anchor" href="#arg-support"></a></dt>
+<dd><p>Optional logical vector selecting the saved common support
+rows. When supplied, every profile evaluation uses exactly these rows.</p></dd>
+
+
+<dt id="arg-weights">weights<a class="anchor" aria-label="anchor" href="#arg-weights"></a></dt>
+<dd><p>Optional likelihood weights, one per row of <code>currentD</code>.
+They are converted to the same per-observation GLM weights used by the
+alignment fit.</p></dd>
 
 </dl></div>
     <div class="section level2">

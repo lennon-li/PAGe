@@ -1,15 +1,14 @@
 # Safe penalised NLL objective for tau/delta optimisation
 
 Evaluates the normalised negative binomial log-likelihood penalised by a
-ridge term on `delta`. Returns the large sentinel value `1e9` whenever
-the reference curve is non-finite, any log-likelihood term is
-non-finite, or an error occurs, so that the outer optimiser can safely
-continue.
+ridge term on `delta`. Failed candidates return an infinite value with a
+\`reason\` attribute; callers must treat them as fit failures rather
+than as a large finite score.
 
 ## Usage
 
 ``` r
-safe_obj(par, t, y, n, gfun, allow_scale, lam, w, ab_prior = NULL)
+.page_alignment_failure(reason)
 ```
 
 ## Arguments
@@ -47,11 +46,7 @@ safe_obj(par, t, y, n, gfun, allow_scale, lam, w, ab_prior = NULL)
 
   Numeric vector of observation weights.
 
-- ab_prior:
-
-  Optional named calibration prior; NULL leaves calibration
-  unregularized.
-
 ## Value
 
-A single numeric scalar (the penalised NLL, or `1e9` on failure).
+A single numeric scalar; failed candidates are \`Inf\` with a diagnostic
+\`reason\` attribute.

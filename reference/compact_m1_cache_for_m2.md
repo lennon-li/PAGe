@@ -10,7 +10,7 @@ parallel M2 evaluation.
 ## Usage
 
 ``` r
-compact_m1_cache_for_m2(m1_cache)
+compact_m1_cache_for_m2(m1_cache, timing_mode = c("legacy", "fractional"))
 ```
 
 ## Arguments

@@ -93,13 +93,6 @@ align_forecast_pipeline_dilate(
 
   Numeric; exponential decay rate after peak (default 0.3).
 
-- ab_prior:
-
-  Optional named list with `a_mean`, `a_sd`, `log_b_mean`, and
-  `log_b_sd`. The value from `legacy_model_settings()$m1_ab_prior` opts
-  into the Legacy Model; NULL preserves the package's unregularized
-  calibration.
-
 ## Value
 
 list with tau, delta, a, b, pred_df, peak, nll, etc.

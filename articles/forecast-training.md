@@ -42,7 +42,7 @@ assembled only after frozen M0 and M1 are available:
 ``` r
 
 candidate <- assemble_kit(m0, m1, m2)
-validate_page_kit(candidate)
+page_validate_kit(candidate)
 saveRDS(candidate, "results/candidate_pre_holdout.rds")
 ```
 

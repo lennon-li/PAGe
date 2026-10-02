@@ -11,7 +11,7 @@ weighted by alignment NLL via softmax."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -78,7 +78,10 @@ weighted by alignment NLL via softmax.</p>
 <span>  dynamic_temp <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  dynamic_temp_pivot <span class="op">=</span> <span class="fl">10L</span>,</span>
 <span>  gam_obj <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  spread_method <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"between"</span>, <span class="st">"total"</span><span class="op">)</span></span>
+<span>  spread_method <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"between"</span>, <span class="st">"total"</span><span class="op">)</span>,</span>
+<span>  timing_mode <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"legacy"</span>, <span class="st">"fractional"</span><span class="op">)</span>,</span>
+<span>  prep <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  return_prep <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -198,7 +201,7 @@ is inflated (default 10). Temperature is scaled by
 <dd><p>Character; <code>"between"</code> (default) computes
 <code>logit_spread</code> as the weighted between-template standard deviation on
 the logit scale, preserving the incumbent behaviour. <code>"total"</code> adds
-weighted per-template GAM SE\^2 (from <code>g_s_mu_se</code>) to the
+weighted squared per-template GAM SE (from <code>g_s_mu_se</code>) to the
 between-template variance, yielding a total-variance spread. When per-template
 SEs are unavailable (zero or missing) the method falls back to between-only
 for that forecast week and increments <code>spread_fallback_count</code>.</p></dd>

@@ -15,7 +15,9 @@ train_m2(
   best_spec = NULL,
   exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
   n_cores = parallel::detectCores() - 1L,
-  verbose = FALSE
+  verbose = FALSE,
+  timing_mode = c("legacy", "fractional"),
+  timing_truth = NULL
 )
 ```
 

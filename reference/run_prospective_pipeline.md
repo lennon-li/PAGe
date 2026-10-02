@@ -19,10 +19,14 @@ run_prospective_pipeline(
   manual_ign_week = NA_integer_,
   mode = c("frozen", "weekly_refit"),
   season = NULL,
-  verbose = TRUE
+  verbose = TRUE,
+  timing_mode = c("legacy", "fractional"),
+  m2_v2_weekly_data = NULL,
+  m2_v2_b_handoff = NULL,
+  m2_v2_b_gate_review = NULL
 )
 
-run_pipeline(kit, current_data, ...)
+run_pipeline(kit, current_data, timing_mode = c("legacy", "fractional"), ...)
 ```
 
 ## Arguments
@@ -58,6 +62,25 @@ run_pipeline(kit, current_data, ...)
 - verbose:
 
   Logical. Emit progress messages (default `TRUE`).
+
+- timing_mode:
+
+  Character. `"legacy"` preserves integer timing; `"fractional"` carries
+  numeric ignition and aligned-week coordinates.
+
+- m2_v2_weekly_data:
+
+  Optional typed A/B weekly panel for the governed M2-v2 shadow path. If
+  absent, M2-v2 is reported unavailable and legacy M2 behavior is
+  unchanged.
+
+- m2_v2_b_handoff:
+
+  Optional type-B soft-timing handoff.
+
+- m2_v2_b_gate_review:
+
+  Optional reviewed B gate-opening object.
 
 - ...:
 

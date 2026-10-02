@@ -1,10 +1,10 @@
 # Compute weighted logit-scale spread (internal helper)
 
 `"between"` computes the weighted between-template standard deviation.
-`"total"` adds weighted per-template SE\\2 (from `g_s_mu_se`) to the
-between-template variance. When per-template SEs are all zero/missing
-for a forecast week, that week falls back to between-only and the
-fallback count is incremented.
+`"total"` adds weighted squared per-template SE (from `g_s_mu_se`) to
+the between-template variance. When per-template SEs are all
+zero/missing for a forecast week, that week falls back to between-only
+and the fallback count is incremented.
 
 ## Usage
 

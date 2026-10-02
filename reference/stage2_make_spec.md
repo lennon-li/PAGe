@@ -43,7 +43,8 @@ stage2_make_spec(
   bias_alpha = 0.05,
   bias_beta = 0,
   K = NULL,
-  pre_buffer = NULL
+  pre_buffer = NULL,
+  timing_mode = c("legacy", "fractional")
 )
 ```
 
@@ -132,6 +133,11 @@ stage2_make_spec(
 - pre_buffer:
 
   Deprecated alias of `Kb`.
+
+- timing_mode:
+
+  Character. Fractional mode preserves a numeric anchor; legacy mode
+  retains the integer contract.
 
 ## Value
 

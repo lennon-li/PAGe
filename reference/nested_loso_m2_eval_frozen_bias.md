@@ -25,7 +25,8 @@ nested_loso_m2_eval_frozen_bias(
   manual_labels_test = NULL,
   flag_args = list(p_thresh = 0.01, k1 = 0.4, k_c = 0.01, n_consec = 2L, min_window =
     10L, w_min = 21L, w_max = 21L, d2_relax = -0.01),
-  verbose = TRUE
+  verbose = TRUE,
+  timing_mode = c("legacy", "fractional")
 )
 ```
 
@@ -103,6 +104,11 @@ nested_loso_m2_eval_frozen_bias(
 - verbose:
 
   Logical.
+
+- timing_mode:
+
+  Character. Fractional mode preserves decimal timing coordinates
+  through weekly refits; legacy mode retains integer behavior.
 
 ## Value
 

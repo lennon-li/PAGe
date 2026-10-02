@@ -24,7 +24,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -106,7 +106,7 @@
 <div class="cell">
 <div class="sourceCode cell-code" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">candidate</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/assemble_kit.html">assemble_kit</a></span><span class="op">(</span><span class="va">m0</span>, <span class="va">m1</span>, <span class="va">m2</span><span class="op">)</span></span>
-<span><span class="fu"><a href="../reference/validate_page_kit.html">validate_page_kit</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/PAGe-public-api.html">page_validate_kit</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS</a></span><span class="op">(</span><span class="va">candidate</span>, <span class="st">"results/candidate_pre_holdout.rds"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <p>The default grid contains the current v16-corrected incumbent values (<code>delta=0</code>, <code>Kr=1</code>, <code>k_f=4</code>, <code>k_e=2</code>, <code>alpha_state=0.20</code>, <code>k_r=0</code>, <code>k_de=0</code>, <code>k_sp=8</code>, <code>bias_alpha=0.05</code>, and <code>bias_beta=0</code>), but their presence is not proof of a deployed kit. Use walk-forward LOSO before proposing a different specification, then complete the governed holdout and promotion sequence.</p>

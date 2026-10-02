@@ -10,7 +10,8 @@ alignIgnition(
   outs,
   season_col = "season",
   week_col = "weekF",
-  nweek_col = "nW_true"
+  nweek_col = "nW_true",
+  template_weeks = .page_template_weeks()
 )
 ```
 
@@ -30,8 +31,14 @@ alignIgnition(
 
 - nweek_col:
 
-  season length column name (default "nW_true"); if missing uses
-  max(weekF) per season
+  calendar length output column (default "nW_true"); derived from season
+  start year
+
+- template_weeks:
+
+  Template domain used for fitting (default 52). Rows shifted outside
+  this domain are retained and flagged, but are excluded by
+  \`estimateRef()\` rather than wrapped back into the season.
 
 ## Value
 

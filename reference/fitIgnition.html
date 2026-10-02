@@ -19,7 +19,7 @@ FS (optional): season-varying week shape via mgcv::bam() with bs="fs".
 
     <a class="navbar-brand me-2" href="../index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -79,6 +79,7 @@ predicted scores to the full dataset. This function supports up to three variant
 <span>  fit_slope <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  fit_fs <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  select <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  timing_truth <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -151,6 +152,13 @@ predicted scores to the full dataset. This function supports up to three variant
 <dd><p>Logical. Passed to <code>gamm4::gamm4(select=...)</code>. Default <code>FALSE</code>.</p></dd>
 
 
+<dt id="arg-timing-truth">timing_truth<a class="anchor" aria-label="anchor" href="#arg-timing-truth"></a></dt>
+<dd><p>Optional data frame from <code><a href="as_timing_targets_v2.html">as_timing_targets_v2()</a></code>
+with <code>season</code> and <code>ignition_target_weekF</code>. When supplied, the
+fractional target is used for the training and event windows. The default
+<code>NULL</code> preserves the legacy phase-derived behavior.</p></dd>
+
+
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
 <dd><p>Logical. Print progress messages. Default <code>TRUE</code>.</p></dd>
 
@@ -168,6 +176,10 @@ predicted scores to the full dataset. This function supports up to three variant
 
   <dt>fits</dt>
 <dd><p>List of fitted objects for each enabled model.</p></dd>
+
+  <dt>basis_support</dt>
+<dd><p>Requested and effective basis dimensions with the
+    explicit support-based adjustment reason.</p></dd>
 
 
 </dl><p><strong>Added score columns (in <code>$data</code>).</strong></p><ul><li><p><code>p_cls_p</code>: base population-level score (gamm4 fixed-effects prediction).</p></li>

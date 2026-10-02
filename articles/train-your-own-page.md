@@ -1,0 +1,188 @@
+# Train PAGe from Seasonal Surveillance Data
+
+PAGe training starts with the surveillance record and an explicit expert
+review of epidemic ignition. The package does not silently substitute
+its historical default ignition labels when you use the workflow in this
+vignette.
+
+## 1. Prepare seasonal data
+
+Use one row per season/week with positive counts, test counts, and
+positivity:
+
+``` r
+
+seasonal_data <- data.frame(
+  season = c("2022-23", "2022-23", "2023-24", "2023-24"),
+  weekF = c(1, 2, 1, 2),
+  y = c(5, 8, 4, 7),
+  N = c(1000, 1000, 950, 960)
+)
+seasonal_data$p <- seasonal_data$y / seasonal_data$N
+```
+
+[`prepare_surveillance_data()`](https://lennon-li.github.io/PAGe/reference/prepare_surveillance_data.md)
+validates and canonicalizes the input. Real model training should use
+complete historical seasons rather than this tiny schema illustration.
+
+## One-call interactive workflow
+
+If you want PAGe to lead the workflow, omit `labels` and
+`ignition_weeks`.
+[`page_train()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
+will plot each season first, prompt for the expert decimal ignition
+week, validate the complete label set, and only then start training:
+
+``` r
+
+fit <- page_train(
+  seasonal_data,
+  annotator = "your-name",
+  interactive = TRUE,
+  mode = "refresh",
+  prospective_holdout = NULL
+)
+```
+
+Use the two-step workflow below when you want to review/save the labels
+separately before starting a potentially expensive training run.
+
+## 2. Review each season and label ignition
+
+In an interactive R session, call:
+
+``` r
+
+library(PAGe)
+
+labels <- page_label_ignitions(
+  seasonal_data,
+  annotator = "your-name",
+  interactive = TRUE
+)
+```
+
+For each season PAGe first opens the same Plotly review produced by
+[`review_expert_ignition()`](https://lennon-li.github.io/PAGe/reference/review_expert_ignition.md).
+After you inspect the curve, the console asks for the ignition week on
+PAGe’s continuous week coordinate. For example, `18.5` means halfway
+through the interval represented by integer week 18.
+
+The decimal annotation is retained for provenance. The current M0/M1
+training contract uses the containing integer week, so `18.5` becomes
+integer training anchor 18. PAGe makes this conversion explicitly with
+[`floor()`](https://rdrr.io/r/base/Round.html).
+
+For a reproducible script or CI job, provide the reviewed values
+directly:
+
+``` r
+
+labels <- page_label_ignitions(
+  seasonal_data,
+  ignition_weeks = c(
+    "2018-19" = 19.4,
+    "2019-20" = 22.1,
+    "2022-23" = 15.6,
+    "2023-24" = 20.2,
+    "2024-25" = 23.0,
+    "2025-26" = 19.3
+  ),
+  annotator = "your-name",
+  interactive = FALSE
+)
+
+labels$table
+labels$manual_labels
+```
+
+Expert input is limited to ignition timing in this workflow. PAGe does
+not ask the user to hand-label forecast targets or manufacture future
+peak information.
+
+## 3. Train a model
+
+[`page_train()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
+reuses the package’s governed
+[`train_pipeline()`](https://lennon-li.github.io/PAGe/reference/train_pipeline.md)
+implementation. It does not create a second training engine.
+
+A fixed-specification refresh is the fastest path when the model
+structure has already been selected:
+
+``` r
+
+fit <- page_train(
+  seasonal_data,
+  labels = labels,
+  mode = "refresh",
+  prospective_holdout = NULL,
+  n_cores = 4
+)
+
+fit
+```
+
+For model development, keep a prospective season out of all fitting,
+tuning, **and expert ignition review**. Let the workflow label only the
+trainable seasons, or supply ignition weeks that omit the holdout:
+
+``` r
+
+fit <- page_train(
+  seasonal_data,
+  ignition_weeks = c(
+    "2018-19" = 19.4,
+    "2019-20" = 22.1,
+    "2022-23" = 15.6,
+    "2023-24" = 20.2,
+    "2024-25" = 23.0
+  ),
+  annotator = "your-name",
+  interactive = FALSE,
+  mode = "retune",
+  prospective_holdout = "2025-26",
+  checkpoint_dir = "checkpoints/page-retune",
+  n_cores = 8
+)
+```
+
+[`page_train()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
+excludes unreleased holdout and explicitly excluded seasons before its
+interactive review step. If a pre-existing label set contains those
+seasons, their labels are retained in the returned provenance object but
+stripped before
+[`train_pipeline()`](https://lennon-li.github.io/PAGe/reference/train_pipeline.md)
+is called.
+
+A governed retune is substantially more expensive because it performs
+leakage-safe leave-one-season-out model selection. Retuning and holdout
+release should follow the promotion/evaluation workflow documented
+elsewhere in PAGe; do not inspect the final holdout to choose
+hyperparameters and then report it as prospective evidence.
+
+## 4. Inspect and save the frozen kit
+
+The training workflow returns the original expert label set, the
+complete `page_training_result`, and its frozen deployment kit:
+
+``` r
+
+fit$labels$table
+fit$training_result
+page_validate_kit(fit$kit, mode = "frozen")
+
+page_save_kit(fit, "artifacts/my-page-kit.rds")
+```
+
+The saved kit is self-contained for frozen forecasting.
+[`page_load_kit()`](https://lennon-li.github.io/PAGe/reference/page_load_kit.md)
+validates it again when read.
+
+``` r
+
+kit <- page_load_kit("artifacts/my-page-kit.rds")
+```
+
+Continue with the deployment vignette to forecast new weekly
+observations.

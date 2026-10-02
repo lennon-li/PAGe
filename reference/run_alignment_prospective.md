@@ -23,7 +23,11 @@ run_alignment_prospective(
   time_weights = NULL,
   trough_weight = 0.1,
   rise_weight = 1,
-  peak_decay = 0.3
+  peak_decay = 0.3,
+  timing_mode = c("legacy", "fractional"),
+  peak_stabilization = c("legacy", "causal"),
+  peak_state = NULL,
+  stabilizer_max_jump_weeks = 2
 )
 ```
 
@@ -99,6 +103,21 @@ run_alignment_prospective(
 - trough_weight, rise_weight, peak_decay:
 
   Alignment-loss controls.
+
+- peak_stabilization:
+
+  Character; \`"legacy"\` (default) preserves the existing stateless
+  peak output, while \`"causal"\` uses the stabilized decimal peak
+  candidate.
+
+- peak_state:
+
+  Optional prior same-season state returned by this function when
+  \`peak_stabilization = "causal"\`.
+
+- stabilizer_max_jump_weeks:
+
+  Positive maximum causal peak movement per origin (default 2 weeks).
 
 ## Value
 
@@ -188,8 +207,8 @@ A named list with components:
 
 ``` r
 if (FALSE) { # \dontrun{
-ref    <- readRDS("data/ref.rds")
-hyper  <- readRDS("data/hyper.rds")
+ref <- readRDS("data/ref.rds")
+hyper <- readRDS("data/hyper.rds")
 params <- readRDS("data/stage1_tuning.rds")$best_params
 
 # Called once per week as new data arrives
@@ -199,8 +218,8 @@ ap <- run_alignment_prospective(
   hyper         = hyper,
   params        = params
 )
-ap$state       # "pre_ignition", "aligning", or "post_peak"
-ap$peak_weekF  # estimated peak in original week space
+ap$state # "pre_ignition", "aligning", or "post_peak"
+ap$peak_weekF # estimated peak in original week space
 
 # Pass previous ign_out to avoid re-running ignition each week
 ap2 <- run_alignment_prospective(

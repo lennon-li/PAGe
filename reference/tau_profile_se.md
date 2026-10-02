@@ -15,6 +15,8 @@ tau_profile_se(
   h = 0.001,
   tau0 = 0,
   tau_bounds = c(-12, 12),
+  support = NULL,
+  weights = NULL,
   ab_prior = NULL
 )
 ```
@@ -49,10 +51,16 @@ tau_profile_se(
   Numeric vector of length 2; hard limits for `tau` (default
   `c(-12, 12)`).
 
-- ab_prior:
+- support:
 
-  Optional named calibration prior; NULL leaves calibration
-  unregularized.
+  Optional logical vector selecting the saved common support rows. When
+  supplied, every profile evaluation uses exactly these rows.
+
+- weights:
+
+  Optional likelihood weights, one per row of `currentD`. They are
+  converted to the same per-observation GLM weights used by the
+  alignment fit.
 
 ## Value
 

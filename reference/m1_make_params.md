@@ -79,7 +79,7 @@ m1_make_params(
 
   Character. `"between"` (default) computes `logit_spread` as the
   weighted between-template standard deviation. `"total"` adds weighted
-  per-template GAM SE\\2 for a total-variance spread. See
+  squared per-template GAM SE for a total-variance spread. See
   [`align_multi_template`](https://lennon-li.github.io/PAGe/reference/align_multi_template.md)
   for details.
 
@@ -95,5 +95,7 @@ and
 
 ``` r
 params <- m1_make_params()
+#> Error in m1_make_params(): could not find function "m1_make_params"
 params_custom <- m1_make_params(slope_weight = 12, temperature = 0.15)
+#> Error in m1_make_params(slope_weight = 12, temperature = 0.15): could not find function "m1_make_params"
 ```

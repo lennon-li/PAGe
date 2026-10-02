@@ -24,9 +24,7 @@ inspect_tuning_boundaries(
 
 - x:
 
-  A stage tuning result with a selected configuration and complete
-  tuning grid. A raw grid alone is not sufficient because boundary
-  status is defined relative to the selected configuration.
+  A stage tuning result, or a data frame containing the tuning grid.
 
 - stage:
 

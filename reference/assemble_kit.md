@@ -24,7 +24,9 @@ assemble_kit(
   m2_model,
   best_spec_id = NULL,
   save_ref_path = NULL,
-  save_m2_path = NULL
+  save_m2_path = NULL,
+  m1_v2 = NULL,
+  m2_v2 = NULL
 )
 ```
 
@@ -65,6 +67,16 @@ assemble_kit(
 
   Character. If set, saves the M2 bundle (`m2_production.rds` format) to
   this path.
+
+- m1_v2:
+
+  Optional \`page_m1_v2_stage\` from \`build_m1_v2_timing()\`. Carried
+  alongside legacy M1 for the redesigned timing runtime and M2 handoff.
+
+- m2_v2:
+
+  Optional \`page_m2_v2_c2_governed\` shadow artifact. It is carried
+  alongside legacy M2 and never replaces \`m2_model\`.
 
 ## Value
 

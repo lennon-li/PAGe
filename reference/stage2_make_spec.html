@@ -23,7 +23,7 @@ derived: spec$formula and spec$exclude_newseason
 
     <a class="navbar-brand me-2" href="../index.html">PAGe</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -94,7 +94,8 @@ derived: spec$formula and spec$exclude_newseason
 <span>  bias_alpha <span class="op">=</span> <span class="fl">0.05</span>,</span>
 <span>  bias_beta <span class="op">=</span> <span class="fl">0</span>,</span>
 <span>  K <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  pre_buffer <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  pre_buffer <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  timing_mode <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"legacy"</span>, <span class="st">"fractional"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -183,6 +184,11 @@ Set any to 0L to disable the corresponding term.</p></dd>
 
 <dt id="arg-pre-buffer">pre_buffer<a class="anchor" aria-label="anchor" href="#arg-pre-buffer"></a></dt>
 <dd><p>Deprecated alias of <code>Kb</code>.</p></dd>
+
+
+<dt id="arg-timing-mode">timing_mode<a class="anchor" aria-label="anchor" href="#arg-timing-mode"></a></dt>
+<dd><p>Character. Fractional mode preserves a numeric anchor;
+legacy mode retains the integer contract.</p></dd>
 
 </dl></div>
     <div class="section level2">
