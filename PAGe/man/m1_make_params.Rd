@@ -66,7 +66,7 @@ is the recommended way to customise alignment settings rather than
 hand-crafting a raw list, as it documents every knob and enforces defaults.
 }
 \examples{
-params <- m1_make_params()
-params_custom <- m1_make_params(slope_weight = 12, temperature = 0.15)
+params <- PAGe:::m1_make_params()
+params_custom <- PAGe:::m1_make_params(slope_weight = 12, temperature = 0.15)
 
 }

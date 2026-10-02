@@ -305,7 +305,7 @@ test_that("gate_nesting is recorded in provenance and kit metadata", {
     assemble_kit = function(m0, m1, m2, best_spec_id) {
       list(m0 = m0, m1 = m1, m2 = m2, best_spec_id = best_spec_id)
     },
-    page_validate_kit = function(x, ...) invisible(x),
+    validate_page_kit = function(x, ...) invisible(x),
     .package = "PAGe"
   )
   for (nesting in c("full", "conditional")) {
