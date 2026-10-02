@@ -27,7 +27,7 @@ page_validate_promotion_bundle <- function(bundle, holdout_season = "2025-26", d
       any(!grepl("^[0-9a-f]{64}$", hashes))) {
     page_refit_abort("Promotion bundle must contain named candidate, incumbent, and authorized-data SHA-256 hashes.")
   }
-  if (!is.null(data_path) && !identical(PAGe::hash_file_sha256(data_path), hashes[["authorized_data"]])) {
+  if (!is.null(data_path) && !identical(PAGe:::hash_file_sha256(data_path), hashes[["authorized_data"]])) {
     page_refit_abort("Authorized data SHA-256 does not match the promotion decision bundle.")
   }
   report <- bundle$report
@@ -56,7 +56,7 @@ page_validate_promotion_manifest <- function(manifest, bundle, bundle_path,
   if (!is.character(hashes) || anyDuplicated(names(hashes)) ||
       !setequal(names(hashes), expected) ||
       !identical(hashes[expected[1:3]], bundle$source_artifact_hashes[expected[1:3]]) ||
-      !identical(hashes[["promotion_bundle"]], PAGe::hash_file_sha256(bundle_path))) {
+      !identical(hashes[["promotion_bundle"]], PAGe:::hash_file_sha256(bundle_path))) {
     page_refit_abort("Promotion manifest source hashes do not bind the promotion bundle.")
   }
   if (!identical(manifest$artifact$role, "holdout_acceptance_decision") ||
@@ -93,7 +93,7 @@ page_read_promotion_manifest <- function(path) {
 }
 
 page_candidate_refit_config <- function(candidate_kit, candidate_path, bundle, manifest) {
-  candidate_hash <- PAGe::hash_file_sha256(candidate_path)
+  candidate_hash <- PAGe:::hash_file_sha256(candidate_path)
   if (!identical(candidate_hash, bundle$source_artifact_hashes[["candidate"]]) ||
       !identical(candidate_hash, manifest$provenance$source_artifact_hashes[["candidate"]])) {
     page_refit_abort("Candidate kit SHA-256 does not match the acceptance evidence.")
@@ -154,11 +154,11 @@ page_refit_manifest <- function(postconditions, allD, data_path, candidate_path,
                                 promotion_bundle_path, promotion_manifest_path,
                                 artifact_path, code_commit) {
   source_hashes <- c(
-    authorized_data = PAGe::hash_file_sha256(data_path),
-    candidate = PAGe::hash_file_sha256(candidate_path),
-    promotion_bundle = PAGe::hash_file_sha256(promotion_bundle_path),
-    promotion_manifest = PAGe::hash_file_sha256(promotion_manifest_path),
-    refit_artifact = PAGe::hash_file_sha256(artifact_path)
+    authorized_data = PAGe:::hash_file_sha256(data_path),
+    candidate = PAGe:::hash_file_sha256(candidate_path),
+    promotion_bundle = PAGe:::hash_file_sha256(promotion_bundle_path),
+    promotion_manifest = PAGe:::hash_file_sha256(promotion_manifest_path),
+    refit_artifact = PAGe:::hash_file_sha256(artifact_path)
   )
   PAGe::new_result_manifest(
     artifact_role = "post_promotion_refit",
@@ -225,8 +225,8 @@ page_run_post_promotion_refit <- function(allD, promotion_bundle, promotion_mani
       !grepl("^[0-9a-f]{7,64}$", code_commit)) {
     page_refit_abort("A 7-64 character lowercase Git commit hash is required.")
   }
-  data_hash <- PAGe::hash_file_sha256(data_path)
-  promotion_hash <- PAGe::hash_file_sha256(promotion_bundle_path)
+  data_hash <- PAGe:::hash_file_sha256(data_path)
+  promotion_hash <- PAGe:::hash_file_sha256(promotion_bundle_path)
   if (identical(normalizePath(output_dir, mustWork = FALSE),
                 normalizePath(manifest_dir, mustWork = FALSE))) {
     page_refit_abort("`output_dir` and `manifest_dir` must be separate locations.")

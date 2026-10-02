@@ -51,6 +51,12 @@ articles:
   - title: Developer reference
     contents:
       - matches("^articles/source-map$")
+  - title: Vignettes
+    contents:
+      - canonical-v3-week12
+      - deploy-and-forecast
+      - model-version-comparison
+      - train-your-own-page
 
 reference:
   - title: Data and simulation
