@@ -48,7 +48,7 @@ page_validate_promotion_bundle <- function(bundle, holdout_season = "2025-26", d
 
 page_validate_promotion_manifest <- function(manifest, bundle, bundle_path,
                                              holdout_season = "2025-26") {
-  if (!isTRUE(PAGe::validate_result_manifest(manifest))) {
+  if (!isTRUE(PAGe:::validate_result_manifest(manifest))) {
     page_refit_abort("Promotion manifest is not a valid disclosure-safe result manifest.")
   }
   hashes <- manifest$provenance$source_artifact_hashes
@@ -160,7 +160,7 @@ page_refit_manifest <- function(postconditions, allD, data_path, candidate_path,
     promotion_manifest = PAGe:::hash_file_sha256(promotion_manifest_path),
     refit_artifact = PAGe:::hash_file_sha256(artifact_path)
   )
-  PAGe::new_result_manifest(
+  PAGe:::new_result_manifest(
     artifact_role = "post_promotion_refit",
     classification = "disclosure_safe",
     code_commit = code_commit,
@@ -202,7 +202,7 @@ page_run_post_promotion_refit <- function(allD, promotion_bundle, promotion_mani
                                           promotion_bundle_path, promotion_manifest_path,
                                           output_dir, manifest_dir,
                                           kit_compatibility = c("strict", "legacy_m2"),
-                                          train_fn = PAGe::train_pipeline,
+  train_fn = PAGe:::train_pipeline,
                                           save_rds = saveRDS,
                                           write_manifest = saveRDS,
                                           write_lines = writeLines,
@@ -212,7 +212,7 @@ page_run_post_promotion_refit <- function(allD, promotion_bundle, promotion_mani
   promotion_report <- page_validate_promotion_bundle(promotion_bundle, data_path = data_path)
   page_validate_promotion_manifest(promotion_manifest, promotion_bundle, promotion_bundle_path)
   candidate <- page_candidate_refit_config(candidate_kit, candidate_path, promotion_bundle, promotion_manifest)
-  promotion_evidence <- PAGe::verify_promotion_evidence(
+  promotion_evidence <- PAGe:::verify_promotion_evidence(
     bundle = promotion_bundle,
     manifest = promotion_manifest,
     data_path = data_path,
@@ -254,7 +254,7 @@ page_run_post_promotion_refit <- function(allD, promotion_bundle, promotion_mani
     postconditions, allD, data_path, candidate_path, promotion_bundle_path,
     promotion_manifest_path, artifact_path, code_commit
   )
-  PAGe::validate_result_manifest(manifest)
+  PAGe:::validate_result_manifest(manifest)
   write_manifest(manifest, manifest_path)
   write_lines(page_manifest_markdown(manifest), manifest_markdown_path)
   list(
