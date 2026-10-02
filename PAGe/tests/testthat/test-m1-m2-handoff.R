@@ -93,6 +93,9 @@ test_that("build_m1 reuses a season-matched M0 alignment", {
     season = c("2023-24", "2024-25"), newWeek = c(1, 1),
     y = c(1, 2), neg = c(9, 8)
   )
+  attr(aligned, "preprocessing") <- list(
+    k_deriv = 20L, peak_weight_boost = 3, peak_weight_decay = 0.3
+  )
   local_mocked_bindings(
     build_m0 = function(...) stop("M0 should not be rebuilt"),
     estimateRef = function(alignedD, ...) {

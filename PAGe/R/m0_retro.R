@@ -70,11 +70,11 @@ tuneIgnitionGrid <- function(dat, grid,
                              progress_every = 200L) {
   stopifnot(is.data.frame(dat), is.data.frame(grid))
   requireNamespace("dplyr")
-  
+
   need <- c("season", "weekF", "phase", "p", "p_cls_p", "y", "N")
   miss <- setdiff(need, names(dat))
   if (length(miss)) stop("tuneIgnitionGrid: dat missing cols: ", paste(miss, collapse = ", "))
-  
+
   truth <- dat |>
     dplyr::group_by(season) |>
     dplyr::summarise(
@@ -82,7 +82,7 @@ tuneIgnitionGrid <- function(dat, grid,
       .groups = "drop"
     )
   if (nrow(truth) == 0L) stop("tuneIgnitionGrid: no phase==1 found; cannot compute iWeek_true.")
-  
+
   defaults <- list(
     cls_thr = 0.25,
     p_cum_thr = 0.20,
@@ -101,38 +101,38 @@ tuneIgnitionGrid <- function(dat, grid,
 
   score_one_i <- function(i) {
     params <- as.list(grid[i, , drop = FALSE])
-    
+
     det_out <- detectIgnitionBySeason(dat, params, keep_signals = FALSE, verbose = FALSE)
     pred <- det_out$by_season[, c("season", "iWeek_hat")]
-    
+
     joined <- dplyr::left_join(truth, pred, by = "season") |>
       dplyr::mutate(
         diff = iWeek_hat - iWeek_true,
         abs_diff = abs(diff),
         miss = is.na(iWeek_hat)
       )
-    
+
     n_miss  <- sum(joined$miss)
     sum_abs <- sum(joined$abs_diff, na.rm = TRUE)
     max_abs <- if (all(is.na(joined$abs_diff))) Inf else max(joined$abs_diff, na.rm = TRUE)
-    
+
     score <- sum_abs + lambda * max_abs + miss_penalty * n_miss
-    
+
     c(score = score, sum_abs = sum_abs, max_abs = max_abs,
       n_miss = n_miss, mean_abs = mean(joined$abs_diff, na.rm = TRUE),
       sd_abs = stats::sd(joined$abs_diff, na.rm = TRUE))
   }
-  
+
   idx <- seq_len(nrow(grid))
   ncores <- as.integer(ncores %||% 1L)
   if (is.na(ncores) || ncores < 1L) ncores <- 1L
-  
+
   if (verbose) {
     message("[tuneIgnitionGrid] evaluating ", length(idx), " parameter sets...",
             "  ncores=", ncores,
             "  os=", .Platform$OS.type)
   }
-  
+
   if (ncores == 1L) {
     metrics <- matrix(NA_real_, nrow = length(idx), ncol = 6)
     colnames(metrics) <- c("score","sum_abs","max_abs","n_miss","mean_abs","sd_abs")
@@ -144,12 +144,12 @@ tuneIgnitionGrid <- function(dat, grid,
     }
   } else {
     requireNamespace("parallel")
-    
+
     if (identical(.Platform$OS.type, "windows")) {
       cl <- parallel::makeCluster(ncores)
       on.exit(try(parallel::stopCluster(cl), silent = TRUE), add = TRUE)
       parallel::clusterEvalQ(cl, { library(dplyr); NULL })
-      
+
       parallel::clusterExport(
         cl,
         varlist = c("dat","truth","grid","miss_penalty","lambda",
@@ -157,7 +157,7 @@ tuneIgnitionGrid <- function(dat, grid,
                     "score_one_i"),
         envir = environment()
       )
-      
+
       chunks <- split(idx, ceiling(seq_along(idx) / progress_every))
       res_list <- vector("list", length(chunks))
       done <- 0L
@@ -167,7 +167,7 @@ tuneIgnitionGrid <- function(dat, grid,
         if (verbose) message("[tuneIgnitionGrid] progress ", done, "/", length(idx))
       }
       metrics <- do.call(rbind, lapply(res_list, function(x) do.call(rbind, x)))
-      
+
     } else {
       chunks <- split(idx, ceiling(seq_along(idx) / progress_every))
       res_list <- vector("list", length(chunks))
@@ -180,22 +180,22 @@ tuneIgnitionGrid <- function(dat, grid,
       metrics <- do.call(rbind, lapply(res_list, function(x) do.call(rbind, x)))
     }
   }
-  
+
   res <- cbind(grid, as.data.frame(metrics))
-  
+
   min_sum <- min(res$sum_abs, na.rm = TRUE)
   cand <- res[res$sum_abs <= (min_sum + sum_tol), , drop = FALSE]
-  
+
   best_i <- with(cand, {
     o <- order(max_abs, n_miss, score)
     rownames(cand)[o[1]]
   })
   best_row <- cand[best_i, , drop = FALSE]
-  
+
   best_params <- as.list(best_row[, c(
     "cls_thr","p_cum_thr","p_thr","prev_thr","n_consec","N","w_min","w_max"
   ), drop = FALSE])
-  
+
   if (verbose) {
     message("[tuneIgnitionGrid] best sum_abs=", best_row$sum_abs,
             " max_abs=", best_row$max_abs,
@@ -204,7 +204,7 @@ tuneIgnitionGrid <- function(dat, grid,
     message("[tuneIgnitionGrid] best params: ",
             paste(names(best_params), unlist(best_params), sep="=", collapse=", "))
   }
-  
+
   list(best_params = best_params, results = res, best_row = best_row)
 }
 
@@ -223,26 +223,26 @@ tuneIgnitionGrid <- function(dat, grid,
 plot_det_facet <- function(det_out, smooth_col = NULL) {
   stopifnot(is.list(det_out), is.data.frame(det_out$data), is.data.frame(det_out$by_season))
   df <- det_out$data
-  
+
   # decide smoothed column
   if (is.null(smooth_col)) {
     smooth_col <- if ("fit" %in% names(df)) "fit" else "p_cls_p"
   }
   if (!smooth_col %in% names(df)) stop("smooth_col not found: ", smooth_col)
-  
+
   # true + estimated ignition weeks
   truth <- df |>
     group_by(season) |>
     summarise(iWeek_true = suppressWarnings(min(weekF[phase == 1L], na.rm = TRUE)),
               .groups = "drop")
-  
+
   ann <- truth |>
     left_join(det_out$by_season |> select(season, iWeek_hat), by = "season")
-  
+
   # plotting data
   df_plot <- df |>
     select(season, weekF, p, smoothed = all_of(smooth_col))
-  
+
   ggplot(df_plot, aes(x = weekF)) +
     # observed dots
     geom_point(aes(y = p), size = 1.2, alpha = 0.8, color = "red") +

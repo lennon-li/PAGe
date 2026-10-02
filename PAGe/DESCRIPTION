@@ -1,7 +1,7 @@
 Package: PAGe
 Type: Package
 Title: Phase-Aligned Gated Epidemic Forecasting
-Version: 0.2.0
+Version: 0.3.0
 Authors@R: person("Lennon", "Li", email = "lennon.li@oahpp.ca", role = c("aut", "cre"))
 Author: Lennon Li [aut, cre]
 Maintainer: Lennon Li <lennon.li@oahpp.ca>
@@ -20,6 +20,7 @@ Depends: R (>= 4.1.0)
 Imports:
     digest,
     jsonlite,
+    methods,
     tibble,
     data.table,
     stats,

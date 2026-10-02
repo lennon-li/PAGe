@@ -1,0 +1,16 @@
+key	value
+api_contract_version	page-weekly-api-v4
+forecast_release_id	5472d08992b5a9da40a9419b75c7427847ff7b1999070041d5e38b0a71da853b
+deployment_season	2026-27
+listener_policy	loopback_only
+source_mode_policy	operator_fixed
+historical_replay_endpoint	FALSE
+release_switching_endpoint	FALSE
+raw_artifact_download_endpoint	FALSE
+production_promotion_endpoint	FALSE
+readiness_cache_max_age_seconds	60
+max_request_bytes	16384
+run_id_regex	^wr_[0-9a-f]{32}$
+idempotency_key_regex	^[A-Za-z0-9._:-]{1,128}$
+worker_runtime	Rscript --vanilla sanitized_environment
+state_writer	supervisor_only

@@ -1,0 +1,263 @@
+# PAGe manuscript execution TODO
+
+Last updated: 2026-09-28
+
+## Active v3 manuscript gates
+
+Current scope is *Epidemics*, Ontario influenza only, application-first and
+descriptive. The canonical weekF12 release is shadow-only; no inferential or
+superiority claims are planned. Package-native implementation is the
+reproducibility and operating surface.
+
+- [x] Reconcile the manuscript architecture and results to the audited v3
+  release and keep prior-cycle results separately labeled.
+- [x] Add bounded legacy/v2 comparisons only where a common ledger or matched
+  target design is verified; document the M2-A training-vintage caveat and
+  absence of a common-ledger M0 comparison.
+- [x] Document package-native training, frozen-kit, and forecasting workflow.
+- [x] Install the exact built tarball into an isolated library and rerun the v3 runtime and training-workflow suites (52/52 + 16/16).
+- [ ] Obtain a terminal full `R CMD check` summary in a stable environment; the current AgentPorter/R 4.6 sandbox interrupts long check calls after install/load/namespace stages.
+- [x] Build and review the three new package vignettes (`train-your-own-page`, `deploy-and-forecast`, `canonical-v3-week12`).
+- [ ] Reconcile every manuscript result/table against its current
+  machine-readable artifact, including the authoritative 2026–27 CSV values.
+- [ ] Run and preserve the first observed 2026–27 weekF12+ shadow transaction;
+  score only after its target observations are available. Do not call the
+  current weekF8–11 diagnostic a prospective issuance result.
+- [ ] Pin package version, repository commit, dependencies, data vintage, and
+  runtime for the submitted manuscript analysis.
+- [ ] Complete data-custodian publication authorization and applicable ethics /
+  REB determination before submission.
+
+WeekF12 support-only replay is not an accuracy or promotion claim. All outputs
+remain `production_eligible=FALSE`. The exact release and scientific caveats
+are summarized in [`V3_IMPLEMENTATION_UPDATE_2026-09-28.md`](V3_IMPLEMENTATION_UPDATE_2026-09-28.md).
+
+## Archived prior-cycle checklist (superseded; rationale retained)
+
+The checklist below records the earlier multi-pathogen proposal and prior-cycle
+gates. It is retained as historical rationale only. Ontario RSV, RSV fitting,
+RSV reporting, multi-pathogen harmonization, and RSV-specific package tests are
+superseded and are not active work for this Ontario-influenza-only manuscript.
+Do not treat unchecked boxes below as current v3 tasks.
+
+Authoritative consolidated plan: [`PLAN.md`](PLAN.md)
+
+Frozen core analysis protocol: [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md)
+
+Frozen Ontario governance, season, and ignition-label records:
+[`GOVERNANCE_DECISIONS.md`](GOVERNANCE_DECISIONS.md),
+[`ONTARIO_FLU_SEASON_DECLARATION.md`](ONTARIO_FLU_SEASON_DECLARATION.md), and
+[`IGNITION_LABEL_PROTOCOL.md`](IGNITION_LABEL_PROTOCOL.md)
+
+Independent review record: [`REVIEW_LOG.md`](REVIEW_LOG.md)
+
+Journal article scan and drafting guide:
+[`EPIDEMICS_ARTICLE_SCAN.md`](EPIDEMICS_ARTICLE_SCAN.md) and
+[`SKELETON.md`](SKELETON.md)
+
+This file is the execution checklist. Section numbers below group related work but do not override the phase order and exit gates in `PLAN.md`. Every checked item must link to its supporting decision record or artifact.
+
+- **Current phase:** Phase 0, governance and evidence-definition blockers.
+- **Blocked until the Ontario influenza go/no-go gate:** Ontario RSV model fitting and RSV-results drafting.
+- **Methods/reporting status:** Finalized in [`METHODS.md`](METHODS.md) and [`REPORTING_TEMPLATES.md`](REPORTING_TEMPLATES.md); result-dependent fields remain gated.
+
+> **Status (2026-09-15): PRIOR CYCLE** — commit 95c1c9f / CSV-label seasons / truncated 2025-26; not comparable with the new cycle. See drafts/ANALYSIS_DEVIATIONS_new-cycle-draft.md.
+
+## 0. Ontario influenza evidence must precede RSV validation
+
+Ming's 2026-09-01 independent review concluded **REVISE FIRST**. Complete this workstream before committing substantial effort to the Ontario RSV application.
+
+- [ ] Re-derive the manuscript's frozen Ontario kit end to end through the governed `tune_*() -> validate_*() -> fit_*() -> freeze_*()` lifecycle and record every stage and kit identity.
+> **Status (2026-09-15): PRIOR CYCLE** — commit 95c1c9f / CSV-label seasons / truncated 2025-26; not comparable with the new cycle. See drafts/ANALYSIS_DEVIATIONS_new-cycle-draft.md.
+
+- [ ] Treat the historical `v16-corrected` incumbent as contextual evidence unless its lineage becomes fully reconstructible.
+- [ ] Resolve all genuinely tuned boundaries before freezing the manuscript kit.
+- [ ] Recompute M1 validation results and either resolve or retire the conflicting historical peak-MAE values.
+- [x] Complete the independent literature review and evidence matrix: [`LITERATURE_REVIEW.md`](LITERATURE_REVIEW.md) and [`LITERATURE_MATRIX.md`](LITERATURE_MATRIX.md).
+- [x] Scan comparable *Epidemics* articles and freeze a fillable, evidence-gated manuscript skeleton: [`EPIDEMICS_ARTICLE_SCAN.md`](EPIDEMICS_ARTICLE_SCAN.md) and [`SKELETON.md`](SKELETON.md).
+- [x] Revise the skeleton after independent Opus review, including the frozen
+  analysis details, claim boundaries, result branches, historical-holdout home,
+  display economy, and Phase-4 drafting gate recorded in [`REVIEW_LOG.md`](REVIEW_LOG.md).
+- [x] Freeze the literature-supported seven-model comparator set, four structural ablations, and label sensitivities in [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md).
+- [x] Prespecify the primary descriptive PAGe-versus-calendar-GAM comparison at
+  horizon two, including aggregation and direction of the observed difference;
+  do not perform statistical hypothesis testing.
+- [x] Freeze the exact per-trial binomial NLL formula, normalization, omitted combinatorial term, sign convention, and weekly/seasonal aggregation.
+- [x] Freeze the operational cadence: one training/tuning workflow and one frozen kit per target season, reused across all weekly origins.
+- [x] Finalize the manuscript-facing Methods draft and reporting templates, including the no-hypothesis-testing rule, stage outputs, provenance schema, runtime fields, and RSV conditional gate.
+- [ ] Evaluate all seven core Ontario models, four structural ablations, and
+  label sensitivities across eligible seasons; report complete season-specific
+  results and descriptive summaries without hypothesis tests.
+- [ ] Produce the canonical Ontario replay table with consistent season, horizon, phase, metric, artifact identity, and runtime fields.
+- [x] Write and version the fold-safe ignition-label protocol in [`IGNITION_LABEL_PROTOCOL.md`](IGNITION_LABEL_PROTOCOL.md).
+- [ ] Run the frozen `-1`, `+1`, and all-M0-label sensitivity analyses.
+- [x] Freeze the exact 11-season principal influenza universe without adding
+  new season data in [`ONTARIO_FLU_SEASON_DECLARATION.md`](ONTARIO_FLU_SEASON_DECLARATION.md).
+- [x] Preserve `2011-12`, `2015-16`, `2020-21`, and `2021-22` as non-principal
+  current-workflow seasons; use `2015-16` only as special diagnostic evidence.
+- [x] Define Ontario backfill and reporting-revision handling in [`GOVERNANCE_DECISIONS.md`](GOVERNANCE_DECISIONS.md).
+- [ ] Obtain written data-custodian publication authorization and disclosure limits.
+- [ ] Obtain and record the applicable research-ethics/REB determination.
+- [x] Document the code provenance of the historical 2% relative-NLL gate and
+  keep it separate from the manuscript estimand because no scientific
+  minimum-important-difference rationale was found.
+- [ ] Report the historical 2025--26 acceptance replay in its own table with its
+  different artifact lineage, excluding it from the new governed replay aggregate.
+- [ ] Pin the package version, repository commit, dependencies, and runtime environment used for manuscript analyses.
+- [ ] Assign a named person to every accountable role before its phase begins.
+- [ ] Run at least one simulation data-generating process that is structurally unfavorable to PAGe's templates.
+- [ ] Hold a documented go/no-go review before the Ontario RSV application: proceed, narrow the claims, redesign, or retarget the journal based on the influenza evidence.
+
+## Gap to close
+
+The PAGe API can accept arbitrary weekly surveillance data, but the empirical evidence currently comes from Ontario influenza. A generic data adapter demonstrates software flexibility; it does not establish predictive validity for RSV.
+
+Ontario RSV is the selected second-pathogen application. After the Ontario influenza evidence gate is passed and the RSV source audit is complete, run Ontario RSV through the full governed M0 -> M1 -> M2 workflow. The intended claim is **cross-pathogen workflow portability after pathogen-specific retraining within the same jurisdiction**, not direct transfer of an influenza-fitted model to RSV.
+
+## 1. Freeze the Ontario RSV validation question
+
+- [x] State the RSV question: can the same PAGe workflow be retrained for Ontario RSV and evaluated with leakage-safe walk-forward replay?
+- [x] Explicitly exclude direct influenza-to-RSV model transfer from the primary claim.
+- [x] Hold jurisdiction constant and evaluate pathogen contrast: Ontario influenza versus Ontario RSV.
+- [x] Freeze RSV dataset suitability criteria before data profiling or model fitting in [`ANALYSIS_PROTOCOL.md`](ANALYSIS_PROTOCOL.md).
+- [x] Record the Ontario RSV selection in the manuscript evidence log.
+- [x] Record the scientific rationale for choosing Ontario RSV: holding jurisdiction approximately constant isolates cross-pathogen workflow portability after pathogen-specific retraining.
+
+## 2. Audit and document the selected Ontario RSV dataset
+
+Required characteristics:
+
+- [ ] Weekly observations over enough seasons for training, tuning, and a final holdout.
+- [ ] Positive counts and total tests, or positive and negative counts, so the binomial target is preserved.
+- [ ] Stable week and season identifiers or enough date information to construct them.
+- [ ] Access, licence, and publication terms documented, including whether observations or only code/aggregates may be shared.
+- [ ] Versioned download, archive, or retrieval date.
+- [ ] Documentation of revisions, reporting delays, suppression, and missingness.
+
+Selection fixed:
+
+- [x] Ontario RSV surveillance data selected as the second-pathogen application.
+- [ ] Identify the exact source table/file, owner, extraction method, and source version.
+- [ ] Confirm whether the source is public, controlled access, or private.
+
+Selection deliverable:
+
+- [ ] Create `manuscript/ontario-rsv-data-audit.md` with source/access information, licence or authorization, schema, season count, completeness, denominator availability, revision behavior, and final suitability decision.
+
+## 3. Define the Ontario RSV analysis before fitting
+
+- [ ] Define season start and end rules.
+- [ ] Define included, excluded, training, validation, and final holdout seasons.
+- [ ] Reserve the most recent complete eligible season as the untouched holdout.
+- [ ] Define missing-week and reporting-revision handling.
+- [ ] Define ignition labels without consulting holdout outcomes.
+- [ ] Freeze the primary metric as binomial negative log-likelihood.
+- [ ] Freeze secondary metrics, phase definitions, descriptive summaries, and
+  predictive-interval evaluation where available.
+- [ ] Freeze comparator and ablation definitions.
+- [ ] Define boundary-expansion stopping rules before tuning.
+- [ ] Hash or otherwise version the protocol before model fitting.
+
+## 4. Build one Ontario RSV input data frame
+
+- [ ] Retrieve the authorized RSV data with a scripted, versioned process where permitted.
+- [ ] Put all eligible Ontario RSV observations into one data frame.
+- [ ] Preserve source identifiers and retrieval metadata as columns or sidecar metadata.
+- [ ] Map the data through `prepare_page_data()` using explicit outcome, total/negative, week, season, and start-year columns.
+- [ ] Check duplicate season-week rows.
+- [ ] Check missing, negative, non-integer, and impossible counts.
+- [ ] Check positivity limits and zero denominators.
+- [ ] Verify 52/53-week boundaries and season transitions.
+- [ ] Document any aggregation performed before the PAGe adapter.
+
+## 5. Add package tests for the Ontario RSV schema
+
+- [ ] Add a synthetic fixture matching the Ontario RSV source schema without containing restricted observations.
+- [ ] Test exact column mapping and MMWR/within-season conversion.
+- [ ] Test first and last seasonal weeks, including a 53-week year if present.
+- [ ] Test missing denominator, duplicate week, impossible count, and malformed season failures.
+- [ ] Test that metadata columns survive mapping.
+- [ ] Run the adapter test and full package suite.
+- [ ] Run package checks in a bounded environment and record pre-existing versus new findings.
+
+## 6. Run the Ontario RSV M0 -> M1 -> M2 workflow
+
+- [ ] Run data preflight and support audit.
+- [ ] Tune, validate, fit, and freeze M0 using training seasons only.
+- [ ] Inspect every genuinely tuned M0 boundary and resolve it before M1.
+- [ ] Tune, validate, fit, and freeze M1 using a matching frozen M0.
+- [ ] Inspect every genuinely tuned M1 boundary and resolve it before M2.
+- [ ] Tune, validate, fit, and freeze M2 using matching frozen M0/M1 identities.
+- [ ] Inspect M2 boundaries and apply prespecified stopping rules.
+- [ ] Assemble and validate the Ontario RSV PAGe kit.
+- [ ] Record stage and total runtimes from machine-readable status files.
+- [ ] Record seasonal training time separately from weekly state-update and forecast latency.
+- [ ] Preserve immutable tuning summaries, kit identity, selection, and manifests.
+
+## 7. Evaluate without leakage
+
+- [ ] Produce complete walk-forward predictions for every eligible validation season.
+- [ ] Verify that each held-out season is absent from all fold-specific training objects and manual labels.
+- [ ] Evaluate persistence and seasonal-naive baselines.
+- [ ] Evaluate the calendar-week GAM without gating/alignment.
+- [ ] Evaluate the prespecified PAGe component ablations.
+- [ ] Replay the final RSV holdout exactly once after all choices are frozen.
+- [ ] Do not tune or revise the selected specification in response to the RSV holdout.
+- [ ] If a new search is required, start and document a new development cycle with a new holdout.
+
+## 8. Harmonize results across applications
+
+- [ ] Use identical metric definitions for Ontario influenza and RSV.
+- [ ] Use identical horizon and epidemic-phase labels where scientifically meaningful.
+- [ ] Keep source-specific metrics separate when surveillance processes are not comparable.
+- [ ] Do not pool influenza and RSV NLL into one headline number without a justified weighting model.
+- [ ] Compare component gains, calibration patterns, and failure modes across applications.
+- [ ] Create one canonical manuscript table per application plus a cross-application synthesis table.
+- [ ] Store all final table and figure inputs in one immutable manuscript-results directory.
+
+## 9. Complete simulations and sensitivity analyses
+
+- [ ] Simulate pathogen-like variation in onset, duration, amplitude, and curve asymmetry.
+- [ ] Include single- and multi-wave epidemics.
+- [ ] Vary denominator size and binomial observation noise.
+- [ ] Include missing weeks and reporting disruptions.
+- [ ] Perturb ignition labels and template similarity.
+- [ ] Evaluate the full method, baselines, and ablations under the same scenarios.
+- [ ] Report Monte Carlo uncertainty and random seeds.
+- [ ] Identify conditions where phase alignment harms rather than helps forecasts.
+- [ ] Verify that the public replication entry point reproduces the frozen
+  simulation summaries from recorded seeds within manifest-defined tolerances.
+
+## 10. Update the manuscript evidence package
+
+- [ ] Update the title and abstract to use respiratory-virus rather than Ontario-specific framing.
+- [ ] Add the Ontario RSV data source and protocol to Methods.
+- [ ] Add separate Ontario influenza and RSV subsections to Results.
+- [ ] State clearly that each pathogen-specific model was retrained.
+- [ ] Add a cross-application synthesis without overstating generalizability.
+- [ ] Update limitations to cover surveillance-system heterogeneity and limited pathogen count.
+- [ ] Add public data, code, package, conflicts, funding, ethics, and AI-use statements.
+- [ ] Select and complete an applicable epidemic-forecast reporting checklist,
+  or document why none is suitable, before submission.
+- [ ] Verify the current *Epidemics* author guide immediately before formatting.
+
+## 11. Ontario RSV completion gate
+
+Do not make a multi-pathogen portability claim until all boxes below are checked:
+
+- [ ] The Ontario RSV source, access classification, licence or authorization, and publication permissions are documented.
+- [ ] The analysis protocol predates model fitting and holdout access.
+- [ ] The full stage lifecycle completed with resolved boundaries.
+- [ ] Fold and label leakage checks passed.
+- [ ] Baselines and ablations used prespecified definitions.
+- [ ] The final RSV holdout was evaluated once and was not used for tuning.
+- [ ] Runtime, failures, and negative findings are reported.
+- [ ] Public replication materials reproduce the RSV analysis or its permitted synthetic/disclosure-safe equivalent.
+- [ ] Claims are limited to the pathogens, jurisdictions, targets, and horizons actually evaluated.
+
+## Fallbacks if Ontario RSV is unsuitable
+
+1. Use a public RSV dataset from another jurisdiction, preserving cross-pathogen validation while adding jurisdictional heterogeneity.
+2. Use another public respiratory-virus target only after confirming denominator compatibility; do not silently treat incidence as positivity.
+3. Retain Ontario influenza as the sole application, narrow the claims, and revert the target journal to *Statistics in Medicine*.
+4. Split the work into an infectious-disease methods paper and a later package/software paper.

@@ -1,3 +1,5 @@
+.m2_training_labels_for_fold <- PAGe:::.m2_training_labels_for_fold
+
 test_that("tune_m1 accepts an explicit historical label vector", {
   captured <- new.env(parent = emptyenv())
   labels <- c("2012-13" = 24L, "2013-14" = 22L)

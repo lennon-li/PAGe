@@ -42,7 +42,7 @@ checkSeasonLength<-function(dat,thresh= 0.05,inclusive  = F) {
           # first week *at or after* start where it drops below threshold
           idx_after <- which(p_vec < thresh & seq_along(p_vec) >= idx_start)[1]
           if (is.na(idx_after)) {
-            # never drops below again → use last observed week
+            # never drops below again -> use last observed week
             w_vec[length(w_vec)]
           } else {
             w_vec[idx_after]

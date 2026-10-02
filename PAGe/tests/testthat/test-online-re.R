@@ -46,7 +46,7 @@ test_that("estimate_season_re_online returns nonzero RE for nonzero residuals", 
   d   <- obj$d
 
   # Build an obs_df mimicking what pipeline_runtime.R passes:
-  # only raw observation columns — no lead, newWeek, logit_f_eff, etc.
+  # only raw observation columns -- no lead, newWeek, logit_f_eff, etc.
   obs_df_raw <- data.frame(
     weekF = 10:15,
     y     = as.integer(c(5, 6, 8, 10, 9, 7)),

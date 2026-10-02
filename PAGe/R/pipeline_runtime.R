@@ -6,14 +6,16 @@
 # runtime is deterministic and warning-free.  Empty inputs return an NA
 # vector, allowing callers to handle an unavailable alignment without a base
 # `min()`/interpolation warning.
-.approx_unique <- function(x, y, xout, rule = 2L) {
+.approx_unique <- function(x, y, xout, rule = 1L) {
   x <- as.numeric(x)
   y <- as.numeric(y)
   xout <- as.numeric(xout)
   out <- rep(NA_real_, length(xout))
   keep <- is.finite(x) & is.finite(y)
   out_keep <- is.finite(xout)
-  if (!any(keep) || !any(out_keep)) return(out)
+  if (!any(keep) || !any(out_keep)) {
+    return(out)
+  }
 
   means <- tapply(y[keep], x[keep], mean)
   x_unique <- as.numeric(names(means))
@@ -22,10 +24,15 @@
   x_unique <- x_unique[ord]
   y_unique <- y_unique[ord]
   if (length(x_unique) == 1L) {
-    out[out_keep] <- y_unique[[1L]]
+    if (identical(as.integer(rule), 1L)) {
+      out[out_keep] <- ifelse(xout[out_keep] == x_unique[[1L]], y_unique[[1L]], NA_real_)
+    } else {
+      out[out_keep] <- y_unique[[1L]]
+    }
   } else {
     out[out_keep] <- stats::approx(
-      x_unique, y_unique, xout = xout[out_keep], rule = rule
+      x_unique, y_unique,
+      xout = xout[out_keep], rule = rule
     )$y
   }
   out
@@ -180,12 +187,16 @@ load_prospective_kit <- function(data_dir,
     "2012-13" = 18L, "2013-14" = 20L, "2014-15" = 20L,
     "2015-16" = 24L, "2016-17" = 19L, "2017-18" = 20L,
     "2018-19" = 19L, "2019-20" = 22L, "2022-23" = 15L,
-    "2023-24" = 20L, "2024-25" = 23L
+    "2023-24" = 20L, "2024-25" = 23L, "2025-26" = 19L
   )
 
   # hist_data: historical aligned data with prospective derivatives, stored
   # in ref_production.rds by docs/run.qmd for use in weekly M2 refit.
   hist_data <- ref_cache$hist_data
+
+  # Optional redesigned timing/forecast shadow artifacts. Legacy kits may omit these.
+  m1_v2 <- ref_cache$m1_v2 %||% NULL
+  m2_v2 <- m2_production$m2_v2 %||% NULL
 
   # m1_train_preds: M1 walk-forward predictions for all historical training
   # seasons, stored in m2_production.rds by docs/forecast_training.qmd.
@@ -215,7 +226,9 @@ load_prospective_kit <- function(data_dir,
     manual_labels  = manual_labels,
     hist_data      = hist_data,
     m1_train_preds = m1_train_preds,
-    template_df    = template_df
+    template_df    = template_df,
+    m1_v2          = m1_v2,
+    m2_v2          = m2_v2
   )
 }
 
@@ -253,14 +266,17 @@ load_prospective_kit <- function(data_dir,
 run_m0_detection <- function(kit,
                              current_data,
                              manual_ign_week = NA_integer_,
-                             verbose = TRUE) {
+                             verbose = TRUE,
+                             timing_mode = c("legacy", "fractional")) {
+  timing_mode <- match.arg(timing_mode)
   params <- kit$m0_params
 
   ign_out <- run_ignition_weekly(
     currentSeason  = current_data,
-    ign_fit_or_gam = NULL,
+    ign_fit_or_gam = kit$m0_classifier %||% kit$ign_fit %||% kit$m0_fit,
     params         = params,
-    start_week     = 1L
+    start_week     = 1L,
+    timing_mode    = timing_mode
   )
 
   ign_resolved <- resolve_week_override(
@@ -277,6 +293,7 @@ run_m0_detection <- function(kit,
       ))
     }
     ign_out$iWeek_hat_locked <- ign_resolved$final
+    if (timing_mode == "fractional") ign_out$iWeek_hat_lockedF <- as.numeric(ign_resolved$final)
     ign_out$ign_week_locked <- ign_resolved$final
   } else if (!is.na(ign_resolved$final)) {
     if (verbose) {
@@ -290,12 +307,288 @@ run_m0_detection <- function(kit,
   }
 
   list(
-    ign_out      = ign_out,
+    ign_out = ign_out,
     iWeek_locked = ign_out$ign_week_locked,
-    overridden   = ign_resolved$overridden
+    iWeek_lockedF = if (timing_mode == "fractional") ign_out$iWeek_hat_lockedF else as.numeric(ign_out$ign_week_locked),
+    overridden = ign_resolved$overridden
   )
 }
 
+
+
+#' Run the redesigned M1-v2 timing stage
+#'
+#' Runs M1-v2 sequentially from the locked M0 activation origin through the
+#' latest observed week. M1-F future timing, calibrated reporting summaries,
+#' M1-C passage probability, and passage confirmation remain separate. After
+#' passage is confirmed, a peak estimate from the unconditioned passage
+#' posterior is locked and carried forward.
+#'
+#' This stage does not replace the legacy M1 alignment curves currently used by
+#' M2. Instead it emits an explicit `m2_handoff` for the redesigned M2 path.
+#'
+#' @param kit PAGe deployment kit containing optional `m1_v2` artifact.
+#' @param current_data Current-season surveillance data.
+#' @param m0_result Output of `run_m0_detection()`.
+#' @param verbose Emit progress messages.
+#' @return A list with `status`, sequential `timing_df`, `m2_handoff`, and the
+#'   carried `m0_result`.
+#' @export
+run_m1_v2_timing <- function(kit, current_data, m0_result, verbose = TRUE) {
+  stage <- kit$m1_v2 %||% NULL
+  if (is.null(stage)) {
+    return(list(
+      status = "unavailable",
+      timing_df = data.frame(),
+      m2_handoff = NULL,
+      m0_result = m0_result,
+      reason = "kit_missing_m1_v2"
+    ))
+  }
+  if (!inherits(stage, "page_m1_v2_stage")) {
+    stop("`kit$m1_v2` must be a `page_m1_v2_stage`.", call. = FALSE)
+  }
+  expected_stage_id <- .m1_v2_stage_artifact_id(stage)
+  if (!identical(stage$artifact_id, expected_stage_id)) {
+    stop("M1-v2 runtime artifact identity integrity check failed.", call. = FALSE)
+  }
+  if (!is.null(kit$governance_id)) {
+    expected_governance_id <- digest::digest(
+      list(base_governance_id = kit$governance_id, m1_v2_artifact_id = stage$artifact_id),
+      algo = "sha256"
+    )
+    if (!is.character(kit$m1_v2_governance_id) ||
+        length(kit$m1_v2_governance_id) != 1L ||
+        !identical(kit$m1_v2_governance_id, expected_governance_id)) {
+      stop("M1-v2 runtime governance identity integrity check failed.", call. = FALSE)
+    }
+  }
+  d <- prepare_surveillance_data(current_data)
+  if (!nrow(d)) stop("`current_data` must contain at least one row.", call. = FALSE)
+  seasons <- unique(d$season)
+  if (length(seasons) != 1L) stop("`current_data` must contain exactly one season.", call. = FALSE)
+  if (seasons %in% stage$training_seasons) {
+    stop(
+      "Current season is present in the M1-v2 training artifact; refusing leakage-prone runtime inference.",
+      call. = FALSE
+    )
+  }
+
+  activation_origin <- suppressWarnings(as.numeric(m0_result$iWeek_locked))
+  activation_decimal <- suppressWarnings(as.numeric(
+    m0_result$iWeek_lockedF %||% m0_result$iWeek_locked
+  ))
+  if (!is.finite(activation_origin) || !is.finite(activation_decimal)) {
+    return(list(
+      status = "pre_ignition",
+      timing_df = data.frame(),
+      m2_handoff = list(
+        version = "m1-v2-to-m2-v1",
+        season = seasons,
+        state = "pre_ignition",
+        origin_week = max(d$weekF),
+        activation_week = NA_real_
+      ),
+      m0_result = m0_result
+    ))
+  }
+  activation_origin <- as.integer(round(activation_origin))
+  end_origin <- as.integer(max(d$weekF))
+  if (activation_origin > end_origin) {
+    return(list(
+      status = "pre_ignition",
+      timing_df = data.frame(),
+      m2_handoff = list(
+        version = "m1-v2-to-m2-v1", season = seasons,
+        state = "pre_ignition", origin_week = end_origin,
+        activation_week = activation_decimal
+      ),
+      m0_result = m0_result
+    ))
+  }
+
+  runtime_policy <- stage$passage_policy$selected[1L, , drop = FALSE]
+  rows <- list()
+  passage_history <- data.frame(origin_week = numeric(), prob_peak_passed = numeric())
+  locked_peak <- NA_real_
+  locked_at <- NA_integer_
+  confirmed <- FALSE
+  latest_raw_posterior <- NULL
+  last_passage_probs <- c(passed=NA_real_, within1=NA_real_, within2=NA_real_, within3=NA_real_)
+
+  for (origin in seq(activation_origin, end_origin, by = 1L)) {
+    prefix <- d[d$weekF <= origin, , drop = FALSE]
+    future <- tryCatch(
+      m1_v2_peak_posterior(
+        stage$library, prefix,
+        activation_week = activation_decimal,
+        origin_week = origin,
+        candidate_step = 0.1
+      ),
+      error = function(e) e
+    )
+    passage <- tryCatch(
+      m1_v2_passage_posterior(
+        stage$library, prefix,
+        activation_week = activation_decimal,
+        origin_week = origin,
+        candidate_step = 0.1
+      ),
+      error = function(e) e
+    )
+
+    future_ok <- !inherits(future, "error")
+    passage_ok <- !inherits(passage, "error")
+    future_error <- if (!future_ok) conditionMessage(future) else NA_character_
+    passage_error <- if (!passage_ok) conditionMessage(passage) else NA_character_
+
+    calibrated <- NULL
+    if (future_ok) {
+      calibrated <- m1_v2_apply_bias_calibration(future, stage$calibrator)
+      latest_raw_posterior <- future$posterior
+    } else {
+      latest_raw_posterior <- NULL
+    }
+
+    passage_mean_raw <- NA_real_
+    passage_mean_cal <- NA_real_
+    decision <- NULL
+    if (passage_ok) {
+      last_passage_probs <- c(
+        passed = passage$prob_peak_passed,
+        within1 = passage$prob_peak_within_1w,
+        within2 = passage$prob_peak_within_2w,
+        within3 = passage$prob_peak_within_3w
+      )
+      passage_history <- rbind(
+        passage_history,
+        data.frame(
+          origin_week = origin,
+          prob_peak_passed = passage$prob_peak_passed,
+          stringsAsFactors = FALSE
+        )
+      )
+      decision <- m1_v2_passage_decision(
+        passage_history = passage_history,
+        current_data = prefix,
+        activation_week = activation_decimal,
+        high_threshold = runtime_policy$high_threshold,
+        low_threshold = runtime_policy$low_threshold,
+        drop_fraction = runtime_policy$drop_fraction,
+        fast_drop_fraction = runtime_policy$fast_drop_fraction %||% 0,
+        min_post_activation = as.integer(runtime_policy$min_post_activation)
+      )
+      pp <- attr(passage, "posterior")
+      passage_mean_raw <- sum(pp$peak_week_decimal * pp$probability)
+      passage_mean_cal <- passage_mean_raw + stage$calibrator$offset_week
+      if (!confirmed && isTRUE(decision$peak_reached_or_passed)) {
+        confirmed <- TRUE
+        locked_peak <- passage_mean_cal
+        locked_at <- origin
+      }
+    }
+
+    state <- if (confirmed) {
+      "passage_confirmed"
+    } else if (future_ok && passage_ok) {
+      "active"
+    } else if (future_ok) {
+      "future_only"
+    } else if (passage_ok) {
+      "passage_only"
+    } else {
+      "unavailable"
+    }
+    msg_parts <- c(
+      if (!future_ok) paste0("M1-F: ", future_error) else NULL,
+      if (!passage_ok) paste0("M1-C: ", passage_error) else NULL
+    )
+    msg <- if (length(msg_parts)) paste(msg_parts, collapse = " | ") else NA_character_
+    if (verbose && length(msg_parts)) message("M1-v2 degraded at week ", origin, ": ", msg)
+
+    rows[[length(rows) + 1L]] <- data.frame(
+      season = seasons,
+      origin_week = origin,
+      asof_boundary = origin + 1,
+      state = state,
+      weeks_elapsed_since_activation = (origin + 1) - activation_decimal,
+      weeks_to_calibrated_peak = if (future_ok) {
+        calibrated$peak_mean_calibrated - (origin + 1)
+      } else {
+        NA_real_
+      },
+      raw_peak_mean = if (future_ok) calibrated$peak_mean_raw else NA_real_,
+      calibrated_peak_mean = if (future_ok) calibrated$peak_mean_calibrated else NA_real_,
+      calibrated_mean_is_future = if (future_ok) calibrated$calibrated_mean_is_future else NA,
+      raw_peak_q05 = if (future_ok) calibrated$peak_q05_raw else NA_real_,
+      raw_peak_q95 = if (future_ok) calibrated$peak_q95_raw else NA_real_,
+      calibrated_peak_q05 = if (future_ok) calibrated$peak_q05_calibrated else NA_real_,
+      calibrated_peak_q95 = if (future_ok) calibrated$peak_q95_calibrated else NA_real_,
+      peak_q05 = if (future_ok) calibrated$peak_q05_calibrated else NA_real_,
+      peak_q95 = if (future_ok) calibrated$peak_q95_calibrated else NA_real_,
+      interval_width_90 = if (future_ok) calibrated$interval_width_90 else NA_real_,
+      prob_peak_passed = if (passage_ok || confirmed) last_passage_probs[["passed"]] else NA_real_,
+      prob_peak_within_1w = if (passage_ok || confirmed) last_passage_probs[["within1"]] else NA_real_,
+      prob_peak_within_2w = if (passage_ok || confirmed) last_passage_probs[["within2"]] else NA_real_,
+      prob_peak_within_3w = if (passage_ok || confirmed) last_passage_probs[["within3"]] else NA_real_,
+      passage_peak_mean_raw = passage_mean_raw,
+      passage_peak_mean_calibrated = passage_mean_cal,
+      peak_passed = confirmed,
+      locked_peak_week = locked_peak,
+      locked_at_origin = locked_at,
+      error = msg,
+      stringsAsFactors = FALSE
+    )
+  }
+
+  timing_df <- do.call(rbind, rows)
+  latest <- timing_df[nrow(timing_df), , drop = FALSE]
+  handoff <- list(
+    version = "m1-v2-to-m2-v1",
+    m1_v2_artifact_id = stage$artifact_id,
+    season = seasons,
+    state = latest$state[[1L]],
+    origin_week = latest$origin_week[[1L]],
+    asof_boundary = latest$asof_boundary[[1L]],
+    activation_week = activation_decimal,
+    weeks_elapsed_since_activation = latest$weeks_elapsed_since_activation[[1L]],
+    weeks_to_calibrated_peak = latest$weeks_to_calibrated_peak[[1L]],
+    raw_peak_posterior = latest_raw_posterior,
+    raw_peak_mean = latest$raw_peak_mean[[1L]],
+    calibrated_peak_mean = latest$calibrated_peak_mean[[1L]],
+    calibrated_mean_is_future = latest$calibrated_mean_is_future[[1L]],
+    raw_peak_q05 = latest$raw_peak_q05[[1L]],
+    raw_peak_q95 = latest$raw_peak_q95[[1L]],
+    calibrated_peak_q05 = latest$calibrated_peak_q05[[1L]],
+    calibrated_peak_q95 = latest$calibrated_peak_q95[[1L]],
+    peak_q05 = latest$peak_q05[[1L]],
+    peak_q95 = latest$peak_q95[[1L]],
+    interval_width_90 = latest$interval_width_90[[1L]],
+    prob_peak_passed = latest$prob_peak_passed[[1L]],
+    prob_peak_within_1w = latest$prob_peak_within_1w[[1L]],
+    prob_peak_within_2w = latest$prob_peak_within_2w[[1L]],
+    prob_peak_within_3w = latest$prob_peak_within_3w[[1L]],
+    locked_peak_week = latest$locked_peak_week[[1L]],
+    locked_at_origin = latest$locked_at_origin[[1L]],
+    calibration_offset_week = stage$calibrator$offset_week,
+    passage_policy = list(
+      high_threshold = runtime_policy$high_threshold,
+      low_threshold = runtime_policy$low_threshold,
+      drop_fraction = runtime_policy$drop_fraction,
+      fast_drop_fraction = runtime_policy$fast_drop_fraction,
+      min_post_activation = as.integer(runtime_policy$min_post_activation)
+    )
+  )
+
+  validate_m1_v2_handoff(handoff)
+
+  list(
+    status = handoff$state,
+    timing_df = timing_df,
+    m2_handoff = handoff,
+    m0_result = m0_result
+  )
+}
 
 #' Walk-forward M1 alignment for the current season
 #'
@@ -329,15 +622,21 @@ run_m1_alignment <- function(kit,
                              current_data,
                              m0_result,
                              walk_start = 5L,
-                             verbose = TRUE) {
+                             verbose = TRUE,
+                             timing_mode = c("legacy", "fractional")) {
+  timing_mode <- match.arg(timing_mode)
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   if (!requireNamespace("tibble", quietly = TRUE)) stop("Please install tibble.")
   `%||%` <- function(x, y) if (is.null(x)) y else x
-
   ref <- kit$ref
   hyper <- kit$hyper
   M1_PARAMS <- kit$M1_PARAMS
   ign_out <- m0_result$ign_out
+  locked_iweek <- if (timing_mode == "fractional") {
+    as.numeric(m0_result$iWeek_lockedF %||% m0_result$iWeek_locked)
+  } else {
+    as.integer(m0_result$iWeek_locked)
+  }
 
   walk_end <- max(current_data$weekF, na.rm = TRUE)
   actual_walk_start <- if (!is.na(m0_result$iWeek_locked)) {
@@ -352,6 +651,7 @@ run_m1_alignment <- function(kit,
         iWeek_hat = integer(0), tau = numeric(0),
         delta_m1 = numeric(0), a = numeric(0), b = numeric(0),
         t_peak = numeric(0), peak_weekF = integer(0),
+        peak_weekF_lo = numeric(0), peak_weekF_hi = numeric(0),
         peak_passed = logical(0), fallback = character(0)
       ),
       m1_curves = tibble::tibble(),
@@ -363,6 +663,8 @@ run_m1_alignment <- function(kit,
 
   per_week <- lapply(eval_weeks, function(ew) {
     season_to_ew <- dplyr::filter(current_data, weekF <= ew)
+    .page_assert_prefix(season_to_ew, ew, label = "M2 prospective input")
+    alignment_error <- NA_character_
 
     ap <- tryCatch(
       run_alignment_prospective_multi(
@@ -384,46 +686,61 @@ run_m1_alignment <- function(kit,
         slope_window       = M1_PARAMS$slope_window,
         dynamic_temp       = M1_PARAMS$dynamic_temp,
         dynamic_temp_pivot = M1_PARAMS$dynamic_temp_pivot,
-        spread_method      = M1_PARAMS$spread_method %||% "between"
+        spread_method      = M1_PARAMS$spread_method %||% "between",
+        timing_mode        = timing_mode
       ),
       error = function(e) {
+        alignment_error <<- conditionMessage(e)
         if (verbose) message("M1 error at week ", ew, ": ", conditionMessage(e))
         NULL
       }
     )
 
-    list(ew = ew, ap = ap, season_to_ew = season_to_ew)
+    list(ew = ew, ap = ap, season_to_ew = season_to_ew, error = alignment_error)
   })
 
   params_df <- dplyr::bind_rows(lapply(per_week, function(pw) {
     ew <- pw$ew
     ap <- pw$ap
-    if (is.null(ap) || ap$state == "pre_ignition") {
+    if (is.null(ap) || ap$state %in% c("pre_ignition", "alignment_failed")) {
       return(tibble::tibble(
-        eval_week = ew, state = "pre_ignition",
-        iWeek_hat = NA_integer_, tau = NA_real_,
+        eval_week = ew,
+        state = if (is.null(ap)) "alignment_failed" else ap$state,
+        iWeek_hat = if (!is.null(ap) && is.finite(ap$iWeek_hat)) {
+          ap$iWeek_hat
+        } else {
+          locked_iweek
+        }, tau = NA_real_,
         delta_m1 = NA_real_, a = NA_real_, b = NA_real_,
         t_peak = NA_real_, peak_weekF = NA_integer_,
-        peak_passed = FALSE, fallback = NA_character_
+        peak_weekF_lo = NA_real_, peak_weekF_hi = NA_real_,
+        peak_passed = FALSE,
+        fallback = if (!is.null(ap) && identical(ap$state, "alignment_failed")) {
+          ap$fallback_reason %||% pw$error %||% NA_character_
+        } else {
+          pw$error %||% NA_character_
+        }
       ))
     }
     tibble::tibble(
-      eval_week   = ew,
-      state       = ap$state,
-      iWeek_hat   = ap$iWeek_hat,
-      tau         = ap$tau,
-      delta_m1    = ap$delta,
-      a           = ap$a,
-      b           = ap$b,
-      t_peak      = ap$t_peak,
-      peak_weekF  = ap$peak_weekF,
+      eval_week = ew,
+      state = ap$state,
+      iWeek_hat = ap$iWeek_hat,
+      tau = ap$tau,
+      delta_m1 = ap$delta,
+      a = ap$a,
+      b = ap$b,
+      t_peak = ap$t_peak,
+      peak_weekF = ap$peak_weekF,
+      peak_weekF_lo = ap$peak_weekF_lo %||% NA_real_,
+      peak_weekF_hi = ap$peak_weekF_hi %||% NA_real_,
       peak_passed = ap$peak_passed,
-      fallback    = ap$fallback_reason %||% NA_character_
+      fallback = ap$fallback_reason %||% NA_character_
     )
   }))
 
   m1_curves <- dplyr::bind_rows(lapply(per_week, function(pw) {
-    if (is.null(pw$ap) || pw$ap$state == "pre_ignition") {
+    if (is.null(pw$ap) || pw$ap$state %in% c("pre_ignition", "alignment_failed")) {
       return(NULL)
     }
     pw$ap$forecast_df |> dplyr::mutate(eval_week = pw$ew)
@@ -471,17 +788,40 @@ run_m2_forecast <- function(kit,
                             current_data,
                             m1_result,
                             mode = c("frozen", "weekly_refit"),
-                            verbose = TRUE) {
+                            verbose = TRUE,
+                            timing_mode = c("legacy", "fractional")) {
   mode <- match.arg(mode)
+  timing_mode <- match.arg(timing_mode)
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   if (!requireNamespace("tibble", quietly = TRUE)) stop("Please install tibble.")
   `%||%` <- function(x, y) if (is.null(x)) y else x
+  locked_iweek <- if (timing_mode == "fractional") {
+    as.numeric(m1_result$m0_result$iWeek_lockedF %||%
+      m1_result$m0_result$iWeek_locked)
+  } else {
+    as.integer(m1_result$m0_result$iWeek_locked)
+  }
 
   ref <- kit$ref
   m2_production <- kit$m2_production
   best_spec <- kit$best_spec
+  family <- m2_production$family %||% best_spec$family %||% "legacy"
+  if (!family %in% c("legacy", m2_subset_family())) {
+    stop("Unsupported M2 model family: `", family, "`.", call. = FALSE)
+  }
+  if (identical(family, m2_subset_family())) {
+    if (identical(mode, "weekly_refit")) {
+      stop("M2 family `", m2_subset_family(), "` supports frozen mode only.", call. = FALSE)
+    }
+    return(m2_subset_runtime_prediction(
+      kit, current_data, m1_result,
+      verbose = verbose,
+      timing_mode = timing_mode
+    ))
+  }
   m2_fit <- m2_production$fit
   correction <- .resolve_correction_spec(best_spec)
+  nW_current <- .page_nw_true(current_data)[1L]
 
   ex_terms <- best_spec$exclude_newseason
   if (is.null(ex_terms)) ex_terms <- stage2_exclude_newseason(best_spec)
@@ -498,10 +838,6 @@ run_m2_forecast <- function(kit,
   fr <- m2_production$feature_ranges
   lfe_train_range <- if (!is.null(fr$logit_f_eff)) fr$logit_f_eff else range(m2_fit$model$logit_f_eff, na.rm = TRUE)
   z_ema_hist_range <- if (!is.null(fr$z_ema)) fr$z_ema else range(m2_fit$model$z_ema, na.rm = TRUE)
-
-  # Frozen-fit soft cap (used when mode=="frozen" or as fallback)
-  soft_cap_frozen <- make_soft_cap_fn(m2_fit)
-  lev_lead_frozen <- levels(m2_fit$model$lead)
 
   if (verbose) {
     cat(sprintf("run_m2_forecast: mode=%s, logN_max=%.2f\n", mode, logN_train_max))
@@ -529,7 +865,41 @@ run_m2_forecast <- function(kit,
     ap <- pw$ap
     season_to_ew <- pw$season_to_ew
 
-    if (is.null(ap) || ap$state == "pre_ignition") next
+    if (is.null(ap) || ap$state %in% c("pre_ignition", "alignment_failed")) {
+      # Keep an explicit unavailable row for a post-ignition alignment failure.
+      # The legacy path used to drop this origin before creating the M2 ledger.
+      iWeek_hat <- if (!is.null(ap) && is.finite(ap$iWeek_hat)) {
+        ap$iWeek_hat
+      } else {
+        locked_iweek
+      }
+      reason <- if (!is.null(ap)) ap$fallback_reason else pw$error
+      if (length(reason) != 1L || is.na(reason) || !nzchar(as.character(reason))) {
+        reason <- if (!is.null(ap) && identical(ap$state, "pre_ignition")) {
+          "no_ignition"
+        } else {
+          "alignment_failed"
+        }
+      }
+      failed_rows <- dplyr::bind_rows(lapply(c(1L, 2L), function(h) {
+        target_weekF <- ew + h
+        target_newWeek <- if (is.finite(iWeek_hat)) {
+          as.numeric(target_weekF - iWeek_hat + anchorWeek)
+        } else {
+          NA_real_
+        }
+        tibble::tibble(
+          eval_week = ew, h = h, target_weekF = target_weekF,
+          target_newWeek = target_newWeek, nW_true = nW_current,
+          forecast_available = FALSE, unavailable_reason = as.character(reason),
+          m1_p = NA_real_, m1_lo = NA_real_, m1_hi = NA_real_,
+          m2_p = NA_real_, m2_lo = NA_real_, m2_hi = NA_real_,
+          forecast_action = "unavailable"
+        )
+      }))
+      m2_rows[[length(m2_rows) + 1L]] <- failed_rows
+      next
+    }
 
     # Reset bias on first post-peak transition so rising-phase upward drift
     # does not inflate post-peak predictions.
@@ -578,7 +948,7 @@ run_m2_forecast <- function(kit,
           eval_weekF = as.integer(cur_weeks),
           h = as.integer(h),
           m1_p_hat = .approx_unique(fdf$newWeek, fdf$p_hat,
-            xout = nw, rule = 2
+            xout = nw, rule = 1
           )
         )
       }))
@@ -593,7 +963,8 @@ run_m2_forecast <- function(kit,
           spec         = best_spec,
           m1_preds     = m1_combined,
           season_label = "current",
-          verbose      = FALSE
+          verbose      = FALSE,
+          timing_mode  = timing_mode
         ),
         error = function(e) {
           if (verbose) {
@@ -612,7 +983,6 @@ run_m2_forecast <- function(kit,
       fit_ew <- m2_fit
     }
     soft_cap_ew <- make_soft_cap_fn(fit_ew)
-    lev_lead_ew <- levels(fit_ew$model$lead) %||% lev_lead_frozen
 
     # Compute EMA state once per eval week (shared across horizons)
     obs_to_ew_base <- season_to_ew |>
@@ -660,14 +1030,46 @@ run_m2_forecast <- function(kit,
     ew_result <- dplyr::bind_rows(lapply(horizons, function(h) {
       target_weekF <- ew + h
       target_newWeek <- as.numeric(target_weekF - iWeek_hat + anchorWeek)
+      availability <- .page_forecast_availability(
+        target_weekF, target_newWeek,
+        nW_true = nW_current
+      )
 
-      m1_p <- .approx_unique(fdf$newWeek, fdf$p_hat, xout = target_newWeek, rule = 2)
-      m1_lo <- .approx_unique(fdf$newWeek, fdf$p_lo, xout = target_newWeek, rule = 2)
-      m1_hi <- .approx_unique(fdf$newWeek, fdf$p_hi, xout = target_newWeek, rule = 2)
+      m1_p <- if (isTRUE(availability$forecast_available)) {
+        .approx_unique(fdf$newWeek, fdf$p_hat, xout = target_newWeek, rule = 1)
+      } else {
+        NA_real_
+      }
+      m1_lo <- if (isTRUE(availability$forecast_available)) {
+        .approx_unique(fdf$newWeek, fdf$p_lo, xout = target_newWeek, rule = 1)
+      } else {
+        NA_real_
+      }
+      m1_hi <- if (isTRUE(availability$forecast_available)) {
+        .approx_unique(fdf$newWeek, fdf$p_hi, xout = target_newWeek, rule = 1)
+      } else {
+        NA_real_
+      }
+      if (isTRUE(availability$forecast_available) && !is.finite(m1_p)) {
+        availability$forecast_available <- FALSE
+        availability$unavailable_reason <- "alignment_prediction_missing"
+      }
       m1_spread <- if ("logit_spread" %in% names(fdf)) {
-        .approx_unique(fdf$newWeek, fdf$logit_spread, xout = target_newWeek, rule = 2)
+        .approx_unique(fdf$newWeek, fdf$logit_spread, xout = target_newWeek, rule = 1)
       } else {
         0
+      }
+
+      if (!isTRUE(availability$forecast_available)) {
+        return(tibble::tibble(
+          eval_week = ew, h = h, target_weekF = target_weekF,
+          target_newWeek = target_newWeek, nW_true = nW_current,
+          forecast_available = FALSE,
+          unavailable_reason = availability$unavailable_reason,
+          m1_p = NA_real_, m1_lo = NA_real_, m1_hi = NA_real_,
+          m2_p = NA_real_, m2_lo = NA_real_, m2_hi = NA_real_,
+          forecast_action = "unavailable"
+        ))
       }
 
       logit_f_eff <- pmin(
@@ -698,11 +1100,14 @@ run_m2_forecast <- function(kit,
         include_season_re = refit_ok,
         soft_cap_fn       = soft_cap_ew,
         return_ci         = TRUE,
-        bias_logit        = bl
+        bias_logit        = bl,
+        timing_mode       = timing_mode
       )
       if (is.null(pr)) {
         return(tibble::tibble(
           eval_week = ew, h = h, target_weekF = target_weekF,
+          target_newWeek = target_newWeek, nW_true = nW_current,
+          forecast_available = TRUE, unavailable_reason = NA_character_,
           m1_p = m1_p, m1_lo = m1_lo, m1_hi = m1_hi,
           m2_p = NA_real_, m2_lo = NA_real_, m2_hi = NA_real_
         ))
@@ -722,16 +1127,22 @@ run_m2_forecast <- function(kit,
       # Record prediction for future bias updates.
       # m2_eta_raw: GAM linear predictor BEFORE bias (bl) addition.
       # Used by B1 fix: raw error = logit_obs - m2_eta_raw.
-      pred_log[[length(pred_log) + 1L]] <<- list(
-        target_weekF = target_weekF, m2_p = pr$m2_p,
-        m2_eta_raw = qlogis(pmin(pmax(pr$m2_p, 1e-6), 1 - 1e-6)) - bl,
-        h = h
-      )
+      pred_log[[length(pred_log) + 1L]] <<-
+        .m2_prediction_log(pr, target_weekF, h)
 
       tibble::tibble(
         eval_week = ew, h = h, target_weekF = target_weekF,
+        target_newWeek = target_newWeek, nW_true = nW_current,
+        forecast_available = TRUE, unavailable_reason = NA_character_,
         m1_p = m1_p, m1_lo = m1_lo, m1_hi = m1_hi,
         m2_p = pr$m2_p,
+        m2_eta_raw = pr$m2_eta_raw,
+        forecast_action = if (identical(correction$post_peak_action, "use_m1") &&
+          isTRUE(ap$peak_passed)) {
+          "post_peak_m1"
+        } else {
+          "gam"
+        },
         m2_lo = pr$m2_lo,
         m2_hi = pr$m2_hi
       )
@@ -779,15 +1190,16 @@ run_m2_forecast <- function(kit,
       newWeek = integer(), p_hat = numeric(), p_lo = numeric(),
       p_hi = numeric(), kind = character()
     )
-    required <- c("eval_week", "target_weekF", "m2_p", "m2_lo", "m2_hi")
+    required <- c("eval_week", "target_weekF", "m2_p")
     if (nrow(m2_preds) > 0L && all(required %in% names(m2_preds))) {
       latest_week <- max(m2_preds$eval_week, na.rm = TRUE)
       latest <- m2_preds[m2_preds$eval_week == latest_week, , drop = FALSE]
+      p_lo <- if ("m2_lo" %in% names(latest)) latest$m2_lo else NA_real_
+      p_hi <- if ("m2_hi" %in% names(latest)) latest$m2_hi else NA_real_
       forecast <- data.frame(
         newWeek = as.integer(latest$target_weekF),
         p_hat = as.numeric(latest$m2_p),
-        p_lo = as.numeric(latest$m2_lo),
-        p_hi = as.numeric(latest$m2_hi),
+        p_lo = as.numeric(p_lo), p_hi = as.numeric(p_hi),
         kind = "forecast"
       )
     }
@@ -832,7 +1244,14 @@ run_m2_forecast <- function(kit,
 #' @param season Optional single season identifier. Used only when
 #'   \code{current_data} has no \code{season} column. A unique
 #'   \code{kit$current_season} or \code{kit$forecast_season} is also accepted.
+#' @param timing_mode Character. \code{"legacy"} preserves integer timing;
+#'   \code{"fractional"} carries numeric ignition and aligned-week coordinates.
 #' @param verbose Logical. Emit progress messages (default \code{TRUE}).
+#' @param m2_v2_weekly_data Optional typed A/B weekly panel for the governed
+#'   M2-v2 shadow path. If absent, M2-v2 is reported unavailable and legacy M2
+#'   behavior is unchanged.
+#' @param m2_v2_b_handoff Optional type-B soft-timing handoff.
+#' @param m2_v2_b_gate_review Optional reviewed B gate-opening object.
 #' @param ... Additional arguments passed by the \code{run_pipeline()} alias.
 #'
 #' @return A list with \code{params_df}, \code{m1_curves}, \code{m2_preds},
@@ -846,8 +1265,13 @@ run_prospective_pipeline <- function(kit,
                                      manual_ign_week = NA_integer_,
                                      mode = c("frozen", "weekly_refit"),
                                      season = NULL,
-                                     verbose = TRUE) {
+                                     verbose = TRUE,
+                                     timing_mode = c("legacy", "fractional"),
+                                     m2_v2_weekly_data = NULL,
+                                     m2_v2_b_handoff = NULL,
+                                     m2_v2_b_gate_review = NULL) {
   mode <- match.arg(mode)
+  timing_mode <- match.arg(timing_mode)
   kit <- validate_page_kit(kit, mode = mode)
   assigned_season <- .resolve_runtime_season(kit, current_data, season)
   current_data <- prepare_surveillance_data(current_data, season = assigned_season)
@@ -855,23 +1279,86 @@ run_prospective_pipeline <- function(kit,
     stop("`current_data` must contain at least one surveillance row.")
   }
   m0 <- run_m0_detection(kit, current_data,
-    manual_ign_week = manual_ign_week, verbose = verbose
+    manual_ign_week = manual_ign_week, verbose = verbose,
+    timing_mode = timing_mode
+  )
+  m1_v2 <- run_m1_v2_timing(kit, current_data,
+    m0_result = m0, verbose = verbose
   )
   m1 <- run_m1_alignment(kit, current_data,
-    m0_result = m0, walk_start = walk_start, verbose = verbose
+    m0_result = m0, walk_start = walk_start, verbose = verbose,
+    timing_mode = timing_mode
   )
   m2 <- run_m2_forecast(kit, current_data,
-    m1_result = m1, mode = mode, verbose = verbose
+    m1_result = m1, mode = mode, verbose = verbose,
+    timing_mode = timing_mode
   )
   plot_data <- .as_forecast_plot_data(m2$m2_preds, current_data)
+  m2_v2_shadow <- .run_m2_v2_pipeline_shadow(
+    kit = kit,
+    typed_weekly_data = m2_v2_weekly_data,
+    current_season = unique(current_data$season),
+    origin_week = as.integer(max(current_data$weekF)),
+    a_handoff = m1_v2$m2_handoff,
+    b_handoff = m2_v2_b_handoff,
+    b_gate_review = m2_v2_b_gate_review
+  )
   structure(list(
     params_df = m1$params_df,
     m1_curves = m1$m1_curves,
     m2_preds  = m2$m2_preds,
     pred_df   = plot_data$pred_df,
     last_obs  = plot_data$last_obs,
-    ign_out   = m0$ign_out
+    ign_out   = m0$ign_out,
+    m1_v2_timing = m1_v2$timing_df,
+    m1_v2_handoff = m1_v2$m2_handoff,
+    m1_v2_status = m1_v2$status,
+    m2_v2_preds = m2_v2_shadow$predictions,
+    m2_v2_status = m2_v2_shadow$status,
+    m2_v2_model_artifact_id = m2_v2_shadow$model_artifact_id,
+    m2_v2_reason = m2_v2_shadow$reason
   ), class = c("page_forecast", "list"))
+}
+
+.run_m2_v2_pipeline_shadow <- function(kit,
+                                       typed_weekly_data = NULL,
+                                       current_season,
+                                       origin_week,
+                                       a_handoff = NULL,
+                                       b_handoff = NULL,
+                                       b_gate_review = NULL) {
+  artifact <- kit$m2_v2 %||% NULL
+  out <- list(
+    status = "unavailable",
+    predictions = data.frame(),
+    model_artifact_id = if (!is.null(artifact)) artifact$artifact_id else NA_character_,
+    reason = if (is.null(artifact)) "kit_missing_m2_v2" else "typed_ab_panel_missing"
+  )
+  if (is.null(artifact) || is.null(typed_weekly_data)) return(out)
+  validate_m2_v2_c2_governed_artifact(artifact)
+  if (!is.data.frame(typed_weekly_data) || !"season" %in% names(typed_weekly_data)) {
+    stop("`m2_v2_weekly_data` must be a typed A/B data frame with `season`.", call. = FALSE)
+  }
+  typed_seasons <- unique(as.character(typed_weekly_data$season))
+  current_season <- unique(as.character(current_season))
+  if (length(typed_seasons) != 1L || length(current_season) != 1L ||
+      !identical(typed_seasons, current_season)) {
+    stop("`m2_v2_weekly_data` must contain exactly the same current season as `current_data`.",
+         call. = FALSE)
+  }
+  origin_week <- as.integer(origin_week)
+  if (!is.finite(origin_week) || !origin_week %in% typed_weekly_data$weekF) {
+    stop("`m2_v2_weekly_data` does not contain the legacy pipeline's current origin week.",
+         call. = FALSE)
+  }
+  result <- run_m2_v2_c2_governed_runtime(
+    artifact, typed_weekly_data, origin_week,
+    a_handoff = a_handoff,
+    b_handoff = b_handoff,
+    b_gate_review = b_gate_review
+  )
+  result$reason <- NA_character_
+  result
 }
 
 .resolve_runtime_season <- function(kit, current_data, season) {
@@ -915,4 +1402,10 @@ run_m2 <- function(kit, current_data, m1_result, ...) run_m2_forecast(kit, curre
 
 #' @rdname run_prospective_pipeline
 #' @export
-run_pipeline <- function(kit, current_data, ...) run_prospective_pipeline(kit, current_data, ...)
+run_pipeline <- function(kit, current_data,
+                         timing_mode = c("legacy", "fractional"), ...) {
+  run_prospective_pipeline(
+    kit, current_data,
+    timing_mode = timing_mode, ...
+  )
+}

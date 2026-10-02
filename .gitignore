@@ -55,3 +55,13 @@ PAGe/docs/
 .vibe/
 .windsurf/
 .zencoder/
+
+# Local build, scratch and scraped outputs (2026-09-15)
+output/
+r-lib/
+.playwright-cli/
+.page_terminal_watch.sh
+.page_watchdog_runtime.sh
+abstracts.txt
+articles.txt
+semanticscholar.txt

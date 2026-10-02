@@ -37,7 +37,7 @@ test_that("manual_labels still accepted (backward compat) with deprecation warni
         manual_labels = c("2023-24" = 20L),
         verbose       = FALSE
       ),
-      error = function(e) NULL  # early failure is OK — we only need the warning
+      error = function(e) NULL  # early failure is OK -- we only need the warning
     ),
     regexp = "deprecated|manual_labels",
     ignore.case = TRUE,
@@ -73,7 +73,7 @@ test_that("manual_labels_train NULL and manual_labels_test NULL are accepted wit
 
 test_that("B4 invariant: training label for test season must NOT leak into test fold", {
   # If manual_labels_train contains the test season, the test fold would use
-  # a retrospective iWeek — the core B4 bug. After the fix, the test fold
+  # a retrospective iWeek -- the core B4 bug. After the fix, the test fold
   # always uses manual_labels_test (default NULL = prospective).
   #
   # We verify this at the API level: manual_labels_train is only used for

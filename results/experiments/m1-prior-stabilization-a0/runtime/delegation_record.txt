@@ -1,0 +1,3 @@
+External worker routes: Liz app-server filesystem failure; Wei OpenCode log filesystem failure on initial and repaired retry; Claude API/DNS EAI_AGAIN.
+Parent executed the bounded experiment locally under the no-implementation-capable-route exception.
+No production M0/M1/M2 code or sealed bundle was modified.

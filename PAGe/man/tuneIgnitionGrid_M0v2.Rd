@@ -12,13 +12,16 @@ tuneIgnitionGrid_M0v2(
   season_col = "season",
   phase_col = "phase",
   truth_col = "iWeek",
+  timing_truth = NULL,
   exSeason = NULL,
   miss_penalty = 0,
   lambda = 20,
   kappa = 0,
   gamma = 25,
   gamma_late = 0,
+  gamma_early = 0,
   iWeek = TRUE,
+  timing_mode = c("legacy", "fractional"),
   ncores = 10L,
   verbose = TRUE,
   progress_every = 200L
@@ -37,6 +40,10 @@ tuneIgnitionGrid_M0v2(
 
 \item{truth_col}{Column name for truth ignition week if stored.}
 
+\item{timing_truth}{Optional data frame with `season` and `ignition_target_weekF`.
+When `timing_mode = "fractional"`, this is the authoritative decimal truth
+for threshold tuning instead of the integer phase transition.}
+
 \item{exSeason}{Optional character vector of seasons to exclude from tuning (but still evaluate afterward).}
 
 \item{miss_penalty}{Numeric. Penalty per missing detection. Default 0 (no misses occur due
@@ -49,6 +56,10 @@ to the \code{w_max} fallback in \code{detectIgnitionBySeason_M0v2}).}
 \item{gamma}{Numeric. Penalty for adjusted error exceeding 2 weeks.}
 
 \item{gamma_late}{Numeric. Extra penalty for being late >2 weeks. Default 0 (disabled).}
+
+\item{gamma_early}{Numeric. Extra penalty for being early by more than 2 weeks.
+Default 0 preserves the historical objective. Gate-free M0-v2 tuning can
+increase this to protect against catastrophic false-early ignition.}
 
 \item{iWeek}{Logical. Use \code{truth_col} if available; otherwise infer from \code{phase_col}.}
 
@@ -65,6 +76,7 @@ List with best params, full results, runtime, and evaluation tables.
 Tunes M0v2 ignition thresholds over a parameter grid by repeatedly calling
 [detectIgnitionBySeason_M0v2()] and comparing estimated ignition weeks to season-level
 truth ignition weeks. Scoring uses a symmetric adjusted error with a -1 week wiggle room
-(detecting one week early counts as exact). Seasons with no detection within
-\code{[w_min, w_max]} are assigned \code{w_max} as a fallback, so misses never occur.
+(detecting one week early counts as exact). Fractional mode uses symmetric
+absolute error. Seasons with no detection remain missing in the training
+artifact and are scored at the legacy \code{w_max} fallback.
 }

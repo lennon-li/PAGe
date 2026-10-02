@@ -11,7 +11,8 @@ tau_profile_se(
   h = 0.001,
   tau0 = 0,
   tau_bounds = c(-12, 12),
-  ab_prior = NULL
+  support = NULL,
+  weights = NULL
 )
 }
 \arguments{
@@ -33,8 +34,12 @@ tau_profile_se(
 \item{tau_bounds}{Numeric vector of length 2; hard limits for \code{tau}
 (default \code{c(-12, 12)}).}
 
-\item{ab_prior}{Optional named calibration prior; NULL leaves calibration
-unregularized.}
+\item{support}{Optional logical vector selecting the saved common support
+rows. When supplied, every profile evaluation uses exactly these rows.}
+
+\item{weights}{Optional likelihood weights, one per row of \code{currentD}.
+They are converted to the same per-observation GLM weights used by the
+alignment fit.}
 }
 \value{
 A list with \code{tau_hat} (numeric) and \code{se_tau}

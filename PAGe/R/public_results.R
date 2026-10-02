@@ -47,6 +47,49 @@ validate_page_kit <- function(kit, mode = c("frozen", "weekly_refit")) {
     }
   }
 
+  if (!is.null(kit$m1_v2)) {
+    if (!inherits(kit$m1_v2, "page_m1_v2_stage")) {
+      stop("PAGe kit field `m1_v2` must be a `page_m1_v2_stage`.")
+    }
+    expected_m1_v2_id <- .m1_v2_stage_artifact_id(kit$m1_v2)
+    if (!identical(kit$m1_v2$artifact_id, expected_m1_v2_id)) {
+      stop("PAGe kit M1-v2 artifact identity integrity check failed.")
+    }
+    if (any(governed_present)) {
+      if (!setequal(kit$m1_v2$training_seasons, kit$season_selection$training_seasons)) {
+        stop("Governed PAGe kit M1-v2 training seasons do not match season selection.")
+      }
+      expected_m1_v2_governance_id <- digest::digest(
+        list(base_governance_id = kit$governance_id,
+             m1_v2_artifact_id = kit$m1_v2$artifact_id),
+        algo = "sha256"
+      )
+      if (!identical(kit$m1_v2_governance_id, expected_m1_v2_governance_id)) {
+        stop("Governed PAGe kit M1-v2 governance identity integrity check failed.")
+      }
+    }
+  }
+
+  if (!is.null(kit$m2_v2)) {
+    if (!inherits(kit$m2_v2, "page_m2_v2_c2_governed")) {
+      stop("PAGe kit field `m2_v2` must be a `page_m2_v2_c2_governed` artifact.")
+    }
+    validate_m2_v2_c2_governed_artifact(kit$m2_v2)
+    if (any(governed_present)) {
+      if (!setequal(kit$m2_v2$training_seasons, kit$season_selection$training_seasons)) {
+        stop("Governed PAGe kit M2-v2 training seasons do not match season selection.")
+      }
+      expected_m2_v2_governance_id <- digest::digest(
+        list(base_governance_id = kit$governance_id,
+             m2_v2_artifact_id = kit$m2_v2$artifact_id),
+        algo = "sha256"
+      )
+      if (!identical(kit$m2_v2_governance_id, expected_m2_v2_governance_id)) {
+        stop("Governed PAGe kit M2-v2 governance identity integrity check failed.")
+      }
+    }
+  }
+
   required <- c(
     "m0_params", "ref", "hyper", "M1_PARAMS", "m2_production", "best_spec"
   )
@@ -86,6 +129,30 @@ validate_page_kit <- function(kit, mode = c("frozen", "weekly_refit")) {
     stop("PAGe kit field `best_spec` must be a Stage-2 specification list.")
   }
   fit <- kit$m2_production$fit
+  family <- kit$m2_production$family %||% kit$best_spec$family %||% "legacy"
+  if (!family %in% c("legacy", m2_subset_family())) {
+    stop("Unsupported M2 model family: `", family, "`.")
+  }
+  if (any(governed_present) && identical(family, "legacy") &&
+    !isTRUE(kit$m2_production$legacy_compatibility$allow_legacy)) {
+    stop(
+      "Governed legacy M2 kits require recorded allow_legacy = TRUE."
+    )
+  }
+  if (identical(family, m2_subset_family())) {
+    if (identical(mode, "weekly_refit")) {
+      stop("M2 family `", m2_subset_family(), "` supports frozen mode only.")
+    }
+    config <- m2_subset_validate_config(kit$best_spec)
+    if (!is.list(fit) || !all(c("h1", "h2") %in% names(fit)) ||
+      !all(vapply(fit[c("h1", "h2")], is.list, logical(1)))) {
+      stop("M2 subset kit must contain frozen h1 and h2 fit objects.")
+    }
+    if (!identical(config$family, family)) {
+      stop("M2 subset kit family/config mismatch.")
+    }
+    return(kit)
+  }
   if (!inherits(fit, "gam")) {
     stop("PAGe kit field `m2_production$fit` must be a fitted GAM/BAM object.")
   }
@@ -130,6 +197,7 @@ validate_page_kit <- function(kit, mode = c("frozen", "weekly_refit")) {
   kit
 }
 
+#' @method print page_training_result
 #' @export
 print.page_training_result <- function(x, ...) {
   cat("<PAGe training result>\n")
@@ -140,6 +208,59 @@ print.page_training_result <- function(x, ...) {
   invisible(x)
 }
 
+.nested_print_nesting <- function(x) {
+  nesting <- x$protocol$gate_nesting %||%
+    x$gate_nesting %||%
+    (if ("folds" %in% names(x) && length(x$folds)) {
+      x$folds[[1L]]$gate_nesting %||% x$folds[[1L]]$training$protocol$gate_nesting
+    } else {
+      NULL
+    })
+  label <- x$protocol$gate_nesting_label %||%
+    (if (!is.null(nesting) && identical(nesting, "conditional")) {
+      "conditional on upstream selection"
+    } else if (!is.null(nesting)) {
+      "fully nested upstream selection"
+    } else {
+      "not recorded"
+    })
+  if (!is.null(nesting)) {
+    cat("  gate nesting: ", nesting, " (", label, ")\n", sep = "")
+  }
+  invisible(nesting)
+}
+
+#' @method print page_outer_training
+#' @export
+print.page_outer_training <- function(x, ...) {
+  cat("<PAGe outer-fold training>\n")
+  holdout <- x$protocol$holdout
+  if (!length(holdout) || !nzchar(as.character(holdout))) holdout <- "final fit"
+  cat("  holdout: ", holdout, "\n", sep = "")
+  .nested_print_nesting(x)
+  cat("  deployment kit: ", if (is.null(x$kit)) "absent" else "ready", "\n", sep = "")
+  invisible(x)
+}
+
+#' @method print page_outer_fold_result
+#' @export
+print.page_outer_fold_result <- function(x, ...) {
+  cat("<PAGe outer-fold result>\n")
+  cat("  holdout: ", x$holdout %||% "unknown", "\n", sep = "")
+  .nested_print_nesting(x)
+  invisible(x)
+}
+
+#' @method print page_nested_season_evaluation
+#' @export
+print.page_nested_season_evaluation <- function(x, ...) {
+  cat("<PAGe nested season evaluation>\n")
+  cat("  folds: ", length(x$folds %||% list()), "\n", sep = "")
+  .nested_print_nesting(x)
+  invisible(x)
+}
+
+#' @method summary page_forecast
 #' @export
 summary.page_forecast <- function(object, ...) {
   pred <- object$pred_df
@@ -166,6 +287,7 @@ summary.page_forecast <- function(object, ...) {
   )
 }
 
+#' @method print page_forecast
 #' @export
 print.page_forecast <- function(x, ...) {
   info <- summary.page_forecast(x)

@@ -36,14 +36,16 @@ run_ignition_weekly <- function(currentSeason,
                                 ign_fit_or_gam = NULL,
                                 params,
                                 start_week = 5L,
-                                week_col = "weekF") {
+                                week_col = "weekF",
+                                timing_mode = c("legacy", "fractional")) {
+  timing_mode <- match.arg(timing_mode)
   stopifnot(is.data.frame(currentSeason), is.list(params))
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   if (!requireNamespace("tibble", quietly = TRUE)) stop("Please install tibble.")
 
   # detectIgnition_oneSeason is now exported from the package
 
-  use_cls <- isTRUE(params$use_cls)
+  use_cls <- .m0_use_cls(params)
   if (!is.null(ign_fit_or_gam)) {
     gam_cls <- get_gam_cls(ign_fit_or_gam)
   } else if (use_cls) {
@@ -51,8 +53,8 @@ run_ignition_weekly <- function(currentSeason,
   } else {
     gam_cls <- NULL
   }
-  
-  d0 <- dplyr::as_tibble(currentSeason) |>
+
+  d0_raw <- dplyr::as_tibble(currentSeason) |>
     dplyr::transmute(
       season = if ("season" %in% names(currentSeason)) as.character(.data$season) else NA_character_,
       weekF  = as.integer(.data[[week_col]]),
@@ -62,63 +64,82 @@ run_ignition_weekly <- function(currentSeason,
       p      = if ("p" %in% names(currentSeason)) as.numeric(.data$p) else .data$y / pmax(.data$y + .data$neg, 1L)
     ) |>
     dplyr::filter(!is.na(.data$weekF), is.finite(.data$weekF), .data$weekF >= 1L) |>
-    dplyr::mutate(weekF = pmin(.data$weekF, 52L)) |>
-    dplyr::arrange(.data$weekF) |>
-    dplyr::group_by(.data$season, .data$weekF) |>
-    dplyr::summarise(
-      y = sum(.data$y, na.rm = TRUE),
-      N = sum(.data$N, na.rm = TRUE),
-      neg = sum(.data$neg, na.rm = TRUE),
-      p = .data$y / pmax(.data$y + .data$neg, 1L),
-      .groups = "drop"
-    )
-  
-  weeks_all  <- sort(unique(d0$weekF))
+    dplyr::arrange(.data$weekF)
+
+  aggregate_prefix <- function(x) {
+    x |>
+      dplyr::group_by(.data$season, .data$weekF) |>
+      dplyr::summarise(
+        y = sum(.data$y, na.rm = TRUE),
+        N = sum(.data$N, na.rm = TRUE),
+        neg = sum(.data$neg, na.rm = TRUE),
+        .groups = "drop"
+      ) |>
+      dplyr::mutate(p = .data$y / pmax(.data$N, 1L)) |>
+      dplyr::arrange(.data$weekF)
+  }
+
+  weeks_all <- sort(unique(d0_raw$weekF))
   weeks_eval <- weeks_all[weeks_all >= as.integer(start_week)]
   if (!length(weeks_eval)) {
-    out_df <- tibble::tibble(weekF = integer(), iWeek_hat_dynamic = integer())
+    out_df <- tibble::tibble(
+      weekF = integer(), iWeek_hat_dynamic = integer(),
+      iWeek_hat_dynamicF = numeric()
+    )
     return(list(
       df = out_df,
       iWeek_hat_dynamic_last = NA_integer_,
       iWeek_hat_locked = NA_integer_,
-      ign_week_locked = NA_integer_
+      ign_week_locked = NA_integer_,
+      iWeek_hat_dynamic_lastF = NA_real_, iWeek_hat_lockedF = NA_real_,
+      ign_week_lockedF = NA_real_, timing_mode = timing_mode
     ))
   }
-  
+
   rows <- lapply(weeks_eval, function(w) {
-    d_now <- d0 |>
+    # Select the chronological prefix before aggregation.  In particular,
+    # week 53 must never be folded into the week-52 observation.
+    d_now <- d0_raw |>
       dplyr::filter(.data$weekF <= w) |>
-      dplyr::mutate(p_cls_p = if (!is.null(gam_cls))
+      aggregate_prefix() |>
+      dplyr::mutate(p_cls_p = if (!is.null(gam_cls)) {
         as.numeric(stats::predict(gam_cls, newdata = ., type = "response"))
-      else
-        0)
-    
-    det <- detectIgnition_oneSeason(as.data.frame(d_now), params = params)
+      } else {
+        0
+      })
+
+    det <- if (timing_mode == "fractional") {
+      detectIgnition_oneSeason_timing_v2(as.data.frame(d_now), params = params)
+    } else {
+      detectIgnition_oneSeason(as.data.frame(d_now), params = params)
+    }
     now <- det$now %||% data.frame()
-    
-    p_now_fallback       <- tail(d_now$p, 1)
-    cum_p_now_fallback   <- sum(d_now$p, na.rm = TRUE)
-    prev_now_fallback    <- sum(d_now$y, na.rm = TRUE) / pmax(sum(d_now$N, na.rm = TRUE), 1)
+
+    p_now_fallback <- tail(d_now$p, 1)
+    cum_p_now_fallback <- sum(d_now$p, na.rm = TRUE)
+    prev_now_fallback <- sum(d_now$y, na.rm = TRUE) / pmax(sum(d_now$N, na.rm = TRUE), 1)
     p_cls_p_now_fallback <- tail(d_now$p_cls_p, 1)
-    
-    p_now       <- now$p_now       %||% p_now_fallback
-    cum_p_now   <- now$cum_p_now   %||% cum_p_now_fallback
-    prev_now    <- now$prev_now    %||% prev_now_fallback
+
+    p_now <- now$p_now %||% p_now_fallback
+    cum_p_now <- now$cum_p_now %||% cum_p_now_fallback
+    prev_now <- now$prev_now %||% prev_now_fallback
     p_cls_p_now <- now$p_cls_p_now %||% p_cls_p_now_fallback
-    n_hit_now   <- now$n_hit_now   %||% NA_integer_
-    
+    n_hit_now <- now$n_hit_now %||% NA_integer_
+
     d1_last <- now$d1_last %||% NA_real_
     d2_last <- now$d2_last %||% NA_real_
-    
-    ok_w_inrange <- now$cond_win  %||% NA
-    ok_cls       <- now$cond_cls  %||% NA
-    ok_cum_p     <- now$cond_cum  %||% NA
-    ok_p         <- now$cond_p    %||% NA
-    ok_prev      <- now$cond_prev %||% NA
-    ok_nconsec   <- now$cond_inc  %||% NA
-    
+
+    ok_w_inrange <- now$cond_win %||% NA
+    ok_cls <- now$cond_cls %||% NA
+    ok_cum_p <- now$cond_cum %||% NA
+    ok_p <- now$cond_p %||% NA
+    ok_prev <- now$cond_prev %||% NA
+    ok_nconsec <- now$cond_inc %||% NA
+
     ignite_ok_now <- now$ignite_ok_now %||% NA
-    
+
+    detection_failed <- isTRUE(det$detection_failed) || is.na(det$iWeek_hat)
+    fallback_week <- as.integer(params$w_max %||% 30L)
     tibble::tibble(
       weekF = as.integer(w),
       p_now = as.numeric(p_now),
@@ -135,15 +156,21 @@ run_ignition_weekly <- function(currentSeason,
       ok_prev = as.logical(ok_prev),
       ok_n_consec = as.logical(ok_nconsec),
       ignite_ok_now = as.logical(ignite_ok_now),
-      iWeek_hat_dynamic = if (is.null(det$iWeek_hat)) NA_integer_ else as.integer(det$iWeek_hat)
+      detection_failed = detection_failed,
+      iWeek_hat_dynamic = if (detection_failed) fallback_week else as.integer(det$iWeek_hat),
+      iWeek_hat_dynamicF = if (is.null(det$iWeek_hatF)) {
+        if (detection_failed) as.numeric(fallback_week) else as.numeric(det$iWeek_hat)
+      } else {
+        as.numeric(det$iWeek_hatF)
+      }
     )
   })
-  
+
   df <- dplyr::bind_rows(rows)
-  
+
   ign_week_locked <- suppressWarnings(min(df$weekF[df$ignite_ok_now %in% TRUE], na.rm = TRUE))
   ign_week_locked <- ifelse(is.infinite(ign_week_locked), NA_integer_, as.integer(ign_week_locked))
-  
+
   iwh_locked <- suppressWarnings(min(df$iWeek_hat_dynamic, na.rm = TRUE))
   iwh_locked <- ifelse(is.infinite(iwh_locked), NA_integer_, as.integer(iwh_locked))
 
@@ -151,7 +178,21 @@ run_ignition_weekly <- function(currentSeason,
     df = df,
     iWeek_hat_dynamic_last = df$iWeek_hat_dynamic[nrow(df)],
     iWeek_hat_locked = iwh_locked,
-    ign_week_locked = ign_week_locked
+    ign_week_locked = ign_week_locked,
+    iWeek_hat_dynamic_lastF = df$iWeek_hat_dynamicF[nrow(df)],
+    iWeek_hat_lockedF = if (timing_mode == "fractional") {
+      vals <- df$iWeek_hat_dynamicF[is.finite(df$iWeek_hat_dynamicF)]
+      if (length(vals)) min(vals) else NA_real_
+    } else {
+      as.numeric(iwh_locked)
+    },
+    ign_week_lockedF = if (timing_mode == "fractional") {
+      if (is.na(ign_week_locked)) NA_real_ else df$iWeek_hat_dynamicF[match(ign_week_locked, df$weekF)]
+    } else {
+      as.numeric(ign_week_locked)
+    },
+    timing_mode = timing_mode,
+    detection_failed = isTRUE(tail(df$detection_failed, 1L))
   )
 }
 
@@ -215,50 +256,50 @@ plot_ignition_weekly_snapshots <- function(ign_out,
   if (!requireNamespace("tidyr", quietly = TRUE)) stop("Need tidyr.")
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Need ggplot2.")
   if (!requireNamespace("tibble", quietly = TRUE)) stop("Need tibble.")
-  
+
   df <- dplyr::as_tibble(ign_out$df)
   if (!("weekF" %in% names(df))) stop("ign_out$df must contain weekF.")
-  
+
   start_week <- as.integer(start_week)
   if (!is.finite(start_week)) start_week <- 1L
-  
+
   maxWeek_in <- maxWeek
   maxWeek <- suppressWarnings(as.integer(maxWeek))
   if (!is.finite(maxWeek_in) || is.na(maxWeek)) maxWeek <- Inf
-  
+
   df <- df |>
     dplyr::mutate(weekF = as.integer(.data$weekF)) |>
     dplyr::arrange(.data$weekF)
-  
+
   # snapshots to include, sorted numerically
   w_seq <- df$weekF[df$weekF >= start_week & df$weekF <= maxWeek]
   w_seq <- sort(unique(w_seq))
   if (!length(w_seq)) stop("No weeks to plot: check start_week/maxWeek vs ign_out$df$weekF.")
-  
+
   # effective maxWeek for xlim
   maxWeek_eff <- if (is.finite(maxWeek)) maxWeek else max(w_seq, na.rm = TRUE)
-  x_end_weekF <- as.integer(maxWeek_eff + 1L)  # <-- requested: maxWeek + 1
+  x_end_weekF <- as.integer(maxWeek_eff + 1L) # <-- requested: maxWeek + 1
   x_start_weekF <- as.integer(start_week)
-  
+
   # ----- observed series (per weekF) -----
   has_date <- FALSE
   if (!is.null(currentSeason)) {
     obs <- dplyr::as_tibble(currentSeason)
     if (!(week_col %in% names(obs))) stop("currentSeason missing week column: ", week_col)
-    
-    has_p  <- p_col %in% names(obs)
+
+    has_p <- p_col %in% names(obs)
     has_yN <- all(c(y_col, N_col) %in% names(obs))
     if (!has_p && !has_yN) stop("currentSeason must have either ", p_col, " or (", y_col, ", ", N_col, ").")
-    
+
     has_date <- date_col %in% names(obs) && any(!is.na(obs[[date_col]]))
-    
+
     obs <- obs |>
       dplyr::transmute(
         weekF = as.integer(.data[[week_col]]),
         date  = if (has_date) as.Date(.data[[date_col]]) else as.Date(NA),
         y     = if (has_yN) as.numeric(.data[[y_col]]) else NA_real_,
         N     = if (has_yN) as.numeric(.data[[N_col]]) else NA_real_,
-        p_raw = if (has_p)  as.numeric(.data[[p_col]]) else NA_real_
+        p_raw = if (has_p) as.numeric(.data[[p_col]]) else NA_real_
       ) |>
       dplyr::filter(is.finite(.data$weekF), .data$weekF >= start_week) |>
       dplyr::group_by(.data$weekF) |>
@@ -279,18 +320,24 @@ plot_ignition_weekly_snapshots <- function(ign_out,
       dplyr::filter(is.finite(.data$p), .data$weekF >= start_week) |>
       dplyr::arrange(.data$weekF)
   }
-  
+
   xvar <- if (has_date) "date" else "weekF"
-  
+
   # map weekF -> date for xlim when date axis is used
   week_to_date <- function(w) {
     w <- as.integer(w)
-    m <- obs |> dplyr::filter(!is.na(.data$date)) |> dplyr::select(.data$weekF, .data$date)
-    if (nrow(m) == 0) return(as.Date(NA))
-    
+    m <- obs |>
+      dplyr::filter(!is.na(.data$date)) |>
+      dplyr::select(.data$weekF, .data$date)
+    if (nrow(m) == 0) {
+      return(as.Date(NA))
+    }
+
     hit <- m$date[match(w, m$weekF)]
-    if (!is.na(hit)) return(hit)
-    
+    if (!is.na(hit)) {
+      return(hit)
+    }
+
     # extrapolate using nearest available date (weekly step = 7 days)
     if (w > max(m$weekF, na.rm = TRUE)) {
       w0 <- max(m$weekF, na.rm = TRUE)
@@ -302,29 +349,30 @@ plot_ignition_weekly_snapshots <- function(ign_out,
       return(d0 - 7L * (w0 - w))
     }
   }
-  
+
   xlim_vec <- if (has_date) {
     c(week_to_date(x_start_weekF), week_to_date(x_end_weekF))
   } else {
     c(x_start_weekF, x_end_weekF)
   }
-  
+
   # ----- ignition lock info (scalar) -----
-  ign_week_locked  <- if (!is.null(ign_out$ign_week_locked))  as.integer(ign_out$ign_week_locked)  else NA_integer_
+  ign_week_locked <- if (!is.null(ign_out$ign_week_locked)) as.integer(ign_out$ign_week_locked) else NA_integer_
   iWeek_hat_locked <- if (!is.null(ign_out$iWeek_hat_locked)) as.integer(ign_out$iWeek_hat_locked) else NA_integer_
   lock_ok <- is.finite(ign_week_locked) && !is.na(ign_week_locked) &&
     is.finite(iWeek_hat_locked) && !is.na(iWeek_hat_locked)
-  
+
   # per-snapshot meta: snapshot factor is ordered by numeric week
   snap_tbl <- tibble::tibble(asof_weekF = w_seq) |>
     dplyr::mutate(
       detected_by_now = lock_ok & (.data$asof_weekF >= ign_week_locked),
       iWeek_plot = dplyr::if_else(.data$detected_by_now, iWeek_hat_locked, NA_integer_),
-      ign_col    = dplyr::if_else(.data$detected_by_now, "red", "black"),
-      snapshot   = factor(paste0("asof_", .data$asof_weekF),
-                          levels = paste0("asof_", w_seq))
+      ign_col = dplyr::if_else(.data$detected_by_now, "red", "black"),
+      snapshot = factor(paste0("asof_", .data$asof_weekF),
+        levels = paste0("asof_", w_seq)
+      )
     )
-  
+
   # attach x positions and observed p at as-of
   snap_tbl <- snap_tbl |>
     dplyr::left_join(
@@ -332,7 +380,7 @@ plot_ignition_weekly_snapshots <- function(ign_out,
       by = c("asof_weekF" = "weekF")
     ) |>
     dplyr::rename(asof_x = .data$x, asof_p = .data$p)
-  
+
   # ignition line x position (only for detected snapshots)
   ign_line <- snap_tbl |>
     dplyr::filter(.data$detected_by_now, !is.na(.data$iWeek_plot)) |>
@@ -341,7 +389,7 @@ plot_ignition_weekly_snapshots <- function(ign_out,
       by = c("iWeek_plot" = "weekF")
     ) |>
     dplyr::rename(ign_x = .data$x)
-  
+
   # all points up to as-of (>= start_week), with red points only after locked ignition
   plot_dat <- tidyr::crossing(asof_weekF = w_seq, weekF = obs$weekF) |>
     dplyr::filter(.data$weekF <= .data$asof_weekF, .data$weekF >= start_week) |>
@@ -355,16 +403,17 @@ plot_ignition_weekly_snapshots <- function(ign_out,
     ) |>
     dplyr::mutate(
       point_col = dplyr::if_else(.data$detected_by_now & !is.na(.data$iWeek_plot) & (.data$weekF >= .data$iWeek_plot),
-                                 "red", "black")
+        "red", "black"
+      )
     ) |>
     dplyr::arrange(.data$asof_weekF, .data$weekF)
-  
+
   make_one <- function(asof_w) {
     asof_w <- as.integer(asof_w)
     dat <- plot_dat |> dplyr::filter(.data$asof_weekF == asof_w)
     snap_info <- snap_tbl |> dplyr::filter(.data$asof_weekF == asof_w)
-    ign_info  <- ign_line |> dplyr::filter(.data$asof_weekF == asof_w)
-    
+    ign_info <- ign_line |> dplyr::filter(.data$asof_weekF == asof_w)
+
     p <- ggplot2::ggplot(dat, ggplot2::aes(x = .data$x, y = .data$p)) +
       ggplot2::geom_line(linewidth = 0.6, alpha = 0.6, color = "grey40", na.rm = TRUE) +
       ggplot2::geom_point(ggplot2::aes(color = .data$point_col), size = 1.6, na.rm = TRUE) +
@@ -378,7 +427,7 @@ plot_ignition_weekly_snapshots <- function(ign_out,
         ggplot2::aes(x = .data$asof_x, y = .data$asof_p, color = .data$ign_col),
         size = 3.0, inherit.aes = FALSE, na.rm = TRUE
       )
-    
+
     if (nrow(ign_info) > 0) {
       p <- p + ggplot2::geom_vline(
         data = ign_info,
@@ -386,20 +435,22 @@ plot_ignition_weekly_snapshots <- function(ign_out,
         color = "red", linetype = "dashed", linewidth = 0.9, inherit.aes = FALSE
       )
     }
-    
+
     p +
       ggplot2::scale_color_identity() +
-      ggplot2::coord_cartesian(ylim = c(0, y_max), xlim = xlim_vec) +  # <-- NEW xlim
+      ggplot2::coord_cartesian(ylim = c(0, y_max), xlim = xlim_vec) + # <-- NEW xlim
       ggplot2::labs(
         x = xvar, y = "p (observed)",
-        title = paste0("asof_", asof_w,
-                       " | detected = ", ifelse(snap_info$detected_by_now[1], "yes", "no"),
-                       " | iWeek_hat_locked = ", ifelse(lock_ok, iWeek_hat_locked, "NA"))
+        title = paste0(
+          "asof_", asof_w,
+          " | detected = ", ifelse(snap_info$detected_by_now[1], "yes", "no"),
+          " | iWeek_hat_locked = ", ifelse(lock_ok, iWeek_hat_locked, "NA")
+        )
       ) +
       ggplot2::theme_minimal(base_size = base_size) +
       ggplot2::theme(panel.grid.minor = ggplot2::element_blank())
   }
-  
+
   if (isTRUE(facet)) {
     p <- ggplot2::ggplot(plot_dat, ggplot2::aes(x = .data$x, y = .data$p)) +
       ggplot2::geom_line(linewidth = 0.6, alpha = 0.6, color = "grey40", na.rm = TRUE) +
@@ -414,7 +465,7 @@ plot_ignition_weekly_snapshots <- function(ign_out,
         ggplot2::aes(x = .data$asof_x, y = .data$asof_p, color = .data$ign_col),
         size = 2.3, inherit.aes = FALSE, na.rm = TRUE
       )
-    
+
     if (nrow(ign_line) > 0) {
       p <- p + ggplot2::geom_vline(
         data = ign_line,
@@ -422,14 +473,14 @@ plot_ignition_weekly_snapshots <- function(ign_out,
         color = "red", linetype = "dashed", linewidth = 0.8, inherit.aes = FALSE
       )
     }
-    
+
     p +
       ggplot2::scale_color_identity() +
-      ggplot2::coord_cartesian(ylim = c(0, y_max), xlim = xlim_vec) +  # <-- NEW xlim
+      ggplot2::coord_cartesian(ylim = c(0, y_max), xlim = xlim_vec) + # <-- NEW xlim
       ggplot2::labs(x = xvar, y = "p (observed)") +
       ggplot2::theme_minimal(base_size = base_size) +
       ggplot2::theme(panel.grid.minor = ggplot2::element_blank()) +
-      ggplot2::facet_wrap(~ snapshot, ncol = ncol, scales = "fixed")
+      ggplot2::facet_wrap(~snapshot, ncol = ncol, scales = "fixed")
   } else {
     out <- lapply(w_seq, make_one)
     names(out) <- paste0("asof_", w_seq)

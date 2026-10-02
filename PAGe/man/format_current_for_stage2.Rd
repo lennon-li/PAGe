@@ -9,7 +9,8 @@ format_current_for_stage2(
   iWeek_used,
   template_df = NULL,
   spec = NULL,
-  season_label = "current"
+  season_label = "current",
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{

@@ -159,7 +159,9 @@ test_that("all optional M2 smooth dimensions retain explicit drop candidates", {
     expect_true(any(
       expanded[[parameter]] == 0L &
         grepl(paste0("boundary:", parameter, ":drop"),
-              expanded$provenance, fixed = TRUE)
+          expanded$provenance,
+          fixed = TRUE
+        )
     ))
   }
 })

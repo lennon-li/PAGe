@@ -109,7 +109,11 @@ make_draft_m2 <- function(m0 = NULL, m1 = NULL) {
       m1_train_preds = data.frame(),
       spec = make_m2_config(),
       training_seasons = selection$training_seasons,
-      spec_version = "test"
+      spec_version = "test",
+      legacy_compatibility = list(
+        allow_legacy = TRUE,
+        training_features_season_held_out = FALSE
+      )
     ),
     upstream_ids = list(m0 = m0$artifact_id, m1 = m1$artifact_id),
     data_id = "test-data"
@@ -580,7 +584,10 @@ test_that("fit_m1 and fit_m2 retain their existing fitted payloads", {
   )
 
   m1 <- freeze_m1(fit_m1(dat, selection, m0, make_m1_config()))
-  m2 <- fit_m2(dat, selection, m0, m1, make_m2_config())
+  m2 <- fit_m2(
+    dat, selection, m0, m1, make_m2_config(), family = "legacy",
+    allow_legacy = TRUE
+  )
 
   expect_equal(m1$hyper$scale, 1)
   expect_identical(m2$fit, "fitted-gam")
@@ -655,7 +662,7 @@ test_that("governed tune APIs record selection and real result schemas", {
   m2_tuning <- tune_m2(
     dat, selection, m0, m1,
     grid = data.frame(spec_id = "v16"),
-    n_cores = 1L, verbose = FALSE
+    n_cores = 1L, verbose = FALSE, family = "legacy", allow_legacy = TRUE
   )
 
   expect_silent(validate_m0_tuning(m0_tuning))
@@ -735,7 +742,9 @@ test_that("fit_m2 requires frozen M0 and M1", {
   draft_m0 <- make_draft_m0(sel)
   m1 <- make_frozen_m1()
   expect_error(
-    fit_m2(make_canonical_data(), sel, draft_m0, m1, make_m2_config()),
+    fit_m2(make_canonical_data(), sel, draft_m0, m1, make_m2_config(),
+      allow_legacy = TRUE
+    ),
     "frozen"
   )
 })
@@ -745,7 +754,9 @@ test_that("fit_m2 rejects unfrozen M1", {
   sel <- season_selection(m0)
   draft_m1 <- make_draft_m1(m0)
   expect_error(
-    fit_m2(make_canonical_data(), sel, m0, draft_m1, make_m2_config()),
+    fit_m2(make_canonical_data(), sel, m0, draft_m1, make_m2_config(),
+      allow_legacy = TRUE
+    ),
     "frozen"
   )
 })
@@ -763,7 +774,9 @@ test_that("fit_m2 rejects mismatched M1 upstream identity", {
   m0_b <- make_frozen_m0(sel_b)
   m1_b <- make_frozen_m1(m0_b)
   expect_error(
-    fit_m2(make_canonical_data(), sel_a, m0_a, m1_b, make_m2_config()),
+    fit_m2(make_canonical_data(), sel_a, m0_a, m1_b, make_m2_config(),
+      allow_legacy = TRUE
+    ),
     "mismatch|identity"
   )
 })

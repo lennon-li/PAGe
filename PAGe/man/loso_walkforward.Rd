@@ -41,7 +41,10 @@ loso_walkforward(
   dynamic_temp = FALSE,
   dynamic_temp_pivot = 10L,
   checkpoint_file = NULL,
-  verbose = TRUE
+  verbose = TRUE,
+  timing_mode = c("legacy", "fractional"),
+  timing_truth = NULL,
+  checkpoint_identity = NULL
 )
 }
 \arguments{

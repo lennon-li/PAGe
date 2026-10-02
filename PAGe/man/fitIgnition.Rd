@@ -21,6 +21,7 @@ fitIgnition(
   fit_slope = FALSE,
   fit_fs = FALSE,
   select = FALSE,
+  timing_truth = NULL,
   verbose = TRUE
 )
 }
@@ -57,6 +58,11 @@ fitIgnition(
 
 \item{select}{Logical. Passed to \code{gamm4::gamm4(select=...)}. Default \code{FALSE}.}
 
+\item{timing_truth}{Optional data frame from \code{as_timing_targets_v2()}
+with \code{season} and \code{ignition_target_weekF}. When supplied, the
+fractional target is used for the training and event windows. The default
+\code{NULL} preserves the legacy phase-derived behavior.}
+
 \item{verbose}{Logical. Print progress messages. Default \code{TRUE}.}
 }
 \value{
@@ -66,6 +72,8 @@ A list with:
   \item{train_data}{Training subset with \code{event} label and per-row bounds.}
   \item{iWeek_by_season}{Season-level truth ignition week table.}
   \item{fits}{List of fitted objects for each enabled model.}
+  \item{basis_support}{Requested and effective basis dimensions with the
+    explicit support-based adjustment reason.}
 }
 
 \strong{Added score columns (in \code{$data}).}

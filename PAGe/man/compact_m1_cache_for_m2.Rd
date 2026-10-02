@@ -4,7 +4,7 @@
 \alias{compact_m1_cache_for_m2}
 \title{Compact a complete M1 LOSO cache for M2}
 \usage{
-compact_m1_cache_for_m2(m1_cache)
+compact_m1_cache_for_m2(m1_cache, timing_mode = c("legacy", "fractional"))
 }
 \arguments{
 \item{m1_cache}{Named list of complete Phase 1 fold artifacts, as produced

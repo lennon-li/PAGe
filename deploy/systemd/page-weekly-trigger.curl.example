@@ -1,0 +1,6 @@
+# Protect this file mode 0600 in deployment. Replace TOKEN_VALUE there, never in unit ExecStart.
+silent
+show-error
+fail-with-body
+header = "Authorization: Bearer TOKEN_VALUE"
+header = "Content-Type: application/json"

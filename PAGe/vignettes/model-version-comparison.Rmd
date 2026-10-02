@@ -1,0 +1,84 @@
+---
+title: "PAGe v1, v2, and v3: What Can Be Compared Fairly?"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{PAGe v1, v2, and v3: What Can Be Compared Fairly?}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+PAGe evolved in stages, and the evaluation ledgers changed with the model. A single pooled "v1 vs v2 vs v3" score would mix different targets, origins, pathogens, and model-routing decisions. This vignette therefore reports only comparisons supported by matched or explicitly chronological evidence.
+
+```{r metrics}
+library(PAGe)
+metrics <- page_version_metrics()
+metrics[, c(
+  "comparison_scope", "component", "horizon", "metric", "unit",
+  "n_rows", "n_seasons", "v1_legacy", "v2", "v3",
+  "relative_gain_v1_to_v2", "relative_gain_v2_to_v3"
+)]
+```
+
+## M1-A peak timing: v1/legacy versus v2
+
+The strict common ledger contains 81 matched origin/truth rows across 10 seasons. Mean absolute peak-timing error is approximately:
+
+- v1/legacy: 1.375 weeks;
+- v2: 1.093 weeks;
+- relative reduction: 20.6%.
+
+The same v2 timing family feeds the canonical v3 A stack, but this exact historical ledger is not an independent v3 re-score. For that reason the v3 metric cell is intentionally `NA` rather than copied from v2.
+
+The underlying v2 ledger also has mean 90% interval coverage of approximately 0.802 and mean interval width of about 4.01 weeks. Those uncertainty metrics describe that M1-v2 evaluation ledger, not a separate v3 experiment.
+
+## M2-A: v1/legacy versus v2 on matched targets
+
+For 10 historical seasons whose target counts are identical across the two systems, the matched-target benchmark gives:
+
+```{r a-table}
+metrics[metrics$component == "M2_A",
+        c("horizon", "n_rows", "n_seasons", "v1_legacy", "v2",
+          "relative_gain_v1_to_v2", "caveat")]
+```
+
+At +1 week, MAE falls from about 8.41 percentage points to 1.78 percentage points. At +2 weeks, MAE falls from about 9.21 to 2.41 percentage points.
+
+This benchmark matches target rows and target counts, but historical training snapshots are not perfectly vintage-matched. It should therefore be interpreted as strong stage-specific evidence rather than a fully prospective head-to-head trial.
+
+Canonical v3 preserves the governed A1 state route. It was not independently re-scored on this exact v1/legacy comparison ledger, so v3 remains `NA` in this table.
+
+## M2-B +2: the direct v2 to v3 improvement
+
+The clearest direct v2-to-v3 performance comparison is Influenza B +2 forecasting. v2's exact B1 state forecast is the baseline. v3 uses posterior-C2 when causal B timing is available and otherwise falls back to the exact B1 route.
+
+Across the seven-season chronological B benchmark:
+
+```{r b-table}
+metrics[metrics$component == "M2_B",
+        c("comparison_scope", "horizon", "n_rows", "n_seasons", "v2", "v3",
+          "relative_gain_v2_to_v3", "caveat")]
+```
+
+Overall +2 MAE improves from about 0.515 percentage points to 0.436 percentage points, a 15.3% reduction.
+
+On the timing-active subset, 89 rows across five seasons, MAE improves from about 0.736 to 0.552 percentage points, a 24.9% reduction. All five timing-active seasons improved on +2 MAE in that benchmark.
+
+## What is intentionally not claimed
+
+PAGe does not currently publish a single universal v1/v2/v3 score. In particular:
+
+- there is no verified common-ledger M0 performance comparison suitable for a v1/v2/v3 accuracy claim;
+- the v1/legacy M2 benchmark is A-only;
+- v3's main new historical accuracy evidence is on B +2 routing;
+- inherited/frozen A components are not assigned v3 metrics merely because their lineage descends from v2;
+- prospective 2026-27 v2/v3 paired accuracy should be accumulated only after each forecast target is observed.
+
+The full table, evidence paths, and caveats are available programmatically:
+
+```{r all-metrics}
+page_version_metrics()
+```

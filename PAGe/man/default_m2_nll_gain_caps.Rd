@@ -15,5 +15,8 @@ boundary inspection. A value of zero means that only a non-improving move
 (an exact tie or a deterioration) is stopped by the practical-gain rule.
 Smoothing dimensions use the thresholds documented in the tuning playbook;
 structural axes use zero because their scales are discrete and not directly
-comparable to NLL changes on continuous axes.
+comparable to NLL changes on continuous axes. The `k_z`, `k_u`, and `k_d`
+basis-size caps cover the governed `offset_subset_v1` family and use the
+same smoothing-dimension threshold as `k_f`/`k_sp`; `intercept` is a
+structural binary axis with a zero cap.
 }

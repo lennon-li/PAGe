@@ -1,0 +1,39 @@
+#!/bin/sh
+set -eu
+: "${PAGE_API_URL:?}"
+: "${PAGE_WEEKLY_CYCLE_ID_FILE:?}"
+: "${PAGE_TRIGGER_CURL_CONFIG:?}"
+: "${PAGE_TRIGGER_BODY:?}"
+: "${PAGE_TRIGGER_POLL_SECONDS:=10}"
+: "${PAGE_TRIGGER_MAX_POLLS:=180}"
+
+if [ ! -f "$PAGE_WEEKLY_CYCLE_ID_FILE" ] || [ -L "$PAGE_WEEKLY_CYCLE_ID_FILE" ] || [ ! -r "$PAGE_WEEKLY_CYCLE_ID_FILE" ]; then
+  echo "cycle ID file must be a readable regular non-symlink file" >&2
+  exit 2
+fi
+if [ -n "$(find "$PAGE_WEEKLY_CYCLE_ID_FILE" -maxdepth 0 -perm /022 -print 2>/dev/null)" ]; then
+  echo "cycle ID file must not be group/world writable" >&2
+  exit 2
+fi
+PAGE_WEEKLY_CYCLE_ID=$(awk 'NR==1{v=$0} END{if(NR!=1) exit 2; print v}' "$PAGE_WEEKLY_CYCLE_ID_FILE") || { echo "cycle ID file must contain exactly one line" >&2; exit 2; }
+printf '%s\n' "$PAGE_WEEKLY_CYCLE_ID" | grep -Eq '^[A-Za-z0-9._:-]{1,128}$' || { echo "invalid weekly cycle ID" >&2; exit 2; }
+resp=$(curl --config "$PAGE_TRIGGER_CURL_CONFIG" -X POST \
+  -H "Idempotency-Key: ${PAGE_WEEKLY_CYCLE_ID}" \
+  --data-binary "@${PAGE_TRIGGER_BODY}" \
+  "${PAGE_API_URL}/v1/weekly-runs")
+run_id=$(printf '%s' "$resp" | jq -er '.run_id')
+i=0
+while [ "$i" -lt "$PAGE_TRIGGER_MAX_POLLS" ]; do
+  state=$(curl --config "$PAGE_TRIGGER_CURL_CONFIG" "${PAGE_API_URL}/v1/weekly-runs/${run_id}")
+  status=$(printf '%s' "$state" | jq -er '.status')
+  case "$status" in
+    succeeded) exit 0 ;;
+    failed) printf '%s\n' "$state" >&2; exit 1 ;;
+    accepted|running) : ;;
+    *) printf 'unexpected status: %s\n' "$status" >&2; exit 1 ;;
+  esac
+  i=$((i+1))
+  sleep "$PAGE_TRIGGER_POLL_SECONDS"
+done
+printf 'weekly API run did not reach terminal success within polling objective: %s\n' "$run_id" >&2
+exit 1

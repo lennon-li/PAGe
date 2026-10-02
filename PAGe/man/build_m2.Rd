@@ -19,7 +19,9 @@ build_m2(
   m1_artifact_path = NULL,
   fail_fast = TRUE,
   future_max_size = NULL,
-  verbose = TRUE
+  verbose = TRUE,
+  timing_mode = c("legacy", "fractional"),
+  timing_truth = NULL
 )
 }
 \arguments{

@@ -66,6 +66,7 @@ test_that("page_manual_ignition_labels is exported and returns named integers", 
   expect_true(length(labs) >= 8L,
     label = "Item 5.2: should contain the full historical label set")
   expect_equal(labs[["2024-25"]], 23L)
+  expect_equal(labs[["2025-26"]], 19L)
   expect_equal(labs[["2012-13"]], 18L)
 })
 

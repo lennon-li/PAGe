@@ -14,7 +14,9 @@ tune_m1(
   checkpoint_dir = NULL,
   verbose = TRUE,
   selection = NULL,
-  manual_labels = NULL
+  manual_labels = NULL,
+  timing_truth = NULL,
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{

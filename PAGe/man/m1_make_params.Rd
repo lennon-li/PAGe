@@ -52,7 +52,7 @@ season (default \code{FALSE}).}
 
 \item{spread_method}{Character. \code{"between"} (default) computes
 \code{logit_spread} as the weighted between-template standard deviation.
-\code{"total"} adds weighted per-template GAM SE\^2 for a total-variance
+\code{"total"} adds weighted squared per-template GAM SE for a total-variance
 spread. See \code{\link{align_multi_template}} for details.}
 }
 \value{

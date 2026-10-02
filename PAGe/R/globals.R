@@ -1,10 +1,10 @@
 # Suppress R CMD check NOTEs / WARNINGs for names that are not true
 # undefined-global references:
 #
-#   1. NSE / data.table column-name bindings — unquoted column references
+#   1. NSE / data.table column-name bindings -- unquoted column references
 #      inside data.table [ ] calls and pipe expressions.
 #
-#   2. Legacy pre-governed function names — `detectIgnition4` (used in
+#   2. Legacy pre-governed function names -- `detectIgnition4` (used in
 #      score_params.R) and `detectIgnitionBySeason` (used in m0_retro.R)
 #      are historical function names that pre-date the M0v2 rename to
 #      `detectIgnitionBySeason_M0v2` / `detectIgnition_oneSeason`.  They
@@ -36,9 +36,9 @@ utils::globalVariables(c(
   "mae_weibull", "med_p", "miss", "mmwr_year",
   "nW", "nW_true", "n_hit", "neg", "newWeek",
   "over2",
-  "p", "p0", "p_cls_base_pop", "p_cls_fs_full", "p_cls_fs_pop",
+  "p", "p0", "p_ci_hi", "p_ci_lo", "p_cls_base_pop", "p_cls_fs_full", "p_cls_fs_pop",
   "p_cls_p", "p_gamm", "p_hat", "p_hi", "p_lo", "p_now", "p_obs",
-  "p_sm", "p_sumK", "phase", "post_ign", "prev",
+  "p_sm", "p_smooth", "p_sumK", "phase", "post_ign", "prev",
   "ref_df", "rel_sd",
   "sd_delta", "season", "season_h", "smoothed", "spec_id",
   "startWeek", "start_week", "start_year",

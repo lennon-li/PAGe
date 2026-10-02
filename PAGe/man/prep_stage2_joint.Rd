@@ -15,7 +15,8 @@ prep_stage2_joint(
   alpha_state = 0.3,
   m1_preds = NULL,
   feature_ranges = NULL,
-  verbose = FALSE
+  verbose = FALSE,
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{

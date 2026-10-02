@@ -1,0 +1,249 @@
+---
+title: "PAGe v3 2026–27 Walk-Forward Review: weekF8–11"
+subtitle: "M0 ignition, M1 timing, and M2 forecast diagnostics"
+author: "PAGe"
+date: "2026-09-28"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-tools: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+options(stringsAsFactors = FALSE)
+knitr::opts_chunk$set(fig.width = 9, fig.height = 5, dpi = 120)
+
+root <- normalizePath("..", winslash = "/", mustWork = TRUE)
+data_dir <- file.path(root, "artifacts", "v3-week8-11-walkforward-report-v1")
+
+state <- read.csv(file.path(data_dir, "m0_m1_state_week8_11.csv"), stringsAsFactors = FALSE, check.names = FALSE)
+m2 <- read.csv(file.path(data_dir, "m2_walkforward_week8_11.csv"), stringsAsFactors = FALSE, check.names = FALSE)
+score <- read.csv(file.path(data_dir, "m2_score_to_date_week8_11.csv"), stringsAsFactors = FALSE, check.names = FALSE)
+meta_raw <- read.delim(file.path(data_dir, "report_metadata.tsv"), sep = "\t", stringsAsFactors = FALSE, check.names = FALSE)
+meta <- setNames(meta_raw$value, meta_raw$key)
+
+fmt <- function(x, digits = 3) ifelse(is.na(x), "—", formatC(x, format = "f", digits = digits))
+```
+
+## Executive summary
+
+This report shows the 2026–27 PAGe v3 walk-forward state from **weekF8 through weekF11**, the latest available week in the current OLIS panel.
+
+> **Governance note:** weekF8–11 are **pre-issuance diagnostics**. The canonical v3 lower bound is now **weekF12**. Numerical M2 values shown here are retrospective walk-forward diagnostics generated from information available at each origin; they were **not governed issued forecasts**.
+
+As of weekF11 (week ending `r state$week_end_date[state$origin_weekF == 11]`):
+
+- Flu A positivity was **`r fmt(state$A_observed_pct[state$origin_weekF == 11])`%**.
+- Flu B positivity was **`r fmt(state$B_observed_pct[state$origin_weekF == 11], 4)`%**.
+- **M0-A had not ignited** at any origin from weekF8–11.
+- **M1-A remained pre-ignition**; no A peak-timing state was active.
+- **M1-B remained outside its weekF12 timing window**; no B timing event was active.
+- M2 state forecasts were nevertheless computable for diagnostic replay. Through targets already observed by weekF11, the to-date MAE was **`r fmt(score$MAE_pp[score$type == "A" & score$horizon == 1])` pp for A+1** and **`r fmt(score$MAE_pp[score$type == "B" & score$horizon == 1])` pp for B+1**.
+
+## Observed surveillance signal
+
+```{r}
+#| label: observed-table
+obs <- state[, c("origin_weekF", "week_start_date", "week_end_date", "A_observed_pct", "B_observed_pct")]
+names(obs) <- c("weekF", "week start", "week end", "A positivity (%)", "B positivity (%)")
+obs[["A positivity (%)"]] <- round(obs[["A positivity (%)"]], 3)
+obs[["B positivity (%)"]] <- round(obs[["B positivity (%)"]], 4)
+knitr::kable(obs, align = c("r", "l", "l", "r", "r"))
+```
+
+```{r}
+#| label: observed-plot
+#| fig-cap: "Observed A and B positivity through weekF11."
+matplot(
+  state$origin_weekF,
+  cbind(state$A_observed_pct, state$B_observed_pct),
+  type = "o", pch = c(16, 17), lty = 1, col = c("#D55E00", "#0072B2"),
+  xlab = "weekF", ylab = "positivity (%)", xaxt = "n"
+)
+axis(1, at = state$origin_weekF)
+legend("topleft", legend = c("Flu A", "Flu B"), col = c("#D55E00", "#0072B2"), pch = c(16, 17), lty = 1, bty = "n")
+grid(col = "grey90")
+```
+
+## M0: A ignition walk-forward
+
+M0 was evaluated prospectively at each origin using only data available through that week. Across weekF8–11, the detector did **not** fire.
+
+```{r}
+#| label: m0-table
+m0 <- state[, c("origin_weekF", "M0_A_ignited", "M0_A_ignition_weekF")]
+names(m0) <- c("origin weekF", "A ignited?", "estimated ignition weekF")
+m0[["estimated ignition weekF"]] <- ifelse(is.na(m0[["estimated ignition weekF"]]), "—", format(m0[["estimated ignition weekF"]]))
+knitr::kable(m0, align = c("r", "c", "r"))
+```
+
+Interpretation: the increase in A positivity by weekF9–10 was not sufficient to satisfy the frozen M0 ignition rules. There was therefore no M0-to-M1 ignition handoff during these origins.
+
+## M1: timing state
+
+### Influenza A
+
+Because M0 had not ignited, M1-A stayed inactive/pre-ignition throughout the review window.
+
+### Influenza B
+
+The canonical B timing/activity lower bound is now weekF12. Therefore weekF8–11 are explicitly **pre-window**, with no B timing event or passage posterior available.
+
+```{r}
+#| label: m1-table
+m1 <- state[, c(
+  "origin_weekF",
+  "M1_A_state", "M1_A_peak_weekF", "M1_A_prob_peak_passed",
+  "M1_B_state", "M1_B_activity_weekF", "M1_B_reason"
+)]
+names(m1) <- c(
+  "origin weekF",
+  "M1-A state", "A peak weekF", "A P(peak passed)",
+  "M1-B state", "B activity weekF", "B reason"
+)
+m1[["A peak weekF"]] <- fmt(m1[["A peak weekF"]], 2)
+m1[["A P(peak passed)"]] <- fmt(m1[["A P(peak passed)"]], 3)
+m1[["B activity weekF"]] <- fmt(m1[["B activity weekF"]], 2)
+knitr::kable(m1, align = c("r", "l", "r", "r", "l", "r", "l"))
+```
+
+## M2: walk-forward forecast diagnostics
+
+The table below reports what the frozen state models would have predicted using only information available at each origin. These are **diagnostic replay values**, not issued forecasts, because all origins are before weekF12.
+
+- A +1/+2 route: exact A1 state model.
+- B +1 route: exact B1 state model.
+- B +2 route: exact B1 fallback because B timing is unavailable before weekF12.
+
+```{r}
+#| label: m2-table
+m2_show <- m2[, c(
+  "origin_weekF", "origin_week_end", "type", "horizon", "target_weekF",
+  "forecast_pct", "observed_target_pct", "error_pp", "abs_error_pp", "route"
+)]
+names(m2_show) <- c(
+  "origin", "origin week end", "type", "horizon", "target",
+  "forecast (%)", "observed (%)", "error (pp)", "abs error (pp)", "route"
+)
+for (nm in c("forecast (%)", "observed (%)", "error (pp)", "abs error (pp)")) {
+  m2_show[[nm]] <- fmt(m2_show[[nm]], 4)
+}
+knitr::kable(m2_show, align = c("r", "l", "c", "r", "r", "r", "r", "r", "r", "l"))
+```
+
+### Score to date
+
+Only targets already observed by weekF11 can be scored. Therefore:
+
+- weekF8 contributes +1 and +2 targets;
+- weekF9 contributes +1 and +2 targets;
+- weekF10 contributes +1 only;
+- weekF11 forecasts are not yet scoreable.
+
+```{r}
+#| label: score-table
+score_show <- score
+names(score_show) <- c("type", "horizon", "MAE (pp)", "n scored")
+score_show[["MAE (pp)"]] <- round(score_show[["MAE (pp)"]], 4)
+knitr::kable(score_show, align = c("c", "r", "r", "r"))
+```
+
+```{r}
+#| label: score-bars
+#| fig-cap: "Walk-forward MAE to date for targets realized by weekF11."
+labels <- paste0(score$type, "+", score$horizon)
+barplot(
+  score$MAE_pp,
+  names.arg = labels,
+  col = ifelse(score$type == "A", "#D55E00", "#0072B2"),
+  ylab = "MAE (percentage points)", xlab = "target",
+  ylim = c(0, max(score$MAE_pp) * 1.2)
+)
+grid(nx = NA, ny = NULL, col = "grey90")
+```
+
+## Origin-by-origin notes
+
+```{r}
+#| label: origin-notes
+notes <- lapply(8:11, function(w) {
+  st <- state[state$origin_weekF == w, , drop = FALSE]
+  mm <- m2[m2$origin_weekF == w, , drop = FALSE]
+  data.frame(
+    weekF = w,
+    A_pct = st$A_observed_pct,
+    B_pct = st$B_observed_pct,
+    M0_A = ifelse(st$M0_A_ignited, paste0("ignited @ ", st$M0_A_ignition_weekF), "not ignited"),
+    M1_A = st$M1_A_state,
+    M1_B = paste(st$M1_B_state, st$M1_B_reason, sep = " / "),
+    A_h1 = mm$forecast_pct[mm$type == "A" & mm$horizon == 1],
+    A_h2 = mm$forecast_pct[mm$type == "A" & mm$horizon == 2],
+    B_h1 = mm$forecast_pct[mm$type == "B" & mm$horizon == 1],
+    B_h2 = mm$forecast_pct[mm$type == "B" & mm$horizon == 2],
+    stringsAsFactors = FALSE
+  )
+})
+notes <- do.call(rbind, notes)
+for (nm in c("A_pct", "B_pct", "A_h1", "A_h2", "B_h1", "B_h2")) notes[[nm]] <- round(notes[[nm]], 4)
+names(notes) <- c("weekF", "A obs %", "B obs %", "M0-A", "M1-A", "M1-B", "A+1 %", "A+2 %", "B+1 %", "B+2 %")
+knitr::kable(notes, align = c("r", "r", "r", "l", "l", "l", "r", "r", "r", "r"))
+```
+
+## Legacy / v2 / v3 context
+
+These weekF8–11 rows are **v3 pre-issuance diagnostics**, not issued forecasts. Historical model comparisons therefore remain separate from this prospective report.
+
+- On the matched M1 common ledger in `artifacts/m1-v2-lowrank-posterior-v10-release-consistent/common_ledger_vs_legacy_v16_strict_future_release.csv`, v2 mean absolute peak error is about **1.093 weeks** versus **1.375 weeks** for legacy across 81 common origin/truth rows in 10 seasons. This is an M1 timing comparison only.
+- A direct matched-target-ledger legacy/v2 M2-A benchmark is available under `artifacts/m2-v2-legacy-matched-a-v1/`; its primary 10-season comparison uses identical target counts but not perfectly identical training vintages.
+- Canonical v2/v3 operational comparisons begin at weekF12 and must come from `2026/run_weekly_shadow_release_v5.R`, which runs both systems from the same archived source and effective typed panel. Transaction deltas describe model-output differences, not forecast accuracy until the target is observed.
+- No verified common-ledger legacy/v2 M0 performance comparison is claimed here.
+
+### WeekF12 A-ignition diagnostic
+
+The frozen M0-A detector uses `w_min=12` and a 1-SE sampling-noise tolerance for recent raw-positivity drops. The weekF10→11 decrease is therefore still classified as raw-step stable. A direct diagnostic that appends the current M2 weekF12 A projection (~1.677%) to the observed weekF1–11 history returns **M0 ignition at weekF12**. This is a counterfactual model-state check, not an observed weekF12 result.
+
+See `docs/v3-legacy-v2-v3-comparison-plan-2026-09-28.md` for the comparison contract.
+
+## Governance and provenance
+
+```{r}
+#| label: provenance-table
+prov <- data.frame(
+  item = c(
+    "Season",
+    "Walk-forward origins",
+    "Latest available weekF",
+    "Latest available week end",
+    "Canonical forecast release",
+    "Typed-panel SHA-256",
+    "Effective-panel SHA-256",
+    "Governed minimum forecast origin",
+    "Report status"
+  ),
+  value = c(
+    meta[["season"]], meta[["origins"]], meta[["latest_weekF"]], meta[["latest_week_end"]],
+    meta[["forecast_release_id"]], meta[["panel_sha256"]], meta[["effective_panel_sha256"]],
+    meta[["governed_min_origin_week"]], meta[["report_status"]]
+  ),
+  stringsAsFactors = FALSE
+)
+knitr::kable(prov, align = c("l", "l"))
+```
+
+The model-state and M2 diagnostic CSVs are generated by:
+
+`../scripts/v3_generate_week8_11_walkforward_report_data.R`
+
+The underlying data products are stored under:
+
+`../artifacts/v3-week8-11-walkforward-report-v1/`
+
+This report deliberately does not reinterpret pre-weekF12 model values as prospective issued forecasts. Its purpose is to show how M0, M1, and M2 evolved walk-forward before the governed issuance window opened.

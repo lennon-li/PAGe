@@ -25,7 +25,8 @@ nested_loso_m1_test(
   top_k = NULL,
   blend_alpha = 1,
   spread_method = c("between", "total"),
-  verbose = TRUE
+  verbose = TRUE,
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{

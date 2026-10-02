@@ -13,7 +13,8 @@ refit_stage2_weekly(
   m1_preds = NULL,
   season_label = "current",
   addFS = NULL,
-  verbose = TRUE
+  verbose = TRUE,
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{

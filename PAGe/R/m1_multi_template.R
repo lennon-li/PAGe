@@ -43,7 +43,7 @@
 #' @param spread_method Character; \code{"between"} (default) computes
 #'   \code{logit_spread} as the weighted between-template standard deviation on
 #'   the logit scale, preserving the incumbent behaviour. \code{"total"} adds
-#'   weighted per-template GAM SE\^2 (from \code{g_s_mu_se}) to the
+#'   weighted squared per-template GAM SE (from \code{g_s_mu_se}) to the
 #'   between-template variance, yielding a total-variance spread. When per-template
 #'   SEs are unavailable (zero or missing) the method falls back to between-only
 #'   for that forecast week and increments \code{spread_fallback_count}.
@@ -83,95 +83,49 @@ align_multi_template <- function(currentD,
                                  dynamic_temp = TRUE,
                                  dynamic_temp_pivot = 10L,
                                  gam_obj = NULL,
-                                 spread_method = c("between", "total")) {
+                                 spread_method = c("between", "total"),
+                                 timing_mode = c("legacy", "fractional"),
+                                 prep = NULL,
+                                 return_prep = FALSE) {
   spread_method <- match.arg(spread_method)
+  timing_mode <- match.arg(timing_mode)
   stopifnot(is.matrix(eta_mat), ncol(eta_mat) >= 2)
-  n_weeks <- nrow(eta_mat)
-  seas_names <- colnames(eta_mat)
-  if (is.null(seas_names)) seas_names <- paste0("S", seq_len(ncol(eta_mat)))
-  all_seas_levs <- seas_names # preserve full level set before top_k filtering
 
-  # --- 1. Build per-season template functions ---
-  template_funs <- lapply(seq_along(seas_names), function(s_idx) {
-    s_name <- seas_names[s_idx]
-    g_s_raw <- stats::splinefun(seq_len(n_weeks), eta_mat[, s_idx], method = "natural")
-    if (blend_alpha < 1) {
-      # Blend toward population reference
-      alpha <- blend_alpha
-      g_s <- function(u) (1 - alpha) * g_ref_fun(u) + alpha * g_s_raw(u)
-    } else {
-      g_s <- g_s_raw
-    }
-    g_s_safe <- function(u) g_s(pmin(pmax(u, 1), n_weeks))
-    # SE: use GAM prediction uncertainty if gam_obj provided; else zero (no CI)
-    if (!is.null(gam_obj)) {
-      g_s_mu_se <- (function(gam, sn, levs, n_wk) {
-        function(u) {
-          u_cl <- pmin(pmax(round(u), 1L), n_wk)
-          nd <- data.frame(
-            newWeek = u_cl,
-            season = factor(sn, levels = levs)
-          )
-          pr <- tryCatch(
-            stats::predict(gam, newdata = nd, type = "link", se.fit = TRUE),
-            error = function(e) list(fit = g_s_safe(u), se.fit = rep(0, length(u)))
-          )
-          list(mu = g_s_safe(u), se = as.numeric(pr$se.fit))
-        }
-      })(gam_obj, s_name, all_seas_levs, n_weeks)
-    } else {
-      g_s_mu_se <- function(u) list(mu = g_s_safe(u), se = rep(0, length(u)))
-    }
-    list(
-      g_ref_fun = g_s, g_ref_safe = g_s_safe, g_ref_mu_se = g_s_mu_se,
-      season = s_name
+  if (is.null(prep)) {
+    prep <- .m1_build_alignment_prep(
+      currentD               = currentD,
+      eta_mat                = eta_mat,
+      g_ref_fun              = g_ref_fun,
+      g_ref_mu_se            = g_ref_mu_se,
+      hyper                  = hyper,
+      allow_scale            = allow_scale,
+      use_weights            = use_weights,
+      level                  = level,
+      future_weeks           = future_weeks,
+      include_observed       = include_observed,
+      fallback_when_unstable = fallback_when_unstable,
+      curvature_ratio        = curvature_ratio,
+      time_weights           = time_weights,
+      trough_weight          = trough_weight,
+      rise_weight            = rise_weight,
+      peak_decay             = peak_decay,
+      top_k                  = top_k,
+      blend_alpha            = blend_alpha,
+      gam_obj                = gam_obj,
+      timing_mode            = timing_mode
     )
-  })
-  names(template_funs) <- seas_names
-
-  # --- 2. Optional top-K pre-filtering by correlation ---
-  if (!is.null(top_k) && top_k < length(template_funs)) {
-    t_obs <- currentD$newWeek
-    p_obs <- currentD$y / (currentD$y + currentD$neg)
-    cors <- vapply(template_funs, function(tf) {
-      p_ref <- stats::plogis(tf$g_ref_safe(t_obs))
-      stats::cor(p_obs, p_ref, method = "spearman", use = "complete.obs")
-    }, numeric(1))
-    keep_idx <- order(cors, decreasing = TRUE)[seq_len(min(top_k, length(cors)))]
-    template_funs <- template_funs[keep_idx]
-    seas_names <- seas_names[keep_idx]
+  }
+  if (isTRUE(return_prep)) {
+    return(prep)
   }
 
-  # --- 3. Align to each template ---
-  results <- lapply(template_funs, function(tf) {
-    tryCatch(
-      align_forecast_pipeline_dilate(
-        currentD               = currentD,
-        g_ref_fun              = tf$g_ref_fun,
-        g_ref_mu_se            = tf$g_ref_mu_se,
-        hyper                  = hyper,
-        allow_scale            = allow_scale,
-        use_weights            = use_weights,
-        level                  = level,
-        future_weeks           = future_weeks,
-        include_observed       = include_observed,
-        fallback_when_unstable = fallback_when_unstable,
-        curvature_ratio        = curvature_ratio,
-        time_weights           = time_weights,
-        trough_weight          = trough_weight,
-        rise_weight            = rise_weight,
-        peak_decay             = peak_decay
-      ),
-      error = function(e) NULL
-    )
-  })
+  template_funs <- prep$template_funs
+  results <- prep$results
+  valid <- prep$valid
+  nlls <- prep$nlls
+  n_obs <- prep$n_obs
 
   # --- 4. Compute softmax weights from NLL + slope similarity ---
-  valid <- !vapply(results, is.null, logical(1))
-  n_obs <- nrow(currentD)
-  nlls <- vapply(results, function(r) {
-    if (is.null(r) || is.null(r$nll) || !is.finite(r$nll)) Inf else r$nll / max(n_obs, 1)
-  }, numeric(1))
 
   if (sum(valid & is.finite(nlls)) == 0) {
     # All templates failed -- fall back to population reference
@@ -399,6 +353,135 @@ align_multi_template <- function(currentD,
 }
 
 
+# Build the slope_weight-independent half of `align_multi_template()`: the
+# per-season template functions, optional top-K filter, and the expensive
+# per-template alignment. This object is fully determined by the alignment
+# inputs (currentD, reference templates, hyper, alignment-loss weights) and can
+# be reused across ensemble weightings that differ only in slope_weight or
+# temperature.
+#' @keywords internal
+.m1_build_alignment_prep <- function(currentD,
+                                     eta_mat,
+                                     g_ref_fun,
+                                     g_ref_mu_se,
+                                     hyper,
+                                     allow_scale = NULL,
+                                     use_weights = TRUE,
+                                     level = 0.95,
+                                     future_weeks = NULL,
+                                     include_observed = TRUE,
+                                     fallback_when_unstable = TRUE,
+                                     curvature_ratio = 1.0,
+                                     time_weights = NULL,
+                                     trough_weight = 0.1,
+                                     rise_weight = 1.0,
+                                     peak_decay = 0.3,
+                                     top_k = NULL,
+                                     blend_alpha = 1.0,
+                                     gam_obj = NULL,
+                                     timing_mode = "legacy") {
+  stopifnot(is.matrix(eta_mat), ncol(eta_mat) >= 2)
+  n_weeks <- nrow(eta_mat)
+  seas_names <- colnames(eta_mat)
+  if (is.null(seas_names)) seas_names <- paste0("S", seq_len(ncol(eta_mat)))
+  all_seas_levs <- seas_names # preserve full level set before top_k filtering
+
+  # --- 1. Build per-season template functions ---
+  template_funs <- lapply(seq_along(seas_names), function(s_idx) {
+    s_name <- seas_names[s_idx]
+    g_s_raw <- stats::splinefun(seq_len(n_weeks), eta_mat[, s_idx], method = "natural")
+    if (blend_alpha < 1) {
+      # Blend toward population reference
+      alpha <- blend_alpha
+      g_s <- function(u) (1 - alpha) * g_ref_fun(u) + alpha * g_s_raw(u)
+    } else {
+      g_s <- g_s_raw
+    }
+    g_s_safe <- function(u) .page_alignment_eval(g_s, u, n_weeks = n_weeks)
+    # SE: use GAM prediction uncertainty if gam_obj provided; else zero (no CI)
+    if (!is.null(gam_obj)) {
+      g_s_mu_se <- (function(gam, sn, levs, n_wk) {
+        function(u) {
+          u <- as.numeric(u)
+          in_domain <- is.finite(u) & u >= 1 & u <= n_wk
+          u_eval <- if (timing_mode == "fractional") u else round(u)
+          u_eval <- u_eval[in_domain]
+          nd <- data.frame(
+            newWeek = u_eval, season = factor(sn, levels = levs)
+          )
+          se <- rep(NA_real_, length(u))
+          if (any(in_domain)) {
+            pr <- tryCatch(
+              stats::predict(gam, newdata = nd, type = "link", se.fit = TRUE),
+              error = function(e) list(se.fit = rep(NA_real_, sum(in_domain)))
+            )
+            se[in_domain] <- as.numeric(pr$se.fit)
+          }
+          list(mu = g_s_safe(u), se = se)
+        }
+      })(gam_obj, s_name, all_seas_levs, n_weeks)
+    } else {
+      g_s_mu_se <- function(u) list(mu = g_s_safe(u), se = rep(0, length(u)))
+    }
+    list(
+      g_ref_fun = g_s, g_ref_safe = g_s_safe, g_ref_mu_se = g_s_mu_se,
+      season = s_name
+    )
+  })
+  names(template_funs) <- seas_names
+
+  # --- 2. Optional top-K pre-filtering by correlation ---
+  if (!is.null(top_k) && top_k < length(template_funs)) {
+    t_obs <- currentD$newWeek
+    p_obs <- currentD$y / (currentD$y + currentD$neg)
+    cors <- vapply(template_funs, function(tf) {
+      p_ref <- stats::plogis(tf$g_ref_safe(t_obs))
+      stats::cor(p_obs, p_ref, method = "spearman", use = "complete.obs")
+    }, numeric(1))
+    keep_idx <- order(cors, decreasing = TRUE)[seq_len(min(top_k, length(cors)))]
+    template_funs <- template_funs[keep_idx]
+    seas_names <- seas_names[keep_idx]
+  }
+
+  # --- 3. Align to each template ---
+  results <- lapply(template_funs, function(tf) {
+    tryCatch(
+      align_forecast_pipeline_dilate(
+        currentD               = currentD,
+        g_ref_fun              = tf$g_ref_fun,
+        g_ref_mu_se            = tf$g_ref_mu_se,
+        hyper                  = hyper,
+        allow_scale            = allow_scale,
+        use_weights            = use_weights,
+        level                  = level,
+        future_weeks           = future_weeks,
+        include_observed       = include_observed,
+        fallback_when_unstable = fallback_when_unstable,
+        curvature_ratio        = curvature_ratio,
+        time_weights           = time_weights,
+        trough_weight          = trough_weight,
+        rise_weight            = rise_weight,
+        peak_decay             = peak_decay
+      ),
+      error = function(e) NULL
+    )
+  })
+
+  valid <- !vapply(results, is.null, logical(1))
+  n_obs <- nrow(currentD)
+  nlls <- vapply(results, function(r) {
+    if (is.null(r) || is.null(r$nll) || !is.finite(r$nll)) Inf else r$nll
+  }, numeric(1))
+
+  list(
+    template_funs = template_funs,
+    results = results,
+    valid = valid,
+    nlls = nlls,
+    n_obs = n_obs
+  )
+}
+
 #' Prospective multi-template alignment wrapper
 #'
 #' Drop-in replacement for \code{run_alignment_prospective()} that uses
@@ -426,6 +509,12 @@ align_multi_template <- function(currentD,
 #' @param spread_method Character; \code{"between"} (default) or \code{"total"}.
 #'   Passed to \code{align_multi_template()} to select the \code{logit_spread}
 #'   computation method. See \code{\link{align_multi_template}} for details.
+#' @param peak_stabilization Character; \code{"legacy"} (default) or
+#'   \code{"causal"}.
+#' @param peak_state Optional prior same-season stabilized state. Used only in
+#'   causal mode.
+#' @param stabilizer_max_jump_weeks Positive maximum causal peak movement per
+#'   origin (default 2 weeks).
 #'
 #' @return List with same structure as \code{run_alignment_prospective()} output.
 run_alignment_prospective_multi <- function(
@@ -449,9 +538,15 @@ run_alignment_prospective_multi <- function(
   slope_window = 6L,
   dynamic_temp = TRUE,
   dynamic_temp_pivot = 10L,
-  spread_method = c("between", "total")
+  spread_method = c("between", "total"),
+  timing_mode = c("legacy", "fractional"),
+  peak_stabilization = c("legacy", "causal"),
+  peak_state = NULL,
+  stabilizer_max_jump_weeks = 2
 ) {
   spread_method <- match.arg(spread_method)
+  timing_mode <- match.arg(timing_mode)
+  peak_stabilization <- match.arg(peak_stabilization)
 
   # Helper: early return in pre-ignition state
   pre_ign <- function() {
@@ -468,10 +563,19 @@ run_alignment_prospective_multi <- function(
       t_peak = NA_real_,
       t_peak_median = NA_real_,
       t_peak_ci = c(NA_real_, NA_real_),
+      t_peak_raw = NA_real_,
+      t_peak_ci_raw = c(NA_real_, NA_real_),
+      t_peak_stabilized = NA_real_,
+      t_peak_ci_stabilized = c(NA_real_, NA_real_),
       peak_weekF = NA_integer_,
       peak_weekF_lo = NA_integer_,
       peak_weekF_hi = NA_integer_,
       peak_passed = FALSE,
+      peak_passed_now = FALSE,
+      peak_passed_latched = FALSE,
+      peak_threshold_week = NA_real_,
+      peak_stabilization = peak_stabilization,
+      peak_state = peak_state,
       fallback_reason = NA_character_,
       forecast_df = NULL,
       ign_out = ign_out,
@@ -486,13 +590,34 @@ run_alignment_prospective_multi <- function(
     return(pre_ign())
   }
 
-  iWeek_hat <- as.integer(ign_out$iWeek_hat_locked)
+  iWeek_hat <- if (timing_mode == "fractional") {
+    as.numeric(ign_out$iWeek_hat_lockedF %||% ign_out$iWeek_hat_locked)
+  } else {
+    as.integer(ign_out$iWeek_hat_locked)
+  }
   ign_week_locked <- as.integer(ign_out$ign_week_locked)
+  alignment_failed <- function(reason) {
+    out <- pre_ign()
+    out$state <- "alignment_failed"
+    out$iWeek_hat <- iWeek_hat
+    out$ign_week_locked <- ign_week_locked
+    out$iWeek_hatF <- as.numeric(iWeek_hat)
+    out$fallback_reason <- as.character(reason)[1L]
+    out
+  }
 
   # Re-anchor to alignment space
 
   currentD <- currentSeason |>
-    dplyr::mutate(newWeek = as.integer(.data$weekF) - iWeek_hat + ref$anchorWeek)
+    dplyr::mutate(newWeek = if (timing_mode == "fractional") {
+      as.numeric(.data$weekF) - iWeek_hat + ref$anchorWeek
+    } else {
+      as.integer(.data$weekF) - iWeek_hat + as.integer(ref$anchorWeek)
+    }) |>
+    dplyr::mutate(
+      alignment_in_domain = .data$newWeek >= 1 & .data$newWeek <= .page_template_weeks(),
+      alignment_out_of_domain = !.data$alignment_in_domain
+    )
 
   if (nrow(currentD) < as.integer(min_obs)) {
     return(pre_ign())
@@ -519,7 +644,7 @@ run_alignment_prospective_multi <- function(
       hyper                  = hyper,
       allow_scale            = scale_rec,
       level                  = level,
-      future_weeks           = seq(1, 52, by = 0.5),
+      future_weeks           = seq(1, .page_template_weeks(), by = 0.5),
       include_observed       = TRUE,
       curvature_ratio        = curvature_ratio,
       temperature            = temperature,
@@ -533,30 +658,61 @@ run_alignment_prospective_multi <- function(
       dynamic_temp           = dynamic_temp,
       dynamic_temp_pivot     = dynamic_temp_pivot,
       gam_obj                = if (!is.null(ref$mod2$gam)) ref$mod2$gam else NULL,
-      spread_method          = spread_method
+      spread_method          = spread_method,
+      timing_mode            = timing_mode
     ),
-    error = function(e) NULL
+    error = function(e) e
   )
 
-  if (is.null(res)) {
-    return(pre_ign())
+  if (inherits(res, "error")) {
+    return(alignment_failed(conditionMessage(res)))
   }
+  if (is.null(res)) {
+    return(alignment_failed("alignment_result_missing"))
+  }
+
+  # Raw and causal stabilized peak fields
+  peak_use <- .m1_prepare_peak(
+    res = res,
+    peak_stabilization = peak_stabilization,
+    previous_state = peak_state,
+    max_jump_weeks = stabilizer_max_jump_weeks
+  )
+  peak_for_status <- list(
+    t_peak = peak_use$t_peak_stabilized,
+    t_peak_ci = peak_use$t_peak_ci_stabilized
+  )
 
   # Peak passage detection
   pk <- peak_status_from_align(
-    res          = res,
-    currentD     = currentD,
-    use_ci       = use_ci,
-    buffer_weeks = buffer_weeks
+    res = res,
+    currentD = currentD,
+    use_ci = use_ci,
+    buffer_weeks = if (identical(peak_stabilization, "causal")) 5L else buffer_weeks,
+    previous_peak_passed = if (identical(peak_stabilization, "causal")) {
+      isTRUE(peak_state$peak_passed)
+    } else {
+      FALSE
+    },
+    peak_override = peak_for_status
   )
 
   # Convert peak to weekF space
-  t_peak_use <- res$peak$t_peak
-  t_peak_ci_use <- res$peak$t_peak_ci
+  t_peak_use <- peak_use$t_peak_stabilized
+  t_peak_ci_use <- peak_use$t_peak_ci_stabilized
 
   peak_weekF <- round(t_peak_use - ref$anchorWeek + iWeek_hat)
   peak_weekF_lo <- round(t_peak_ci_use[1] - ref$anchorWeek + iWeek_hat)
   peak_weekF_hi <- round(t_peak_ci_use[2] - ref$anchorWeek + iWeek_hat)
+  peak_weekF_raw <- peak_use$t_peak_raw - ref$anchorWeek + iWeek_hat
+  peak_weekF_lo_raw <- peak_use$t_peak_ci_raw[1L] - ref$anchorWeek + iWeek_hat
+  peak_weekF_hi_raw <- peak_use$t_peak_ci_raw[2L] - ref$anchorWeek + iWeek_hat
+
+  peak_state_out <- list(
+    t_peak_stabilized = peak_use$t_peak_stabilized,
+    t_peak_ci_stabilized = peak_use$t_peak_ci_stabilized,
+    peak_passed = pk$peak_passed
+  )
 
   state <- if (pk$peak_passed) "post_peak" else "aligning"
 
@@ -571,14 +727,29 @@ run_alignment_prospective_multi <- function(
     allow_scale = res$allow_scale,
     delta_on = res$delta_on,
     t_peak = t_peak_use,
-    t_peak_median = res$peak$t_peak_median,
+    t_peak_median = if (identical(peak_stabilization, "causal")) t_peak_use else res$peak$t_peak_median,
     t_peak_ci = t_peak_ci_use,
-    t_peak_raw = res$peak$t_peak,
-    t_peak_ci_raw = res$peak$t_peak_ci,
-    peak_weekF = as.integer(peak_weekF),
-    peak_weekF_lo = as.integer(peak_weekF_lo),
-    peak_weekF_hi = as.integer(peak_weekF_hi),
+    t_peak_raw = peak_use$t_peak_raw,
+    t_peak_ci_raw = peak_use$t_peak_ci_raw,
+    t_peak_stabilized = peak_use$t_peak_stabilized,
+    t_peak_ci_stabilized = peak_use$t_peak_ci_stabilized,
+    peak_weekF = if (timing_mode == "fractional") as.numeric(t_peak_use - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF),
+    peak_weekF_lo = if (timing_mode == "fractional") as.numeric(t_peak_ci_use[1] - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF_lo),
+    peak_weekF_hi = if (timing_mode == "fractional") as.numeric(t_peak_ci_use[2] - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF_hi),
+    peak_weekF_raw = as.numeric(peak_weekF_raw),
+    peak_weekF_lo_raw = as.numeric(peak_weekF_lo_raw),
+    peak_weekF_hi_raw = as.numeric(peak_weekF_hi_raw),
+    peak_weekF_stabilized = as.numeric(t_peak_use - ref$anchorWeek + iWeek_hat),
+    peak_weekF_lo_stabilized = as.numeric(t_peak_ci_use[1] - ref$anchorWeek + iWeek_hat),
+    peak_weekF_hi_stabilized = as.numeric(t_peak_ci_use[2] - ref$anchorWeek + iWeek_hat),
+    iWeek_hatF = as.numeric(iWeek_hat),
+    iWeek_hat_bracket = ign_out$iWeek_hat_bracket %||% NULL,
     peak_passed = pk$peak_passed,
+    peak_passed_now = pk$peak_passed_now,
+    peak_passed_latched = pk$peak_passed,
+    peak_threshold_week = pk$threshold_week,
+    peak_stabilization = peak_stabilization,
+    peak_state = peak_state_out,
     fallback_reason = res$fallback_reason,
     forecast_df = res$pred_df,
     ign_out = ign_out,
@@ -587,6 +758,276 @@ run_alignment_prospective_multi <- function(
     spread_method = res$spread_method %||% spread_method,
     spread_fallback_count = res$spread_fallback_count %||% 0L
   )
+}
+
+
+#' Prospective multi-template alignment for several ensemble weightings
+#'
+#' Computes the expensive per-template alignment once for `currentSeason` and
+#' then re-ensembles for each entry of `weight_sets`. This is exact: each
+#' element of the result is identical to calling
+#' \code{run_alignment_prospective_multi()} with that weighting, because the
+#' weighting parameters only enter the softmax reweighting step (see
+#' \code{\link{align_multi_template}}). Intended for tuning loops that sweep
+#' \code{slope_weight} / temperature at a fixed alignment configuration.
+#'
+#' @param currentSeason,ref,hyper,ign_out,use_ci,buffer_weeks,allow_scale,level,
+#'   min_obs,curvature_ratio,trough_weight,rise_weight,peak_decay,top_k,
+#'   blend_alpha,spread_method,timing_mode As in
+#'   \code{run_alignment_prospective_multi()}.
+#' @param weight_sets List of weighting overrides. Each element must be a list
+#'   with \code{slope_weight}, \code{temperature}, \code{slope_window},
+#'   \code{dynamic_temp}, and \code{dynamic_temp_pivot}.
+#'
+#' @return A list with the same length as \code{weight_sets}; each element has
+#'   the structure returned by \code{run_alignment_prospective_multi()}.
+#' @keywords internal
+run_alignment_prospective_multi_weights <- function(
+  currentSeason,
+  ref,
+  hyper,
+  ign_out,
+  weight_sets,
+  use_ci = TRUE,
+  buffer_weeks = 0L,
+  allow_scale = NULL,
+  level = 0.95,
+  min_obs = 4L,
+  curvature_ratio = 1.0,
+  trough_weight = 0.1,
+  rise_weight = 1.0,
+  peak_decay = 0.3,
+  top_k = NULL,
+  blend_alpha = 1.0,
+  spread_method = c("between", "total"),
+  timing_mode = c("legacy", "fractional"),
+  peak_stabilization = c("legacy", "causal"),
+  peak_state = NULL,
+  stabilizer_max_jump_weeks = 2
+) {
+  spread_method <- match.arg(spread_method)
+  timing_mode <- match.arg(timing_mode)
+  peak_stabilization <- match.arg(peak_stabilization)
+  if (!is.list(weight_sets) || !length(weight_sets)) {
+    stop("`weight_sets` must be a non-empty list.", call. = FALSE)
+  }
+
+  pre_ign <- function() {
+    list(
+      state = "pre_ignition",
+      iWeek_hat = NA_integer_,
+      ign_week_locked = NA_integer_,
+      tau = NA_real_,
+      delta = NA_real_,
+      a = NA_real_,
+      b = NA_real_,
+      allow_scale = NA,
+      delta_on = NA,
+      t_peak = NA_real_,
+      t_peak_median = NA_real_,
+      t_peak_ci = c(NA_real_, NA_real_),
+      t_peak_raw = NA_real_,
+      t_peak_ci_raw = c(NA_real_, NA_real_),
+      t_peak_stabilized = NA_real_,
+      t_peak_ci_stabilized = c(NA_real_, NA_real_),
+      peak_weekF = NA_integer_,
+      peak_weekF_lo = NA_integer_,
+      peak_weekF_hi = NA_integer_,
+      peak_passed = FALSE,
+      peak_passed_now = FALSE,
+      peak_passed_latched = FALSE,
+      peak_threshold_week = NA_real_,
+      peak_stabilization = peak_stabilization,
+      peak_state = peak_state,
+      fallback_reason = NA_character_,
+      forecast_df = NULL,
+      ign_out = ign_out,
+      spread_method = spread_method,
+      spread_fallback_count = 0L
+    )
+  }
+
+  max_weekF <- max(currentSeason$weekF, na.rm = TRUE)
+  if (is.na(ign_out$ign_week_locked) || ign_out$ign_week_locked > max_weekF) {
+    return(lapply(weight_sets, function(ws) pre_ign()))
+  }
+
+  iWeek_hat <- if (timing_mode == "fractional") {
+    as.numeric(ign_out$iWeek_hat_lockedF %||% ign_out$iWeek_hat_locked)
+  } else {
+    as.integer(ign_out$iWeek_hat_locked)
+  }
+  ign_week_locked <- as.integer(ign_out$ign_week_locked)
+
+  currentD <- currentSeason |>
+    dplyr::mutate(newWeek = if (timing_mode == "fractional") {
+      as.numeric(.data$weekF) - iWeek_hat + ref$anchorWeek
+    } else {
+      as.integer(.data$weekF) - iWeek_hat + as.integer(ref$anchorWeek)
+    }) |>
+    dplyr::mutate(
+      alignment_in_domain = .data$newWeek >= 1 & .data$newWeek <= .page_template_weeks(),
+      alignment_out_of_domain = !.data$alignment_in_domain
+    )
+
+  if (nrow(currentD) < as.integer(min_obs)) {
+    return(lapply(weight_sets, function(ws) pre_ign()))
+  }
+
+  scale_rec <- if (!is.null(allow_scale)) {
+    allow_scale
+  } else {
+    check_scale_identifiability(
+      currentD  = currentD,
+      g_ref_fun = ref$g_ref_fun,
+      hyper     = hyper
+    )$allow_scale_rec
+  }
+
+  base_args <- list(
+    currentD               = currentD,
+    eta_mat                = ref$eta_mat,
+    g_ref_fun              = ref$g_ref_fun,
+    g_ref_mu_se            = ref$g_ref_mu_se,
+    hyper                  = hyper,
+    allow_scale            = scale_rec,
+    level                  = level,
+    future_weeks           = seq(1, .page_template_weeks(), by = 0.5),
+    include_observed       = TRUE,
+    curvature_ratio        = curvature_ratio,
+    top_k                  = top_k,
+    blend_alpha            = blend_alpha,
+    trough_weight          = trough_weight,
+    rise_weight            = rise_weight,
+    peak_decay             = peak_decay,
+    gam_obj                = if (!is.null(ref$mod2$gam)) ref$mod2$gam else NULL,
+    spread_method          = spread_method,
+    timing_mode            = timing_mode
+  )
+
+  # Build the shared alignment preparation once. A failed post-ignition
+  # preparation remains an explicit alignment failure for every weighting.
+  alignment_failed <- function(reason) {
+    out <- pre_ign()
+    out$state <- "alignment_failed"
+    out$iWeek_hat <- iWeek_hat
+    out$ign_week_locked <- ign_week_locked
+    out$iWeek_hatF <- as.numeric(iWeek_hat)
+    out$fallback_reason <- as.character(reason)[1L]
+    out
+  }
+  prep <- tryCatch(
+    do.call(
+      align_multi_template,
+      c(base_args, list(return_prep = TRUE))
+    ),
+    error = function(e) e
+  )
+  if (inherits(prep, "error")) {
+    return(lapply(weight_sets, function(ws) {
+      alignment_failed(conditionMessage(prep))
+    }))
+  }
+  if (is.null(prep)) {
+    return(lapply(weight_sets, function(ws) {
+      alignment_failed("alignment_preparation_missing")
+    }))
+  }
+
+  finalize <- function(res) {
+    peak_use <- .m1_prepare_peak(
+      res = res,
+      peak_stabilization = peak_stabilization,
+      previous_state = peak_state,
+      max_jump_weeks = stabilizer_max_jump_weeks
+    )
+    pk <- peak_status_from_align(
+      res = res,
+      currentD = currentD,
+      use_ci = use_ci,
+      buffer_weeks = if (identical(peak_stabilization, "causal")) 5L else buffer_weeks,
+      previous_peak_passed = if (identical(peak_stabilization, "causal")) {
+        isTRUE(peak_state$peak_passed)
+      } else {
+        FALSE
+      },
+      peak_override = list(
+        t_peak = peak_use$t_peak_stabilized,
+        t_peak_ci = peak_use$t_peak_ci_stabilized
+      )
+    )
+    t_peak_use <- peak_use$t_peak_stabilized
+    t_peak_ci_use <- peak_use$t_peak_ci_stabilized
+    peak_weekF <- round(t_peak_use - ref$anchorWeek + iWeek_hat)
+    peak_weekF_lo <- round(t_peak_ci_use[1] - ref$anchorWeek + iWeek_hat)
+    peak_weekF_hi <- round(t_peak_ci_use[2] - ref$anchorWeek + iWeek_hat)
+    peak_state_out <- list(
+      t_peak_stabilized = peak_use$t_peak_stabilized,
+      t_peak_ci_stabilized = peak_use$t_peak_ci_stabilized,
+      peak_passed = pk$peak_passed
+    )
+    state <- if (pk$peak_passed) "post_peak" else "aligning"
+    list(
+      state = state,
+      iWeek_hat = iWeek_hat,
+      ign_week_locked = ign_week_locked,
+      tau = res$tau,
+      delta = res$delta,
+      a = res$a,
+      b = res$b,
+      allow_scale = res$allow_scale,
+      delta_on = res$delta_on,
+      t_peak = t_peak_use,
+      t_peak_median = if (identical(peak_stabilization, "causal")) t_peak_use else res$peak$t_peak_median,
+      t_peak_ci = t_peak_ci_use,
+      t_peak_raw = peak_use$t_peak_raw,
+      t_peak_ci_raw = peak_use$t_peak_ci_raw,
+      t_peak_stabilized = peak_use$t_peak_stabilized,
+      t_peak_ci_stabilized = peak_use$t_peak_ci_stabilized,
+      peak_weekF = if (timing_mode == "fractional") as.numeric(t_peak_use - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF),
+      peak_weekF_lo = if (timing_mode == "fractional") as.numeric(t_peak_ci_use[1] - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF_lo),
+      peak_weekF_hi = if (timing_mode == "fractional") as.numeric(t_peak_ci_use[2] - ref$anchorWeek + iWeek_hat) else as.integer(peak_weekF_hi),
+      iWeek_hatF = as.numeric(iWeek_hat),
+      iWeek_hat_bracket = ign_out$iWeek_hat_bracket %||% NULL,
+      peak_passed = pk$peak_passed,
+      peak_passed_now = pk$peak_passed_now,
+      peak_passed_latched = pk$peak_passed,
+      peak_threshold_week = pk$threshold_week,
+      peak_stabilization = peak_stabilization,
+      peak_state = peak_state_out,
+      fallback_reason = res$fallback_reason,
+      forecast_df = res$pred_df,
+      ign_out = ign_out,
+      weights = res$weights,
+      template_names = res$template_names,
+      spread_method = res$spread_method %||% spread_method,
+      spread_fallback_count = res$spread_fallback_count %||% 0L
+    )
+  }
+
+  lapply(weight_sets, function(ws) {
+    res <- tryCatch(
+      do.call(
+        align_multi_template,
+        c(base_args, list(
+          prep                  = prep,
+          temperature           = ws$temperature,
+          slope_weight          = ws$slope_weight,
+          slope_window          = ws$slope_window,
+          dynamic_temp          = ws$dynamic_temp,
+          dynamic_temp_pivot    = ws$dynamic_temp_pivot
+        ))
+      ),
+      error = function(e) e
+    )
+    if (inherits(res, "error")) {
+      return(alignment_failed(conditionMessage(res)))
+    }
+    if (is.null(res)) {
+      return(alignment_failed("alignment_result_missing"))
+    }
+    finalize(res)
+  })
 }
 
 
@@ -626,7 +1067,8 @@ run_alignment_prospective_multi <- function(
 #' Compute weighted logit-scale spread (internal helper)
 #'
 #' \code{"between"} computes the weighted between-template standard deviation.
-#' \code{"total"} adds weighted per-template SE\^2 (from \code{g_s_mu_se}) to
+#' \code{"total"} adds weighted squared per-template SE (from
+#' \code{g_s_mu_se}) to
 #' the between-template variance. When per-template SEs are all zero/missing for
 #' a forecast week, that week falls back to between-only and the fallback count
 #' is incremented.

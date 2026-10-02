@@ -69,14 +69,14 @@ logit_stable <- function(p, eps = 1e-6) qlogis(pmin(pmax(p, eps), 1 - eps))
 #' }
 get_gam_cls <- function(ign_fit_or_gam) {
   if (inherits(ign_fit_or_gam, c("gam", "bam"))) return(ign_fit_or_gam)
-  
+
   # gamm4 style list
   if (is.list(ign_fit_or_gam) &&
       "gam" %in% names(ign_fit_or_gam) &&
       inherits(ign_fit_or_gam$gam, c("gam", "bam"))) {
     return(ign_fit_or_gam$gam)
   }
-  
+
   # fitIgnition style list
   if (is.list(ign_fit_or_gam) &&
       "fits" %in% names(ign_fit_or_gam) &&
@@ -85,7 +85,7 @@ get_gam_cls <- function(ign_fit_or_gam) {
       inherits(ign_fit_or_gam$fits$p_only_week_p$gam, c("gam", "bam"))) {
     return(ign_fit_or_gam$fits$p_only_week_p$gam)
   }
-  
+
   stop("Could not extract a GAM classifier. Pass a mgcv::gam/bam, a gamm4 list with $gam, or your full fitIgnition() output.")
 }
 
@@ -117,18 +117,18 @@ resolve_week_override <- function(week_est,
                                   valid_weeks = 1:52) {
   mode <- match.arg(mode)
   est <- as.integer(week_est)
-  
+
   if (is.null(override_week) || is.na(override_week)) {
     return(list(final = est, est = est, overridden = FALSE, override = NA_integer_))
   }
-  
+
   ov <- as.integer(override_week)
-  
+
   if (mode == "nearest_valid") {
     ov <- valid_weeks[which.min(abs(valid_weeks - ov))]
     return(list(final = ov, est = est, overridden = TRUE, override = ov))
   }
-  
+
   ov <- max(min(ov, max(valid_weeks)), min(valid_weeks))
   final <- switch(
     mode,
@@ -136,6 +136,6 @@ resolve_week_override <- function(week_est,
     cap     = if (is.na(est)) ov else pmin(est, ov),
     floor   = if (is.na(est)) ov else pmax(est, ov)
   )
-  
+
   list(final = as.integer(final), est = est, overridden = TRUE, override = ov)
 }

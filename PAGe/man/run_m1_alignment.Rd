@@ -5,7 +5,14 @@
 \alias{run_m1}
 \title{Walk-forward M1 alignment for the current season}
 \usage{
-run_m1_alignment(kit, current_data, m0_result, walk_start = 5L, verbose = TRUE)
+run_m1_alignment(
+  kit,
+  current_data,
+  m0_result,
+  walk_start = 5L,
+  verbose = TRUE,
+  timing_mode = c("legacy", "fractional")
+)
 
 run_m1(kit, current_data, m0_result, ...)
 }

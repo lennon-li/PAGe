@@ -69,6 +69,43 @@ m2_next <- tune_m2(
 )
 ```
 
+For a fresh manual cycle, use the read-only planner first. It normalizes the
+holdout and LOSO seasons, records the exact grids and M1 hard-cap policy, and
+reports worker/resource estimates without creating a checkpoint:
+
+```r
+plan <- plan_training(
+  allD, mode = "retune", prospective_holdout = "2025-26",
+  checkpoint_dir = "artifacts/2025-26/checkpoints", n_cores = 8L
+)
+print(plan)
+plan$support$m0
+```
+
+After a complete stage result, `boundary_action_plan()` records both the raw
+optimizer winner and the governed candidate. If `action$settled` is `FALSE`,
+use its `next_grid` with the same folds and checkpoint directory; do not pass a
+boundary winner downstream. The returned `next_call` is an explicit handoff
+for the next stage decision.
+
+For M1, `boundary_action_plan()` exposes two practical-gain controls that are
+forwarded to `select_m1_candidate()`: `m1_min_gain` (weeks of improvement
+required before added M1 complexity is accepted; default `0.05`) and
+`m1_prefer_simpler` (prefer the simplest boundary-safe candidate within
+`m1_min_gain` of the best; default `TRUE`). `train_outer_fold()` accepts and
+records both, so manual M1 boundary decisions and the governed nested
+evaluation apply the same backoff rule.
+
+The ordinary `m2_subset_tune()` result labels its inner leave-one-season-out
+scores `evaluation_label = "cross-fitted"`. Reserve `"nested"` for scores
+generated inside an outer-held-out gate; ordinary inner scores are not nested.
+
+`preflight_support_audit()` is deliberately stage-aware. M0 can be checked
+from canonical surveillance data; M1 basis support is checked after passing
+the aligned M0 handoff; and M2 basis support is checked after prepared M2
+features exist. A `deferred` entry is not a pass—it means rerun the audit with
+the missing handoff before launching workers.
+
 `build_m2()` persists the complete Phase 1 fold cache as
 `checkpoints/m2/m1_phase1.rds` (or at the explicit `m1_artifact_path`). Before
 parallel M2 evaluation it calls `compact_m1_cache_for_m2()`, retaining only

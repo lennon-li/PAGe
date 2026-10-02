@@ -10,7 +10,9 @@ assemble_kit(
   m2_model,
   best_spec_id = NULL,
   save_ref_path = NULL,
-  save_m2_path = NULL
+  save_m2_path = NULL,
+  m1_v2 = NULL,
+  m2_v2 = NULL
 )
 }
 \arguments{
@@ -31,6 +33,12 @@ taken from \code{build_m2()$best_spec_id}).}
 
 \item{save_m2_path}{Character. If set, saves the M2 bundle
 (\code{m2_production.rds} format) to this path.}
+
+\item{m1_v2}{Optional `page_m1_v2_stage` from `build_m1_v2_timing()`.
+Carried alongside legacy M1 for the redesigned timing runtime and M2 handoff.}
+
+\item{m2_v2}{Optional `page_m2_v2_c2_governed` shadow artifact. It is carried
+alongside legacy M2 and never replaces `m2_model`.}
 }
 \value{
 A kit list compatible with all \code{run_*()} functions. Governed

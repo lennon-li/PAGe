@@ -16,14 +16,13 @@
     stop("M1 reference data must contain `newWeek`.", call. = FALSE)
   }
   week <- suppressWarnings(as.numeric(alignedD$newWeek))
-  week <- week[is.finite(week)]
-  week <- pmin(pmax(week, 1), as.integer(n_weeks))
+  week <- week[is.finite(week) & week >= 1 & week <= as.integer(n_weeks)]
   n_unique <- length(unique(week))
   if (as.integer(k) > n_unique) {
     stop(
       "M1 reference model cannot support k_ref=", as.integer(k),
-      ": only ", n_unique, " unique `newWeek` values are available after ",
-      "clamping to the ", as.integer(n_weeks), "-week domain. Use k_ref <= ",
+      ": only ", n_unique, " unique in-domain `newWeek` values are available in the ",
+      as.integer(n_weeks), "-week domain. Use k_ref <= ",
       n_unique, " or expand the data/domain first.",
       call. = FALSE
     )
@@ -68,6 +67,8 @@
 #' @param agg Character. Aggregation method for the \code{"fs"} method's population curve:
 #'   \code{"median"} (default) takes pointwise median across seasons on logit scale;
 #'   \code{"mean"} takes the mean. Ignored for other methods.
+#' @param timing_mode Character. \code{"legacy"} preserves integer aligned
+#'   coordinates; \code{"fractional"} retains numeric aligned coordinates.
 #'
 #' @return A list with components: \code{mod2}, \code{g_ref_fun}, \code{g_ref_safe},
 #'   \code{g_ref_mu_se}, \code{ref_df}, \code{pred_df}, \code{dat}, \code{anchorWeek},
@@ -76,7 +77,7 @@
 estimateRef <- function(alignedD,
                         exSeason = NULL,
                         k = 10,
-                        n_weeks = 52L,
+                        n_weeks = .page_template_weeks(),
                         nAGQ = 1,
                         method = c(
                           "binomial", "binomial_weighted",
@@ -85,9 +86,11 @@ estimateRef <- function(alignedD,
                         ),
                         trough_weight = 0.1,
                         peak_weight_boost = 3,
-                        agg = c("median", "mean")) {
+                        agg = c("median", "mean"),
+                        timing_mode = c("legacy", "fractional")) {
   method <- match.arg(method)
   agg <- match.arg(agg)
+  timing_mode <- match.arg(timing_mode)
 
   if (!requireNamespace("gamm4", quietly = TRUE)) stop("Need 'gamm4'.")
   if (!requireNamespace("mgcv", quietly = TRUE)) stop("Need 'mgcv'.")
@@ -107,11 +110,16 @@ estimateRef <- function(alignedD,
       return(wt)
     }
     wt[dat$phase == 0L] <- trough_weight
-    if (peak_weight_boost > 1 && "iWeek" %in% names(dat) && "weekF" %in% names(dat)) {
+    if (peak_weight_boost > 1 &&
+      any(c("iWeek", "iWeekF") %in% names(dat)) && "weekF" %in% names(dat)) {
       for (s in unique(dat$season)) {
         idx <- which(dat$season == s & dat$phase == 1L)
         if (length(idx) == 0) next
-        iw <- dat$iWeek[idx[1]]
+        iw <- if (timing_mode == "fractional" && "iWeekF" %in% names(dat)) {
+          dat$iWeekF[idx[1L]]
+        } else {
+          dat$iWeek[idx[1L]]
+        }
         wk <- dat$weekF[idx]
         p_obs <- dat$fit[idx]
         pk <- wk[which.max(p_obs)]
@@ -131,8 +139,29 @@ estimateRef <- function(alignedD,
   if (!is.null(exSeason) && length(exSeason) > 0) {
     dat <- dplyr::filter(dat, !(.data$season %in% exSeason))
   }
+  raw_new_week <- suppressWarnings(as.numeric(dat$newWeek))
+  domain <- .page_alignment_domain(raw_new_week, n_weeks)
+  dat$alignment_in_domain <- domain$in_domain
+  dat$alignment_out_of_domain <- domain$out_of_domain
+  out_of_domain_by_season <- stats::aggregate(
+    dat$alignment_out_of_domain,
+    list(season = as.character(dat$season)), sum
+  )
+  names(out_of_domain_by_season)[2L] <- "n_out_of_domain"
+  attr(dat, "out_of_domain_by_season") <- out_of_domain_by_season
+  dat <- dat[domain$in_domain, , drop = FALSE]
+  if (!nrow(dat)) {
+    stop("No aligned rows remain inside the ", as.integer(n_weeks),
+      "-week template domain after plain shifting.",
+      call. = FALSE
+    )
+  }
   .validate_m1_reference_support(dat, k = k, n_weeks = n_weeks)
-  dat <- dplyr::mutate(dat, newWeek = pmin(as.integer(.data$newWeek), as.integer(n_weeks)))
+  dat <- dplyr::mutate(dat, newWeek = if (timing_mode == "fractional") {
+    as.numeric(.data$newWeek)
+  } else {
+    as.integer(.data$newWeek)
+  })
 
   # ---------- helpers for re-smooth models ----------
   # gaussian_logit: s(season, bs="re") -- exclude="s(season)" for population curve
@@ -308,7 +337,12 @@ estimateRef <- function(alignedD,
     ))
   }
   g_ref_fun <- stats::splinefun(grid$newWeek, eta_hat, method = "natural")
-  g_ref_safe <- function(u) g_ref_fun(pmin(pmax(u, 1L), n_weeks))
+  g_ref_safe <- function(u) {
+    out <- rep(NA_real_, length(u))
+    ok <- is.finite(u) & u >= 1 & u <= n_weeks
+    out[ok] <- g_ref_fun(u[ok])
+    out
+  }
 
   dat <- dplyr::mutate(dat, fit_ref = stats::plogis(g_ref_safe(.data$newWeek)))
 
@@ -397,6 +431,9 @@ estimateRef <- function(alignedD,
 
   if (uses_fs) {
     g_ref_mu_se <- (function(gam_obj, seas_levs, agg_method) {
+      force(gam_obj)
+      force(seas_levs)
+      force(agg_method)
       function(u) {
         eta_mat <- sapply(seas_levs, function(s) {
           nd <- data.frame(newWeek = u, season = factor(s, levels = seas_levs))
@@ -417,6 +454,9 @@ estimateRef <- function(alignedD,
   } else if (uses_fs_combo) {
     # Ensemble: average gaussian_logit + fs population curves
     g_ref_mu_se <- (function(gam_gl, gam_fs, seas_levs) {
+      force(gam_gl)
+      force(gam_fs)
+      force(seas_levs)
       function(u) {
         # gaussian_logit population curve
         nd_gl <- data.frame(newWeek = u, season = factor(seas_levs[1L], levels = seas_levs))
@@ -437,6 +477,9 @@ estimateRef <- function(alignedD,
     })(mod2$gam, mod2$gam_fs, levels(dat$season))
   } else {
     g_ref_mu_se <- (function(gam_obj, excl, season_lev) {
+      force(gam_obj)
+      force(excl)
+      force(season_lev)
       function(u) {
         nd <- if (!is.null(season_lev)) {
           data.frame(newWeek = u, season = factor(season_lev[1L], levels = season_lev))
@@ -454,16 +497,18 @@ estimateRef <- function(alignedD,
   }
 
   out <- list(
-    mod2        = mod2,
-    g_ref_fun   = g_ref_fun,
-    g_ref_safe  = g_ref_safe,
+    mod2 = mod2,
+    g_ref_fun = g_ref_fun,
+    g_ref_safe = g_ref_safe,
     g_ref_mu_se = g_ref_mu_se,
-    ref_df      = ref_df,
-    pred_df     = pred_df,
-    dat         = dat,
-    anchorWeek  = anchorWeek,
-    method      = method,
-    agg         = agg
+    ref_df = ref_df,
+    pred_df = pred_df,
+    dat = dat,
+    out_of_domain_by_season = out_of_domain_by_season,
+    anchorWeek = anchorWeek,
+    method = method,
+    agg = agg,
+    n_weeks = as.integer(n_weeks)
   )
   # For fs method: include per-season logit predictions for diagnostics
   if (uses_fs) out$eta_mat <- eta_mat
@@ -682,18 +727,43 @@ estimateDerivs <- function(
     models = models_out
   )
 }
+# Calendar support is independent of how many observations have arrived.
+.season_calendar_weeks <- function(data, season_col = "season") {
+  if (!is.data.frame(data) || !season_col %in% names(data) || !nrow(data)) {
+    stop("Cannot derive MMWR calendar length: non-empty season data is required.",
+      call. = FALSE
+    )
+  }
+  season <- as.character(data[[season_col]])
+  valid <- !is.na(season) & grepl("^[0-9]{4}-([0-9]{2}|[0-9]{4})$", season)
+  if (length(season) != nrow(data) || any(!valid)) {
+    stop("Cannot derive MMWR calendar length: season must name its start year (YYYY-YY).",
+      call. = FALSE
+    )
+  }
+  year <- as.integer(substr(season, 1L, 4L))
+  dates <- as.Date(paste0(year, "-12-31"))
+  vapply(year, function(start_year) {
+    page_season_calendar(mmwr_year = start_year, week = 27L)$nW_true[[1L]]
+  }, integer(1))
+}
+
 #' Align within-season week index by shifting ignition to a common anchor week
 #'
 #' @param outs list of flagIgnition() outputs (each has $data and $ignition)
 #' @param season_col season column name (default "season")
 #' @param week_col within-season week column name (default "weekF")
-#' @param nweek_col season length column name (default "nW_true"); if missing uses max(weekF) per season
+#' @param nweek_col calendar length output column (default "nW_true"); derived from season start year
+#' @param template_weeks Template domain used for fitting (default 52). Rows
+#'   shifted outside this domain are retained and flagged, but are excluded by
+#'   `estimateRef()` rather than wrapped back into the season.
 #'
 #' @return data.frame with newWeek and phase_inSeason added; attributes: anchorWeek, ignD
 alignIgnition <- function(outs,
                           season_col = "season",
                           week_col = "weekF",
-                          nweek_col = "nW_true") {
+                          nweek_col = "nW_true",
+                          template_weeks = .page_template_weeks()) {
   stopifnot(is.list(outs), length(outs) > 0)
   if (!requireNamespace("data.table", quietly = TRUE)) stop("Need 'data.table'.")
   if (!requireNamespace("purrr", quietly = TRUE)) stop("Need 'purrr'.")
@@ -726,24 +796,28 @@ alignIgnition <- function(outs,
   iweek_map <- setNames(ign_small$iWeek, ign_small[[season_col]])
   offset_map <- setNames(anchorWeek - ign_small$iWeek, ign_small[[season_col]])
 
-  # season length nW (52/53)
-  if (!is.null(nweek_col) && nweek_col %in% names(allD)) {
-    allD[, nW := to_int(get(nweek_col))]
-    allD[is.na(nW), nW := max(get(week_col), na.rm = TRUE), by = season_col]
-  } else {
-    allD[, nW := max(get(week_col), na.rm = TRUE), by = season_col]
-  }
+  # Never infer calendar length from observed coverage or a supplied stale value.
+  allD[, nW := .season_calendar_weeks(as.data.frame(allD), season_col)]
+  allD[, nW_true := nW]
+  if (!is.null(nweek_col)) allD[, (nweek_col) := nW]
 
   # lookup iWeek and offset WITHOUT merge
   allD[, iWeek := iweek_map[get(season_col)]]
   allD[, offset := offset_map[get(season_col)]]
 
-  # aligned week (wrap by nW to handle 52 vs 53)
-  allD[, newWeek := ifelse(
-    is.na(get(week_col)) | is.na(iWeek) | is.na(nW) | is.na(anchorWeek),
-    NA_integer_,
-    ((get(week_col) + offset - 1L) %% nW) + 1L
-  )]
+  week_values <- allD[[week_col]]
+  iweek_values <- allD[["iWeek"]]
+  nw_values <- allD[["nW"]]
+  shifted <- ifelse(
+    is.na(week_values) | is.na(iweek_values) | is.na(nw_values) | is.na(anchorWeek),
+    NA_real_,
+    .page_shift_week(week_values, iweek_values, anchorWeek)
+  )
+  domain <- .page_alignment_domain(shifted, template_weeks)
+  allD[, newWeek_raw := shifted]
+  allD[, newWeek := shifted]
+  allD[, alignment_in_domain := domain$in_domain]
+  allD[, alignment_out_of_domain := domain$out_of_domain]
 
   # ---- phase indicator: in-season (>= ignition) vs pre-season (< ignition) ----
   allD[, phase := as.integer(
@@ -757,5 +831,11 @@ alignIgnition <- function(outs,
   out <- as.data.frame(allD)
   attr(out, "anchorWeek") <- anchorWeek
   attr(out, "ignD") <- as.data.frame(ign_small)
+  attr(out, "template_weeks") <- as.integer(template_weeks)
+  attr(out, "out_of_domain_by_season") <- as.data.frame(
+    allD[, .(n_rows = .N, n_out_of_domain = sum(alignment_out_of_domain)),
+      by = season_col
+    ]
+  )
   out
 }

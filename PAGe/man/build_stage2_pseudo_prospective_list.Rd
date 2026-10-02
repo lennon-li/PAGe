@@ -14,7 +14,8 @@ build_stage2_pseudo_prospective_list(
   pre_buffer = 1L,
   n_weeks = 53L,
   eps = 1e-06,
-  date_col = if ("date" \%in\% names(currentSeason)) "date" else NULL
+  date_col = if ("date" \%in\% names(currentSeason)) "date" else NULL,
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{

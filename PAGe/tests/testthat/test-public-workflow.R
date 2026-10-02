@@ -94,7 +94,8 @@ test_that("training validates before filtering and returns a stable class", {
 
   result <- PAGe::train_pipeline(
     workflow_surveillance("2024-25", 1L),
-    mode = "refresh", prospective_holdout = NULL, verbose = FALSE
+    mode = "refresh", prospective_holdout = NULL, verbose = FALSE,
+    m2_family = "legacy", allow_legacy = TRUE
   )
   expect_s3_class(result, "page_training_result")
   expect_true(all(c("N", "p", "neg") %in% calls$columns))
@@ -103,7 +104,8 @@ test_that("training validates before filtering and returns a stable class", {
   expect_error(
     PAGe::train_pipeline(
       workflow_surveillance(c("2024-25", "2024-25"), c(1L, 1L)),
-      mode = "refresh", verbose = FALSE
+      mode = "refresh", verbose = FALSE,
+      m2_family = "legacy", allow_legacy = TRUE
     ),
     "one row"
   )

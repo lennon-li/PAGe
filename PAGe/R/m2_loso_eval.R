@@ -24,8 +24,12 @@ assert_loso_test_season_absent <- function(test_season,
                                            label_name = "labels",
                                            action = c("stop", "warn")) {
   action <- match.arg(action)
-  if (is.null(labels) || is.null(test_season)) return(invisible(TRUE))
-  if (!test_season %in% names(labels)) return(invisible(TRUE))
+  if (is.null(labels) || is.null(test_season)) {
+    return(invisible(TRUE))
+  }
+  if (!test_season %in% names(labels)) {
+    return(invisible(TRUE))
+  }
   msg <- paste0(
     "LOSO label safety: test season '", test_season, "' is present in `",
     label_name, "`. Held-out seasons must not appear in supplied labels to ",
@@ -81,6 +85,8 @@ assert_loso_test_season_absent <- function(test_season,
 #'   \code{flagIgnition()} without override (no retrospective label leakage).
 #' @param flag_args Named list forwarded to \code{flagIgnition()}.
 #' @param verbose Logical.
+#' @param timing_mode Character. Fractional mode preserves decimal timing
+#'   coordinates through weekly refits; legacy mode retains integer behavior.
 #' @return Same structure as \code{nested_loso_m2_eval()}: list with
 #'   \code{scores} and \code{predictions}.
 nested_loso_m2_eval_frozen_bias <- function(allD,
@@ -106,12 +112,14 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
                                               w_max      = 21L,
                                               d2_relax   = -0.01
                                             ),
-                                            verbose = TRUE) {
+                                            verbose = TRUE,
+                                            timing_mode = c("legacy", "fractional")) {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   if (!requireNamespace("tibble", quietly = TRUE)) stop("Please install tibble.")
   if (!requireNamespace("purrr", quietly = TRUE)) stop("Please install purrr.")
   `%||%` <- function(x, y) if (is.null(x)) y else x
   correction_compatibility <- match.arg(correction_compatibility)
+  timing_mode <- match.arg(timing_mode)
 
   # B4 backward compat: old callers pass manual_labels; new callers use
   # manual_labels_train / manual_labels_test.  Redirect with deprecation warning.
@@ -135,7 +143,8 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
   test_s <- fold$test_season
   assert_loso_test_season_absent(test_s, manual_labels_train, "manual_labels_train")
   assert_loso_test_season_absent(test_s, manual_labels_test, "manual_labels_test",
-    action = "warn")
+    action = "warn"
+  )
   na_scores <- tibble::tibble(
     season = test_s, n = NA_integer_,
     mean_nll = NA_real_, bernoulli_nll = NA_real_,
@@ -180,9 +189,13 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
     ))
   aligned_test <- alignIgnition(test_outs)
 
-  iWeek_used <- suppressWarnings(
-    min(aligned_test$weekF[aligned_test$phase == 1L], na.rm = TRUE)
-  )
+  iWeek_used <- if (timing_mode == "fractional" && "iWeek_hatF" %in% names(m1_test_preds)) {
+    vals <- as.numeric(m1_test_preds$iWeek_hatF)
+    vals <- vals[is.finite(vals)]
+    if (length(vals)) vals[1L] else NA_real_
+  } else {
+    suppressWarnings(min(aligned_test$weekF[aligned_test$phase == 1L], na.rm = TRUE))
+  }
   if (!is.finite(iWeek_used)) {
     return(list(scores = na_scores, predictions = empty_preds))
   }
@@ -195,10 +208,11 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
 
   ex_terms <- spec$exclude_newseason
   if (is.null(ex_terms)) ex_terms <- stage2_exclude_newseason(spec)
-  anchorWeek <- as.integer(
-    spec$anchorWeek %||% fold$anchorWeek %||% fold$ref$anchorWeek %||% 20L
-  )
-
+  anchorWeek <- if (timing_mode == "fractional") {
+    as.numeric(fold$anchorWeek %||% fold$ref$anchorWeek %||% spec$anchorWeek %||% 20)
+  } else {
+    as.integer(spec$anchorWeek %||% fold$anchorWeek %||% fold$ref$anchorWeek %||% 20L)
+  }
   eval_weeks <- sort(unique(m1_test_preds$eval_weekF))
   eval_weeks <- eval_weeks[eval_weeks >= iWeek_used]
   if (!is.null(eval_window)) {
@@ -226,6 +240,7 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
     t_since_v <- as.numeric(ew - iWeek_used)
 
     obs_to_ew <- dplyr::filter(test_allD, .data$weekF <= ew)
+    .page_assert_prefix(obs_to_ew, ew, label = "M2 replay input")
 
     # Fix B: prospective peak detection -- reset bias on first post-peak week
     p_to_ew <- obs_to_ew$y / pmax(obs_to_ew$N, 1L)
@@ -340,7 +355,8 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
         include_season_re = FALSE,
         soft_cap_fn       = soft_cap_fn,
         return_ci         = TRUE,
-        bias_logit        = bl
+        bias_logit        = bl,
+        timing_mode       = timing_mode
       )
       if (is.null(pr)) next
 
@@ -356,23 +372,27 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
       # Record prediction for future bias updates.
       # m2_eta_raw: GAM linear predictor BEFORE bias (bl) addition.
       # Used by B1 fix: raw error = logit_obs - m2_eta_raw.
-      pred_log[[length(pred_log) + 1L]] <- list(
-        target_weekF = target_weekF, m2_p = pr$m2_p,
-        m2_eta_raw = stats::qlogis(pmin(pmax(pr$m2_p, 1e-6), 1 - 1e-6)) - bl,
-        h = h
-      )
+      pred_log[[length(pred_log) + 1L]] <-
+        .m2_prediction_log(pr, target_weekF, h)
 
       all_rows[[i]] <- c(all_rows[[i]], list(tibble::tibble(
-        season  = test_s,
-        weekF   = as.integer(ew),
-        lead    = paste0("h", h),
+        season = test_s,
+        weekF = as.integer(ew),
+        lead = paste0("h", h),
         t_since = t_since_v,
-        p_hat   = pr$m2_p,
-        p_obs   = y_lead / max(N_lead, 1L),
-        y_lead  = y_lead,
-        N_lead  = N_lead,
-        p_lo    = pr$m2_lo,
-        p_hi    = pr$m2_hi
+        p_hat = pr$m2_p,
+        m2_eta_raw = pr$m2_eta_raw,
+        forecast_action = if (identical(correction$post_peak_action, "use_m1") &&
+          identical(m1_state_now, "post_peak")) {
+          "post_peak_m1"
+        } else {
+          "gam"
+        },
+        p_obs = y_lead / max(N_lead, 1L),
+        y_lead = y_lead,
+        N_lead = N_lead,
+        p_lo = pr$m2_lo,
+        p_hi = pr$m2_hi
       )))
     }
   }
@@ -462,11 +482,13 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
                                                w_max      = 21L,
                                                d2_relax   = -0.01
                                              ),
-                                             verbose = TRUE) {
+                                             verbose = TRUE,
+                                             timing_mode = c("legacy", "fractional")) {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Please install dplyr.")
   if (!requireNamespace("tibble", quietly = TRUE)) stop("Please install tibble.")
   if (!requireNamespace("purrr", quietly = TRUE)) stop("Please install purrr.")
   `%||%` <- function(x, y) if (is.null(x)) y else x
+  timing_mode <- match.arg(timing_mode)
 
   .Deprecated(msg = paste0(
     "nested_loso_m2_eval_weekly_refit() is a legacy comparison path; ",
@@ -487,7 +509,8 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
   test_s <- fold$test_season
   assert_loso_test_season_absent(test_s, manual_labels_train, "manual_labels_train")
   assert_loso_test_season_absent(test_s, manual_labels_test, "manual_labels_test",
-    action = "warn")
+    action = "warn"
+  )
   na_scores <- tibble::tibble(
     season = test_s, n = NA_integer_,
     mean_nll = NA_real_, brier = NA_real_, rmse_p = NA_real_
@@ -517,9 +540,14 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
     ))
   aligned_test <- alignIgnition(test_outs)
 
-  iWeek_used <- suppressWarnings(
-    min(aligned_test$weekF[aligned_test$phase == 1L], na.rm = TRUE)
-  )
+  iWeek_used <- if (timing_mode == "fractional" &&
+    "iWeek_hatF" %in% names(m1_test_preds)) {
+    vals <- as.numeric(m1_test_preds$iWeek_hatF)
+    vals <- vals[is.finite(vals)]
+    if (length(vals)) vals[1L] else NA_real_
+  } else {
+    suppressWarnings(min(aligned_test$weekF[aligned_test$phase == 1L], na.rm = TRUE))
+  }
   if (!is.finite(iWeek_used)) {
     return(list(scores = na_scores, predictions = empty_preds))
   }
@@ -542,9 +570,13 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
   ex_terms <- spec$exclude_newseason
   if (is.null(ex_terms)) ex_terms <- stage2_exclude_newseason(spec)
   # Season RE handling delegated to m2_predict_one() via include_season_re.
-  anchorWeek <- as.integer(
-    spec$anchorWeek %||% fold$anchorWeek %||% fold$ref$anchorWeek %||% 20L
-  )
+  anchorWeek <- if (timing_mode == "fractional") {
+    as.numeric(fold$anchorWeek %||% fold$ref$anchorWeek %||% spec$anchorWeek %||% 20)
+  } else {
+    as.integer(spec$anchorWeek %||% fold$anchorWeek %||% fold$ref$anchorWeek %||% 20L)
+  }
+  refit_spec <- spec
+  if (timing_mode == "fractional") refit_spec$anchorWeek <- anchorWeek
 
   eval_weeks <- sort(unique(m1_test_preds$eval_weekF))
   eval_weeks <- eval_weeks[eval_weeks >= iWeek_used]
@@ -583,6 +615,7 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
       }
     }
     obs_to_ew <- dplyr::filter(test_allD, .data$weekF <= ew)
+    .page_assert_prefix(obs_to_ew, ew, label = "M2 replay input")
     if (nrow(obs_to_ew) < 2L) next
 
     # Combine M1 train + test predictions for refit: the current-season rows
@@ -601,10 +634,11 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
         iWeek_used   = iWeek_used,
         hist_data    = hist_aligned,
         template_df  = fold$template_df,
-        spec         = spec,
+        spec         = refit_spec,
         m1_preds     = m1_combined,
         season_label = test_s,
-        verbose      = FALSE
+        verbose      = FALSE,
+        timing_mode  = timing_mode
       ),
       error = function(e) {
         if (verbose) message("[m2_eval_wf] refit failed at ew=", ew, ": ", conditionMessage(e))
@@ -682,7 +716,8 @@ nested_loso_m2_eval_weekly_refit <- function(allD,
         include_season_re = is_refit,
         soft_cap_fn       = soft_cap_fn,
         return_ci         = FALSE,
-        bias_logit        = bl
+        bias_logit        = bl,
+        timing_mode       = timing_mode
       )
       if (is.null(pr)) next
 

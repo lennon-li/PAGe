@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly PAGe shadow API trigger example
+
+[Timer]
+# Site operators must align this with the governed upstream publication window/timezone.
+OnCalendar=Sun *-*-* 12:30:00 America/Toronto
+Persistent=true
+Unit=page-weekly-trigger.service
+
+[Install]
+WantedBy=timers.target

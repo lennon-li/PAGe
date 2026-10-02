@@ -20,7 +20,8 @@ nested_loso_m2_eval_frozen_bias(
   manual_labels_test = NULL,
   flag_args = list(p_thresh = 0.01, k1 = 0.4, k_c = 0.01, n_consec = 2L, min_window =
     10L, w_min = 21L, w_max = 21L, d2_relax = -0.01),
-  verbose = TRUE
+  verbose = TRUE,
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{
@@ -61,6 +62,9 @@ labels for the test season. Default \code{NULL} = use prospective
 \item{flag_args}{Named list forwarded to \code{flagIgnition()}.}
 
 \item{verbose}{Logical.}
+
+\item{timing_mode}{Character. Fractional mode preserves decimal timing
+coordinates through weekly refits; legacy mode retains integer behavior.}
 }
 \value{
 Same structure as \code{nested_loso_m2_eval()}: list with

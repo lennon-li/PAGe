@@ -13,7 +13,7 @@
     "2012-13" = 18L, "2013-14" = 20L, "2014-15" = 20L,
     "2015-16" = 24L, "2016-17" = 19L, "2017-18" = 20L,
     "2018-19" = 19L, "2019-20" = 22L, "2022-23" = 15L,
-    "2023-24" = 20L, "2024-25" = 23L
+    "2023-24" = 20L, "2024-25" = 23L, "2025-26" = 19L
   )
 }
 
@@ -36,9 +36,10 @@
 
 .default_m0_params <- function() {
   list(
-    cls_thr = 0.26, p_thr = 0.005, prev_thr = 0.001,
+    cls_thr = 0.26, use_cls = FALSE, p_thr = 0.005, prev_thr = 0.001,
     p_sum_thr = 0.06, eps = 0, n_consec = 5L, L = 2L,
-    K_sum = 5L, N_req = 4L, w_min = 13L, w_max = 26L
+    K_sum = 5L, raw_nondec_n = 3L, raw_drop_se_tol = 1.0,
+    N_req = 4L, w_min = 12L, w_max = 26L
   )
 }
 
@@ -142,7 +143,7 @@ legacy_model_settings <- function() {
 #'   (default 10; ignored when \code{dynamic_temp = FALSE}).
 #' @param spread_method Character. \code{"between"} (default) computes
 #'   \code{logit_spread} as the weighted between-template standard deviation.
-#'   \code{"total"} adds weighted per-template GAM SE\^2 for a total-variance
+#'   \code{"total"} adds weighted squared per-template GAM SE for a total-variance
 #'   spread. See \code{\link{align_multi_template}} for details.
 #'
 #' @return A named list suitable for the \code{m1_params} argument of
@@ -192,8 +193,10 @@ m1_make_params <- function(k_ref = 25L,
     eps       = 0,
     K_sum     = 5L,
     p_sum_thr = c(0.050, 0.055, 0.060),
+    raw_nondec_n = 3L,
+    raw_drop_se_tol = 1.0,
     N_req     = 4L,
-    w_min     = 13L,
+    w_min     = 12L,
     w_max     = 26L,
     K_dp      = 3L,
     dp_thr    = 0.01,
@@ -316,6 +319,7 @@ compact_m0_artifact_for_m1 <- function(m0) {
 #' @param k_deriv Integer. GAM basis functions for derivative smoothing (default
 #'   \code{10L}).
 #'
+#' @param peak_weight_boost,peak_weight_decay Derivative smoothing rise boost and decay.
 #' @return A list with \code{aligned} (aligned data frame), \code{seasons_used},
 #'   \code{manual_labels}, \code{flag_args}, and \code{best_params}.
 #'
@@ -325,7 +329,10 @@ build_m0 <- function(allD,
                      manual_labels = .default_manual_labels(),
                      flag_args = .default_flag_args(),
                      best_params = .default_m0_params(),
-                     k_deriv = 10L) {
+                     k_deriv = 10L,
+                     timing_truth = NULL,
+                     peak_weight_boost = 1,
+                     peak_weight_decay = 0.3) {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
   if (!requireNamespace("purrr", quietly = TRUE)) stop("Need 'purrr'.")
 
@@ -336,7 +343,15 @@ build_m0 <- function(allD,
   }
   seasons_used <- sort(unique(dat$season))
 
-  res_deriv <- estimateDerivs(dat, k = as.integer(k_deriv))
+  preprocessing <- list(
+    k_deriv = as.integer(k_deriv),
+    peak_weight_boost = peak_weight_boost, peak_weight_decay = peak_weight_decay
+  )
+  res_deriv <- estimateDerivs(dat,
+    k = preprocessing$k_deriv,
+    peak_weight_boost = peak_weight_boost, peak_weight_decay = peak_weight_decay,
+    ignition_weeks = manual_labels
+  )
   outs <- res_deriv$data |>
     dplyr::group_by(.data$season) |>
     dplyr::group_split(.keep = TRUE) |>
@@ -345,8 +360,37 @@ build_m0 <- function(allD,
     })
   aligned <- alignIgnition(outs)
 
+  if (!is.null(timing_truth)) {
+    if (!is.data.frame(timing_truth) ||
+      !all(c("season", "ignition_target_weekF") %in% names(timing_truth))) {
+      stop("`timing_truth` must contain season and ignition_target_weekF.", call. = FALSE)
+    }
+    timing_truth <- timing_truth[, c("season", "ignition_target_weekF"), drop = FALSE]
+    timing_truth$season <- as.character(timing_truth$season)
+    if (anyDuplicated(timing_truth$season) ||
+      any(!is.finite(timing_truth$ignition_target_weekF))) {
+      stop("`timing_truth` must have one finite target per season.", call. = FALSE)
+    }
+    targets <- stats::setNames(
+      as.numeric(timing_truth$ignition_target_weekF), timing_truth$season
+    )
+    aligned$season <- as.character(aligned$season)
+    aligned$iWeek <- unname(targets[aligned$season])
+    if (any(!is.finite(aligned$iWeek))) stop("Missing training-season timing target.", call. = FALSE)
+    anchor <- stats::median(targets[seasons_used], na.rm = TRUE)
+    aligned$phase <- as.integer(aligned$weekF >= aligned$iWeek)
+    aligned$newWeek <- .page_shift_week(aligned$weekF, aligned$iWeek, anchor)
+    .dom <- .page_alignment_domain(aligned$newWeek, .page_template_weeks())
+    aligned$alignment_in_domain <- .dom$in_domain
+    aligned$alignment_out_of_domain <- .dom$out_of_domain
+    attr(aligned, "anchorWeek") <- anchor
+    attr(aligned, "ignD") <- unique(aligned[, c("season", "iWeek"), drop = FALSE])
+  }
+
+  attr(aligned, "preprocessing") <- preprocessing
   list(
     aligned       = aligned,
+    preprocessing = preprocessing,
     seasons_used  = seasons_used,
     manual_labels = manual_labels,
     flag_args     = flag_args,
@@ -396,7 +440,10 @@ tune_m0 <- function(allD,
                     verbose = TRUE,
                     selection = NULL,
                     checkpoint_dir = NULL,
-                    previous_results = NULL) {
+                    previous_results = NULL,
+                    timing_truth = NULL,
+                    timing_mode = c("legacy", "fractional")) {
+  timing_mode <- match.arg(timing_mode)
   governed <- !is.null(selection)
   if (governed) {
     allD <- .selected_training_data(allD, selection)
@@ -405,7 +452,8 @@ tune_m0 <- function(allD,
   }
   m0_built <- build_m0(allD,
     exclude = exclude,
-    manual_labels = manual_labels, flag_args = flag_args
+    manual_labels = manual_labels, flag_args = flag_args,
+    timing_truth = timing_truth
   )
   aligned <- m0_built$aligned
 
@@ -450,6 +498,8 @@ tune_m0 <- function(allD,
     exSeason_tune = NULL,
     fit_args = fit_args_use,
     tune_args = tune_args_use,
+    timing_truth = timing_truth,
+    timing_mode = timing_mode,
     verbose = verbose,
     checkpoint_dir = checkpoint_dir,
     previous_results = previous_results
@@ -476,6 +526,14 @@ tune_m0 <- function(allD,
 # ============================================================
 # M1
 # ============================================================
+
+.m1_preprocessing <- function(params = list()) {
+  list(
+    k_deriv = as.integer(params$k_deriv %||% 20L),
+    peak_weight_boost = params$peak_weight_boost %||% 3,
+    peak_weight_decay = params$peak_weight_decay %||% 0.3
+  )
+}
 
 #' Build M1 reference curve and alignment hyperparameters
 #'
@@ -507,7 +565,10 @@ build_m1 <- function(allD,
                      exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
                      exclude_live = TRUE,
                      min_live_weeks = 20L,
-                     m1_params = .default_m1_params()) {
+                     m1_params = .default_m1_params(),
+                     timing_mode = c("legacy", "fractional"),
+                     timing_truth = NULL) {
+  timing_mode <- match.arg(timing_mode)
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
 
   m0_handoff <- compact_m0_artifact_for_m1(m0)
@@ -535,8 +596,17 @@ build_m1 <- function(allD,
     }
   }
 
+  preprocessing <- .m1_preprocessing(m1_params)
+  # Match the legacy label coordinate used by tune_m1; fractional targets are
+  # already in the common numeric coordinate.
+  manual_labels <- if (timing_mode == "legacy") manual_labels - 1L else manual_labels
   seasons_used <- sort(unique(as.character(dat$season)))
+  aligned_preprocessing <- attr(m0_handoff$aligned, "preprocessing")
+  aligned_labels <- attr(m0_handoff$aligned, "m1_manual_labels")
   can_reuse_m0 <- !is.null(m0_handoff$aligned) &&
+    !is.null(aligned_preprocessing) &&
+    identical(aligned_preprocessing, preprocessing) &&
+    (is.null(aligned_labels) || identical(aligned_labels, manual_labels)) &&
     !is.null(m0_handoff$seasons_used) &&
     setequal(m0_handoff$seasons_used, seasons_used) &&
     (is.null(m0_handoff$data_id) ||
@@ -547,16 +617,21 @@ build_m1 <- function(allD,
     build_m0(dat,
       exclude = character(0),
       manual_labels = manual_labels,
-      flag_args = flag_args
+      flag_args = flag_args,
+      timing_truth = timing_truth,
+      k_deriv = preprocessing$k_deriv,
+      peak_weight_boost = preprocessing$peak_weight_boost,
+      peak_weight_decay = preprocessing$peak_weight_decay
     )$aligned
   }
 
   ref <- estimateRef(
     alignedD = aligned_train,
     exSeason = character(0),
-    k        = as.integer(m1_params$k_ref %||% 25L),
-    n_weeks  = 52L,
-    method   = m1_params$ref_method %||% "fs"
+    k = as.integer(m1_params$k_ref %||% 25L),
+    n_weeks = 52L,
+    method = m1_params$ref_method %||% "fs",
+    timing_mode = timing_mode
   )
   hyper <- learn_alignment_hyperparams(ref$dat, ref$g_ref_fun)
 
@@ -569,6 +644,86 @@ build_m1 <- function(allD,
   )
 }
 
+
+
+#' Build the governed M1-v2 timing artifact
+#'
+#' Fits the peak-aligned low-rank M1-v2 historical library and its strictly
+#' inner-cross-fitted early-bias calibrator. This timing artifact is independent
+#' of the legacy M1 alignment curves still used by the current M2 implementation.
+#'
+#' @param allD Completed historical surveillance data.
+#' @param peak_truth Retrospective peak truth with columns `season` and
+#'   `peak_week_decimal`.
+#' @param activation_table Historical cross-fitted M0 activation table with
+#'   `season`, `activation_origin_week`, and `activation_week_decimal`.
+#' @param k,grid_step,tau_step Retrospective smoothing and peak-relative library
+#'   controls passed to `fit_m1_v2_library()`.
+#' @param amplitude_grid Candidate peak-amplitude integration grid forwarded to
+#'   the M1-v2 library. Defaults to the frozen Influenza-A grid.
+#' @param calibration_origins Number of earliest post-M0 primary origins used
+#'   by the nested scalar timing calibrator.
+#' @param calibration_candidate_step Candidate grid spacing used only in the
+#'   inner calibration replay.
+#' @param passage_candidate_step Candidate grid spacing used in inner cross-fitted
+#'   M1-C policy selection.
+#' @return A `page_m1_v2_stage` object containing `library`, `calibrator`, and
+#'   a deterministic artifact identity.
+#' @export
+build_m1_v2_timing <- function(allD, peak_truth, activation_table,
+                               k = 8L, grid_step = 0.01, tau_step = 0.1,
+                               amplitude_grid = seq(0.08, 0.44, by = 0.02),
+                               calibration_origins = 4L,
+                               calibration_candidate_step = 0.2,
+                               passage_candidate_step = 0.2) {
+  d <- prepare_surveillance_data(allD)
+  amplitude_grid <- .normalize_m1_v2_amplitude_grid(amplitude_grid)
+  library <- fit_m1_v2_library(
+    d, peak_truth, k = k, grid_step = grid_step, tau_step = tau_step,
+    amplitude_grid = amplitude_grid
+  )
+  calibrator <- fit_m1_v2_bias_calibrator(
+    library = library,
+    data = d,
+    peak_truth = peak_truth,
+    activation_table = activation_table,
+    n_origins = calibration_origins,
+    candidate_step = calibration_candidate_step
+  )
+  passage_policy <- fit_m1_v2_passage_policy(
+    library = library,
+    data = d,
+    peak_truth = peak_truth,
+    activation_table = activation_table,
+    candidate_step = passage_candidate_step
+  )
+  config <- list(
+    k = as.integer(k), grid_step = grid_step, tau_step = tau_step,
+    amplitude_grid = amplitude_grid,
+    calibration_origins = as.integer(calibration_origins),
+    calibration_candidate_step = calibration_candidate_step,
+    passage_candidate_step = passage_candidate_step
+  )
+  stage <- list(
+    version = "page-m1-v2-stage-v1",
+    artifact_id = NA_character_,
+    library = library,
+    calibrator = calibrator,
+    passage_policy = passage_policy,
+    training_seasons = library$training_seasons,
+    config = config,
+    output_contract = list(
+      raw_posterior = TRUE,
+      calibrated_location_summary = TRUE,
+      passage_probability = TRUE,
+      passage_state = TRUE,
+      elapsed_remaining_timing = TRUE,
+      m2_handoff_version = "m1-v2-to-m2-v1"
+    )
+  )
+  stage$artifact_id <- .m1_v2_stage_artifact_id(stage)
+  structure(stage, class = c("page_m1_v2_stage", "list"))
+}
 
 #' Tune M1 alignment hyperparameters via LOSO grid search
 #'
@@ -607,7 +762,10 @@ tune_m1 <- function(allD,
                     checkpoint_dir = NULL,
                     verbose = TRUE,
                     selection = NULL,
-                    manual_labels = NULL) {
+                    manual_labels = NULL,
+                    timing_truth = NULL,
+                    timing_mode = c("legacy", "fractional")) {
+  timing_mode <- match.arg(timing_mode)
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
 
   governed <- !is.null(selection)
@@ -622,6 +780,7 @@ tune_m1 <- function(allD,
     m0_handoff$manual_labels %||%
     .default_manual_labels()
   m1_params <- m1$m1_params %||% .default_m1_params()
+  preprocessing <- .m1_preprocessing(m1_params)
   params <- m0_handoff$best_params
   if (is.null(params)) {
     stop("tune_m1 requires m0 from tune_m0() (needs best_params).")
@@ -645,8 +804,9 @@ tune_m1 <- function(allD,
   }
   dir.create(checkpoint_dir, recursive = TRUE, showWarnings = FALSE)
 
-  # M1 tuning uses -1L offset on manual_labels (matches _extended_tune_m1_v7.R)
-  manual_labels_v7 <- manual_labels - 1L
+  # M1 tuning uses -1L offset on legacy labels. Fractional timing uses the
+  # explicit midpoint targets and must retain them as numeric coordinates.
+  manual_labels_v7 <- if (timing_mode == "fractional") manual_labels else manual_labels - 1L
 
   if (verbose) {
     message(sprintf(
@@ -669,13 +829,16 @@ tune_m1 <- function(allD,
     verbose             = verbose,
     fail_fast           = TRUE,
     dynamic_temp        = isTRUE(m1_params$dynamic_temp),
-    k_deriv             = 20L,
+    k_deriv             = preprocessing$k_deriv,
     buffer_weeks        = 5L,
     curvature_ratio     = 1.0,
     align_peak_decay    = m1_params$peak_decay %||% 0.3,
     align_trough_weight = m1_params$trough_weight %||% 0.1,
-    peak_weight_boost   = 3,
-    peak_weight_decay   = 0.3
+    peak_weight_boost   = preprocessing$peak_weight_boost,
+    peak_weight_decay   = preprocessing$peak_weight_decay,
+    flag_args           = m0_handoff$flag_args %||% .default_flag_args(),
+    timing_mode         = timing_mode,
+    timing_truth        = timing_truth
   )
   out$manual_labels <- manual_labels_v7
   if (governed) {
@@ -703,7 +866,8 @@ tune_m1 <- function(allD,
 
 .m1_phase1_version <- function() 1L
 
-.m1_phase1_identity <- function(allD, test_seasons, m0, m1) {
+.m1_phase1_identity <- function(allD, test_seasons, m0, m1,
+                                timing_mode = "legacy", timing_truth = NULL) {
   upstream_identity <- function(stage, artifact, fields) {
     artifact_id <- artifact$artifact_id
     if (is.character(artifact_id) && length(artifact_id) == 1L &&
@@ -721,6 +885,8 @@ tune_m1 <- function(allD,
       list(
         schema = .m1_phase1_schema(),
         version = .m1_phase1_version(),
+        timing_mode = timing_mode,
+        timing_truth = timing_truth,
         data_id = .stage_training_data_id(allD),
         test_seasons = as.character(test_seasons),
         m0 = upstream_identity(
@@ -788,7 +954,9 @@ tune_m1 <- function(allD,
 #' @return A named list with the M2-only fold handoff. The original cache is
 #'   not modified.
 #' @export
-compact_m1_cache_for_m2 <- function(m1_cache) {
+compact_m1_cache_for_m2 <- function(m1_cache,
+                                    timing_mode = c("legacy", "fractional")) {
+  timing_mode <- match.arg(timing_mode)
   if (!is.list(m1_cache)) {
     stop("`m1_cache` must be a named list of fold artifacts.", call. = FALSE)
   }
@@ -817,7 +985,11 @@ compact_m1_cache_for_m2 <- function(m1_cache) {
         template_df = fold$template_df,
         train_seasons = fold$train_seasons %||% character(),
         test_season = fold$test_season,
-        anchorWeek = as.integer(anchor_week)
+        anchorWeek = if (timing_mode == "fractional") {
+          as.numeric(anchor_week)
+        } else {
+          as.integer(anchor_week)
+        }
       ),
       m1_train = entry$m1_train %||% NULL,
       m1_test = entry$m1_test %||% NULL
@@ -827,7 +999,8 @@ compact_m1_cache_for_m2 <- function(m1_cache) {
   compact
 }
 
-.m2_checkpoint_identity <- function(allD, test_seasons, grid, m0, m1) {
+.m2_checkpoint_identity <- function(allD, test_seasons, grid, m0, m1,
+                                    timing_mode = "legacy", timing_truth = NULL) {
   upstream_identity <- function(stage, artifact, fields) {
     artifact_id <- artifact$artifact_id
     if (is.character(artifact_id) && length(artifact_id) == 1L &&
@@ -844,6 +1017,8 @@ compact_m1_cache_for_m2 <- function(m1_cache) {
     list(
       schema = .m2_checkpoint_schema(),
       version = .m2_checkpoint_version(),
+      timing_mode = timing_mode,
+      timing_truth = timing_truth,
       data_id = .stage_training_data_id(allD),
       test_seasons = as.character(test_seasons),
       m0 = upstream_identity(
@@ -963,7 +1138,10 @@ build_m2 <- function(allD,
                      m1_artifact_path = NULL,
                      fail_fast = TRUE,
                      future_max_size = NULL,
-                     verbose = TRUE) {
+                     verbose = TRUE,
+                     timing_mode = c("legacy", "fractional"),
+                     timing_truth = NULL) {
+  timing_mode <- match.arg(timing_mode)
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
   if (!requireNamespace("purrr", quietly = TRUE)) stop("Need 'purrr'.")
   if (!requireNamespace("furrr", quietly = TRUE)) stop("Need 'furrr'.")
@@ -981,7 +1159,8 @@ build_m2 <- function(allD,
 
   converted <- .m2_specs_from_grid(
     grid,
-    bias_alpha = bias_alpha, bias_beta = bias_beta
+    bias_alpha = bias_alpha, bias_beta = bias_beta,
+    timing_mode = timing_mode
   )
   grid_df <- converted$grid
   specs_list <- converted$specs
@@ -1000,7 +1179,8 @@ build_m2 <- function(allD,
     stop("`m1_artifact_path` must be NULL or one non-empty path.", call. = FALSE)
   }
   phase1_identity <- .m1_phase1_identity(
-    allD = allD, test_seasons = test_seasons, m0 = m0, m1 = m1
+    allD = allD, test_seasons = test_seasons, m0 = m0, m1 = m1,
+    timing_mode = timing_mode, timing_truth = timing_truth
   )
 
   if (verbose) {
@@ -1014,6 +1194,9 @@ build_m2 <- function(allD,
   if (verbose) {
     message("[build_m2] Phase 1: M1 cache for ", length(test_seasons), " folds...")
   }
+  old_future_plan <- future::plan()
+  on.exit(future::plan(old_future_plan), add = TRUE)
+
   m1_cache <- NULL
   if (!is.null(phase1_artifact_path) && file.exists(phase1_artifact_path)) {
     m1_cache <- .read_m1_phase1_artifact(phase1_artifact_path, phase1_identity)
@@ -1032,18 +1215,11 @@ build_m2 <- function(allD,
     }
   }
 
-  # Validate a reusable artifact before allocating the multisession pool.
-  # This keeps malformed handoffs fail-fast and deterministic on hosts where
-  # worker socket creation is restricted.
-  if (!is.null(m1_cache)) {
-    invisible(compact_m1_cache_for_m2(m1_cache))
-  }
-
-  old_future_plan <- future::plan()
-  on.exit(future::plan(old_future_plan), add = TRUE)
-  future::plan(future::multisession, workers = as.integer(max(1L, n_cores)))
-
   if (is.null(m1_cache)) {
+    # Validate/reject any supplied Phase-1 artifact before opening a worker
+    # cluster. This keeps contract errors deterministic in constrained
+    # environments and avoids spawning workers for a request that cannot run.
+    .page_set_parallel_plan(as.integer(max(1L, n_cores)))
     m1_cache <- list()
     for (test_s in test_seasons) {
       if (verbose) message(sprintf("  [%s] build_fold + M1...", test_s))
@@ -1053,7 +1229,8 @@ build_m2 <- function(allD,
           exclude_seasons = exclude_all,
           k_ref = as.integer(m1_params$k_ref %||% 25L),
           ref_method = m1_params$ref_method %||% "fs",
-          manual_labels = manual_labels, verbose = FALSE
+          manual_labels = manual_labels, verbose = FALSE,
+          timing_mode = timing_mode, timing_truth = timing_truth
         ),
         error = function(e) {
           if (isTRUE(fail_fast)) {
@@ -1082,7 +1259,8 @@ build_m2 <- function(allD,
           dynamic_temp = isTRUE(m1_params$dynamic_temp),
           dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L,
           spread_method = m1_params$spread_method %||% "between",
-          parallel = TRUE, verbose = FALSE
+          parallel = TRUE, verbose = FALSE,
+          timing_mode = timing_mode
         ),
         error = function(e) {
           if (isTRUE(fail_fast)) {
@@ -1108,7 +1286,8 @@ build_m2 <- function(allD,
           slope_window = m1_params$slope_window %||% 6L,
           dynamic_temp = isTRUE(m1_params$dynamic_temp),
           dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L,
-          spread_method = m1_params$spread_method %||% "between"
+          spread_method = m1_params$spread_method %||% "between",
+          timing_mode = timing_mode
         ),
         error = function(e) {
           if (isTRUE(fail_fast)) {
@@ -1145,7 +1324,7 @@ build_m2 <- function(allD,
     )
   }
   full_m1_cache_bytes <- as.numeric(utils::object.size(m1_cache))
-  m1_cache <- compact_m1_cache_for_m2(m1_cache)
+  m1_cache <- compact_m1_cache_for_m2(m1_cache, timing_mode = timing_mode)
   compact_m1_cache_bytes <- as.numeric(utils::object.size(m1_cache))
   if (verbose) {
     message(
@@ -1190,7 +1369,9 @@ build_m2 <- function(allD,
       test_seasons = test_seasons,
       grid = grid_df,
       m0 = m0,
-      m1 = m1
+      m1 = m1,
+      timing_mode = timing_mode,
+      timing_truth = timing_truth
     )
     if (file.exists(ckpt_file)) {
       # A changed grid is a governed expansion when data, folds, and frozen
@@ -1223,10 +1404,7 @@ build_m2 <- function(allD,
   if (length(todo_ids) > 0) {
     n_workers <- as.integer(max(1L, n_cores))
     todo_batches <- split(todo_ids, ceiling(seq_along(todo_ids) / n_workers))
-    future::plan(
-      future::multisession,
-      workers = n_workers
-    )
+    .page_set_parallel_plan(n_workers)
 
     for (bi in seq_along(todo_batches)) {
       batch <- todo_batches[[bi]]
@@ -1244,17 +1422,21 @@ build_m2 <- function(allD,
           for (test_s in test_seasons) {
             fc <- m1_cache[[test_s]]
             if (is.null(fc)) next
+            m2_train_args <- list(
+              fold = fc$fold,
+              m1_train_preds = if (!is.null(fc$m1_train) && nrow(fc$m1_train) > 0) {
+                fc$m1_train
+              } else {
+                NULL
+              },
+              spec = spec, method = "REML", verbose = FALSE,
+              fail_fast = fail_fast
+            )
+            if (timing_mode == "fractional") {
+              m2_train_args$timing_mode <- timing_mode
+            }
             m2_fit <- tryCatch(
-              nested_loso_m2_train(
-                fold = fc$fold,
-                m1_train_preds = if (!is.null(fc$m1_train) && nrow(fc$m1_train) > 0) {
-                  fc$m1_train
-                } else {
-                  NULL
-                },
-                spec = spec, method = "REML", verbose = FALSE,
-                fail_fast = fail_fast
-              ),
+              do.call(nested_loso_m2_train, m2_train_args),
               error = function(e) {
                 if (isTRUE(fail_fast)) {
                   stop(
@@ -1270,20 +1452,24 @@ build_m2 <- function(allD,
               manual_labels,
               test_s
             )
+            m2_eval_args <- list(
+              allD = allD, fold = fc$fold, m2_fit = m2_fit,
+              m1_test_preds = if (!is.null(fc$m1_test) && nrow(fc$m1_test) > 0) {
+                fc$m1_test
+              } else {
+                NULL
+              },
+              spec = spec, eval_window = 12L,
+              bias_alpha = spec$bias_alpha,
+              manual_labels_train = manual_labels_train,
+              manual_labels_test = NULL,
+              flag_args = flag_args_use, verbose = FALSE
+            )
+            if (timing_mode == "fractional") {
+              m2_eval_args$timing_mode <- timing_mode
+            }
             eval_out <- tryCatch(
-              nested_loso_m2_eval_frozen_bias(
-                allD = allD, fold = fc$fold, m2_fit = m2_fit,
-                m1_test_preds = if (!is.null(fc$m1_test) && nrow(fc$m1_test) > 0) {
-                  fc$m1_test
-                } else {
-                  NULL
-                },
-                spec = spec, eval_window = 12L,
-                bias_alpha = spec$bias_alpha,
-                manual_labels_train = manual_labels_train,
-                manual_labels_test = NULL,
-                flag_args = flag_args_use, verbose = FALSE
-              ),
+              do.call(nested_loso_m2_eval_frozen_bias, m2_eval_args),
               error = function(e) {
                 if (isTRUE(fail_fast)) {
                   stop(
@@ -1328,7 +1514,7 @@ build_m2 <- function(allD,
           round(mean(r$scores$bernoulli_nll, na.rm = TRUE), 4)
         })
         cat(sprintf(
-          " %ds | NLL %.4f\u2013%.4f\n", elapsed,
+          " %ds | NLL %.4f-%.4f\n", elapsed,
           min(batch_nlls, na.rm = TRUE), max(batch_nlls, na.rm = TRUE)
         ))
       }
@@ -1404,7 +1590,22 @@ train_m2 <- function(allD,
                      best_spec = NULL,
                      exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
                      n_cores = parallel::detectCores() - 1L,
-                     verbose = FALSE) {
+                     verbose = FALSE,
+                     timing_mode = c("legacy", "fractional"),
+                     timing_truth = NULL) {
+  timing_mode <- match.arg(timing_mode)
+  allD_prod <- if (length(exclude) > 0) {
+    allD[!as.character(allD$season) %in% exclude, , drop = FALSE]
+  } else {
+    allD
+  }
+  if (is.list(best_spec) && identical(best_spec$family, m2_subset_family())) {
+    return(m2_subset_train(
+      allD_prod,
+      m0 = m0, m1 = m1, config = best_spec,
+      timing_mode = timing_mode, timing_truth = timing_truth
+    ))
+  }
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
   if (!requireNamespace("purrr", quietly = TRUE)) stop("Need 'purrr'.")
   if (!requireNamespace("future", quietly = TRUE)) stop("Need 'future'.")
@@ -1421,11 +1622,6 @@ train_m2 <- function(allD,
   if (is.null(params)) stop("train_m2 requires m0 from tune_m0() (needs best_params).")
   if (is.null(ref)) stop("train_m2 requires m1 from build_m1() (needs ref).")
 
-  allD_prod <- if (length(exclude) > 0) {
-    dplyr::filter(allD, !.data$season %in% exclude)
-  } else {
-    allD
-  }
   train_seas <- sort(unique(allD_prod$season))
 
   if (verbose) message(sprintf("[train_m2] %d training seasons", length(train_seas)))
@@ -1439,12 +1635,35 @@ train_m2 <- function(allD,
       do.call(flagIgnition, c(list(df = df, manual_labels = manual_labels), flag_args_use))
     })
   aligned_train <- alignIgnition(train_outs)
+  if (timing_mode == "fractional" && !is.null(timing_truth)) {
+    tt <- timing_truth[timing_truth$season %in% train_seas,
+      c("season", "ignition_target_weekF"),
+      drop = FALSE
+    ]
+    if (nrow(tt) != length(train_seas) || anyDuplicated(as.character(tt$season)) ||
+      any(!is.finite(tt$ignition_target_weekF))) {
+      stop("Fractional timing truth must contain one finite target per training season.", call. = FALSE)
+    }
+    target <- stats::setNames(as.numeric(tt$ignition_target_weekF), as.character(tt$season))
+    aligned_train$season <- as.character(aligned_train$season)
+    aligned_train$iWeekF <- unname(target[aligned_train$season])
+    aligned_train$iWeek <- aligned_train$iWeekF
+    anchor <- stats::median(target, na.rm = TRUE)
+    aligned_train$phase <- as.integer(aligned_train$weekF >= aligned_train$iWeekF)
+    aligned_train$newWeek <- .page_shift_week(
+      aligned_train$weekF, aligned_train$iWeekF, anchor
+    )
+    .dom <- .page_alignment_domain(aligned_train$newWeek, .page_template_weeks())
+    aligned_train$alignment_in_domain <- .dom$in_domain
+    aligned_train$alignment_out_of_domain <- .dom$out_of_domain
+    attr(aligned_train, "anchorWeek") <- anchor
+  }
 
   # M1 walk-forward predictions for all training seasons
   if (verbose) message("[train_m2] M1 walk-forward predictions...")
   old_future_plan <- future::plan()
   on.exit(future::plan(old_future_plan), add = TRUE)
-  future::plan(future::multisession, workers = as.integer(max(1L, n_cores)))
+  .page_set_parallel_plan(as.integer(max(1L, n_cores)))
   m1_train_preds <- m1_walkforward_multi(
     allD = allD, ref = ref, hyper = hyper, params = params,
     seasons = train_seas,
@@ -1457,7 +1676,8 @@ train_m2 <- function(allD,
     dynamic_temp = isTRUE(m1_params$dynamic_temp),
     dynamic_temp_pivot = m1_params$dynamic_temp_pivot %||% 10L,
     spread_method = m1_params$spread_method %||% "between",
-    parallel = TRUE, verbose = verbose
+    parallel = TRUE, verbose = verbose,
+    timing_mode = timing_mode
   )
 
   # Fit production GAM
@@ -1468,6 +1688,7 @@ train_m2 <- function(allD,
     spec        = best_spec,
     method      = "REML",
     m1_preds    = if (nrow(m1_train_preds) > 0) m1_train_preds else NULL,
+    timing_mode = timing_mode,
     verbose     = verbose
   )
 
@@ -1510,6 +1731,10 @@ train_m2 <- function(allD,
 #'   output from \code{build_m1()}.
 #' @param m2_model Frozen \code{page_m2_fit} from \code{freeze_m2()}, or a
 #'   legacy output from \code{train_m2()}.
+#' @param m1_v2 Optional `page_m1_v2_stage` from `build_m1_v2_timing()`.
+#'   Carried alongside legacy M1 for the redesigned timing runtime and M2 handoff.
+#' @param m2_v2 Optional `page_m2_v2_c2_governed` shadow artifact. It is carried
+#'   alongside legacy M2 and never replaces `m2_model`.
 #' @param best_spec_id Character label for the best M2 spec (optional;
 #'   taken from \code{build_m2()$best_spec_id}).
 #' @param save_ref_path Character. If set, saves the reference bundle
@@ -1527,7 +1752,9 @@ assemble_kit <- function(m0,
                          m2_model,
                          best_spec_id = NULL,
                          save_ref_path = NULL,
-                         save_m2_path = NULL) {
+                         save_m2_path = NULL,
+                         m1_v2 = NULL,
+                         m2_v2 = NULL) {
   governed <- any(vapply(
     list(m0, m1, m2_model),
     function(x) inherits(x, c("page_m0_fit", "page_m1_fit", "page_m2_fit")),
@@ -1537,6 +1764,15 @@ assemble_kit <- function(m0,
     .require_frozen_stage(m0, "m0")
     .require_frozen_stage(m1, "m1")
     .require_frozen_stage(m2_model, "m2")
+    if (!identical(
+      m2_model$family %||% m2_model$config$family,
+      m2_subset_family()
+    ) && !isTRUE(m2_model$legacy_compatibility$allow_legacy)) {
+      stop(
+        "Governed legacy M2 assembly requires recorded allow_legacy = TRUE.",
+        call. = FALSE
+      )
+    }
     .check_selection_match(m0$selection, m1$selection)
     .check_selection_match(m0$selection, m2_model$selection)
     .check_upstream_identity(m1, m0, "m0")
@@ -1544,10 +1780,42 @@ assemble_kit <- function(m0,
     .check_upstream_identity(m2_model, m1, "m1")
   }
 
+  if (!is.null(m1_v2)) {
+    if (!inherits(m1_v2, "page_m1_v2_stage")) {
+      stop("`m1_v2` must be a `page_m1_v2_stage` from `build_m1_v2_timing()`.", call. = FALSE)
+    }
+    m1_seasons <- sort(unique(as.character(m1$seasons_used %||% character())))
+    if (length(m1_seasons) && !setequal(m1_v2$training_seasons, m1_seasons)) {
+      stop("`m1_v2` training seasons do not match the M1 training season set.", call. = FALSE)
+    }
+  }
+
+  if (!is.null(m2_v2)) {
+    if (!inherits(m2_v2, "page_m2_v2_c2_governed")) {
+      stop("`m2_v2` must be a `page_m2_v2_c2_governed` artifact.", call. = FALSE)
+    }
+    validate_m2_v2_c2_governed_artifact(m2_v2)
+    m2_seasons <- sort(unique(as.character(m2_model$training_seasons %||% character())))
+    if (length(m2_seasons) && !setequal(m2_v2$training_seasons, m2_seasons)) {
+      stop("`m2_v2` training seasons do not match the legacy M2 training season set.", call. = FALSE)
+    }
+  }
+
   manual_labels <- m0$manual_labels %||% .default_manual_labels()
   flag_args <- m0$flag_args %||% .default_flag_args()
   m1_params <- .canonical_m1_params(m1$m1_params)
-  correction_spec <- .resolve_correction_spec(m2_model$spec)
+  subset_family <- identical(
+    m2_model$family %||% m2_model$spec$family,
+    m2_subset_family()
+  )
+  correction_spec <- if (subset_family) {
+    list(
+      family = m2_subset_family(), bias_alpha = 0, bias_beta = 0,
+      post_peak_action = "none"
+    )
+  } else {
+    .resolve_correction_spec(m2_model$spec)
+  }
   spec_identity <- .m2_spec_identity(
     m2_model$spec,
     best_spec_id %||% m2_model$best_spec_id %||% m2_model$spec_id
@@ -1559,18 +1827,22 @@ assemble_kit <- function(m0,
     hist_data     = m1$aligned_train,
     M1_PARAMS     = m1_params,
     flag_args     = flag_args,
-    manual_labels = manual_labels
+    manual_labels = manual_labels,
+    m1_v2 = m1_v2
   )
 
   m2_bundle <- list(
-    spec             = m2_model$spec,
-    fit              = m2_model$fit,
-    feature_ranges   = m2_model$feature_ranges,
-    m1_train_preds   = m2_model$m1_train_preds,
+    family = if (subset_family) m2_subset_family() else NULL,
+    spec = m2_model$spec,
+    fit = m2_model$fit,
+    feature_ranges = m2_model$feature_ranges,
+    m1_train_preds = m2_model$m1_train_preds,
     training_seasons = m2_model$training_seasons,
-    spec_version     = m2_model$spec_version %||% "assembled",
-    best_spec_id     = spec_identity,
-    correction_spec  = correction_spec
+    spec_version = m2_model$spec_version %||% "assembled",
+    best_spec_id = spec_identity,
+    correction_spec = correction_spec,
+    legacy_compatibility = m2_model$legacy_compatibility %||% NULL,
+    m2_v2 = m2_v2
   )
 
   if (!is.null(save_ref_path)) {
@@ -1593,7 +1865,9 @@ assemble_kit <- function(m0,
     manual_labels  = manual_labels,
     hist_data      = m1$aligned_train,
     m1_train_preds = m2_model$m1_train_preds,
-    template_df    = m1$ref$pred_df[, c("newWeek", "fit")]
+    template_df    = m1$ref$pred_df[, c("newWeek", "fit")],
+    m1_v2           = m1_v2,
+    m2_v2           = m2_v2
   )
   if (governed) {
     kit$season_selection <- m0$selection
@@ -1606,6 +1880,18 @@ assemble_kit <- function(m0,
       kit$season_selection,
       kit$stage_artifact_ids
     )
+    if (!is.null(m1_v2)) {
+      kit$m1_v2_governance_id <- digest::digest(
+        list(base_governance_id = kit$governance_id, m1_v2_artifact_id = m1_v2$artifact_id),
+        algo = "sha256"
+      )
+    }
+    if (!is.null(m2_v2)) {
+      kit$m2_v2_governance_id <- digest::digest(
+        list(base_governance_id = kit$governance_id, m2_v2_artifact_id = m2_v2$artifact_id),
+        algo = "sha256"
+      )
+    }
   }
   kit
 }

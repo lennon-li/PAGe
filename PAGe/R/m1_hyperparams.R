@@ -44,7 +44,7 @@ learn_alignment_hyperparams <- function(
     lambda_scale     = 0.20,
     h_delta          = 0.01
 ) {
-  # ⇩⇩⇩ ADD THIS LINE SO THE FUNCTION ACTUALLY USES THE ARGUMENT ⇩⇩⇩
+  #  ADD THIS LINE SO THE FUNCTION ACTUALLY USES THE ARGUMENT
   g_ref_safe <- function(u) g_ref_fun(pmin(pmax(u, 1), 52))
 
   seasons <- unique(theD$season)

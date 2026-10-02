@@ -14,13 +14,13 @@ plotSeasonCurves <- function(df, x = "weekF") {
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Need 'dplyr'.")
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Need 'ggplot2'.")
   if (!requireNamespace("scales", quietly = TRUE)) stop("Need 'scales'.")
-  
+
   df <- df |>
     dplyr::mutate(
       p_obs = y / N,
       season = as.factor(as.character(season))
     )
-  
+
   # compute ignition week per season (prefer iWeek if present)
   if ("iWeek" %in% names(df)) {
     title_map <- df |>
@@ -48,12 +48,12 @@ plotSeasonCurves <- function(df, x = "weekF") {
   } else {
     stop("Need either 'iWeek' column or 'ignition' column to label titles.")
   }
-  
+
   df <- df |> dplyr::left_join(title_map, by = "season")
-  
+
   # vertical ignition line data
   vline_df <- title_map |> dplyr::filter(!is.na(iWeek))
-  
+
   ggplot2::ggplot(df, ggplot2::aes(x = .data[[x]])) +
     ggplot2::geom_point(ggplot2::aes(y = p_obs), alpha = 0.6) +
     ggplot2::geom_line(ggplot2::aes(y = fit), linewidth = 0.9) +

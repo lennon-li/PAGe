@@ -10,7 +10,9 @@ build_m1(
   exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
   exclude_live = TRUE,
   min_live_weeks = 20L,
-  m1_params = .default_m1_params()
+  m1_params = .default_m1_params(),
+  timing_mode = c("legacy", "fractional"),
+  timing_truth = NULL
 )
 }
 \arguments{

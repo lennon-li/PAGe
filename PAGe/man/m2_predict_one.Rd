@@ -20,7 +20,8 @@ m2_predict_one(
   include_season_re = FALSE,
   soft_cap_fn = NULL,
   return_ci = FALSE,
-  bias_logit = 0
+  bias_logit = 0,
+  timing_mode = c("legacy", "fractional")
 )
 }
 \arguments{
@@ -30,9 +31,10 @@ m2_predict_one(
 
 \item{h}{Integer. Forecast horizon (1 or 2).}
 
-\item{iWeek}{Integer. Locked ignition week.}
+\item{iWeek}{Numeric. Locked ignition week; fractional in the opt-in
+fractional timing mode.}
 
-\item{anchorWeek}{Integer. Reference-curve anchor week.}
+\item{anchorWeek}{Numeric. Reference-curve anchor week.}
 
 \item{logit_f_eff}{Numeric. logit(M1 predicted positivity at target week).}
 
@@ -63,10 +65,15 @@ is included in the prediction (weekly-refit mode). If \code{FALSE},
 \code{m2_hi} (+/-1.96 SE on the link scale).}
 
 \item{bias_logit}{Numeric online bias adjustment on the logit scale.}
+
+\item{timing_mode}{Character. \code{"legacy"} uses integer aligned weeks;
+\code{"fractional"} preserves numeric aligned weeks.}
 }
 \value{
 A named list with \code{m2_p} (and \code{m2_lo}, \code{m2_hi}
-  if \code{return_ci = TRUE}), or \code{NULL} on prediction failure.
+  if \code{return_ci = TRUE}), and \code{m2_eta_raw}, the GAM linear
+  predictor before online correction or probability capping; or \code{NULL}
+  on prediction failure. Bounds describe the conditional fitted mean.
 }
 \description{
 Shared prediction core used by all M2 code paths: LOSO frozen evaluation,
