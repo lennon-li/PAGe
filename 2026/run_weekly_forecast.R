@@ -100,7 +100,7 @@ if (dry_run) {
   )
   cat("planned steps:\n")
   cat("  1. verify kit file exists and its sha256 equals PAGE_KIT_SHA256\n")
-  cat("  2. load the kit and run PAGe::validate_page_kit(kit, mode = \"frozen\")\n")
+  cat("  2. load the kit and run PAGe::page_validate_kit(kit, mode = \"frozen\")\n")
   cat("  3. stop before fetching data or forecasting (dry run)\n")
 }
 
@@ -116,7 +116,7 @@ if (!identical(kit_actual_sha256, kit_expected_sha256)) {
   )
 }
 kit <- readRDS(kit_path)
-kit <- PAGe::validate_page_kit(kit, mode = "frozen")
+kit <- PAGe::page_validate_kit(kit, mode = "frozen")
 cat(sprintf("kit verified: sha256=%s\n", kit_actual_sha256))
 
 if (dry_run) {
@@ -149,7 +149,7 @@ write_status("started", sprintf("run_id=%s kit_sha256=%s", run_id, kit_actual_sh
 
 cache_dir <- file.path(run_dir, "data_cache")
 current <- tryCatch(
-  PAGe::getCurrentD(
+  PAGe:::getCurrentD(
     data = if (nzchar(forecast_source)) forecast_source else NULL,
     cache_dir = cache_dir
   ),
@@ -214,7 +214,7 @@ write_status("forecasting", status_detail)
 dir.create(week_dir, recursive = FALSE, showWarnings = FALSE)
 
 t0 <- Sys.time()
-result <- PAGe::run_prospective_pipeline(
+result <- PAGe:::run_prospective_pipeline(
   kit,
   current_data = used,
   walk_start = walk_start,

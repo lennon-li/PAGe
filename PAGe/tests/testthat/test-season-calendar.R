@@ -63,7 +63,7 @@ test_that("dated adapter ignores a conflicting source season label", {
     week_start = as.Date(c("2025-07-06", "2026-01-04")),
     y = c(1L, 2L), N = c(10L, 10L)
   )
-  out <- PAGe::prepare_page_data(
+  out <- PAGe:::prepare_page_data(
     raw,
     outcome_col = "y", week_col = "mmwr_week", season_col = "source_season",
     total_col = "N", week_type = "mmwr", date_col = "week_start"

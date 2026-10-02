@@ -115,7 +115,6 @@
 #'   and `N_lead` are `NA` when the target week is not observed, and
 #'   `t_since_target` is always `NA`. Predictions are `NA` when the origin or
 #'   its one-week lag is not observed in `season`.
-#' @export
 baseline_calendar_gam <- function(data, season, train_seasons, origins,
                                   horizons = 1:2, k_week = 8L,
                                   k_signal = 6L) {

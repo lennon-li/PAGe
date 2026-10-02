@@ -9,35 +9,31 @@ execute:
   eval: false
 ---
 
-PAGe training is an offline workflow. The examples below are not executed
-during documentation builds because full fitting and nested LOSO are
-computationally substantial.
+PAGe separates its supported user API from its internal training and reproduction machinery. This guide uses only exported functions. For implementation details, see [`stage-api-map.md`](stage-api-map.md) and [`tuning-playbook.md`](tuning-playbook.md).
 
-::: {.callout-tip title="Start here for a user walkthrough"}
-For a concise, copy/paste-oriented training guide using the current public R
-API, see [`training_walkthrough.qmd`](training_walkthrough.qmd). Continue with
-[`realtime_deployment_walkthrough.qmd`](realtime_deployment_walkthrough.qmd)
-for current ORVT ingestion, direct R forecasting, and HTTP API usage.
+::: {.callout-tip title="Related walkthroughs"}
+For a training-focused walkthrough, see [`training_walkthrough.qmd`](training_walkthrough.qmd). For current ORVT ingestion, real-time forecasting, the walk-forward report, and HTTP deployment, see [`realtime_deployment_walkthrough.qmd`](realtime_deployment_walkthrough.qmd). The complete exported namespace is listed in [`public-api.qmd`](public-api.qmd).
 :::
 
 ## Prepare authorized surveillance data
 
-PAGe does not ship surveillance observations. Input must contain one row per
-season and `weekF`, positive tests `y`, and either total tests `N` or negative
-tests `neg`.
+PAGe does not ship surveillance observations. Load an authorized local source or supported official source, then validate the canonical contract.
 
 ```{r}
 library(PAGe)
 
-allD <- load_flu_hist("/authorized/path/flu_history.csv") |>
-  prepare_surveillance_data()
+allD <- page_load_surveillance(
+  source = "/authorized/path/flu_history.csv",
+  season = NULL
+)
+
+allD <- prepare_surveillance_data(allD)
+validate_surveillance_data(allD)
 ```
 
 ## Declare the governed season sets
 
-The guarded stage API never infers training membership from the rows that
-happen to be present. Declare training, permanent exclusions, untouched
-holdouts, and prospective application seasons explicitly:
+Training membership is explicit rather than inferred from whatever rows happen to be present.
 
 ```{r}
 selection <- validate_season_selection(
@@ -52,246 +48,170 @@ selection <- validate_season_selection(
 )
 ```
 
-The four sets must be mutually disjoint and every identifier must exist in the
-canonical data. `season_selection(x)` retrieves the recorded selection from a
-governed tuning result, stage artifact, or assembled kit.
+The four season sets must be mutually disjoint. `season_selection(x)` retrieves the recorded selection from a governed result or kit.
 
-## Train and freeze each stage
+## Train PAGe
 
-Each stage has separate tuning, tuning-validation, fitting, and freezing
-operations. A downstream stage accepts only frozen upstream artifacts with the
-same season selection and expected artifact identities.
+`page_train()` owns the governed tuning, validation, fitting, freezing, and kit-assembly boundaries.
+
+For a fixed-specification refresh:
 
 ```{r}
-# M0: ignition
-m0_tuning <- tune_m0(allD, selection = selection)
-validate_m0_tuning(m0_tuning)
-m0 <- fit_m0(allD, selection, config = m0_tuning$best_params) |>
-  freeze_m0(tuning = m0_tuning)
-
-# M1: alignment (boundary gate before freeze)
-m1_tuning <- tune_m1(allD, m0 = m0, selection = selection)
-validate_m1_tuning(m1_tuning, check_boundaries = TRUE)
-m1_best <- m1_tuning$best[1, , drop = FALSE]
-m1_config <- m1_make_params(
-  k_ref = m1_best$k_ref,
-  temperature = m1_best$multi_temperature,
-  rise_weight = m1_best$align_rise_weight,
-  slope_window = m1_best$slope_window,
-  slope_weight = m1_best$slope_weight
+trained <- page_train(
+  data = allD,
+  selection = selection,
+  mode = "refresh"
 )
-m1 <- fit_m1(allD, selection, m0, config = m1_config) |>
-  freeze_m1(tuning = m1_tuning)
-
-# train_pipeline(mode = "retune") performs the M0 grid boundary gate before
-# this point and the M1 boundary gate before freezing M1 or starting M2.
-
-# M2: forecast
-m2_grid <- if (exists("prior_m2_results", inherits = FALSE)) {
-  plan_m2_grid(prior_m2_results, max_finalists = 6L, max_specs = 64L)
-} else {
-  default_m2_grid()
-}
-m2_tuning <- tune_m2(allD, selection, m0, m1, grid = m2_grid)
-validate_m2_tuning(m2_tuning)
-m2 <- fit_m2(allD, selection, m0, m1, config = m2_tuning$best_spec) |>
-  freeze_m2(tuning = m2_tuning)
-
-kit <- assemble_kit(m0, m1, m2)
-validate_page_kit(kit)
 ```
 
-The example uses the validated one-row `m1_tuning$best` selection as the fixed
-M1 configuration. A tuning result is not itself a fitted stage, and a draft fit
-is not a deployment input. `assemble_kit()` fails if a governed chain contains
-a draft stage, mismatched season selection, or broken upstream identity.
-
-`tune_m1()` normally inherits M0's manual labels and records the shifted M1
-label vector in its result. To reproduce a historical M1 search that used a
-different target-label vector, pass that vector explicitly with
-`manual_labels=` in the unshifted M0 coordinate system. This override changes
-the M1 tuning target only; it should not silently replace the labels used to
-fit M0 or the production reference.
-
-M2 tuning constructs labels separately for every LOSO fold. The held-out
-season is excluded from `manual_labels_train`, while `manual_labels_test` is
-`NULL`, so held-out ignition timing is detected prospectively. Any checkpoint
-created with the held-out label supplied to the evaluation fold is leaked and
-must be recomputed rather than merely re-ranked.
-
-## Compatibility refresh of the locked specification
-
-Use refresh when the model structure is already approved. It fits the coded
-current v16-corrected specification (`k_f=4`, `k_e=2`, `alpha_state=0.20`, `k_sp=8`, `k_r=0`,
-`k_de=0`, `delta=0`, `Kr=1`, `bias_alpha=0.05`, `bias_beta=0`). The 2025-26
-season remains excluded as a prospective holdout by default.
+For governed retuning and model selection:
 
 ```{r}
-training <- train_pipeline(allD, mode = "refresh")
-kit <- training$kit
-saveRDS(kit, "page_kit.rds")
-```
-
-`train_pipeline()` is the high-level compatibility orchestrator and composes
-the guarded stage lifecycle above for both refresh and retune. Use the explicit
-calls when a workflow needs to inspect or gate each stage independently.
-
-## Replay the holdout and apply promotion gates
-
-Both candidate and incumbent kits must have been trained without 2025-26.
-Governed evaluation runs through `scripts/acceptance/replay_2025_26.R`, which
-saves the private replay bundle and disclosure-safe manifest before returning
-a promotion decision. Do not pass a bare `check_promotion()` report to
-`train_pipeline()`; it has no artifact provenance and cannot release the
-holdout.
-
-After a passing acceptance run, use
-`season2526/run_retrain_venkata.R` with the saved decision bundle, manifest,
-authorized data, candidate kit, and incumbent kit. That script verifies every
-bound SHA-256 hash, constructs short-lived verified promotion evidence, and
-performs the fixed post-promotion refresh.
-
-Promotion requires at least 2% Bernoulli-NLL improvement, at most 5% MAE
-degradation at any horizon, and at most 10% MAE degradation in any phase. A
-failed or malformed report keeps the holdout excluded. The versioned report
-schema validates the locked thresholds and internal gate consistency. The
-retained artifacts and their verified hashes—not the forgeable R class—are the
-production safety boundary.
-
-## Retune when model selection is required
-
-```{r}
-retuned <- train_pipeline(
-  allD,
+retuned <- page_train(
+  data = allD,
+  selection = selection,
   mode = "retune",
-  previous_results = prior_m2_results,
-  selection_method = "min_nll", # alternatives: "one_se", "pareto"
-  racing = FALSE,
-  checkpoint_dir = "results/checkpoints"
+  prospective_holdout = "2025-26",
+  checkpoint_dir = "results/checkpoints",
+  selection_method = "min_nll",
+  verbose = TRUE
 )
 ```
 
-The adaptive grid retains the v16 incumbent, uses compatible prior results,
-keeps diverse finalists, adds local neighbors, and expands reached boundaries.
-Optional `racing=TRUE` requires a user-supplied partial-fold evaluator. Racing
-only removes clear losers; every survivor receives full nested-LOSO evaluation
-before selection.
+Alternative supported selection methods include `"one_se"` and `"pareto"` where the underlying training workflow permits them.
 
-### Diagnose and expand the grid
+Low-level tuning grids, boundary expansion, stage freezing, fold runners, cache helpers, and artifact constructors are intentionally internal. Repository-owned reproduction scripts may use them explicitly, but external users should train through `page_train()`.
 
-A selected value should normally have tested values on both sides. If the
-winner is at a lower or upper edge, retain the existing candidates and add one
-valid value beyond that edge using the adjacent observed spacing. Then rerun
-the same complete folds and selection rule. Prefer one-factor local neighbors
-before adding targeted interactions; do not expand every axis into an
-unbounded Cartesian grid.
-
-A boundary can be legitimate when it is a null or hard constraint. For
-example, an M2 smooth dimension of zero means that feature is off and should
-not be expanded to an invalid negative value. Record whether each boundary is
-expanded, accepted as a constraint/null, or left unresolved because the
-predeclared grid cap was reached.
-
-For the default M1 grid, a selected `k_ref=25` or `slope_weight=8` is on the
-lower edge. If that selection survives the complete governed run, adjacent
-spacing suggests testing `k_ref=20` and `slope_weight=4` in the next
-pre-holdout development round while retaining the original candidates.
-
-For M2, prefer:
+## Save and validate a kit
 
 ```{r}
-next_grid <- plan_m2_grid(
-  previous_results = prior_m2_results,
-  max_finalists = 6L,
-  max_specs = 64L
+page_save_kit(
+  trained$kit,
+  "results/kits/page-kit.rds"
 )
+
+kit <- page_load_kit("results/kits/page-kit.rds")
+page_validate_kit(kit, mode = "frozen")
 ```
 
-The planner retains the coded incumbent and prior finalists, adds nearest local
-neighbors, expands valid winning boundaries by one observed step, and preserves
-stable specification identities. Stop expanding when the winner is bracketed,
-a boundary is a documented null/constraint, improvement is flat relative to
-fold uncertainty, or the declared computational cap is reached. Never alter
-the grid after viewing the prospective holdout.
+`page_save_kit()` and `page_load_kit()` validate the governed artifact rather than acting as unguarded `saveRDS()`/`readRDS()` wrappers.
 
-## Manual pre-holdout candidate cycle
+## Advanced component-level interface
 
-Use this compact sequence when testing a new cycle by hand. Keep `2025-26` in
-the holdout for every call. The current boundary cycle should reuse the
-already-frozen M0/M1 artifacts and begin at the M2 block below; only run the
-M0/M1 blocks when those stages are intentionally being retuned. If prior M2
-results are available, use the planner so already-scored specifications are
-retained by identity rather than rebuilt; otherwise start from
-`default_m2_grid()`.
+Researchers can work directly with the scientific components when they already have explicit fixed configurations.
 
 ```{r}
-# M0: tune -> validate -> fit -> freeze
-m0_tuning <- tune_m0(
-  allD, selection = selection,
-  n_cores = parallel::detectCores(), verbose = TRUE
-)
-validate_m0_tuning(m0_tuning)
-m0 <- fit_m0(allD, selection, config = m0_tuning$best_params) |>
-  freeze_m0(tuning = m0_tuning)
+m0 <- m0_fit(allD, selection, config = m0_config)
+m0_state <- m0_detect(m0_kit, current_data)
 
-# M1: tune -> validate (including boundaries) -> fit -> freeze
-m1_tuning <- tune_m1(
-  allD, m0 = m0, selection = selection,
-  grid = default_m1_grid(),
-  n_cores = parallel::detectCores(),
-  checkpoint_dir = "results/checkpoints/m1-cycle", verbose = TRUE
+m1 <- m1_fit(allD, selection, m0, config = m1_config)
+m1_state <- m1_predict(m1_kit, current_data, m0_state)
+peak <- m1_peak_posterior(
+  library = m1_library,
+  current_data = current_data,
+  activation_week = ignition_week,
+  origin_week = origin_week
 )
-validate_m1_tuning(m1_tuning, check_boundaries = TRUE)
-m1_best <- m1_tuning$best[1, , drop = FALSE]
-m1_config <- m1_make_params(
-  k_ref = m1_best$k_ref,
-  temperature = m1_best$multi_temperature,
-  rise_weight = m1_best$align_rise_weight,
-  slope_window = m1_best$slope_window,
-  slope_weight = m1_best$slope_weight
+passage <- m1_passage_posterior(
+  library = m1_library,
+  current_data = current_data,
+  activation_week = ignition_week,
+  origin_week = origin_week
 )
-m1 <- fit_m1(allD, selection, m0, config = m1_config) |>
-  freeze_m1(tuning = m1_tuning)
 
-# M2: plan -> tune -> validate -> fit -> freeze
-m2_grid <- if (exists("prior_m2_results", inherits = FALSE)) {
-  plan_m2_grid(prior_m2_results, max_finalists = 6L, max_specs = 64L)
-} else {
-  default_m2_grid()
-}
-m2_tuning <- tune_m2(
-  allD, selection, m0, m1, grid = m2_grid,
-  n_cores = parallel::detectCores(),
-  checkpoint_dir = "results/checkpoints/m2-cycle", verbose = TRUE
-)
-validate_m2_tuning(m2_tuning)
-m2 <- fit_m2(allD, selection, m0, m1, config = m2_tuning$best_spec) |>
-  freeze_m2(tuning = m2_tuning)
-
-# Assemble only after all three stages are frozen and matched.
-candidate <- assemble_kit(m0, m1, m2)
-validate_page_kit(candidate)
-saveRDS(candidate, "results/candidate_pre_holdout.rds")
+m2 <- m2_fit(allD, selection, m0, m1, config = m2_config)
+m2_state <- m2_predict(m2_kit, current_data, m1_state)
 ```
 
-The tuning objects are the evidence checkpoints; the frozen stage objects are
-the governed inputs to `assemble_kit()`; and `candidate` is the pre-holdout
-kit. It is not incumbent or deployable until the artifact-bound acceptance
-workflow compares it with the pre-holdout incumbent on the untouched holdout.
+These functions expose scientific model operations; they do not expose the development-generation names of the implementations underneath them.
 
-The [tuning playbook](tuning-playbook.md) gives parameter-specific M0, M1, and
-M2 advice plus a boundary-report schema.
-
-## Produce a frozen prospective forecast
+## Evaluate and replay
 
 ```{r}
-kit <- readRDS("page_kit.rds")
-current <- prepare_surveillance_data(current_csv, season = "2026-27")
-forecast <- run_pipeline(kit, current, mode = "frozen")
-plot_forecast(forecast, history = allD)
+evaluation <- evaluate_forecasts(
+  allD,
+  holdouts = sort(unique(allD$season))
+)
+
+replay <- replay_holdout(
+  kit,
+  allD
+)
 ```
 
-Frozen-GAM deployment is the default validated path. Archive the input
-snapshot, issue date, kit version, manual overrides, and returned M0/M1/M2 state
-for reproducibility. Weekly refitting is available only as an explicit legacy
-compatibility option.
+Promotion decisions remain separate from model fitting:
+
+```{r}
+gate <- check_promotion(candidate_metrics, incumbent_metrics)
+evidence <- verify_promotion(promotion_bundle)
+```
+
+The production safety boundary is the retained artifact evidence and verified hashes, not merely the R class of a decision object.
+
+## Forecast from the current production release
+
+For the packaged current production release:
+
+```{r}
+forecast <- page_forecast(
+  current_data,
+  season = "2026-27"
+)
+
+print(forecast)
+```
+
+For a previously saved kit in the general real-time workflow:
+
+```{r}
+forecast_now <- page_forecast_now(
+  kit = kit,
+  data = current_data
+)
+```
+
+## Generate the walk-forward report
+
+```{r}
+page_walkforward_report(
+  current_data,
+  season = "2026-27",
+  output_file = "PAGe_2026-27_walkforward.html",
+  self_contained = TRUE
+)
+```
+
+The report is generated from R; the HTML artifact is not a hand-maintained source file.
+
+## Aggregate stratified forecasts
+
+The same aggregation API can combine pathogen types, age groups, regions, sites, or other strata.
+
+```{r}
+ab <- aggregate_strata(
+  estimate = c(A = 0.05, B = 0.02),
+  se = c(A = 0.004, B = 0.002),
+  method = "sum",
+  dependence = "shared_denominator",
+  bounds = c(0, 1)
+)
+```
+
+For age groups or other denominator partitions:
+
+```{r}
+all_age <- aggregate_strata(
+  estimate = c(`0-17` = 0.10, `18-64` = 0.20, `65+` = 0.30),
+  se = c(`0-17` = 0.01, `18-64` = 0.02, `65+` = 0.03),
+  method = "weighted_mean",
+  weights = c(`0-17` = 100, `18-64` = 300, `65+` = 100),
+  dependence = "independent",
+  bounds = c(0, 1)
+)
+```
+
+When joint simulation or posterior draws exist, prefer `aggregate_strata_draws()` because it propagates the full dependence structure directly.
+
+## Provenance and manuscript work
+
+Keep input snapshots, release identifiers, hashes, training selections, and generated reports with each governed run. Manuscript-specific protocols, drafts, publication analyses, and manuscript runners live under the repository's separate `manuscript/` tree; production package code remains under `PAGe/`.

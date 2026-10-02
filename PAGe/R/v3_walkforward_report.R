@@ -236,7 +236,6 @@
 #' @param strict Passed to [page_v3_forecast()] and the typed-panel validator.
 #'
 #' @return Invisibly, the normalized path to the generated HTML report.
-#' @export
 page_v3_walkforward_report <- function(data,
                                        season = NULL,
                                        origins = NULL,
@@ -345,7 +344,7 @@ page_v3_walkforward_report <- function(data,
     ff <- ff[match(c("A", "B"), ff$type), , drop = FALSE]
     ii <- ii[match(c("A", "B"), ii$type), , drop = FALSE]
     if (anyNA(ff$type) || anyNA(ii$type)) next
-    agg <- page_aggregate_strata(
+    agg <- aggregate_strata(
       estimate = stats::setNames(ff$forecast_pct / 100, ff$type),
       lower = stats::setNames(ii$ci_lo_pct / 100, ii$type),
       upper = stats::setNames(ii$ci_hi_pct / 100, ii$type),

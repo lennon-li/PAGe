@@ -165,16 +165,16 @@ test_that("season perturbation cannot alter that season's nested correction", {
 
 test_that("governed legacy M2 requires an explicit compatibility flag", {
   expect_error(
-    PAGe::tune_m2(
+    PAGe:::tune_m2(
       data.frame(), list(), list(), list(), data.frame(),
       family = "legacy"
     ),
     "allow_legacy"
   )
-  expect_true("allow_legacy" %in% names(formals(PAGe::tune_m2)))
-  expect_identical(eval(formals(PAGe::tune_m2)$family)[[1L]], "offset_subset_v1")
+  expect_true("allow_legacy" %in% names(formals(PAGe:::tune_m2)))
+  expect_identical(eval(formals(PAGe:::tune_m2)$family)[[1L]], "offset_subset_v1")
   expect_error(
-    PAGe::train_pipeline(data.frame(), m2_family = "legacy"),
+    PAGe:::train_pipeline(data.frame(), m2_family = "legacy"),
     "allow_legacy"
   )
 })

@@ -268,7 +268,7 @@ test_that("retune calls governed lifecycle in M0 -> M1 -> M2 order", {
     .package = "PAGe"
   )
 
-  result <- PAGe::train_pipeline(
+  result <- PAGe:::train_pipeline(
     allD,
     mode = "retune",
     exclude = character(0),
@@ -371,7 +371,7 @@ test_that("retune excludes holdout season from training selection", {
     .package = "PAGe"
   )
 
-  result <- PAGe::train_pipeline(
+  result <- PAGe:::train_pipeline(
     allD,
     mode = "retune",
     exclude = character(0),
@@ -464,7 +464,7 @@ test_that("retune racing=TRUE routes full_evaluator through governed tune_m2", {
     )
   }
 
-  result <- PAGe::train_pipeline(
+  result <- PAGe:::train_pipeline(
     allD,
     mode = "retune",
     exclude = character(0),
@@ -539,7 +539,7 @@ test_that("retune preserves page_training_result field shape", {
     .package = "PAGe"
   )
 
-  result <- PAGe::train_pipeline(
+  result <- PAGe:::train_pipeline(
     allD,
     mode = "retune",
     exclude = character(0),

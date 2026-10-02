@@ -117,24 +117,24 @@
 
 test_that("gate_nesting defaults to full and rejects invalid values", {
   expect_identical(
-    eval(formals(PAGe::train_outer_fold)$gate_nesting)[[1L]], "full"
+    eval(formals(PAGe:::train_outer_fold)$gate_nesting)[[1L]], "full"
   )
   expect_identical(
-    eval(formals(PAGe::run_outer_fold)$gate_nesting)[[1L]], "full"
+    eval(formals(PAGe:::run_outer_fold)$gate_nesting)[[1L]], "full"
   )
   expect_identical(
-    eval(formals(PAGe::nested_season_evaluation)$gate_nesting)[[1L]], "full"
+    eval(formals(PAGe:::nested_season_evaluation)$gate_nesting)[[1L]], "full"
   )
   expect_error(
-    PAGe::train_outer_fold(data.frame(), gate_nesting = "nope"),
+    PAGe:::train_outer_fold(data.frame(), gate_nesting = "nope"),
     "arg"
   )
   expect_error(
-    PAGe::run_outer_fold(data.frame(), "A", gate_nesting = "nope"),
+    PAGe:::run_outer_fold(data.frame(), "A", gate_nesting = "nope"),
     "arg"
   )
   expect_error(
-    PAGe::nested_season_evaluation(data.frame(), gate_nesting = "nope"),
+    PAGe:::nested_season_evaluation(data.frame(), gate_nesting = "nope"),
     "arg"
   )
 })
@@ -305,12 +305,12 @@ test_that("gate_nesting is recorded in provenance and kit metadata", {
     assemble_kit = function(m0, m1, m2, best_spec_id) {
       list(m0 = m0, m1 = m1, m2 = m2, best_spec_id = best_spec_id)
     },
-    validate_page_kit = function(x, ...) invisible(x),
+    page_validate_kit = function(x, ...) invisible(x),
     .package = "PAGe"
   )
   for (nesting in c("full", "conditional")) {
     directory <- withr::local_tempdir()
-    result <- PAGe::train_outer_fold(
+    result <- PAGe:::train_outer_fold(
       fixture$data,
       holdout = "C",
       artifact_dir = directory,

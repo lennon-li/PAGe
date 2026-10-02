@@ -14,8 +14,8 @@ make_metric_predictions <- function(scale = 1, spec_id = NULL) {
 }
 
 test_that("forecast metrics are deterministic and promotion gates are transparent", {
-  incumbent <- PAGe::summarize_forecast_metrics(make_metric_predictions(1.08))
-  candidate <- PAGe::summarize_forecast_metrics(make_metric_predictions(1.00))
+  incumbent <- PAGe:::summarize_forecast_metrics(make_metric_predictions(1.08))
+  candidate <- PAGe:::summarize_forecast_metrics(make_metric_predictions(1.00))
 
   expect_named(candidate, c("overall", "horizon", "phase"))
   expect_named(candidate$overall, c("bernoulli_nll", "mae", "n_trials", "n_predictions"))
@@ -45,7 +45,7 @@ test_that("aggregate replay diagnostics report intervals and fail safely without
   predictions <- make_metric_predictions()
   predictions$p_lo <- pmax(.001, predictions$p_hat - .05)
   predictions$p_hi <- pmin(.999, predictions$p_hat + .05)
-  diagnostics <- PAGe::summarize_replay_diagnostics(predictions)
+  diagnostics <- PAGe:::summarize_replay_diagnostics(predictions)
 
   expect_named(diagnostics, c("overall", "horizon"))
   expect_true(all(c(
@@ -60,7 +60,7 @@ test_that("aggregate replay diagnostics report intervals and fail safely without
 
   no_interval <- make_metric_predictions()
   no_interval$p_hat <- .25
-  safe <- PAGe::summarize_replay_diagnostics(no_interval)
+  safe <- PAGe:::summarize_replay_diagnostics(no_interval)
   expect_identical(safe$overall$interval_status, "not_available")
   expect_true(is.na(safe$overall$interval_coverage_trial_weighted))
   expect_identical(safe$overall$calibration_status, "not_estimable")
@@ -83,14 +83,14 @@ test_that("M2 candidate selection supports min-NLL, one-SE, and Pareto", {
   )
   result <- list(summary = summary, scores = scores, grid = grid)
 
-  expect_identical(PAGe::select_m2_candidate(result)$selected_spec_id, "middle")
-  one_se <- PAGe::select_m2_candidate(result, method = "one_se")
+  expect_identical(PAGe:::select_m2_candidate(result)$selected_spec_id, "middle")
+  one_se <- PAGe:::select_m2_candidate(result, method = "one_se")
   expect_identical(one_se$selected_spec_id, "simple")
-  pareto <- PAGe::select_m2_candidate(result, method = "pareto")
+  pareto <- PAGe:::select_m2_candidate(result, method = "pareto")
   expect_identical(pareto$selected_spec_id, "middle")
   expect_setequal(pareto$pareto_set$spec_id, "middle")
   expect_error(
-    PAGe::select_m2_candidate(list(summary = summary[1:2], grid = grid), "pareto"),
+    PAGe:::select_m2_candidate(list(summary = summary[1:2], grid = grid), "pareto"),
     "horizon.*phase"
   )
 })
@@ -107,7 +107,7 @@ test_that("racing retains uncertainty-overlapping candidates and requires full e
   }
   full <- function(grid, ...) list(grid = grid, fully_evaluated = TRUE)
 
-  raced <- PAGe::race_m2_candidates(
+  raced <- PAGe:::race_m2_candidates(
     grid, evaluator, stages = c(3L, 6L), min_survivors = 2L,
     full_evaluator = full
   )
@@ -115,7 +115,7 @@ test_that("racing retains uncertainty-overlapping candidates and requires full e
   expect_true(raced$final$fully_evaluated)
   expect_identical(raced$final$grid, raced$survivors)
   expect_error(
-    PAGe::race_m2_candidates(grid, evaluator, full_evaluator = NULL),
+    PAGe:::race_m2_candidates(grid, evaluator, full_evaluator = NULL),
     "full_evaluator"
   )
 })
@@ -125,7 +125,7 @@ test_that("unseen replay rejects leakage and returns standardized metrics", {
     c("2024-25", rep("2025-26", 8)), c(1L, 1:8)
   )
   leaking <- list(m2_production = list(training_seasons = c("2024-25", "2025-26")))
-  expect_error(PAGe::replay_season_holdout(leaking, allD), "leakage")
+  expect_error(PAGe:::replay_season_holdout(leaking, allD), "leakage")
 
   clean <- list(m2_production = list(training_seasons = "2024-25"))
   runner <- function(kit, current_data, mode, verbose) {
@@ -136,7 +136,7 @@ test_that("unseen replay rejects leakage and returns standardized metrics", {
       params_df = data.frame(eval_week = predictions$weekF, h = predictions$lead)
     )
   }
-  replay <- PAGe::replay_season_holdout(clean, allD, runner = runner)
+  replay <- PAGe:::replay_season_holdout(clean, allD, runner = runner)
   expect_identical(replay$season, "2025-26")
   expect_identical(replay$status, "unseen_replay_complete")
   expect_false(replay$eligible_for_refresh)
@@ -157,7 +157,7 @@ test_that("unseen replay rejects leakage and returns standardized metrics", {
     season = c("2025-26", "2025-26"), weekF = 1:2,
     y = c(10, 20), N = 100, p = c(.1, .2)
   )
-  raw_replay <- PAGe::replay_season_holdout(clean, raw_data, runner = raw_runner)
+  raw_replay <- PAGe:::replay_season_holdout(clean, raw_data, runner = raw_runner)
   expect_equal(raw_replay$predictions$p_obs, .2)
   expect_equal(raw_replay$predictions$t_since, 0)
   expect_equal(raw_replay$ignition_week, 1)
@@ -171,7 +171,7 @@ test_that("holdout replay rejects conflicting identity and gates legacy M2 expli
     m2_production = canonical,
     m2 = list(training_seasons = "2025-26")
   )
-  expect_error(PAGe::replay_season_holdout(conflicting, allD), "conflicting")
+  expect_error(PAGe:::replay_season_holdout(conflicting, allD), "conflicting")
 
   runner <- function(...) {
     predictions <- make_metric_predictions()
@@ -181,11 +181,11 @@ test_that("holdout replay rejects conflicting identity and gates legacy M2 expli
     )
   }
   expect_error(
-    PAGe::replay_season_holdout(list(m2 = canonical), allD, runner = runner),
+    PAGe:::replay_season_holdout(list(m2 = canonical), allD, runner = runner),
     "compatibility"
   )
   expect_warning(
-    replay <- PAGe::replay_season_holdout(
+    replay <- PAGe:::replay_season_holdout(
       list(m2 = canonical), allD, runner = runner,
       kit_compatibility = "legacy_m2"
     ),

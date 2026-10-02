@@ -1,5 +1,4 @@
 #' Build expert ignition review objects for all seasons
-#' @export
 review_expert_ignition_set <- function(data, seasons = NULL, existing_annotations = NULL, ...) {
   canonical <- prepare_surveillance_data(data)
   available <- sort(unique(as.character(canonical$season)))
@@ -12,7 +11,6 @@ review_expert_ignition_set <- function(data, seasons = NULL, existing_annotation
 }
 
 #' Create a blank ignition annotation sheet
-#' @export
 expert_ignition_annotation_sheet <- function(data, annotator, annotation_version, positivity_version) {
   canonical <- prepare_surveillance_data(data)
   annotator <- .expert_timing_nonempty(annotator, "annotator")

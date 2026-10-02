@@ -30,7 +30,7 @@ test_that("run_pipeline output is consumable by plot_forecast", {
     .package = "PAGe"
   )
 
-  result <- PAGe::run_pipeline(
+  result <- PAGe:::run_pipeline(
     kit = workflow_kit(),
     current_data = data.frame(
       season = "2025-26", weekF = c(9L, 10L),
@@ -43,7 +43,7 @@ test_that("run_pipeline output is consumable by plot_forecast", {
 })
 
 test_that("the production runtime defaults to frozen evaluation semantics", {
-  mode_default <- eval(formals(PAGe::run_prospective_pipeline)$mode)
+  mode_default <- eval(formals(PAGe:::run_prospective_pipeline)$mode)
 
   expect_identical(mode_default[[1L]], "frozen")
 })
@@ -67,7 +67,7 @@ test_that("nested LOSO fold evaluation passes only supported arguments", {
 })
 
 test_that("locked refresh training has complete M0 and M2 inputs", {
-  build_m0_body <- body(PAGe::build_m0)
+  build_m0_body <- body(PAGe:::build_m0)
   return_call <- build_m0_body[[length(build_m0_body)]]
   build_m0_fields <- names(as.list(return_call)[-1L])
 
@@ -76,7 +76,7 @@ test_that("locked refresh training has complete M0 and M2 inputs", {
     info = "build_m0() must supply the best_params consumed by train_m2()"
   )
 
-  train_m2_body <- paste(deparse(body(PAGe::train_m2)), collapse = " ")
+  train_m2_body <- paste(deparse(body(PAGe:::train_m2)), collapse = " ")
   handles_null_spec <- grepl("is.null\\(best_spec\\)", train_m2_body)
 
   expect_true(
@@ -192,7 +192,7 @@ test_that("getCurrentD honors a requested season from a local CSV", {
     pho_season = c("2024-25", "2025-26"), week = c(40L, 40L),
     mmwr_year = c(2024L, 2025L)
   )
-  result <- PAGe::getCurrentD(
+  result <- PAGe:::getCurrentD(
     data = csv, season = "2024-25", source_calendar = source_calendar
   )
 
@@ -219,21 +219,21 @@ test_that("getCurrentD validates inputs and represents zero-test weeks safely", 
     pho_season = "2024-25", week = c(40L, 41L),
     mmwr_year = c(2024L, 2024L)
   )
-  result <- PAGe::getCurrentD(
+  result <- PAGe:::getCurrentD(
     data = csv, season = "2024-25", source_calendar = source_calendar
   )
   expect_true(any(is.na(result$p)))
   expect_equal(result$p[result$N > 0], 0.2)
   expect_error(
-    PAGe::getCurrentD(data = csv, season = "2024"),
+    PAGe:::getCurrentD(data = csv, season = "2024"),
     "YYYY-YY"
   )
   expect_error(
-    PAGe::getCurrentD(data = csv, startWeek = 0L),
+    PAGe:::getCurrentD(data = csv, startWeek = 0L),
     "startWeek"
   )
   expect_error(
-    PAGe::getCurrentD(data = csv, virus = "Influenza B"),
+    PAGe:::getCurrentD(data = csv, virus = "Influenza B"),
     "no rows"
   )
   expect_error(
@@ -243,7 +243,7 @@ test_that("getCurrentD validates inputs and represents zero-test weeks safely", 
       bad <- read.csv(csv)
       bad$X..of.positive.tests <- 11L
       utils::write.csv(bad, bad_csv, row.names = FALSE)
-      PAGe::getCurrentD(data = bad_csv, season = "2024-25")
+      PAGe:::getCurrentD(data = bad_csv, season = "2024-25")
     },
     "y <= N"
   )

@@ -1,5 +1,5 @@
 estimateRef <- PAGe:::estimateRef
-simulate_flu_seasons <- PAGe::simulate_flu_seasons
+simulate_flu_seasons <- PAGe:::simulate_flu_seasons
 
 # Regression coverage for stable governed M1 identities with real reference
 # functions. This deliberately exercises estimateRef(), not a mocked payload.

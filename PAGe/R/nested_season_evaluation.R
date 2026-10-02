@@ -1241,7 +1241,6 @@
 #'   a status and, when built, the shadow kit. Shadow evidence is saved in
 #'   separate `shadow_m2_kit.rds` and `shadow_m2_status.rds` artifacts; the
 #'   existing primary training artifact retains its original schema.
-#' @export
 train_outer_fold <- function(
   data,
   holdout = NULL,
@@ -1872,7 +1871,6 @@ train_outer_fold <- function(
 #'
 #' @return A `page_final_training` object containing the fitted all-season kit
 #'   and its complete tuning evidence.
-#' @export
 fit_final_pipeline <- function(data,
                                exclude = .default_nested_exclusions(),
                                ...) {
@@ -2118,7 +2116,6 @@ fit_final_pipeline <- function(data,
 #'   result includes `shadow_metrics` and `shadow_m1_prediction_equal`. Failed
 #'   or absent shadows have missing predictions and no shadow metrics. Shadow
 #'   metrics are also saved in `outer_shadow_metrics.rds`.
-#' @export
 run_outer_fold <- function(data, holdout, artifact_dir = NULL,
                            checkpoint_dir = NULL, timing_labels = NULL,
                            timing_mode = c("legacy", "fractional"),
@@ -2322,7 +2319,6 @@ run_outer_fold <- function(data, holdout, artifact_dir = NULL,
 #' @return A `page_nested_season_evaluation` containing all fold results,
 #'   canonical out-of-fold predictions, and equal-season primary and
 #'   test-count-weighted sensitivity summaries.
-#' @export
 nested_season_evaluation <- function(
   data,
   holdouts = NULL,

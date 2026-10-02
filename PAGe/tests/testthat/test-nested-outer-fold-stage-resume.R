@@ -119,7 +119,7 @@ test_that("train_outer_fold skips M0/M1/top-level-M2 on a second call into the s
     fit_m2 = function(...) list(stage = "m2"),
     freeze_m2 = function(x, ...) x,
     assemble_kit = function(...) list(ok = TRUE),
-    validate_page_kit = function(x, ...) invisible(x)
+    page_validate_kit = function(x, ...) invisible(x)
   )
 
   labels <- lapply(c("A", "B", "C"), function(season) {
@@ -147,7 +147,7 @@ test_that("train_outer_fold skips M0/M1/top-level-M2 on a second call into the s
     verbose = FALSE
   )
 
-  first <- do.call(PAGe::train_outer_fold, args)
+  first <- do.call(PAGe:::train_outer_fold, args)
   expect_equal(calls$m0_n, 1L)
   expect_equal(calls$m1_n, 1L)
   expect_equal(calls$m2_n, 1L)
@@ -157,7 +157,7 @@ test_that("train_outer_fold skips M0/M1/top-level-M2 on a second call into the s
 
   # Second call into the SAME artifact_dir: M0/M1/top-level-M2 must not be
   # retuned -- only the (mocked) nested inner-gate step and final freeze run.
-  second <- do.call(PAGe::train_outer_fold, args)
+  second <- do.call(PAGe:::train_outer_fold, args)
   expect_equal(calls$m0_n, 1L)
   expect_equal(calls$m1_n, 1L)
   expect_equal(calls$m2_n, 1L)

@@ -136,7 +136,7 @@ promotion_candidate_fixed_config <- function(candidate_kit, candidate) {
 }
 
 promotion_validate_manifest <- function(manifest, role, label) {
-  if (!isTRUE(PAGe::validate_result_manifest(manifest))) {
+  if (!isTRUE(PAGe:::validate_result_manifest(manifest))) {
     promotion_abort(paste0("The ", label, " manifest is invalid."))
   }
   if (!identical(manifest$artifact$role, role) ||
@@ -201,9 +201,9 @@ promotion_validate_acceptance <- function(
   }
 
   bundle_hashes <- c(
-    authorized_data = PAGe::hash_file_sha256(data_path),
-    candidate = PAGe::hash_file_sha256(candidate_path),
-    incumbent = PAGe::hash_file_sha256(incumbent_path)
+    authorized_data = PAGe:::hash_file_sha256(data_path),
+    candidate = PAGe:::hash_file_sha256(candidate_path),
+    incumbent = PAGe:::hash_file_sha256(incumbent_path)
   )
   if (!identical(
     acceptance_bundle$source_artifact_hashes[names(bundle_hashes)],
@@ -242,7 +242,7 @@ promotion_validate_acceptance <- function(
   )
   acceptance_hashes <- c(
     bundle_hashes,
-    promotion_bundle = PAGe::hash_file_sha256(acceptance_bundle_path)
+    promotion_bundle = PAGe:::hash_file_sha256(acceptance_bundle_path)
   )
   promotion_expect_hashes(
     acceptance_manifest$provenance$source_artifact_hashes,
@@ -263,7 +263,7 @@ promotion_validate_acceptance <- function(
     bundle_hashes = bundle_hashes,
     acceptance_hashes = acceptance_hashes,
     acceptance_manifest_hash =
-      PAGe::hash_file_sha256(acceptance_manifest_path)
+      PAGe:::hash_file_sha256(acceptance_manifest_path)
   )
 }
 
@@ -283,7 +283,7 @@ promotion_validate_refit <- function(
     candidate = acceptance$bundle_hashes[["candidate"]],
     promotion_bundle = acceptance$acceptance_hashes[["promotion_bundle"]],
     promotion_manifest = acceptance$acceptance_manifest_hash,
-    refit_artifact = PAGe::hash_file_sha256(refit_artifact_path)
+    refit_artifact = PAGe:::hash_file_sha256(refit_artifact_path)
   )
   actual_refit_hash <-
     refit_manifest$provenance$source_artifact_hashes[["refit_artifact"]]
@@ -345,7 +345,7 @@ promotion_validate_refit <- function(
     kit = refit_result$kit,
     identity = promoted,
     source_hashes = expected_refit_hashes,
-    refit_manifest_hash = PAGe::hash_file_sha256(refit_manifest_path)
+    refit_manifest_hash = PAGe:::hash_file_sha256(refit_manifest_path)
   )
 }
 
@@ -396,7 +396,7 @@ promotion_build_manifest <- function(
   code_commit,
   run_timestamp
 ) {
-  PAGe::new_result_manifest(
+  PAGe:::new_result_manifest(
     artifact_role = "promoted_deployment_kit",
     classification = "disclosure_safe",
     code_commit = code_commit,
@@ -461,9 +461,9 @@ promote_post_refit <- function(
   holdout_season = "2025-26",
   kit_compatibility = c("strict", "legacy_m2"),
   preflight_only = FALSE,
-  read_manifest = function(path) PAGe::read_result_manifest(path),
+  read_manifest = function(path) PAGe:::read_result_manifest(path),
   write_manifest = function(manifest, path, overwrite = FALSE) {
-    PAGe::write_result_manifest(manifest, path, overwrite = overwrite)
+    PAGe:::write_result_manifest(manifest, path, overwrite = overwrite)
   },
   save_rds = saveRDS,
   write_lines = writeLines,
@@ -602,7 +602,7 @@ promote_post_refit <- function(
     acceptance_manifest = acceptance$acceptance_manifest_hash,
     refit_artifact = refit$source_hashes[["refit_artifact"]],
     refit_manifest = refit$refit_manifest_hash,
-    promoted_kit = PAGe::hash_file_sha256(staged_kit)
+    promoted_kit = PAGe:::hash_file_sha256(staged_kit)
   )
   manifest <- promotion_build_manifest(
     refit = refit,
@@ -610,7 +610,7 @@ promote_post_refit <- function(
     code_commit = code_commit,
     run_timestamp = run_timestamp
   )
-  PAGe::validate_result_manifest(manifest)
+  PAGe:::validate_result_manifest(manifest)
   write_manifest(manifest, staged_json, overwrite = FALSE)
   write_lines(
     promotion_manifest_markdown(manifest, deployment_id),
@@ -636,7 +636,7 @@ promote_post_refit <- function(
     promotion_abort("Could not publish the immutable private deployment directory.")
   }
   if (!identical(
-    PAGe::hash_file_sha256(final_paths$promoted_kit_path),
+    PAGe:::hash_file_sha256(final_paths$promoted_kit_path),
     upstream_hashes[["promoted_kit"]]
   )) {
     unlink(

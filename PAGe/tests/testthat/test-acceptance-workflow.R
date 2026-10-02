@@ -37,8 +37,8 @@ acceptance_replay <- function(kit, allD, season) {
   list(
     season = season,
     predictions = predictions,
-    metrics = PAGe::summarize_forecast_metrics(predictions),
-    diagnostics = PAGe::summarize_replay_diagnostics(predictions),
+    metrics = PAGe:::summarize_forecast_metrics(predictions),
+    diagnostics = PAGe:::summarize_replay_diagnostics(predictions),
     ignition_week = 12,
     ignition_status = "locked"
   )
@@ -151,13 +151,13 @@ test_that("a passing replay writes disclosure-safe aggregate evidence and a vali
   expect_identical(bundle$holdout_season, "2025-26")
   expect_true(is.list(bundle$report))
   expect_identical(bundle$created_at, "2026-07-28T12:00:00Z")
-  expect_identical(bundle$source_artifact_hashes[["candidate"]], PAGe::hash_file_sha256(inputs$candidate_path))
-  expect_identical(bundle$source_artifact_hashes[["incumbent"]], PAGe::hash_file_sha256(inputs$incumbent_path))
+  expect_identical(bundle$source_artifact_hashes[["candidate"]], PAGe:::hash_file_sha256(inputs$candidate_path))
+  expect_identical(bundle$source_artifact_hashes[["incumbent"]], PAGe:::hash_file_sha256(inputs$incumbent_path))
   manifest <- acceptance_read_manifest(result$paths$manifest)
-  expect_true(PAGe::validate_result_manifest(manifest))
+  expect_true(PAGe:::validate_result_manifest(manifest))
   expect_identical(
     unname(manifest$provenance$source_artifact_hashes[["promotion_bundle"]]),
-    PAGe::hash_file_sha256(result$paths$private_bundle)
+    PAGe:::hash_file_sha256(result$paths$private_bundle)
   )
 
   csvs <- list.files(result$paths$audit_dir, pattern = "[.]csv$", full.names = TRUE)
@@ -183,7 +183,7 @@ test_that("a failed gate saves evidence before returning an error", {
     } else {
       predictions$p_obs
     }
-    list(season = season, predictions = predictions, metrics = PAGe::summarize_forecast_metrics(predictions))
+    list(season = season, predictions = predictions, metrics = PAGe:::summarize_forecast_metrics(predictions))
   }
 
   expect_error(acceptance_run_test(inputs, "synthetic-fail", failing_replay), "Promotion failed")

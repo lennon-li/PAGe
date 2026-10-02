@@ -1,25 +1,25 @@
 test_that("m1_make_params carries spread_method in configuration", {
   expect_identical(PAGe:::.default_m1_params()$spread_method, "between")
 
-  params_default <- PAGe::m1_make_params()
+  params_default <- PAGe:::m1_make_params()
   expect_identical(params_default$spread_method, "between")
 
-  params_total <- PAGe::m1_make_params(spread_method = "total")
+  params_total <- PAGe:::m1_make_params(spread_method = "total")
   expect_identical(params_total$spread_method, "total")
 })
 
 test_that(".canonical_m1_params preserves supplied spread_method", {
-  params <- PAGe::m1_make_params(spread_method = "total")
+  params <- PAGe:::m1_make_params(spread_method = "total")
   canonical <- PAGe:::.canonical_m1_params(params)
   expect_identical(canonical$spread_method, "total")
 
-  params_between <- PAGe::m1_make_params(spread_method = "between")
+  params_between <- PAGe:::m1_make_params(spread_method = "between")
   canonical_between <- PAGe:::.canonical_m1_params(params_between)
   expect_identical(canonical_between$spread_method, "between")
 })
 
 test_that("m1_make_params rejects invalid spread_method", {
-  expect_error(PAGe::m1_make_params(spread_method = "invalid"))
+  expect_error(PAGe:::m1_make_params(spread_method = "invalid"))
 })
 
 test_that("between mode preserves the existing weighted-SD result", {

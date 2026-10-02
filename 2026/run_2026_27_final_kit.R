@@ -70,7 +70,7 @@ if (!preflight_only) {
     status_path <- NA_character_
     stop("Another runner already claimed this run directory.")
   }
-  write_status("started", paste0("run_id=", run_id, " entry=PAGe::train_outer_fold holdout=NULL"))
+  write_status("started", paste0("run_id=", run_id, " entry=PAGe:::train_outer_fold holdout=NULL"))
 }
 
 package_library <- Sys.getenv("PAGE_PACKAGE_LIBRARY", "")
@@ -147,7 +147,7 @@ M1_PARAMS <- list(
   slope_window = 6L, dynamic_temp = FALSE, dynamic_temp_pivot = 10L,
   spread_method = "between"
 )
-M2_STAGE_A_GRID <- PAGe::m2_subset_grid(
+M2_STAGE_A_GRID <- PAGe:::m2_subset_grid(
   k_z_values = c(0L, 3L, 4L, 5L),
   k_u_values = c(0L, 7L, 8L, 9L),
   k_d_values = c(0L, 3L, 4L, 5L, 6L, 7L),
@@ -190,7 +190,7 @@ n_weeks_in_start_year <- function(start_year) {
   )$MMWRweek == 53L)
 }
 
-raw <- PAGe::load_flu_hist(hist_path)
+raw <- PAGe:::load_flu_hist(hist_path)
 calendar <- PAGe::page_season_calendar(
   dates = as.Date(raw$week_start_date), start_week = 27L
 )
@@ -247,7 +247,7 @@ manual_labels_default <- PAGe:::.default_manual_labels()
 if (!all(training_seasons %in% names(manual_labels_default))) stop("Missing manual ignition labels.")
 
 timing_labels_training <- lapply(training_seasons, function(season) {
-  review <- PAGe::review_season_timing_v2(allD, season = season)
+  review <- PAGe:::review_season_timing_v2(allD, season = season)
   n_weeks <- max(52L, max(review$signals$weekF, na.rm = TRUE))
   ignition <- as.integer(manual_labels_default[[season]])
   if (!is.finite(ignition)) {
@@ -263,7 +263,7 @@ timing_labels_training <- lapply(training_seasons, function(season) {
     stop("No peak label is available for training season: ", season)
   }
   peak_pair <- if (peak < n_weeks) c(peak, peak + 1L) else c(peak - 1L, peak)
-  PAGe::finalize_season_timing_v2(
+  PAGe:::finalize_season_timing_v2(
     review,
     ignition = ignition_pair,
     peak = peak_pair,
@@ -275,8 +275,8 @@ timing_labels_training <- lapply(training_seasons, function(season) {
 names(timing_labels_training) <- training_seasons
 
 # Exercise the same timing conversions the training API will consume.
-manual_labels <- PAGe::as_manual_labels_v2(timing_labels_training)
-timing_targets <- PAGe::as_timing_targets_v2(timing_labels_training)
+manual_labels <- PAGe:::as_manual_labels_v2(timing_labels_training)
+timing_targets <- PAGe:::as_timing_targets_v2(timing_labels_training)
 stopifnot(setequal(names(manual_labels), EXPECTED_TRAINING), all(is.finite(manual_labels)))
 if (!identical(input_sha256, sha256(hist_path))) stop("Input changed during preflight.")
 
@@ -386,7 +386,7 @@ platform <- list(
   git_package_status = optional_command("git", c("status", "--porcelain", "--", "PAGe")),
   input_csv = hist_path, input_sha256 = input_sha256, source_manifest = source_manifest,
   gate_run_dir = Sys.getenv("PAGE_GATE_RUN_DIR"), gate_override = Sys.getenv("PAGE_GATE_OVERRIDE"),
-  entry_point = "PAGe::train_outer_fold", holdout = NULL, selection = selection,
+  entry_point = "PAGe:::train_outer_fold", holdout = NULL, selection = selection,
   recipe = RECIPE,
   recipe_summary = c(
     m0_rows = nrow(M0_GRID), m1_rows = nrow(M1_GRID),
@@ -402,7 +402,7 @@ writeLines(capture.output(print(platform)), file.path(run_dir, "platform_manifes
 saveRDS(timing_labels_training, file.path(run_dir, "timing_labels_v2.rds"))
 write_status("training", "11 eligible seasons; inner LOSO M0 -> M1 -> M2; no outer replay")
 t0 <- Sys.time()
-result <- PAGe:::.page_training_audit(do.call(PAGe::train_outer_fold, c(list(
+result <- PAGe:::.page_training_audit(do.call(PAGe:::train_outer_fold, c(list(
   data = allD, holdout = NULL, timing_labels = timing_labels_training,
   artifact_dir = artifact_dir, checkpoint_dir = checkpoint_dir,
   exclude = c(EXCLUDE, INCOMPLETE), verbose = TRUE
@@ -424,7 +424,7 @@ if (!file.copy(file.path(artifact_dir, "candidate_pre_holdout.rds"), kit_path, o
   stop("Could not preserve final frozen kit.")
 }
 saved_kit <- readRDS(kit_path)
-invisible(PAGe::validate_page_kit(saved_kit, mode = "frozen"))
+invisible(PAGe::page_validate_kit(saved_kit, mode = "frozen"))
 stopifnot(
   setequal(saved_kit$season_selection$training_seasons, EXPECTED_TRAINING),
   length(saved_kit$season_selection$holdout_seasons) == 0L

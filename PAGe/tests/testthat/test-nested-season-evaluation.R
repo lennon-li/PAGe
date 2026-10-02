@@ -82,7 +82,7 @@ test_that("nested evaluation rotates outer holdouts and aggregates seasons", {
   )
 
   directory <- tempfile("nested-evaluation-")
-  result <- PAGe::nested_season_evaluation(
+  result <- PAGe:::nested_season_evaluation(
     nested_test_data(),
     holdouts = c("A", "B", "C"),
     exclude = character(),
@@ -207,7 +207,7 @@ test_that("outer training isolates labels and forwards primary weighting", {
     fit_m2 = function(...) list(stage = "m2"),
     freeze_m2 = function(x, ...) x,
     assemble_kit = function(...) list(ok = TRUE),
-    validate_page_kit = function(x, ...) invisible(x)
+    page_validate_kit = function(x, ...) invisible(x)
   )
 
   labels <- lapply(c("A", "B", "C"), function(season) {
@@ -219,7 +219,7 @@ test_that("outer training isolates labels and forwards primary weighting", {
     )
   })
   artifact_dir <- tempfile("timing-v2-outer-artifacts-")
-  result <- PAGe::train_outer_fold(
+  result <- PAGe:::train_outer_fold(
     nested_test_data(),
     holdout = "C",
     exclude = character(),
@@ -268,7 +268,7 @@ test_that("outer training isolates labels and forwards primary weighting", {
 
 test_that("train_outer_fold forwards every control override and derives the fallback id", {
   calls <- new.env(parent = emptyenv())
-  off_id <- PAGe::m2_subset_config()$h1$id
+  off_id <- PAGe:::m2_subset_config()$h1$id
   settled_plan <- function(stage) {
     structure(list(
       stage = stage,
@@ -344,7 +344,7 @@ test_that("train_outer_fold forwards every control override and derives the fall
         scores = data.frame(),
         summary = data.frame(),
         training_rows = data.frame(),
-        selected_config = PAGe::m2_subset_config(
+        selected_config = PAGe:::m2_subset_config(
           h1 = PAGe:::m2_subset_spec(intercept = TRUE, k_z = 3L),
           h2 = PAGe:::m2_subset_spec(intercept = TRUE, k_z = 3L),
           alpha_state = 0.3,
@@ -373,10 +373,10 @@ test_that("train_outer_fold forwards every control override and derives the fall
     },
     freeze_m2 = function(x, ...) x,
     assemble_kit = function(...) list(ok = TRUE),
-    validate_page_kit = function(x, ...) invisible(x)
+    page_validate_kit = function(x, ...) invisible(x)
   )
 
-  result <- PAGe::train_outer_fold(
+  result <- PAGe:::train_outer_fold(
     nested_test_data(),
     holdout = "C",
     exclude = character(),
@@ -437,11 +437,11 @@ test_that("train_outer_fold forwards every control override and derives the fall
 })
 
 test_that("all-off fallback identifier is derived from the subset constructor", {
-  off_id <- PAGe::m2_subset_config()$h1$id
+  off_id <- PAGe:::m2_subset_config()$h1$id
   expect_identical(off_id, "i0_kz0_ku0_kd0")
   tuning <- list(
     grid = data.frame(id = c("other", off_id), stringsAsFactors = FALSE),
-    selected_config = PAGe::m2_subset_config(alpha_state = 0.3, gamma = 1.7)
+    selected_config = PAGe:::m2_subset_config(alpha_state = 0.3, gamma = 1.7)
   )
   fallback <- PAGe:::.nested_all_off_config(tuning$selected_config, tuning)
   expect_identical(as.character(fallback$row$id), off_id)
@@ -513,7 +513,7 @@ test_that("run_outer_fold enforces strict compatibility and protocol weights", {
   timing <- PAGe:::label_season_timing(
     season = "C", ignition = c(1L, 2L), peak = c(2L, 3L), n_weeks = 4L
   )
-  result <- PAGe::run_outer_fold(
+  result <- PAGe:::run_outer_fold(
     nested_test_data(),
     holdout = "C",
     timing_labels = timing
@@ -542,7 +542,7 @@ test_that("score_scale controls primary and sensitivity denominators", {
 
 test_that("min_training_seasons and control validation are enforced", {
   expect_error(
-    PAGe::train_outer_fold(
+    PAGe:::train_outer_fold(
       nested_test_data(),
       holdout = "C",
       exclude = character(),
@@ -553,7 +553,7 @@ test_that("min_training_seasons and control validation are enforced", {
     "At least 3 outer-training seasons"
   )
   expect_error(
-    PAGe::train_outer_fold(
+    PAGe:::train_outer_fold(
       nested_test_data(),
       holdout = "C",
       exclude = character(),
@@ -564,7 +564,7 @@ test_that("min_training_seasons and control validation are enforced", {
     "named vector of positive steps"
   )
   expect_error(
-    PAGe::train_outer_fold(
+    PAGe:::train_outer_fold(
       nested_test_data(),
       holdout = "C",
       exclude = character(),
@@ -575,7 +575,7 @@ test_that("min_training_seasons and control validation are enforced", {
     "supports only M2 family"
   )
   expect_error(
-    PAGe::train_outer_fold(
+    PAGe:::train_outer_fold(
       nested_test_data(),
       holdout = "C",
       exclude = character(),
@@ -586,7 +586,7 @@ test_that("min_training_seasons and control validation are enforced", {
     "must be an integer"
   )
   expect_error(
-    PAGe::train_outer_fold(
+    PAGe:::train_outer_fold(
       nested_test_data(),
       holdout = "C",
       exclude = character(),
@@ -601,14 +601,14 @@ test_that("min_training_seasons and control validation are enforced", {
 test_that("nested evaluation rejects excluded or absent outer seasons", {
   data <- nested_test_data()
   expect_error(
-    PAGe::nested_season_evaluation(
+    PAGe:::nested_season_evaluation(
       data,
       holdouts = "Z", exclude = character()
     ),
     "absent"
   )
   expect_error(
-    PAGe::nested_season_evaluation(data, holdouts = "A", exclude = "A"),
+    PAGe:::nested_season_evaluation(data, holdouts = "A", exclude = "A"),
     "fixed exclusion"
   )
 })
@@ -628,7 +628,7 @@ test_that("final fit uses all eligible seasons without an outer holdout", {
     }
   )
 
-  result <- PAGe::fit_final_pipeline(
+  result <- PAGe:::fit_final_pipeline(
     nested_test_data(),
     exclude = character()
   )
@@ -639,9 +639,9 @@ test_that("final fit uses all eligible seasons without an outer holdout", {
 })
 
 test_that("timing-v2 is explicit on every nested training entry point", {
-  expect_true("timing_labels" %in% names(formals(PAGe::train_outer_fold)))
-  expect_true("timing_labels" %in% names(formals(PAGe::run_outer_fold)))
-  expect_true("timing_labels" %in% names(formals(PAGe::nested_season_evaluation)))
+  expect_true("timing_labels" %in% names(formals(PAGe:::train_outer_fold)))
+  expect_true("timing_labels" %in% names(formals(PAGe:::run_outer_fold)))
+  expect_true("timing_labels" %in% names(formals(PAGe:::nested_season_evaluation)))
 })
 
 test_that("replay paths reject missing, duplicated, and unmatched forecast keys", {

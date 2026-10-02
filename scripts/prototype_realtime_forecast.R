@@ -32,7 +32,7 @@ cat("real prefix:", real_source, "\n")
 cat("shape from :", shape_source, " season", shape_season, "\n\n")
 
 kit <- readRDS(kit_path)
-invisible(PAGe::validate_page_kit(kit, mode = "frozen"))
+invisible(PAGe::page_validate_kit(kit, mode = "frozen"))
 
 real <- PAGe::page_load_surveillance(real_source, season = "2026-27")
 real_prov <- attr(real, "page_source")

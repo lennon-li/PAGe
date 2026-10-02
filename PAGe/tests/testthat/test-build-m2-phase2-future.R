@@ -7,7 +7,7 @@
 # seeding a matching M1 Phase 1 artifact so Phase 2 executes real M2 workers.
 
 .fixture_build <- function() {
-  synth <- PAGe::simulate_flu_seasons(S = 3, weeks = 1:40, seed = 2025)
+  synth <- PAGe:::simulate_flu_seasons(S = 3, weeks = 1:40, seed = 2025)
   synth$season <- factor(synth$season, labels = c("2022-23", "2023-24", "2024-25"))
   allD <- data.frame(
     season = as.character(synth$season),
@@ -108,7 +108,7 @@ test_that("build_m2 Phase 2 launches multisession workers and completes", {
   )
 
   future::plan(future::multisession, workers = 1L)
-  out <- PAGe::build_m2(
+  out <- PAGe:::build_m2(
     allD = fx$allD, m0 = fx$m0, m1 = fx$m1, loso_seasons = "2024-25",
     grid = grid, n_cores = 2, checkpoint_dir = dir, verbose = FALSE
   )
@@ -144,7 +144,7 @@ test_that("build_m2 restores the previous future plan after a Phase 2 error", {
 
   future::plan(future::multisession, workers = 1L)
   expect_error(
-    PAGe::build_m2(
+    PAGe:::build_m2(
       allD = fx$allD, m0 = fx$m0, m1 = fx$m1, loso_seasons = "2024-25",
       grid = grid, n_cores = 2, checkpoint_dir = dir, verbose = FALSE
     ),
@@ -170,7 +170,7 @@ test_that("build_m2 rejects invalid future_max_size and restores the plan", {
 
   future::plan(future::sequential)
   expect_error(
-    PAGe::build_m2(
+    PAGe:::build_m2(
       allD = fx$allD, m0 = fx$m0, m1 = fx$m1, loso_seasons = "2024-25",
       grid = grid, n_cores = 2, checkpoint_dir = dir,
       future_max_size = -1, verbose = FALSE

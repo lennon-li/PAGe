@@ -12,7 +12,6 @@
 #'
 #' @return A data frame with columns \code{season} (factor), \code{newWeek},
 #'   \code{y} (positives), and \code{neg} (negatives).
-#' @export
 simulate_flu_seasons <- function(S = 10, weeks = 1:52, seed = 2025) {
   set.seed(seed)
   bump_fun <- function(t, mu = 36, sigma = 7) exp(-0.5 * ((t - mu)/sigma)^2)
@@ -47,7 +46,6 @@ simulate_flu_seasons <- function(S = 10, weeks = 1:52, seed = 2025) {
 #'
 #' @return A data frame containing the CSV fields.
 #' @seealso [prepare_surveillance_data()] for normalization and validation.
-#' @export
 load_flu_hist <- function(path = NULL) {
   fp <- path
   if (is.null(fp) || !length(fp) || !nzchar(fp[[1L]])) {

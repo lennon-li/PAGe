@@ -47,7 +47,7 @@ if (length(missing)) {
 }
 
 tuning <- lapply(inputs, readRDS)
-sensitivity <- PAGe::extract_nll_sensitivity(tuning)
+sensitivity <- PAGe:::extract_nll_sensitivity(tuning)
 
 write.csv(sensitivity$overall, file.path(output_dir, "nll_by_parameter.csv"), row.names = FALSE)
 write.csv(sensitivity$by_season, file.path(output_dir, "nll_by_parameter_season.csv"), row.names = FALSE)
@@ -135,8 +135,8 @@ write.csv(
   row.names = FALSE
 )
 
-plot_nll <- PAGe::plot_nll_sensitivity(sensitivity, statistic = "best_metric")
-plot_gain <- PAGe::plot_nll_sensitivity(sensitivity, statistic = "adjacent_gain")
+plot_nll <- PAGe:::plot_nll_sensitivity(sensitivity, statistic = "best_metric")
+plot_gain <- PAGe:::plot_nll_sensitivity(sensitivity, statistic = "adjacent_gain")
 ggplot2::ggsave(
   file.path(output_dir, "nll_vs_parameter.png"), plot_nll,
   width = 14, height = 10, units = "in", dpi = 160

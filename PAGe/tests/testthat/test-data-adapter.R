@@ -8,7 +8,7 @@ test_that("prepare_page_data maps arbitrary within-season data to the canonical 
     site = c("one", "one", "two")
   )
 
-  out <- PAGe::prepare_page_data(
+  out <- PAGe:::prepare_page_data(
     raw,
     outcome_col = "positives",
     week_col = "epi_week",
@@ -34,7 +34,7 @@ test_that("prepare_page_data derives weekF from MMWR weeks and season years", {
     tested = c(10L, 10L, 10L)
   )
 
-  out <- PAGe::prepare_page_data(
+  out <- PAGe:::prepare_page_data(
     raw,
     outcome_col = "positives",
     week_col = "mmwr_week",
@@ -57,7 +57,7 @@ test_that("prepare_page_data supports negatives and explicit start years", {
     year0 = c(2025L, 2025L)
   )
 
-  out <- PAGe::prepare_page_data(
+  out <- PAGe:::prepare_page_data(
     raw,
     outcome_col = "positives",
     week_col = "week",
@@ -75,22 +75,22 @@ test_that("prepare_page_data rejects ambiguous or invalid mappings", {
   raw <- data.frame(season = "A", week = 1L, positive = 1L, total = 2L)
 
   expect_error(
-    PAGe::prepare_page_data(raw, "positive", "week", "season"),
+    PAGe:::prepare_page_data(raw, "positive", "week", "season"),
     "total_col|negative_col"
   )
   expect_error(
-    PAGe::prepare_page_data(raw, "positive", "week", "season", "total", "total"),
+    PAGe:::prepare_page_data(raw, "positive", "week", "season", "total", "total"),
     "distinct"
   )
   expect_error(
-    PAGe::prepare_page_data(
+    PAGe:::prepare_page_data(
       raw, "positive", "week", "season", "total",
       week_type = "mmwr"
     ),
     "start_year_col"
   )
   expect_error(
-    PAGe::prepare_page_data(
+    PAGe:::prepare_page_data(
       transform(raw, positive = 3L), "positive", "week", "season", "total"
     ),
     "y.*cannot exceed|Positive counts"
@@ -128,7 +128,7 @@ test_that("prepare_page_data matches the canonical Ontario multi-season data", {
   )
   expected_weekF <- ((ontario$mmwr_week - 27L) %% n_weeks) + 1L
 
-  mapped <- PAGe::prepare_page_data(
+  mapped <- PAGe:::prepare_page_data(
     ontario,
     outcome_col = "positive_tests",
     week_col = "mmwr_week",

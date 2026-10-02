@@ -232,7 +232,6 @@
 #'   Attributes record
 #'   code{source_url_or_path}, code{retrieved_utc}, code{sha256},
 #'   code{pho_layout}, code{n_weeks}, and code{last_week_end_date}.
-#' @export
 getCurrentD <- function(data = NULL, base_url = NULL, file_name = NULL,
                         cache_dir = NULL, startWeek = 27L,
                         lastWeek = NA_integer_, virus = "Influenza A",

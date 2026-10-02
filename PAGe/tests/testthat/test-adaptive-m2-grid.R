@@ -33,8 +33,8 @@ test_that("previous M2 ranking consolidates duplicate summaries deterministicall
   reordered$grid <- grid[c(3L, 1L, 2L), ]
   reordered$summary <- previous$summary[c(4L, 3L, 2L, 1L), ]
   expect_identical(
-    PAGe::plan_m2_grid(previous, max_specs = 30L),
-    PAGe::plan_m2_grid(reordered, max_specs = 30L)
+    PAGe:::plan_m2_grid(previous, max_specs = 30L),
+    PAGe:::plan_m2_grid(reordered, max_specs = 30L)
   )
 })
 
@@ -70,7 +70,7 @@ test_that("previous M2 grid rejects ambiguous source identifiers", {
   )
 
   expect_error(
-    PAGe::plan_m2_grid(previous),
+    PAGe:::plan_m2_grid(previous),
     "must exactly match"
   )
 })
@@ -85,7 +85,7 @@ test_that("boundary expansion uses the spacing adjacent to the winning boundary"
     )
   )
 
-  planned <- PAGe::plan_m2_grid(previous, max_specs = 30L)
+  planned <- PAGe:::plan_m2_grid(previous, max_specs = 30L)
   alpha_boundary <- planned[
     grepl("boundary:alpha_state", planned$provenance, fixed = TRUE), ,
     drop = FALSE
@@ -117,7 +117,7 @@ test_that("M2 EMA boundary expands only to the explicit drop/null", {
     )
   )
 
-  planned <- PAGe::plan_m2_grid(previous, max_specs = 40L)
+  planned <- PAGe:::plan_m2_grid(previous, max_specs = 40L)
 
   expect_true(any(planned$k_e == 0L & grepl("boundary:k_e:drop", planned$provenance, fixed = TRUE)))
   expect_false(any(planned$k_e == 1L))
@@ -129,7 +129,7 @@ test_that("M2 EMA boundary expands only to the explicit drop/null", {
     "k_e must be 0"
   )
 
-  dropped_ema <- PAGe::stage2_make_spec(k_e = 0L)
+  dropped_ema <- PAGe:::stage2_make_spec(k_e = 0L)
   expect_false(any(grepl("z_ema", deparse(dropped_ema$formula), fixed = TRUE)))
 })
 
@@ -139,7 +139,7 @@ test_that("all optional M2 smooth dimensions retain explicit drop candidates", {
     alpha_state = 0.20, k_r = c(2L, 4L), k_de = c(2L, 4L),
     k_sp = c(4L, 8L), bias_alpha = 0.05, bias_beta = 0
   )
-  planned <- PAGe::plan_m2_grid(max_specs = 64L)
+  planned <- PAGe:::plan_m2_grid(max_specs = 64L)
 
   expect_true(any(planned$k_e == 0L))
   expect_true(any(planned$k_r == 0L))
@@ -154,7 +154,7 @@ test_that("all optional M2 smooth dimensions retain explicit drop candidates", {
       bernoulli_nll = c(0.10, 0.20)
     )
   )
-  expanded <- PAGe::plan_m2_grid(previous, max_specs = 64L)
+  expanded <- PAGe:::plan_m2_grid(previous, max_specs = 64L)
   for (parameter in c("k_r", "k_de", "k_sp")) {
     expect_true(any(
       expanded[[parameter]] == 0L &
@@ -180,7 +180,7 @@ test_that("adaptive planning adds a missing drop after positive expansion", {
       bernoulli_nll = c(0.20, 0.10)
     )
   )
-  planned <- PAGe::plan_m2_grid(previous, max_specs = 64L)
+  planned <- PAGe:::plan_m2_grid(previous, max_specs = 64L)
   expect_true(any(
     planned$k_sp == 0L &
       grepl("boundary:k_sp:drop", planned$provenance, fixed = TRUE)
@@ -197,23 +197,23 @@ test_that("adaptive M2 caps preserve the incumbent and best prior specification"
     )
   )
 
-  planned <- PAGe::plan_m2_grid(previous, max_finalists = 3L, max_specs = 2L)
+  planned <- PAGe:::plan_m2_grid(previous, max_finalists = 3L, max_specs = 2L)
   winner_id <- PAGe:::.m2_spec_ids(grid[2L, ])
 
   expect_equal(nrow(planned), 2L)
   expect_match(planned$provenance[1L], "incumbent:v16", fixed = TRUE)
   expect_true(winner_id %in% planned$spec_id)
-  expect_error(PAGe::plan_m2_grid(max_finalists = 1.5), "positive integer")
-  expect_error(PAGe::plan_m2_grid(max_specs = 2.5), "positive integer")
+  expect_error(PAGe:::plan_m2_grid(max_finalists = 1.5), "positive integer")
+  expect_error(PAGe:::plan_m2_grid(max_specs = 2.5), "positive integer")
 })
 
 test_that("all documented M2 selection methods remain explicit options", {
   expect_identical(
-    eval(formals(PAGe::select_m2_candidate)$method),
+    eval(formals(PAGe:::select_m2_candidate)$method),
     c("min_nll", "one_se", "pareto")
   )
   expect_identical(
-    eval(formals(PAGe::train_pipeline)$selection_method),
+    eval(formals(PAGe:::train_pipeline)$selection_method),
     c("min_nll", "one_se", "pareto")
   )
 })

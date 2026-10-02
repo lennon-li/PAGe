@@ -68,7 +68,7 @@ m2 <- fit_m2(historical, selection, m0, m1, m2_tuning$best_spec) |>
   freeze_m2(m2_tuning)
 
 kit <- assemble_kit(m0, m1, m2)
-validate_page_kit(kit)
+page_validate_kit(kit)
 ```
 
 Tuning, fitting, and freezing are distinct states. M1 requires a frozen,
@@ -179,7 +179,7 @@ m2 <- fit_m2(historical, selection, m0, m1, m2_tuning$best_spec) |>
   freeze_m2(m2_tuning)
 
 candidate <- assemble_kit(m0, m1, m2)
-validate_page_kit(candidate)
+page_validate_kit(candidate)
 saveRDS(candidate, "results/candidate_pre_holdout.rds")
 ```
 

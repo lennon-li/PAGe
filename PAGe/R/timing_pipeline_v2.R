@@ -55,7 +55,6 @@
 #' @param params M0 detector parameters.
 #' @param ... Arguments passed to \code{detectIgnitionBySeason_M0v2()}.
 #' @return The detector result with numeric timing columns and provenance.
-#' @export
 detectIgnitionBySeason_M0v2_timing <- function(ign_fit, params, ...) {
   det <- detectIgnitionBySeason_M0v2(
     ign_fit = ign_fit, params = params, ...
@@ -133,7 +132,6 @@ detectIgnitionBySeason_M0v2_timing <- function(ign_fit, params, ...) {
 #' @param d_now One-season detector data containing the standard M0 columns.
 #' @param params M0 detector parameters.
 #' @return A list with current detector signals and integer/fractional timing.
-#' @export
 detectIgnition_oneSeason_timing_v2 <- function(d_now, params) {
   det <- detectIgnitionBySeason_M0v2_timing(
     d_now,
@@ -176,7 +174,6 @@ detectIgnition_oneSeason_timing_v2 <- function(d_now, params) {
 #' @param ... Additional arguments are reserved for future detector controls.
 #' @return The legacy weekly output with \code{iWeek_hat_dynamicF},
 #'   \code{iWeek_hat_lockedF}, and integer brackets.
-#' @export
 run_ignition_weekly_timing_v2 <- function(currentSeason, params, start_week = 5L, ...) {
   d0 <- dplyr::as_tibble(currentSeason) |>
     dplyr::transmute(
@@ -247,7 +244,6 @@ run_ignition_weekly_timing_v2 <- function(currentSeason, params, start_week = 5L
 #' @param labels Timing-v2 label object or list of objects.
 #' @return A copy of \code{data} with numeric \code{ignition_target_weekF}
 #'   and \code{peak_observed_weekF} columns.
-#' @export
 prepare_timing_training_data_v2 <- function(data, labels) {
   targets <- as_timing_targets_v2(labels)
   out <- dplyr::as_tibble(data) |>
@@ -268,7 +264,6 @@ prepare_timing_training_data_v2 <- function(data, labels) {
 #' @param labels Timing-v2 labels for the training seasons.
 #' @param ... Arguments passed to \code{fitIgnition()}.
 #' @return An M0 classifier result with numeric timing provenance.
-#' @export
 fitIgnition_timing_v2 <- function(data, labels, ...) {
   targets <- as_timing_targets_v2(labels)
   fit <- fitIgnition(
@@ -289,7 +284,6 @@ fitIgnition_timing_v2 <- function(data, labels, ...) {
 #' @param detection Output from \code{detectIgnitionBySeason_M0v2_timing()}.
 #' @param labels Timing-v2 labels used as truth.
 #' @return A per-season data frame with numeric truth, estimate, and error.
-#' @export
 score_ignition_timing_v2 <- function(detection, labels) {
   if (!is.list(detection) || is.null(detection$by_season)) {
     stop("`detection` must contain `$by_season`.", call. = FALSE)
@@ -316,7 +310,6 @@ score_ignition_timing_v2 <- function(detection, labels) {
 #' @param labels Timing-v2 labels.
 #' @param prediction_col Name of the prediction column.
 #' @return A data frame with observed truth, retained second label, and error.
-#' @export
 score_peak_timing_v2 <- function(predictions, labels, prediction_col = "peak_weekF") {
   if (!is.data.frame(predictions) || !all(c("season", prediction_col) %in% names(predictions))) {
     stop("`predictions` must contain season and `prediction_col`.", call. = FALSE)
@@ -346,7 +339,6 @@ score_peak_timing_v2 <- function(predictions, labels, prediction_col = "peak_wee
 #' @param m0_result Output from \code{run_ignition_weekly_timing_v2()}.
 #' @param anchor_week Numeric aligned anchor.
 #' @return A list containing numeric \code{iWeek_hatF} and \code{currentD}.
-#' @export
 fractional_alignment_coordinates_v2 <- function(current_data, m0_result,
                                                 anchor_week) {
   i_week <- as.numeric(m0_result$iWeek_hat_lockedF)

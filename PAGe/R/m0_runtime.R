@@ -237,7 +237,6 @@ run_ignition_weekly <- function(currentSeason,
 #'
 #' @return A ggplot object (when \code{facet = TRUE}) or a named list of
 #'   ggplot objects (when \code{facet = FALSE}).
-#' @export
 plot_ignition_weekly_snapshots <- function(ign_out,
                                            currentSeason = NULL,
                                            facet = TRUE,

@@ -13,7 +13,7 @@ same installed PAGe 0.2.0 package and source checkout at commit
 
 ## Execution process
 
-- Runner: `scripts/run_manuscript_holdout.R`
+- Runner: `manuscript/scripts/run_manuscript_holdout.R`
 - Lifecycle: M0 tune/expand/validate/freeze → M1 tune/expand/validate/freeze →
   M2 tune/expand/validate/freeze → strict unseen replay
 - Input: authorized `flu_testing_data.csv`; checksum recorded in each run

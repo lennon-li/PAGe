@@ -8,7 +8,6 @@
 .expert_timing_coordinate_version <- "page-continuous-week-v1"
 
 #' Create one expert decimal ignition annotation
-#' @export
 new_expert_ignition_annotation <- function(
     season,
     ignition_week_decimal,
@@ -50,7 +49,6 @@ new_expert_ignition_annotation <- function(
 }
 
 #' Validate an expert ignition annotation
-#' @export
 validate_expert_ignition_annotation <- function(x) {
   if (!inherits(x, "page_expert_ignition_annotation_v2")) {
     stop("`x` must be created by `new_expert_ignition_annotation()`.", call. = FALSE)
@@ -74,7 +72,6 @@ validate_expert_ignition_annotation <- function(x) {
 }
 
 #' Compile expert ignition annotations to flat storage rows
-#' @export
 compile_expert_ignition_annotations <- function(annotations) {
   if (inherits(annotations, "page_expert_ignition_annotation_v2")) annotations <- list(annotations)
   if (!is.list(annotations) || !length(annotations)) {

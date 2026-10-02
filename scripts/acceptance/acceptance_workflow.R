@@ -182,7 +182,7 @@ run_acceptance_replay <- function(data_path,
   )
   if (is.null(replay_fun)) {
     replay_fun <- function(kit, allD, season) {
-      PAGe::replay_season_holdout(
+      PAGe:::replay_season_holdout(
         kit,
         allD,
         season = season,
@@ -199,9 +199,9 @@ run_acceptance_replay <- function(data_path,
 
   paths <- acceptance_run_paths(private_output_dir, audit_output_dir, run_id)
   source_hashes <- c(
-    authorized_data = PAGe::hash_file_sha256(data_path),
-    candidate = PAGe::hash_file_sha256(candidate_path),
-    incumbent = PAGe::hash_file_sha256(incumbent_path)
+    authorized_data = PAGe:::hash_file_sha256(data_path),
+    candidate = PAGe:::hash_file_sha256(candidate_path),
+    incumbent = PAGe:::hash_file_sha256(incumbent_path)
   )
   candidate_replay <- replay_fun(candidate_kit, prepared_data, season)
   incumbent_replay <- replay_fun(incumbent_kit, prepared_data, season)
@@ -211,11 +211,11 @@ run_acceptance_replay <- function(data_path,
   gate <- PAGe::check_promotion(candidate_replay$metrics, incumbent_replay$metrics)
   candidate_diagnostics <- .acceptance_or(
     candidate_replay$diagnostics,
-    PAGe::summarize_replay_diagnostics(candidate_replay$predictions)
+    PAGe:::summarize_replay_diagnostics(candidate_replay$predictions)
   )
   incumbent_diagnostics <- .acceptance_or(
     incumbent_replay$diagnostics,
-    PAGe::summarize_replay_diagnostics(incumbent_replay$predictions)
+    PAGe:::summarize_replay_diagnostics(incumbent_replay$predictions)
   )
   saveRDS(candidate_replay, paths$candidate_replay)
   saveRDS(incumbent_replay, paths$incumbent_replay)
@@ -232,13 +232,13 @@ run_acceptance_replay <- function(data_path,
   acceptance_write_decision_markdown(
     paths, run_id, season, candidate, incumbent, gate, candidate_replay, incumbent_replay
   )
-  source_hashes <- c(source_hashes, promotion_bundle = PAGe::hash_file_sha256(paths$private_bundle))
+  source_hashes <- c(source_hashes, promotion_bundle = PAGe:::hash_file_sha256(paths$private_bundle))
   if (is.null(code_commit)) {
     code_commit <- tryCatch(system2("git", c("rev-parse", "--short", "HEAD"), stdout = TRUE, stderr = FALSE), error = function(e) "unknown")
     code_commit <- tolower(trimws(.acceptance_or(code_commit[[1L]], "unknown")))
   }
   if (!grepl("^[0-9a-f]{7,64}$", code_commit)) stop("A Git commit hash is required for the acceptance manifest.", call. = FALSE)
-  manifest <- PAGe::new_result_manifest(
+  manifest <- PAGe:::new_result_manifest(
     artifact_role = "holdout_acceptance_decision", classification = "disclosure_safe",
     code_commit = code_commit, run_timestamp = run_timestamp,
     r_version = as.character(getRversion()),
@@ -256,7 +256,7 @@ run_acceptance_replay <- function(data_path,
   manifest_json$provenance$source_artifact_hashes <- as.list(manifest$provenance$source_artifact_hashes)
   manifest_json$provenance$row_counts <- as.list(manifest$provenance$row_counts)
   jsonlite::write_json(manifest_json, paths$manifest, auto_unbox = TRUE, pretty = TRUE)
-  if (!PAGe::validate_result_manifest(acceptance_read_manifest(paths$manifest))) {
+  if (!PAGe:::validate_result_manifest(acceptance_read_manifest(paths$manifest))) {
     stop("Written acceptance manifest did not validate.", call. = FALSE)
   }
   result <- list(paths = paths, gate = gate, manifest = manifest, run_id = run_id)

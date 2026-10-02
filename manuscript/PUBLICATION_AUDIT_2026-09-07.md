@@ -59,7 +59,7 @@ The successful socket-enabled rerun is in `/tmp/page-publication-handoff-test.lo
 ### 1. The reported experiment does not match the manuscript primary analysis
 
 Evidence: [Methods](METHODS.md:215), [protocol](ANALYSIS_PROTOCOL.md:32),
-[runner](../scripts/run_manuscript_holdout.R:304),
+[runner](scripts/run_manuscript_holdout.R:304),
 [tuning score](../PAGe/R/m2_loso_eval.R:382), and
 [replay scoring](../PAGe/R/evaluation_gates.R:676).
 

@@ -92,7 +92,7 @@ test_that("training validates before filtering and returns a stable class", {
     .package = "PAGe"
   )
 
-  result <- PAGe::train_pipeline(
+  result <- PAGe:::train_pipeline(
     workflow_surveillance("2024-25", 1L),
     mode = "refresh", prospective_holdout = NULL, verbose = FALSE,
     m2_family = "legacy", allow_legacy = TRUE
@@ -102,7 +102,7 @@ test_that("training validates before filtering and returns a stable class", {
   expect_output(print(result), "PAGe training result")
 
   expect_error(
-    PAGe::train_pipeline(
+    PAGe:::train_pipeline(
       workflow_surveillance(c("2024-25", "2024-25"), c(1L, 1L)),
       mode = "refresh", verbose = FALSE,
       m2_family = "legacy", allow_legacy = TRUE
@@ -126,7 +126,7 @@ test_that("prospective workflow assigns only an unambiguous season", {
   )
 
   current <- data.frame(weekF = 1L, y = 2L, N = 10L)
-  result <- PAGe::run_prospective_pipeline(
+  result <- PAGe:::run_prospective_pipeline(
     workflow_kit(), current,
     season = "2025-26", verbose = FALSE
   )
@@ -134,29 +134,29 @@ test_that("prospective workflow assigns only an unambiguous season", {
   expect_identical(seen$data$season, "2025-26")
   expect_equal(seen$data$p, 0.2)
   expect_error(
-    PAGe::run_prospective_pipeline(workflow_kit(), current, verbose = FALSE),
+    PAGe:::run_prospective_pipeline(workflow_kit(), current, verbose = FALSE),
     "season"
   )
-  expect_no_error(PAGe::run_prospective_pipeline(
+  expect_no_error(PAGe:::run_prospective_pipeline(
     workflow_kit("2025-26"), current,
     verbose = FALSE
   ))
 })
 
 test_that("kit validation reports mode-appropriate missing fields", {
-  expect_identical(PAGe::validate_page_kit(workflow_kit()), workflow_kit())
-  expect_error(PAGe::validate_page_kit(list()), "m0_params")
+  expect_identical(PAGe::page_validate_kit(workflow_kit()), workflow_kit())
+  expect_error(PAGe::page_validate_kit(list()), "m0_params")
 
   broken <- workflow_kit()
   broken$M1_PARAMS$slope_window <- NULL
-  expect_error(PAGe::validate_page_kit(broken), "slope_window")
+  expect_error(PAGe::page_validate_kit(broken), "slope_window")
 
   malformed <- workflow_kit()
   malformed$best_spec <- 4L
-  expect_error(PAGe::validate_page_kit(malformed), "specification list")
+  expect_error(PAGe::page_validate_kit(malformed), "specification list")
 
   expect_error(
-    PAGe::validate_page_kit(workflow_kit(), mode = "weekly_refit"),
+    PAGe::page_validate_kit(workflow_kit(), mode = "weekly_refit"),
     "hist_data"
   )
 })
@@ -164,14 +164,14 @@ test_that("kit validation reports mode-appropriate missing fields", {
 test_that("v16 kits without an unused log-N feature remain valid", {
   kit <- workflow_kit()
   expect_false("logN_now" %in% names(kit$m2_production$fit$model))
-  expect_no_error(PAGe::validate_page_kit(kit, mode = "frozen"))
+  expect_no_error(PAGe::page_validate_kit(kit, mode = "frozen"))
 
   local_mocked_bindings(
     make_soft_cap_fn = function(...) function(x) x,
     stage2_exclude_newseason = function(...) character(),
     .package = "PAGe"
   )
-  expect_no_warning(PAGe::run_m2_forecast(
+  expect_no_warning(PAGe:::run_m2_forecast(
     kit,
     workflow_surveillance("2025-26", 1L),
     m1_result = list(per_week = list()),
@@ -189,7 +189,7 @@ test_that("kits with a dropped EMA smooth remain valid", {
     lead = factor(c("h1", "h2"))
   )
 
-  expect_no_error(PAGe::validate_page_kit(kit, mode = "frozen"))
+  expect_no_error(PAGe::page_validate_kit(kit, mode = "frozen"))
 })
 
 test_that("forecast summaries and printing expose stable essentials", {

@@ -47,7 +47,6 @@
 #'   coexist in a multinomial partition (`sum(p) <= 1 + tolerance`).
 #'
 #' @return A correlation matrix with the same stratum names as `p`.
-#' @export
 page_shared_denominator_correlation <- function(p, tolerance = 1e-10) {
   nm <- names(p)
   p <- as.numeric(p)
@@ -156,7 +155,6 @@ page_shared_denominator_correlation <- function(p, tolerance = 1e-10) {
 #' @return An object of class `page_strata_aggregate` containing the aggregate
 #'   estimate, interval, standard error(s), operator weights, and dependence
 #'   matrix used.
-#' @export
 page_aggregate_strata <- function(estimate,
                                   se = NULL,
                                   lower = NULL,
@@ -304,7 +302,6 @@ page_aggregate_strata <- function(estimate,
 #' @param keep_draws Logical; include aggregate draws in the result.
 #'
 #' @return A `page_strata_aggregate_draws` object.
-#' @export
 page_aggregate_strata_draws <- function(draws,
                                         method = c("sum", "weighted_mean", "linear"),
                                         weights = NULL,

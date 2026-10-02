@@ -55,7 +55,7 @@ n_weeks_in_start_year <- function(start_year) {
   )$MMWRweek == 53L)
 }
 
-raw <- PAGe::load_flu_hist(hist_path)
+raw <- PAGe:::load_flu_hist(hist_path)
 allD <- raw |>
   mutate(
     season = as.character(season), week = as.integer(week),
@@ -85,12 +85,12 @@ saveRDS(selection, file.path(artifact_dir, "season_selection.rds"))
 expand_until_settled <- function(tuning, stage, grid, tune_again,
                                  max_rounds = 8L) {
   m2_gain_caps <- if (identical(stage, "M2")) {
-    PAGe::default_m2_nll_gain_caps()
+    PAGe:::default_m2_nll_gain_caps()
   } else {
     NULL
   }
   for (round in seq_len(max_rounds)) {
-    report <- PAGe::inspect_tuning_boundaries(
+    report <- PAGe:::inspect_tuning_boundaries(
       tuning, stage = stage, grid = grid, warn = FALSE,
       min_nll_gain = m2_gain_caps
     )
@@ -105,13 +105,13 @@ expand_until_settled <- function(tuning, stage, grid, tune_again,
     }
 
     if (identical(stage, "M1")) {
-      grid_next <- PAGe::expand_tuning_grid(
+      grid_next <- PAGe:::expand_tuning_grid(
         tuning, stage = stage, grid = grid, n_weeks = 52L,
         steps = c(k_ref = 1),
         m1_k_ref_bounds = c(lower = 10L, upper = 52L)
       )
     } else {
-      grid_next <- PAGe::expand_tuning_grid(
+      grid_next <- PAGe:::expand_tuning_grid(
         tuning, stage = stage, grid = grid
       )
     }
@@ -136,43 +136,43 @@ expand_until_settled <- function(tuning, stage, grid, tune_again,
 
 write_status("running", paste0("M0 tuning; cores=", n_cores))
 m0_grid <- PAGe:::.default_m0_grid()
-m0 <- PAGe::tune_m0(
+m0 <- PAGe:::tune_m0(
   allD, grid = m0_grid, manual_labels = manual_labels,
   n_cores = n_cores, verbose = TRUE, selection = selection,
   checkpoint_dir = file.path(checkpoint_dir, "m0")
 )
 m0_cycle <- expand_until_settled(
   m0, "M0", m0_grid,
-  function(grid) PAGe::tune_m0(
+  function(grid) PAGe:::tune_m0(
     allD, grid = grid, manual_labels = manual_labels,
     n_cores = n_cores, verbose = TRUE, selection = selection,
     checkpoint_dir = file.path(checkpoint_dir, "m0"),
     previous_results = m0
   )
 )
-m0 <- PAGe::validate_m0_tuning(
+m0 <- PAGe:::validate_m0_tuning(
   m0_cycle$tuning, grid = m0_cycle$grid, check_boundaries = TRUE
 )
 saveRDS(m0, file.path(artifact_dir, "m0_tuning.rds"))
 write.csv(m0_cycle$grid, file.path(artifact_dir, "m0_grid.csv"), row.names = FALSE)
-m0_fit <- PAGe::fit_m0(
+m0_fit <- PAGe:::fit_m0(
   allD, selection, config = m0$best_params, manual_labels = manual_labels
 )
-m0 <- PAGe::freeze_m0(m0_fit, tuning = m0)
+m0 <- PAGe:::freeze_m0(m0_fit, tuning = m0)
 saveRDS(m0, file.path(artifact_dir, "m0_frozen.rds"))
 
 write_status("running", "M0 settled; M1 tuning")
-m1_grid <- PAGe::default_m1_grid()
-m1 <- PAGe::tune_m1(
-  allD, m0 = m0, m1 = list(m1_params = PAGe::m1_make_params()),
+m1_grid <- PAGe:::default_m1_grid()
+m1 <- PAGe:::tune_m1(
+  allD, m0 = m0, m1 = list(m1_params = PAGe:::m1_make_params()),
   grid = m1_grid, n_cores = n_cores, verbose = TRUE,
   selection = selection, checkpoint_dir = file.path(checkpoint_dir, "m1"),
   manual_labels = manual_labels
 )
 m1_cycle <- expand_until_settled(
   m1, "M1", m1_grid,
-  function(grid) PAGe::tune_m1(
-    allD, m0 = m0, m1 = list(m1_params = PAGe::m1_make_params()),
+  function(grid) PAGe:::tune_m1(
+    allD, m0 = m0, m1 = list(m1_params = PAGe:::m1_make_params()),
     grid = grid, n_cores = n_cores, verbose = TRUE,
     selection = selection, checkpoint_dir = file.path(checkpoint_dir, "m1"),
     manual_labels = manual_labels
@@ -181,21 +181,21 @@ m1_cycle <- expand_until_settled(
 if (any(m1_cycle$report$decision == "expand_required")) {
   stop("M1 remained unresolved after expansion; M2 was not started.", call. = FALSE)
 }
-m1 <- PAGe::validate_m1_tuning(m1_cycle$tuning, check_boundaries = TRUE)
+m1 <- PAGe:::validate_m1_tuning(m1_cycle$tuning, check_boundaries = TRUE)
 saveRDS(m1, file.path(artifact_dir, "m1_tuning.rds"))
 write.csv(m1_cycle$grid, file.path(artifact_dir, "m1_grid.csv"), row.names = FALSE)
 best_m1 <- m1$best[1L, , drop = FALSE]
-m1_config <- PAGe::m1_make_params(
+m1_config <- PAGe:::m1_make_params(
   k_ref = best_m1$k_ref, temperature = best_m1$multi_temperature,
   rise_weight = best_m1$align_rise_weight, slope_weight = best_m1$slope_weight,
   slope_window = best_m1$slope_window, ref_method = "fs"
 )
-m1_fit <- PAGe::fit_m1(allD, selection, m0 = m0, config = m1_config)
-m1 <- PAGe::freeze_m1(m1_fit, tuning = m1)
+m1_fit <- PAGe:::fit_m1(allD, selection, m0 = m0, config = m1_config)
+m1 <- PAGe:::freeze_m1(m1_fit, tuning = m1)
 saveRDS(m1, file.path(artifact_dir, "m1_frozen.rds"))
 
 write_status("running", "M1 settled; M2 tuning")
-m2_grid <- PAGe::plan_m2_grid(NULL, max_finalists = 6L, max_specs = 64L)
+m2_grid <- PAGe:::plan_m2_grid(NULL, max_finalists = 6L, max_specs = 64L)
 expanded_m2 <- list.files(
   artifact_dir, pattern = "^m2_expanded_grid_round[0-9]+\\.csv$",
   full.names = TRUE
@@ -215,39 +215,39 @@ if (length(expanded_m2)) {
             " (", nrow(m2_grid), " specs).")
   }
 }
-m2 <- PAGe::tune_m2(
+m2 <- PAGe:::tune_m2(
   allD, selection = selection, m0 = m0, m1 = m1, grid = m2_grid,
   n_cores = n_cores, checkpoint_dir = file.path(checkpoint_dir, "m2"),
   verbose = TRUE
 )
 m2_cycle <- expand_until_settled(
   m2, "M2", m2_grid,
-  function(grid) PAGe::tune_m2(
+  function(grid) PAGe:::tune_m2(
     allD, selection = selection, m0 = m0, m1 = m1, grid = grid,
     n_cores = n_cores, checkpoint_dir = file.path(checkpoint_dir, "m2"),
     verbose = TRUE
   )
 )
-m2 <- PAGe::validate_m2_tuning(
+m2 <- PAGe:::validate_m2_tuning(
   m2_cycle$tuning,
   check_boundaries = TRUE,
-  min_nll_gain = PAGe::default_m2_nll_gain_caps()
+  min_nll_gain = PAGe:::default_m2_nll_gain_caps()
 )
 saveRDS(m2, file.path(artifact_dir, "m2_tuning.rds"))
 write.csv(m2_cycle$grid, file.path(artifact_dir, "m2_grid.csv"), row.names = FALSE)
 
-m2_fit <- PAGe::fit_m2(
+m2_fit <- PAGe:::fit_m2(
   allD, selection, m0 = m0, m1 = m1, config = m2$best_spec,
   n_cores = n_cores, verbose = TRUE
 )
-m2 <- PAGe::freeze_m2(m2_fit, tuning = m2)
-kit <- PAGe::assemble_kit(m0, m1, m2, best_spec_id = m2$best_spec_id)
-PAGe::validate_page_kit(kit)
+m2 <- PAGe:::freeze_m2(m2_fit, tuning = m2)
+kit <- PAGe:::assemble_kit(m0, m1, m2, best_spec_id = m2$best_spec_id)
+PAGe:::validate_page_kit(kit)
 saveRDS(m2, file.path(artifact_dir, "m2_frozen.rds"))
 saveRDS(kit, file.path(artifact_dir, "candidate_pre_holdout.rds"))
 
 write_status("running", "M2 settled; strict 2015-16 replay")
-replay <- PAGe::replay_season_holdout(
+replay <- PAGe:::replay_season_holdout(
   kit, allD, season = holdout, kit_compatibility = "strict"
 )
 if (!identical(as.character(replay$status), "unseen_replay_complete")) {

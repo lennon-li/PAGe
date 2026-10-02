@@ -35,7 +35,7 @@ options(stringsAsFactors=FALSE)
   files <- sort(list.files('PAGe/R',pattern='[.]R$',full.names=TRUE))
   for (f in files) sys.source(f,envir=.GlobalEnv)
   sys.source('scripts/v3_probability_helpers_v1.R',envir=.GlobalEnv)
-  fc <- page_v3_forecast(panel,season=season,origin_weekF=origin)
+  fc <- page_forecast(panel,season=season,origin_weekF=origin)
   if (!identical(fc$release_id,opt$expected_release_id) || !isTRUE(fc$issued)) stop('Package-native v3 probability runtime identity mismatch.',call.=FALSE)
   pp <- fc$forecasts[,c('type','horizon','forecast','route'),drop=FALSE]
   z <- merge(cmp[,c('type','horizon','v3_forecast_pct','v3_route')],pp,by=c('type','horizon'),all=TRUE,sort=FALSE)

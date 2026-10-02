@@ -40,7 +40,6 @@ m2_subset_term_names <- function() c("z", "u", "d", "tau")
 #'
 #' @return A data frame with stable `id`, component, and `enabled_count`
 #'   columns, ordered from simplest to most complex.
-#' @export
 m2_subset_grid <- function(k_values = c(0L, 3L, 4L, 5L, 6L, 7L, 8L),
                            k_z_values = k_values, k_u_values = k_values,
                            k_d_values = k_values, k_tau_values = 0L,
@@ -761,7 +760,6 @@ m2_subset_is_family <- function(x) {
 #'
 #' @return A validated configuration list tagged with the
 #'   `offset_subset_v1` family.
-#' @export
 m2_subset_config <- function(h1 = NULL, h2 = NULL, alpha_state = 0.2,
                              bs = "ts", method = "REML",
                              gamma = 1.4, intercept_sp = -1) {

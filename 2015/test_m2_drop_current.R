@@ -15,7 +15,7 @@ suppressPackageStartupMessages({
   library(MMWRweek)
 })
 
-raw <- PAGe::load_flu_hist(hist_path)
+raw <- PAGe:::load_flu_hist(hist_path)
 n_weeks_in_start_year <- function(start_year) {
   52L + as.integer(
     MMWRweek::MMWRweek(as.Date(paste0(as.integer(start_year), "-12-31")))$MMWRweek == 53L
@@ -50,7 +50,7 @@ summary <- do.call(rbind, lapply(grid$spec_id, function(id) {
     bernoulli_nll = mean(scores$bernoulli_nll, na.rm = TRUE)
   )
 }))
-planned <- PAGe::plan_m2_grid(
+planned <- PAGe:::plan_m2_grid(
   list(grid = grid, summary = summary),
   max_specs = 64L
 )
@@ -97,7 +97,7 @@ message(
   " with ", nrow(grid), " cached specifications and ",
   n_cores, " cores"
 )
-tuning <- PAGe::tune_m2(
+tuning <- PAGe:::tune_m2(
   allD,
   selection = selection,
   m0 = m0,
@@ -107,8 +107,8 @@ tuning <- PAGe::tune_m2(
   checkpoint_dir = scratch,
   verbose = TRUE
 )
-caps <- PAGe::default_m2_nll_gain_caps()
-tuning <- PAGe::validate_m2_tuning(
+caps <- PAGe:::default_m2_nll_gain_caps()
+tuning <- PAGe:::validate_m2_tuning(
   tuning,
   check_boundaries = TRUE,
   min_nll_gain = caps

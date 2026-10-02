@@ -1,0 +1,159 @@
+---
+title: "PAGe public R API"
+format:
+  html:
+    toc: true
+    embed-resources: true
+---
+
+## Scope
+
+The public PAGe API is intentionally small. Functions exported from the package are the supported user contract; model-development helpers, tuning internals, frozen-release implementation functions, and historical versioned functions remain inside the package namespace for reproducibility but are not part of the supported API.
+
+Development labels such as `v1`, `v2`, and `v3` are not used in public function names. Version identifiers may still appear in immutable artifacts, schemas, release IDs, archived scripts, and internal implementation names where they are required for provenance.
+
+## Surveillance data
+
+```r
+page_load_surveillance(...)
+prepare_surveillance_data(...)
+validate_surveillance_data(...)
+validate_season_selection(...)
+page_season_calendar(...)
+```
+
+`page_load_surveillance()` is the normal data-ingestion entry point. `prepare_surveillance_data()` and `validate_surveillance_data()` expose the canonical data contract when users already have surveillance data in memory.
+
+## End-to-end forecasting
+
+```r
+forecast <- page_forecast(data, season = "2026-27")
+
+page_walkforward_report(
+  data,
+  season = "2026-27",
+  output_file = "PAGe_walkforward.html"
+)
+```
+
+Additional operational functions are:
+
+```r
+page_forecast_now(...)
+page_models()
+```
+
+`page_models()` validates and returns the current frozen production model bundle and release metadata.
+
+## Training and kit lifecycle
+
+The supported full-system training workflow is:
+
+```r
+trained <- page_train(
+  data = surveillance_data,
+  selection = selection,
+  mode = "refresh"
+)
+
+page_save_kit(trained$kit, "page-kit.rds")
+kit <- page_load_kit("page-kit.rds")
+page_validate_kit(kit)
+```
+
+Use `mode = "retune"` when the governed workflow should retune rather than refresh a fixed specification.
+
+Expert ignition labeling is available through:
+
+```r
+page_label_ignitions(...)
+```
+
+The season selection recorded in governed objects can be retrieved with:
+
+```r
+season_selection(x)
+```
+
+## Model-level scientific interface
+
+Researchers who need direct access to the three PAGe components can use the stable model-level functions:
+
+```r
+m0 <- m0_fit(...)
+m0_state <- m0_detect(...)
+
+m1 <- m1_fit(...)
+m1_state <- m1_predict(...)
+peak <- m1_peak_posterior(...)
+passage <- m1_passage_posterior(...)
+
+m2 <- m2_fit(...)
+forecast <- m2_predict(...)
+```
+
+These names describe the scientific role of each component rather than the development generation that implemented it.
+
+## Stratified aggregation
+
+PAGe supports aggregation across pathogen types, age groups, regions, sites, or other strata.
+
+For analytic uncertainty propagation:
+
+```r
+aggregate_strata(
+  estimate = c(A = 0.05, B = 0.02),
+  se = c(A = 0.004, B = 0.002),
+  method = "sum",
+  dependence = "shared_denominator",
+  bounds = c(0, 1)
+)
+```
+
+For denominator-weighted age strata:
+
+```r
+aggregate_strata(
+  estimate = c(`0-17` = 0.10, `18-64` = 0.20, `65+` = 0.30),
+  se = c(`0-17` = 0.01, `18-64` = 0.02, `65+` = 0.03),
+  method = "weighted_mean",
+  weights = c(`0-17` = 100, `18-64` = 300, `65+` = 100),
+  dependence = "independent",
+  bounds = c(0, 1)
+)
+```
+
+When joint posterior or simulation draws are available, prefer:
+
+```r
+aggregate_strata_draws(draws, method = "sum")
+```
+
+For mutually exclusive categories sharing a denominator, the implied multinomial correlation matrix can be inspected with:
+
+```r
+shared_denominator_correlation(c(A = 0.05, B = 0.02))
+```
+
+## Evaluation and governance
+
+```r
+evaluation <- evaluate_forecasts(...)
+replay <- replay_holdout(...)
+check_promotion(...)
+verify_promotion(...)
+```
+
+These functions expose the supported validation and promotion workflow without exporting the lower-level fold runners, candidate racing helpers, artifact constructors, or cache machinery.
+
+## Plotting
+
+```r
+plot_forecast(...)
+```
+
+Specialized development and diagnostic plots remain internal.
+
+## Internal implementation helpers
+
+Functions such as `tune_m0()`, `fit_m0()`, `freeze_m0()`, `run_m1_v2_timing()`, `page_v3_forecast()`, `build_m2()`, and other versioned/development helpers are intentionally not exported. They remain available to repository-owned reproduction code and package internals, but external users should use the stable public API above.

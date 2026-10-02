@@ -9,7 +9,7 @@ test_that("preflight audit passes valid M0 grid", {
     n_consec = 5L, L = 2L, eps = 0, K_sum = 5L,
     p_sum_thr = 0.06, N_req = 4L, w_min = 13L, w_max = 26L
   )
-  audit <- PAGe::preflight_support_audit(data, m0_grid = grid)
+  audit <- PAGe:::preflight_support_audit(data, m0_grid = grid)
   expect_s3_class(audit, "page_preflight_audit")
   expect_true(audit$m0$valid)
   expect_length(audit$m0$issues, 0)
@@ -26,7 +26,7 @@ test_that("preflight audit fails unsupported M0 grid", {
     n_consec = 5L, L = 2L, eps = 0, K_sum = 6L,
     p_sum_thr = 0.06, N_req = 4L, w_min = 1L, w_max = 4L
   )
-  audit <- PAGe::preflight_support_audit(data, m0_grid = grid)
+  audit <- PAGe:::preflight_support_audit(data, m0_grid = grid)
   expect_false(audit$m0$valid)
   expect_length(audit$m0$issues, 1)
   expect_true(grepl("shortest training season", audit$m0$issues[1]))
@@ -39,7 +39,7 @@ test_that("preflight audit passes valid M1 grid", {
     slope_weight = c(8, 12, 16),
     slope_window = 6L
   )
-  audit <- PAGe::preflight_support_audit(
+  audit <- PAGe:::preflight_support_audit(
     data.frame(season = "a", weekF = 1L),
     m1_grid = grid
   )
@@ -52,7 +52,7 @@ test_that("preflight audit fails unsupported M1 grid", {
     slope_weight = c(8, 12),
     slope_window = 6L
   )
-  audit <- PAGe::preflight_support_audit(
+  audit <- PAGe:::preflight_support_audit(
     data.frame(season = "a", weekF = 1L),
     m1_grid = grid, n_weeks = 52L
   )
@@ -80,7 +80,7 @@ test_that("preflight audit passes valid M2 grid", {
     alpha_state = 0.2, k_r = 0L, k_de = 0L, k_sp = 4L,
     bias_alpha = 0.05, bias_beta = 0
   )
-  audit <- PAGe::preflight_support_audit(data, m2_grid = grid)
+  audit <- PAGe:::preflight_support_audit(data, m2_grid = grid)
   expect_true(audit$m2$valid)
 })
 
@@ -98,22 +98,22 @@ test_that("preflight audit fails unsupported M2 grid", {
     alpha_state = 0.2, k_r = 0L, k_de = 0L, k_sp = 0L,
     bias_alpha = 0.05, bias_beta = 0
   )
-  audit <- PAGe::preflight_support_audit(data, m2_grid = grid)
+  audit <- PAGe:::preflight_support_audit(data, m2_grid = grid)
   expect_false(audit$m2$valid)
   expect_true(grepl("exceed data support", audit$m2$issues[1]))
 })
 
 test_that("preflight audit fails on malformed input", {
   expect_error(
-    PAGe::preflight_support_audit("not a data frame", m0_grid = data.frame()),
+    PAGe:::preflight_support_audit("not a data frame", m0_grid = data.frame()),
     "must be a data frame"
   )
   expect_error(
-    PAGe::preflight_support_audit(data.frame(season = "a"), m0_grid = "not a grid"),
+    PAGe:::preflight_support_audit(data.frame(season = "a"), m0_grid = "not a grid"),
     "must be a data frame"
   )
   expect_error(
-    PAGe::preflight_support_audit(data.frame(season = "a")),
+    PAGe:::preflight_support_audit(data.frame(season = "a")),
     "must be supplied"
   )
 })
@@ -130,7 +130,7 @@ test_that("preflight audit covers multiple stages", {
     p_sum_thr = 0.06, N_req = 4L, w_min = 13L, w_max = 26L
   )
   m1_grid <- data.frame(k_ref = 25L, slope_weight = 8, slope_window = 6L)
-  audit <- PAGe::preflight_support_audit(data, m0_grid = m0_grid, m1_grid = m1_grid)
+  audit <- PAGe:::preflight_support_audit(data, m0_grid = m0_grid, m1_grid = m1_grid)
   expect_true("m0" %in% names(audit))
   expect_true("m1" %in% names(audit))
   expect_true(audit$m0$valid)

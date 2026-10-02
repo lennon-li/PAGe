@@ -26,7 +26,6 @@
 #'   vector of problems), and \code{remediation} (character vector of
 #'   suggestions). The audit itself stops on malformed input (e.g., wrong types)
 #'   but records per-stage validation failures in the report.
-#' @export
 preflight_support_audit <- function(data,
                                     m0_grid = NULL,
                                     m1_grid = NULL,
