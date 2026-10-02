@@ -116,14 +116,21 @@
 }
 
 .api_validate_trigger_request <- function(body,config) {
-  if (is.character(body)) body <- .api_parse_json_object_strict(body,c('season','expected_release_id'))
-  if (!is.list(body) || !identical(sort(names(body)),sort(c('season','expected_release_id')))) stop('Invalid trigger request.',call.=FALSE)
+  if (is.character(body)) {
+    .api_require_packages('jsonlite')
+    body <- tryCatch(jsonlite::parse_json(body,simplifyVector=FALSE),error=function(e) stop('Malformed JSON.',call.=FALSE))
+    if (!is.list(body) || is.null(names(body)) || any(!nzchar(names(body))) || anyDuplicated(names(body))) stop('Duplicate or empty JSON keys are forbidden.',call.=FALSE)
+  }
+  required <- c('season','expected_release_id'); allowed <- c(required,'a_shadow_option')
+  if (!is.list(body) || !all(required %in% names(body)) || length(setdiff(names(body),allowed))) stop('Invalid trigger request.',call.=FALSE)
   season <- .api_scalar_string(body$season,'season',7L)
   rel <- .api_scalar_string(body$expected_release_id,'expected_release_id',64L)
+  opt <- as.character(body$a_shadow_option %||% 'off')
+  if (length(opt)!=1L || is.na(opt) || !opt %in% c('off','exp050_h2')) stop('Invalid A shadow option.',call.=FALSE)
   if (!grepl('^[0-9]{4}-[0-9]{2}$',season)) stop('Invalid season format.',call.=FALSE)
   if (!identical(season,config$season)) stop('Requested season is not the configured deployment season.',call.=FALSE)
   if (!grepl(.PAGE_SHA_RE,rel) || !identical(rel,config$forecast_release_id)) stop('Release assertion does not match deployment release.',call.=FALSE)
-  list(season=season,expected_release_id=rel)
+  list(season=season,expected_release_id=rel,a_shadow_option=opt)
 }
 
 .api_validate_idempotency_key <- function(key) {
@@ -132,12 +139,25 @@
   key
 }
 
-.api_request_digest <- function(req,source_mode) {
+.api_request_digest_legacy_off <- function(req,source_mode) {
   payload <- paste0(
     'api_contract_version\t',.PAGE_API_CONTRACT,'\n',
     'season\t',req$season,'\n',
     'expected_release_id\t',req$expected_release_id,'\n',
     'source_mode\t',source_mode,'\n'
+  )
+  .api_sha256_text(payload)
+}
+
+.api_request_digest <- function(req,source_mode) {
+  opt <- as.character(req$a_shadow_option %||% 'off')
+  if (identical(opt,'off')) return(.api_request_digest_legacy_off(req,source_mode))
+  payload <- paste0(
+    'api_contract_version\t',.PAGE_API_CONTRACT,'\n',
+    'season\t',req$season,'\n',
+    'expected_release_id\t',req$expected_release_id,'\n',
+    'source_mode\t',source_mode,'\n',
+    'a_shadow_option\t',opt,'\n'
   )
   .api_sha256_text(payload)
 }
@@ -317,7 +337,7 @@
 
 .api_job_projection <- function(config,run_id) {
   st <- .api_read_state(config,run_id); req <- .api_read_json(.api_request_path(config,run_id))
-  out <- list(run_id=run_id,season=req$season,release_id=req$expected_release_id,created_utc=req$created_utc,status=.api_public_state(st))
+  out <- list(run_id=run_id,season=req$season,release_id=req$expected_release_id,a_shadow_option=as.character(req$a_shadow_option %||% 'off'),created_utc=req$created_utc,status=.api_public_state(st))
   for (k in c('started_utc','finished_utc','origin_weekF','effective_panel_sha256','transaction_id','worker_exit_code','failure_code','failure_message')) if (!is.null(st[[k]])) out[[k]] <- st[[k]]
   out
 }
@@ -351,13 +371,24 @@
 
 .api_validate_immutable_request_lineage <- function(config,run_id) {
   req <- .api_read_json(.api_request_path(config,run_id))
-  required <- c('run_id','api_contract_version','season','expected_release_id','source_mode','key_hash','request_digest','created_utc','service_instance_id')
-  if (!is.list(req) || !setequal(names(req),required) || length(req)!=length(required)) stop('Immutable request schema is incomplete or unexpected.',call.=FALSE)
+  required <- c('run_id','api_contract_version','season','expected_release_id','source_mode','a_shadow_option','key_hash','request_digest','created_utc','service_instance_id')
+  legacy <- setdiff(required,'a_shadow_option')
+  if (!is.list(req) || !(setequal(names(req),required) || setequal(names(req),legacy))) stop('Immutable request schema is incomplete or unexpected.',call.=FALSE)
+  is_legacy <- !'a_shadow_option' %in% names(req)
+  opt <- as.character(req$a_shadow_option %||% 'off'); if (length(opt)!=1L || !opt %in% c('off','exp050_h2')) stop('Immutable request A shadow option invalid.',call.=FALSE)
   if (!identical(as.character(req$run_id),run_id) || !identical(as.character(req$api_contract_version),.PAGE_API_CONTRACT)) stop('Immutable request identity mismatch.',call.=FALSE)
   if (!identical(as.character(req$season),config$season) || !identical(as.character(req$expected_release_id),config$forecast_release_id) || !identical(as.character(req$source_mode),config$source_mode)) stop('Immutable request deployment binding mismatch.',call.=FALSE)
   if (!.api_is_sha(as.character(req$key_hash)) || !.api_is_sha(as.character(req$request_digest)) || !.api_is_utc_timestamp(as.character(req$created_utc)) || !nzchar(as.character(req$service_instance_id))) stop('Immutable request lineage field invalid.',call.=FALSE)
-  recomputed <- .api_request_digest(list(season=as.character(req$season),expected_release_id=as.character(req$expected_release_id)),as.character(req$source_mode))
-  if (!identical(recomputed,as.character(req$request_digest))) stop('Immutable request digest does not recompute.',call.=FALSE)
+  digest_req <- list(season=as.character(req$season),expected_release_id=as.character(req$expected_release_id),a_shadow_option=opt)
+  if (is_legacy) {
+    candidates <- c(.api_request_digest_legacy_off(digest_req,as.character(req$source_mode)),
+                    .api_request_digest(digest_req,as.character(req$source_mode)))
+    if (!as.character(req$request_digest) %in% candidates) stop('Immutable request digest does not recompute.',call.=FALSE)
+  } else {
+    recomputed <- .api_request_digest(digest_req,as.character(req$source_mode))
+    if (!identical(recomputed,as.character(req$request_digest))) stop('Immutable request digest does not recompute.',call.=FALSE)
+  }
+  req$a_shadow_option <- opt
   req
 }
 .api_ensure_idempotency_from_request <- function(config,run_id) {
@@ -470,7 +501,7 @@
   if (!is.null(active_lock_run)) return(list(status='busy',run_id=active_lock_run))
   run_id <- .api_new_run_id(); jd <- .api_job_dir(config,run_id)
   if (!dir.create(jd,recursive=FALSE,showWarnings=FALSE,mode='0700')) stop('Could not create job directory.',call.=FALSE)
-  request <- list(run_id=run_id,api_contract_version=.PAGE_API_CONTRACT,season=req$season,expected_release_id=req$expected_release_id,source_mode=config$source_mode,key_hash=key_hash,request_digest=digest,created_utc=.api_now(),service_instance_id=service_instance_id)
+  request <- list(run_id=run_id,api_contract_version=.PAGE_API_CONTRACT,season=req$season,expected_release_id=req$expected_release_id,source_mode=config$source_mode,a_shadow_option=as.character(req$a_shadow_option %||% 'off'),key_hash=key_hash,request_digest=digest,created_utc=.api_now(),service_instance_id=service_instance_id)
   .api_atomic_write_json(request,.api_request_path(config,run_id),immutable=TRUE)
   .api_write_state(config,run_id,list(state='accepted_pending',updated_utc=.api_now(),service_instance_id=service_instance_id))
   if (!.api_create_season_lock(config,run_id,service_instance_id)) stop('Could not create season lock.',call.=FALSE)
@@ -893,7 +924,45 @@
   list(status='experimental',available=TRUE,kind='peak',type=type,operator='<',threshold=as.numeric(threshold),threshold_scale='weekF',probability=as.numeric(sum(w[atoms<threshold])),outcome=d$outcome,probability_snapshot_sha256=prob$sha256,calibration=d$calibration)
 }
 
+
+.api_a_shadow_snapshot <- function(snapshot_dir,receipt,cmp,expected_option) {
+  expected_option <- as.character(expected_option %||% 'off')
+  if (!expected_option %in% c('off','exp050_h2')) stop('Invalid expected A shadow option.',call.=FALSE)
+  path <- file.path(snapshot_dir,'a_shadow_snapshot.rds'); sha_path <- file.path(snapshot_dir,'a_shadow_snapshot.sha256')
+  if (!file.exists(path) || !file.exists(sha_path)) stop('A shadow snapshot files are missing.',call.=FALSE)
+  sha_lines <- readLines(sha_path,warn=FALSE,encoding='UTF-8')
+  if (length(sha_lines)!=1L || !.api_is_sha(sha_lines[[1L]])) stop('A shadow snapshot SHA sidecar is invalid.',call.=FALSE)
+  got_sha <- .api_sha256_file(path); if (!identical(got_sha,sha_lines[[1L]])) stop('A shadow snapshot SHA mismatch.',call.=FALSE)
+  x <- readRDS(path)
+  req <- c('schema_version','status','option','season','origin_weekF','release_id','canonical_unchanged','challenger')
+  if (!is.list(x) || !identical(names(x),req)) stop('A shadow snapshot schema mismatch.',call.=FALSE)
+  if (!identical(x$schema_version,'page-v3-a-shadow-snapshot-v1') || !identical(as.character(x$option),expected_option) ||
+      !identical(as.character(x$season),receipt[['season']]) || !identical(as.integer(x$origin_weekF),as.integer(receipt[['origin_weekF']])) ||
+      !identical(as.character(x$release_id),receipt[['release_id']]) || !isTRUE(x$canonical_unchanged)) stop('A shadow snapshot identity mismatch.',call.=FALSE)
+  if (expected_option=='off') {
+    if (!identical(x$status,'off') || !is.null(x$challenger)) stop('OFF A shadow snapshot invalid.',call.=FALSE)
+  } else {
+    if (!identical(x$status,'experimental_shadow') || !is.list(x$challenger)) stop('EXP050 A shadow snapshot invalid.',call.=FALSE)
+    q <- x$challenger; needed <- c('option','status','type','horizon','canonical_route','canonical_forecast_pct','challenger_route','challenger_forecast_pct','delta_challenger_minus_canonical_pp','feature','artifact','canonical_unchanged')
+    if (!identical(names(q),needed) || !identical(q$option,'exp050_h2') || !identical(q$status,'experimental_shadow') || !identical(q$type,'A') || !identical(as.integer(q$horizon),2L) ||
+        !identical(q$canonical_route,'exact_A1_state') || !identical(q$challenger_route,'shadow_A1form_EXP050_h2') || !isTRUE(q$canonical_unchanged)) stop('EXP050 A shadow challenger schema invalid.',call.=FALSE)
+    can <- suppressWarnings(as.numeric(q$canonical_forecast_pct)); ch <- suppressWarnings(as.numeric(q$challenger_forecast_pct)); de <- suppressWarnings(as.numeric(q$delta_challenger_minus_canonical_pp))
+    if (any(!is.finite(c(can,ch,de))) || ch<=0 || ch>=100 || abs(de-(ch-can))>1e-10) stop('EXP050 A shadow values invalid.',call.=FALSE)
+    r <- cmp[cmp$type=='A' & cmp$horizon==2L,,drop=FALSE]
+    if (nrow(r)!=1L || !identical(as.character(r$v3_route[[1L]]),'exact_A1_state') || abs(can-r$v3_forecast_pct[[1L]])>1e-12) stop('A shadow canonical parity mismatch.',call.=FALSE)
+    if (!is.list(q$artifact) || !grepl(.PAGE_SHA_RE,as.character(q$artifact$artifact_id %||% ''))) stop('A shadow artifact identity invalid.',call.=FALSE)
+  }
+  list(snapshot=x,sha256=got_sha,path=path)
+}
+
 .api_validate_and_project_transaction <- function(config,run_id,persist=TRUE) {
+  # Transaction validation is deliberately independent of optional API request
+  # lineage so retained/legacy canonical transactions remain projectable. The
+  # challenger is OFF unless this API run explicitly requested a valid option.
+  req_path <- .api_request_path(config,run_id)
+  req_shadow <- if (file.exists(req_path)) tryCatch(.api_read_json(req_path),error=function(e) NULL) else NULL
+  a_shadow_option <- as.character(if (is.list(req_shadow)) req_shadow$a_shadow_option %||% 'off' else 'off')
+  if (length(a_shadow_option)!=1L || !a_shadow_option %in% c('off','exp050_h2')) stop('Invalid persisted A shadow option.',call.=FALSE)
   schema <- .api_transaction_schema(config$transaction_schema)
   tx_dir <- .api_find_published_transaction(config,run_id)
   completed_path <- file.path(tx_dir,'COMPLETED')
@@ -939,8 +1008,21 @@
     if (!inherits(prob_try,'error')) { prob <- prob_try; prob_validation <- 'valid' } else prob_validation <- 'invalid'
   } else if (any(file.exists(prob_files))) prob_validation <- 'partial'
   prob_projection <- if (is.null(prob)) list(status='unavailable',validation=prob_validation) else list(status='experimental',validation='valid',positivity_query=paste0('/v1/weekly-runs/',run_id,'/probability/positivity'),peak_query=paste0('/v1/weekly-runs/',run_id,'/probability/peak'),probability_snapshot_sha256=prob$sha256)
-  result <- list(run_id=run_id,season=config$season,origin_weekF=origin,release_id=config$forecast_release_id,effective_panel_sha256=receipt[['effective_panel_sha256']],monitoring=mon$monitoring,forecasts=forecasts,probabilities=prob_projection)
-  provenance <- list(run_id=run_id,season=config$season,origin_weekF=origin,release_id=config$forecast_release_id,release_manifest_sha256=manifest_sha,source_mode=receipt[['source_mode']],raw_source_sha256=receipt[['raw_source_sha256']],supplied_typed_panel_sha256=receipt[['supplied_typed_panel_sha256']],effective_panel_sha256=receipt[['effective_panel_sha256']],transaction_id=tx_id,v2_child_run=basename(receipt[['v2_child_run']]),v3_child_run=basename(receipt[['v3_child_run']]),monitoring_file_sha256=mon$file_sha256,probability_snapshot_validation=prob_validation,probability_snapshot_sha256=if(is.null(prob)) NULL else prob$sha256,api_contract_version=.PAGE_API_CONTRACT)
+  shadow_files <- c(file.path(jd,'a_shadow_snapshot.rds'),file.path(jd,'a_shadow_snapshot.sha256'))
+  a_shadow <- NULL; a_shadow_validation <- if (a_shadow_option=='off') 'off' else 'missing'
+  if (all(file.exists(shadow_files))) {
+    sh_try <- tryCatch(.api_a_shadow_snapshot(jd,receipt,cmp,a_shadow_option),error=identity)
+    if (!inherits(sh_try,'error')) { a_shadow <- sh_try; a_shadow_validation <- 'valid' } else a_shadow_validation <- 'invalid'
+  } else if (any(file.exists(shadow_files))) a_shadow_validation <- 'partial'
+  a_shadow_projection <- if (a_shadow_option=='off') {
+    list(option='off',status='off',canonical_unchanged=TRUE)
+  } else if (is.null(a_shadow)) {
+    list(option=a_shadow_option,status='unavailable',validation=a_shadow_validation,canonical_unchanged=TRUE)
+  } else {
+    c(list(option=a_shadow_option,status='experimental_shadow',validation='valid',snapshot_sha256=a_shadow$sha256,canonical_unchanged=TRUE),a_shadow$snapshot['challenger'])
+  }
+  result <- list(run_id=run_id,season=config$season,origin_weekF=origin,release_id=config$forecast_release_id,effective_panel_sha256=receipt[['effective_panel_sha256']],a_shadow_option=a_shadow_option,monitoring=mon$monitoring,forecasts=forecasts,a_shadow=a_shadow_projection,probabilities=prob_projection)
+  provenance <- list(run_id=run_id,season=config$season,origin_weekF=origin,release_id=config$forecast_release_id,release_manifest_sha256=manifest_sha,source_mode=receipt[['source_mode']],raw_source_sha256=receipt[['raw_source_sha256']],supplied_typed_panel_sha256=receipt[['supplied_typed_panel_sha256']],effective_panel_sha256=receipt[['effective_panel_sha256']],transaction_id=tx_id,v2_child_run=basename(receipt[['v2_child_run']]),v3_child_run=basename(receipt[['v3_child_run']]),a_shadow_option=a_shadow_option,a_shadow_snapshot_validation=a_shadow_validation,a_shadow_snapshot_sha256=if(is.null(a_shadow)) NULL else a_shadow$sha256,monitoring_file_sha256=mon$file_sha256,probability_snapshot_validation=prob_validation,probability_snapshot_sha256=if(is.null(prob)) NULL else prob$sha256,api_contract_version=.PAGE_API_CONTRACT)
   if (persist) {
     jd <- .api_job_dir(config,run_id)
     .api_atomic_write_json(ref,file.path(jd,'transaction_ref.json'),immutable=TRUE)
@@ -949,7 +1031,7 @@
   }
   # Private in-memory validation state: never persisted in public JSON. The
   # HTTP query uses this exact SHA/schema/route-validated snapshot object.
-  list(transaction_ref=ref,result=result,provenance=provenance,probability_snapshot=prob)
+  list(transaction_ref=ref,result=result,provenance=provenance,probability_snapshot=prob,a_shadow_snapshot=a_shadow)
 }
 
 .api_reconcile_job <- function(config,run_id,current_instance_id,process_registry=NULL) {

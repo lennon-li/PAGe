@@ -1,0 +1,316 @@
+---
+title: "PAGe Training Walkthrough"
+subtitle: "From historical surveillance data to a frozen, auditable model kit"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-copy: true
+execute:
+  eval: false
+---
+
+This guide is the user-facing training path for PAGe. It shows the public R API first, then the lower-level governed stage API used when a model developer needs to inspect M0, M1, and M2 separately.
+
+::: {.callout-important title="Training is offline"}
+Training and model selection are offline operations. Do not retune a model from the current surveillance week. A prospective holdout must remain untouched until the candidate is frozen and the acceptance workflow is run.
+:::
+
+## 1. Install/load PAGe
+
+Run from an R environment that satisfies the repository runtime contract.
+
+```{r}
+library(PAGe)
+```
+
+For a source checkout rather than an installed package:
+
+```{r}
+pkgload::load_all("PAGe")
+```
+
+## 2. Prepare historical surveillance data
+
+PAGe expects one observation per season/week with positive tests `y`, total tests `N`, and a season-relative `weekF` coordinate. The package normalization layer should be used rather than hand-building downstream model matrices.
+
+```{r}
+history <- load_flu_hist("/authorized/path/flu_history.csv") |>
+  prepare_surveillance_data()
+
+validate_surveillance_data(history)
+
+history |>
+  subset(select = c(season, weekF, y, N, p)) |>
+  head()
+```
+
+A useful first audit is the available season set:
+
+```{r}
+sort(unique(history$season))
+```
+
+## 3. Record expert ignition labels
+
+The convenience workflow can prompt interactively, but reproducible training should use a named decimal-week vector or a previously saved expert annotation object.
+
+```{r}
+ignition_weeks <- c(
+  "2012-13" = 18.0,
+  "2013-14" = 20.0,
+  "2014-15" = 20.0,
+  "2016-17" = 19.0,
+  "2017-18" = 20.0,
+  "2018-19" = 19.0,
+  "2019-20" = 22.0,
+  "2022-23" = 15.0,
+  "2023-24" = 20.0,
+  "2024-25" = 23.0
+)
+
+labels <- page_label_ignitions(
+  history,
+  ignition_weeks = ignition_weeks,
+  annotator = "model-development-team",
+  interactive = FALSE
+)
+
+labels
+labels$table
+```
+
+The decimal expert annotation is retained for provenance. The current legacy M0/M1 training contract receives the integer projection used by the training workflow.
+
+## 4. Declare training, exclusion, and holdout seasons
+
+Never infer the governed season set from whichever rows happen to be present in a file.
+
+```{r}
+selection <- validate_season_selection(
+  history,
+  training_seasons = setdiff(
+    sort(unique(history$season)),
+    c("2011-12", "2015-16", "2020-21", "2021-22", "2025-26")
+  ),
+  exclude_seasons = c("2011-12", "2015-16", "2020-21", "2021-22"),
+  holdout_seasons = "2025-26",
+  application_seasons = character()
+)
+
+selection
+```
+
+The four season sets are checked for consistency and are carried through the governed stage artifacts.
+
+## 5. Recommended high-level training API
+
+For most users, `page_train_workflow()` is the simplest public entry point. It combines expert ignition annotations with the governed `train_pipeline()` lifecycle and returns a frozen kit.
+
+### Refresh a locked specification
+
+Use `mode = "refresh"` when the model specification has already been selected and only a fixed-spec refit is intended.
+
+```{r}
+trained <- page_train_workflow(
+  data = history,
+  labels = labels,
+  mode = "refresh",
+  prospective_holdout = "2025-26",
+  exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
+  n_cores = max(1L, parallel::detectCores() - 1L),
+  checkpoint_dir = "results/checkpoints/refresh",
+  verbose = TRUE
+)
+
+trained
+validate_page_kit(trained$kit, mode = "frozen")
+```
+
+### Retune when model selection is intended
+
+Retuning is a development operation and should be completed without looking at the prospective holdout.
+
+```{r}
+trained <- page_train_workflow(
+  data = history,
+  labels = labels,
+  mode = "retune",
+  prospective_holdout = "2025-26",
+  exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
+  n_cores = max(1L, parallel::detectCores() - 1L),
+  checkpoint_dir = "results/checkpoints/retune",
+  selection_method = "min_nll",
+  verbose = TRUE
+)
+```
+
+Alternative final selection methods supported by `train_pipeline()` are `"one_se"` and `"pareto"`.
+
+## 6. Save and reload the frozen kit
+
+Use the package helpers rather than an unvalidated bare `saveRDS()`/`readRDS()` pair.
+
+```{r}
+page_save_kit(
+  trained,
+  "results/kits/candidate_pre_holdout.rds"
+)
+
+kit <- page_load_kit("results/kits/candidate_pre_holdout.rds")
+validate_page_kit(kit, mode = "frozen")
+```
+
+`page_save_kit()` validates the frozen kit before atomically publishing it. `page_load_kit()` validates again on load.
+
+## 7. Lower-level governed stage API
+
+Use this interface when a developer needs stage-by-stage tuning evidence or wants to stop at a governance boundary.
+
+```{r}
+# M0: ignition
+m0_tuning <- tune_m0(history, selection = selection)
+validate_m0_tuning(m0_tuning)
+
+m0 <- fit_m0(
+  history,
+  selection,
+  config = m0_tuning$best_params
+) |>
+  freeze_m0(tuning = m0_tuning)
+
+# M1: alignment / timing
+m1_tuning <- tune_m1(
+  history,
+  m0 = m0,
+  selection = selection
+)
+validate_m1_tuning(m1_tuning, check_boundaries = TRUE)
+
+m1_best <- m1_tuning$best[1, , drop = FALSE]
+m1_config <- m1_make_params(
+  k_ref = m1_best$k_ref,
+  temperature = m1_best$multi_temperature,
+  rise_weight = m1_best$align_rise_weight,
+  slope_window = m1_best$slope_window,
+  slope_weight = m1_best$slope_weight
+)
+
+m1 <- fit_m1(
+  history,
+  selection,
+  m0,
+  config = m1_config
+) |>
+  freeze_m1(tuning = m1_tuning)
+
+# M2: one- and two-week positivity forecasts
+m2_tuning <- tune_m2(
+  history,
+  selection,
+  m0,
+  m1,
+  grid = default_m2_grid()
+)
+validate_m2_tuning(m2_tuning)
+
+m2 <- fit_m2(
+  history,
+  selection,
+  m0,
+  m1,
+  config = m2_tuning$best_spec
+) |>
+  freeze_m2(tuning = m2_tuning)
+
+kit <- assemble_kit(m0, m1, m2)
+validate_page_kit(kit, mode = "frozen")
+```
+
+The required lifecycle is:
+
+```text
+tune_m0 -> validate_m0_tuning -> fit_m0 -> freeze_m0
+    |
+    v
+tune_m1 -> validate_m1_tuning -> fit_m1 -> freeze_m1
+    |
+    v
+tune_m2 -> validate_m2_tuning -> fit_m2 -> freeze_m2
+    |
+    v
+assemble_kit -> validate_page_kit
+```
+
+A downstream stage will reject incompatible draft or mismatched upstream artifacts.
+
+## 8. Inspect training provenance
+
+Keep the data identity, labels, training result, and kit identity together.
+
+```{r}
+trained$provenance
+trained$labels$provenance
+season_selection(trained$kit)
+```
+
+For an additional data-file checksum outside R:
+
+```{r}
+digest::digest(
+  file = "/authorized/path/flu_history.csv",
+  algo = "sha256",
+  serialize = FALSE
+)
+```
+
+## 9. Holdout acceptance and promotion are separate
+
+A frozen pre-holdout kit is a candidate, not yet a promoted deployment kit. The governed lifecycle after training is:
+
+```text
+frozen candidate
+  -> untouched holdout replay
+  -> artifact-bound promotion decision
+  -> fixed-spec post-acceptance refresh
+  -> immutable promotion registry
+  -> verified load
+```
+
+The operator commands for these phases are documented in [`deployment-workflow.qmd`](deployment-workflow.qmd). In particular, do not use a hand-constructed `check_promotion()` object to release the holdout.
+
+A registered deployment kit is loaded with both the immutable kit path and its deployment manifest:
+
+```{r}
+promoted_kit <- load_promoted_kit(
+  kit_path = "/secure/PAGe/deployment-registry/<deployment-id>/promoted_kit.rds",
+  deployment_manifest_path =
+    "results/deployment-audit/<deployment-id>/deployment_manifest.json"
+)
+```
+
+## 10. Minimal reproducible training record
+
+For every governed training run, retain at least:
+
+1. the exact historical input file and SHA-256;
+2. the expert ignition annotation table and annotation provenance;
+3. the explicit season selection;
+4. M0/M1/M2 tuning results or fixed-spec configuration;
+5. checkpoints and boundary-review evidence when retuning;
+6. the frozen candidate kit;
+7. the package/runtime version information;
+8. the later acceptance/refit/promotion manifests, if the candidate is promoted.
+
+Useful session capture:
+
+```{r}
+sessionInfo()
+packageVersion("PAGe")
+```
+
+## Next step
+
+Once a kit is frozen or promoted, continue with [`realtime_deployment_walkthrough.qmd`](realtime_deployment_walkthrough.qmd) for current surveillance ingestion, direct R forecasting, and the v4 weekly HTTP API.

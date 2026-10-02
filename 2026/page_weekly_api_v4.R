@@ -2,7 +2,14 @@
 
 .page_json_response <- function(status,obj) list(status=as.integer(status),headers=list('Content-Type'='application/json; charset=utf-8','Cache-Control'='no-store','X-Content-Type-Options'='nosniff'),body=.api_canonical_json(obj))
 
-.page_api_sanitized_env <- function() c(PATH=Sys.getenv('PATH'),HOME='/nonexistent/page-api-home',R_LIBS_USER='/nonexistent/page-api-user-library',R_LIBS_SITE='/usr/local/lib/R/site-library:/usr/lib/R/site-library',R_PROFILE_USER='/dev/null',R_ENVIRON_USER='/dev/null',TZ='UTC',LANG='C.UTF-8',LC_ALL='C.UTF-8')
+.page_api_sanitized_env <- function() {
+  env <- c(PATH=Sys.getenv('PATH'),HOME='/nonexistent/page-api-home',R_LIBS_USER='/nonexistent/page-api-user-library',R_LIBS_SITE='/usr/local/lib/R/site-library:/usr/lib/R/site-library',R_PROFILE_USER='/dev/null',R_ENVIRON_USER='/dev/null',TZ='UTC',LANG='C.UTF-8',LC_ALL='C.UTF-8')
+  keep <- c('http_proxy','https_proxy','HTTP_PROXY','HTTPS_PROXY','NO_PROXY','no_proxy','SSL_CERT_FILE','SSL_CERT_DIR')
+  vals <- Sys.getenv(keep,unset=NA_character_)
+  vals <- vals[!is.na(vals) & nzchar(vals)]
+  if (length(vals)) env <- c(env,vals)
+  env
+}
 
 .page_api_spawn_worker <- function(ctx,run_id) {
   jd <- .api_job_dir(ctx$config,run_id)

@@ -182,3 +182,50 @@ test_that('v4 HTTP probability endpoints expose strict immutable queries', {
   fractional_h <- .page_api_handle(ctx,'GET',paste0('/v1/weekly-runs/',c$run_id,'/probability/positivity?type=A&horizon=1.5&threshold=0.02'),h)
   expect_identical(fractional_h$status,400L)
 })
+
+
+.materialize_a_shadow_snapshot <- function(case, option='exp050_h2') {
+  jd <- .api_job_dir(case$cfg,case$run_id); dir.create(jd,recursive=TRUE,showWarnings=FALSE)
+  reqp <- .api_request_path(case$cfg,case$run_id)
+  if (!file.exists(reqp)) .api_atomic_write_json(list(a_shadow_option=option),reqp,TRUE)
+  r <- system2(Sys.which('Rscript'),c('--vanilla','2026/run_page_a_shadow_snapshot_v1.R',
+    paste0('--transaction-dir=',case$tx),paste0('--job-dir=',jd),
+    paste0('--expected-release-id=',.PAGE_FORECAST_RELEASE_ID),paste0('--option=',option)),stdout=TRUE,stderr=TRUE)
+  expect_identical(attr(r,'status') %||% 0L,0L,info=paste(r,collapse='\n'))
+  jd
+}
+
+test_that('v4 EXP050 H2 shadow snapshot is separate from canonical A1 forecasts', {
+  c <- .copy_case(); jd <- .materialize_a_shadow_snapshot(c,'exp050_h2')
+  p <- .api_validate_and_project_transaction(c$cfg,c$run_id,persist=FALSE)
+  expect_identical(p$result$a_shadow_option,'exp050_h2')
+  expect_identical(p$result$a_shadow$status,'experimental_shadow')
+  expect_identical(p$result$a_shadow$validation,'valid')
+  expect_true(p$result$a_shadow$canonical_unchanged)
+  q <- p$result$a_shadow$challenger
+  expect_identical(q$type,'A'); expect_identical(as.integer(q$horizon),2L)
+  expect_identical(q$canonical_route,'exact_A1_state')
+  expect_identical(q$challenger_route,'shadow_A1form_EXP050_h2')
+  expect_true(is.finite(as.numeric(q$challenger_forecast_pct)))
+  a2 <- Filter(function(x) identical(x$type,'A') && identical(as.integer(x$horizon),2L),p$result$forecasts)[[1L]]
+  expect_equal(as.numeric(q$canonical_forecast_pct),as.numeric(a2$v3_pct),tolerance=1e-12)
+  expect_equal(as.numeric(q$delta_challenger_minus_canonical_pp),as.numeric(q$challenger_forecast_pct)-as.numeric(q$canonical_forecast_pct),tolerance=1e-12)
+  expect_match(p$provenance$a_shadow_snapshot_sha256,'^[0-9a-f]{64}$')
+  expect_length(p$result$forecasts,4L)
+})
+
+test_that('v4 A shadow defaults OFF and tampering fails challenger closed', {
+  c <- .copy_case()
+  p0 <- .api_validate_and_project_transaction(c$cfg,c$run_id,persist=FALSE)
+  expect_identical(p0$result$a_shadow$status,'off')
+  expect_true(p0$result$a_shadow$canonical_unchanged)
+
+  c2 <- .copy_case(); jd <- .materialize_a_shadow_snapshot(c2,'exp050_h2')
+  cat('tamper',file=file.path(jd,'a_shadow_snapshot.rds'),append=TRUE)
+  p <- .api_validate_and_project_transaction(c2$cfg,c2$run_id,persist=FALSE)
+  expect_identical(p$result$a_shadow$status,'unavailable')
+  expect_identical(p$result$a_shadow$validation,'invalid')
+  expect_true(p$result$a_shadow$canonical_unchanged)
+  expect_null(p$provenance$a_shadow_snapshot_sha256)
+  expect_length(p$result$forecasts,4L)
+})

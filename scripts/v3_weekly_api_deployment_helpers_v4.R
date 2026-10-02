@@ -74,7 +74,7 @@
   mp <- file.path(deployment_dir,'deployment_manifest.tsv')
   if (!file.exists(mp)) stop('Missing API deployment manifest.',call.=FALSE)
   m <- utils::read.delim(mp,sep='\t',stringsAsFactors=FALSE,check.names=FALSE)
-  needed <- c('scripts/v3_weekly_api_deployment_helpers_v4.R','scripts/v3_weekly_api_helpers_v4.R','scripts/v3_shadow_release_helpers_v1.R','scripts/v3_shadow_ops_helpers_v1.R','2026/run_weekly_shadow_release_v5.R','scripts/v3_probability_helpers_v1.R','2026/run_page_probability_snapshot_v1.R')
+  needed <- c('scripts/v3_weekly_api_deployment_helpers_v4.R','scripts/v3_weekly_api_helpers_v4.R','scripts/v3_shadow_release_helpers_v1.R','scripts/v3_shadow_ops_helpers_v1.R','2026/run_weekly_shadow_release_v5.R','scripts/v3_probability_helpers_v1.R','2026/run_page_probability_snapshot_v1.R','scripts/v3_a_shadow_helpers_v1.R','2026/run_page_a_shadow_snapshot_v1.R')
   for (rel in needed) {
     row <- m[m$path==rel,,drop=FALSE]; if (nrow(row)!=1L) stop('API deployment does not bind bootstrap source: ',rel,call.=FALSE)
     p <- file.path(repo_root,rel)

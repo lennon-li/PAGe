@@ -29,3 +29,18 @@ The API is loopback-only and **shadow-only**. It does not add model execution lo
 ## Acceptance evidence
 
 The v3 binding test asserts the exact release and API contract, validates preflight/deployment identity, runs synthetic OLIS weekF12 through the API worker, checks four finite forecasts and panel/source provenance, and confirms weekF11 fails closed without a success projection. Core and HTTP v3 test variants exercise the unchanged API semantics against v3 constants.
+
+
+## 2026-09-29 optional A+2 test-volume challenger
+
+API v4 may accept `a_shadow_option = "exp050_h2"` in a weekly trigger. The
+option is part of immutable request/idempotency lineage. It is evaluated only
+after the authoritative v3 transaction succeeds and produces a separate
+SHA-bound challenger snapshot. The four canonical forecast rows remain
+unchanged. Omission or `off` preserves prior behavior exactly.
+
+The challenger is supported only from weekF12 and uses the frozen
+`v3-a-exp050-h2-shadow-v1` artifact. Historical nested LOSO from weekF12 showed
+about 1.5% +2 MAE improvement, below promotion criteria; the route is therefore
+prospective-shadow only. Challenger failure must never invalidate or replace a
+canonical v3 transaction.

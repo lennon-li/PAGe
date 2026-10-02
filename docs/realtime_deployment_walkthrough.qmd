@@ -1,0 +1,547 @@
+---
+title: "PAGe Real-Time Deployment Walkthrough"
+subtitle: "Official ORVT input, reproducible forecasting, and the weekly HTTP API"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-copy: true
+execute:
+  eval: false
+---
+
+This guide covers the operational path after a PAGe model kit has been frozen or promoted. It presents two supported user patterns:
+
+1. **direct R forecasting** with a validated kit and official surveillance input;
+2. **service/API use** through the weekly v4 HTTP API.
+
+::: {.callout-important title="Current deployment status"}
+The checked-in weekly HTTP API is a governed **shadow-only** service. Its deployment is pinned to an immutable forecast release. Do not substitute a different release ID in an API request; discover the release from `/v1/release` and use that exact value.
+:::
+
+## 1. Direct R: load a frozen kit
+
+For a normal frozen kit saved by the package:
+
+```{r}
+library(PAGe)
+
+kit <- page_load_kit("/secure/PAGe/page_kit.rds")
+validate_page_kit(kit, mode = "frozen")
+```
+
+For a kit promoted through the immutable registry, load both the private kit and its disclosure-safe deployment manifest:
+
+```{r}
+kit <- load_promoted_kit(
+  kit_path = "/secure/PAGe/deployment-registry/<deployment-id>/promoted_kit.rds",
+  deployment_manifest_path =
+    "results/deployment-audit/<deployment-id>/deployment_manifest.json"
+)
+```
+
+## 2. Direct R: ingest current official surveillance
+
+### Live PHO ORVT feed
+
+`getCurrentD()` is the lowest-level ORVT reader. For 2026–27 it resolves the supported PHO filename convention, validates the PHO schema, aggregates the provincial counts, converts surveillance week to PAGe `weekF`, and records source provenance.
+
+```{r}
+current_a <- getCurrentD(
+  virus = "Influenza A",
+  season = "2026-27",
+  include_predecessor = FALSE,
+  cache_dir = "results/orvt-cache"
+)
+
+attr(current_a, "source_url_or_path")
+attr(current_a, "sha256")
+attr(current_a, "pho_layout")
+
+tail(current_a[, c(
+  "season", "weekF", "week_start_date", "week_end_date",
+  "N", "y", "p"
+)])
+```
+
+### Pinned downloaded ORVT CSV
+
+For reproducibility, an operator can save the official CSV first and then pass the exact file to the same resolver:
+
+```{r}
+orvt_file <- "/secure/PAGe/input/ORVT_Lab_Testing_Data_2025-26_2026-27.csv"
+
+current_a <- getCurrentD(
+  data = orvt_file,
+  virus = "Influenza A",
+  season = "2026-27",
+  include_predecessor = FALSE
+)
+
+current_b <- getCurrentD(
+  data = orvt_file,
+  virus = "Influenza B",
+  season = "2026-27",
+  include_predecessor = FALSE
+)
+
+stopifnot(identical(current_a$weekF, current_b$weekF))
+```
+
+Hash the raw file before modeling:
+
+```{r}
+raw_sha256 <- digest::digest(
+  file = orvt_file,
+  algo = "sha256",
+  serialize = FALSE
+)
+raw_sha256
+```
+
+## 3. Direct R: use the high-level surveillance loader
+
+`page_load_surveillance()` is the normal package-level resolver. It accepts the live ORVT feed (`source = NULL`), a downloaded ORVT CSV, a historical PAGe CSV, a daily `.RData` extract, or an already-canonical data frame.
+
+```{r}
+current <- page_load_surveillance(
+  source = orvt_file,
+  season = "2026-27",
+  include_predecessor = FALSE
+)
+
+source_info <- attr(current, "page_source")
+source_info
+```
+
+The `page_source` record includes the source kind/path, SHA-256 when available, retrieval time, resolved season, number of weeks, latest `weekF`, and latest week end.
+
+For the live feed instead:
+
+```{r}
+current_live <- page_load_surveillance(
+  source = NULL,
+  season = "2026-27",
+  cache_dir = "results/orvt-cache",
+  include_predecessor = FALSE
+)
+```
+
+## 4. Direct R: produce the current forecast
+
+`page_forecast_now()` is the simplest real-time R API. It validates the frozen kit, resolves the current surveillance source, runs the frozen prospective pipeline, and returns the latest forecast rows plus ignition and source provenance.
+
+::: {.callout-note title="Direct R versus the governed weekly A+B product"}
+`page_forecast_now()` is the package-level frozen-kit convenience path. The current governed weekly A+B operational product is the strict weekly transaction exposed by the v4 service later in this guide. Use the transaction/API path when reproducing the official four A/B × +1/+2 weekly outputs.
+:::
+
+```{r}
+run <- page_forecast_now(
+  kit = kit,
+  source = orvt_file,
+  season = "2026-27",
+  timing_mode = "fractional",
+  verbose = TRUE
+)
+
+run$forecast
+run$ignition
+run$source
+```
+
+For the live feed, set `source = NULL`:
+
+```{r}
+run_live <- page_forecast_now(
+  kit = kit,
+  source = NULL,
+  season = "2026-27",
+  cache_dir = "results/orvt-cache",
+  timing_mode = "fractional"
+)
+```
+
+Pre-ignition seasons can legitimately return zero M2 forecast rows. That is a valid model state, not automatically an error.
+
+## 6. Generate the walk-forward HTML report from R
+
+The package can render the same interactive walk-forward report used for the current 2026-27 weekly review. Supply either a canonical typed A+B panel as a data frame or the official ORVT CSV path accepted by `page_v3_forecast()`.
+
+```{r}
+report_file <- page_v3_walkforward_report(
+  data = orvt_file,
+  season = "2026-27",
+  output_file = "PAGe_2026-27_week12_walkforward.html",
+  self_contained = TRUE
+)
+
+report_file
+```
+
+For an already-canonical typed panel:
+
+```{r}
+typed_panel <- read.csv(
+  "/secure/PAGe/input/typed_ab_weekly.csv",
+  stringsAsFactors = FALSE
+)
+
+page_v3_walkforward_report(
+  data = typed_panel,
+  season = "2026-27",
+  output_file = "PAGe_2026-27_week12_walkforward.html"
+)
+```
+
+The generated report includes the A and B hero rows, individual A/B +1/+2 forecasts with 95% confidence intervals, retrospective prediction intervals where the target-week denominator is already known, a single summed A+B forecast line, the Flu A peak CDF/hazard views, and the peak-normalized M1 full-season shape view with observed 2026-27 points. With `self_contained = TRUE`, Plotly JavaScript is embedded and the HTML has no network dependency. Historical Week 8-11 diagnostics and report-only uncertainty/shape support are packaged separately from the frozen forecast-model identity.
+
+## 6. Strict reproducible ORVT transaction
+
+For governed weekly replay, use one explicit official ORVT CSV and one frozen content-addressed release. The helper below intentionally disables automatic source fallback.
+
+```{bash}
+cd /home/yeli/repos/PAGe-m1-v2
+
+ORVT=/secure/PAGe/input/ORVT_Lab_Testing_Data_2025-26_2026-27.csv
+RELEASE_DIR=/secure/PAGe/releases/<release-id>
+RAW_SHA="$(sha256sum "$ORVT" | awk '{print $1}')"
+
+bash scripts/reproduce_weekly_orvt_v1.sh \
+  --season=2026-27 \
+  --input="$ORVT" \
+  --release-dir="$RELEASE_DIR" \
+  --output-root=results/weekly-shadow-release-v5 \
+  --expected-sha256="$RAW_SHA"
+```
+
+The transaction archives the raw source, binds its SHA-256, records the release identity, constructs the typed A+B panel, runs the governed weekly stack, and publishes only after the transaction seals complete.
+
+To prove a later replay is equivalent:
+
+```{bash}
+python3 scripts/verify_weekly_reproducibility_v1.py \
+  <first-sealed-transaction-dir> \
+  <second-sealed-transaction-dir>
+```
+
+Accept only:
+
+```text
+REPRODUCIBILITY_CHECK=PASS
+```
+
+The verifier checks the season/origin, strict `source_mode=orvt`, raw-source SHA-256, release ID, supplied typed-panel SHA-256, effective-panel SHA-256, and all four A/B × +1/+2 forecasts.
+
+## 7. Weekly HTTP API: user setup
+
+The v4 service is normally loopback-only behind an approved same-host proxy. Users need:
+
+- an API base URL;
+- a bearer token supplied outside source code;
+- the current immutable release ID, discovered from the API;
+- a unique idempotency key for each publication cycle/request option.
+
+In R, keep the token in an environment variable rather than embedding it in a script:
+
+```{r}
+Sys.setenv(PAGE_API_TOKEN = "<set outside shared code>")
+
+api_base <- "http://127.0.0.1:8088"
+token <- Sys.getenv("PAGE_API_TOKEN")
+stopifnot(nzchar(token))
+```
+
+The examples below use `httr2`.
+
+```{r}
+library(httr2)
+```
+
+## 8. Check API liveness and readiness from R
+
+`/healthz` checks process liveness and does not require a bearer token:
+
+```{r}
+health <- request(paste0(api_base, "/healthz")) |>
+  req_perform() |>
+  resp_body_json(simplifyVector = TRUE)
+
+health
+```
+
+`/readyz` reports whether the deployment/runtime preflight is currently ready:
+
+```{r}
+ready_resp <- request(paste0(api_base, "/readyz")) |>
+  req_perform()
+
+resp_status(ready_resp)
+resp_body_json(ready_resp, simplifyVector = TRUE)
+```
+
+Do not submit a weekly run until readiness is `200` / `ready = TRUE`.
+
+## 9. Discover the pinned release from R
+
+Do not hard-code a release from an old runbook. Ask the running service which immutable release it is serving:
+
+```{r}
+release <- request(paste0(api_base, "/v1/release")) |>
+  req_auth_bearer_token(token) |>
+  req_perform() |>
+  resp_body_json(simplifyVector = TRUE)
+
+release$release_id
+release$api_contract_version
+release$api_deployment_id
+```
+
+Use `release$release_id` in the trigger body.
+
+## 10. Trigger a weekly run from R
+
+The request must include a stable `Idempotency-Key`. Reusing the same key with a different request is rejected.
+
+```{r}
+publication_id <- "2026-10-02-week12-official-orvt"
+
+trigger <- request(paste0(api_base, "/v1/weekly-runs")) |>
+  req_auth_bearer_token(token) |>
+  req_headers(`Idempotency-Key` = publication_id) |>
+  req_body_json(list(
+    season = "2026-27",
+    expected_release_id = release$release_id
+  )) |>
+  req_perform() |>
+  resp_body_json(simplifyVector = TRUE)
+
+trigger
+run_id <- trigger$run_id
+stopifnot(grepl("^wr_[0-9a-f]{32}$", run_id))
+```
+
+The API returns `202` for a newly accepted/active job. An idempotent replay of an already terminal job can return `200`.
+
+The optional `a_shadow_option = "exp050_h2"` requests the experimental A+2 test-volume challenger without changing the four canonical forecasts:
+
+```{r}
+trigger_shadow <- request(paste0(api_base, "/v1/weekly-runs")) |>
+  req_auth_bearer_token(token) |>
+  req_headers(`Idempotency-Key` = paste0(publication_id, "-exp050")) |>
+  req_body_json(list(
+    season = "2026-27",
+    expected_release_id = release$release_id,
+    a_shadow_option = "exp050_h2"
+  )) |>
+  req_perform() |>
+  resp_body_json(simplifyVector = TRUE)
+```
+
+## 11. Poll run status from R
+
+```{r}
+get_run_status <- function(run_id) {
+  request(paste0(api_base, "/v1/weekly-runs/", run_id)) |>
+    req_auth_bearer_token(token) |>
+    req_perform() |>
+    resp_body_json(simplifyVector = TRUE)
+}
+
+status <- get_run_status(run_id)
+status
+```
+
+For an interactive client, poll at a modest interval until the job becomes terminal:
+
+```{r}
+repeat {
+  status <- get_run_status(run_id)
+  message("status = ", status$status)
+
+  if (status$status %in% c("succeeded", "failed")) break
+  Sys.sleep(5)
+}
+
+stopifnot(identical(status$status, "succeeded"))
+```
+
+## 12. Retrieve forecasts and monitoring from R
+
+```{r}
+result <- request(
+  paste0(api_base, "/v1/weekly-runs/", run_id, "/result")
+) |>
+  req_auth_bearer_token(token) |>
+  req_perform() |>
+  resp_body_json(simplifyVector = TRUE)
+
+result$season
+result$origin_weekF
+result$release_id
+result$effective_panel_sha256
+result$forecasts
+result$monitoring
+```
+
+A successful canonical weekly result contains the four A/B × +1/+2 forecast rows. Monitoring is a disclosure-safe projection from validated child artifacts; for example, A can expose M0 ignition state and M1 peak-timing fields when available.
+
+## 13. Retrieve provenance from R
+
+Always pair a forecast with its provenance projection.
+
+```{r}
+provenance <- request(
+  paste0(api_base, "/v1/weekly-runs/", run_id, "/provenance")
+) |>
+  req_auth_bearer_token(token) |>
+  req_perform() |>
+  resp_body_json(simplifyVector = TRUE)
+
+provenance
+```
+
+At minimum, verify that the result and provenance agree on the release and effective panel identities supported by the response schema/configuration.
+
+```{r}
+stopifnot(identical(result$release_id, release$release_id))
+stopifnot(identical(
+  result$effective_panel_sha256,
+  provenance$effective_panel_sha256
+))
+```
+
+For official ORVT runs, operator-side transaction provenance should additionally show `source_mode = "orvt"` and the archived raw-source SHA-256. The public HTTP projection intentionally does not expose arbitrary raw artifacts.
+
+## 14. Experimental probability queries from R
+
+Probability endpoints are immutable queries against the run-bound probability snapshot. They do not recompute the model.
+
+### Positivity exceedance
+
+Example: probability that Flu A positivity at +1 week exceeds 2%:
+
+```{r}
+p_a_gt_2 <- request(
+  paste0(
+    api_base,
+    "/v1/weekly-runs/", run_id,
+    "/probability/positivity"
+  )
+) |>
+  req_auth_bearer_token(token) |>
+  req_url_query(
+    type = "A",
+    horizon = 1,
+    threshold = 0.02
+  ) |>
+  req_perform() |>
+  resp_body_json(simplifyVector = TRUE)
+
+p_a_gt_2
+```
+
+The positivity threshold is a **proportion**, so `0.02` means 2%.
+
+### Peak timing
+
+Example: probability the Flu A peak occurred before Week 21:
+
+```{r}
+p_peak_before_21 <- request(
+  paste0(
+    api_base,
+    "/v1/weekly-runs/", run_id,
+    "/probability/peak"
+  )
+) |>
+  req_auth_bearer_token(token) |>
+  req_url_query(
+    type = "A",
+    week = 21
+  ) |>
+  req_perform() |>
+  resp_body_json(simplifyVector = TRUE)
+
+p_peak_before_21
+```
+
+If the timing/probability snapshot is unavailable for a type or origin, the endpoint returns the documented unavailable/error state rather than fabricating a probability.
+
+## 15. Minimal user-facing API helper in R
+
+A small wrapper can keep authentication and endpoint handling consistent:
+
+```{r}
+page_api_get <- function(path, query = NULL) {
+  req <- request(paste0(api_base, path)) |>
+    req_auth_bearer_token(token)
+
+  if (!is.null(query)) {
+    req <- do.call(req_url_query, c(list(req), query))
+  }
+
+  req |>
+    req_perform() |>
+    resp_body_json(simplifyVector = TRUE)
+}
+
+page_api_get("/v1/release")
+page_api_get(paste0("/v1/weekly-runs/", run_id, "/result"))
+page_api_get(paste0("/v1/weekly-runs/", run_id, "/provenance"))
+```
+
+## 16. Operator deployment/preflight path
+
+Service deployment is an operator task rather than an end-user R call. The current v4 builder validates the pinned release and produces a content-addressed API deployment directory.
+
+```{bash}
+Rscript --vanilla scripts/build_v3_weekly_api_deployment_v4.R \
+  --deployment-root=<ARTIFACT_MOUNT>/api-deployments \
+  --artifact-mount=<ARTIFACT_MOUNT> \
+  --artifact-fs-type=nfs4 \
+  --artifact-mount-source=<MOUNT_SOURCE> \
+  --job-root=<ARTIFACT_MOUNT>/weekly-api \
+  --output-root=<ARTIFACT_MOUNT>/weekly-shadow \
+  --source-mode=orvt \
+  --season=2026-27 \
+  --bind-host=127.0.0.1 \
+  --port=8088 \
+  --rscript=/usr/bin/Rscript \
+  --forecast-release-dir=<REPO>/artifacts/v3-shadow-release-v3/<release-id> \
+  --max-runtime-seconds=1800 \
+  --mode=production
+```
+
+For an official PHO publication, preflight the source before triggering:
+
+```{bash}
+Rscript --vanilla 2026/run_page_orvt_source_preflight_v1.R \
+  --season=2026-27 \
+  --min-weekF=<expected-origin> \
+  --result-path=/tmp/page-orvt-source.json
+```
+
+Review the selected official URL, source SHA-256, latest week/end date, and A/B counts before the weekly transaction is started.
+
+## 17. Operational acceptance checklist
+
+Before treating a weekly result as reproducible, confirm:
+
+1. the kit/release identity is immutable and validated;
+2. the source is the intended official ORVT vintage;
+3. the raw input SHA-256 has been recorded;
+4. the latest week/end date is the expected publication origin;
+5. the transaction sealed successfully;
+6. result and provenance panel hashes agree;
+7. there are four finite canonical A/B × +1/+2 forecasts when the model is eligible to issue them;
+8. any unavailable M0/M1 timing state is displayed as unavailable/not detected rather than synthesized;
+9. replaying the same source and release reproduces the same semantic outputs.
+
+## Related documentation
+
+- [`training_walkthrough.qmd`](training_walkthrough.qmd) — offline training and frozen-kit creation.
+- [`deployment-workflow.qmd`](deployment-workflow.qmd) — acceptance, fixed-spec post-holdout refresh, and immutable promotion.
+- [`v3-weekly-deployment-api-operations-2026-09-27.md`](v3-weekly-deployment-api-operations-2026-09-27.md) — operator details for API v4.
+- [`v3-weekly-deployment-api-openapi-v1.yaml`](v3-weekly-deployment-api-openapi-v1.yaml) — HTTP contract.

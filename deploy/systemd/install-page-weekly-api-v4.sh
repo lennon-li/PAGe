@@ -42,6 +42,13 @@ done
 [[ "$PAGE_API_BIND_HOST" == 127.0.0.1 || "$PAGE_API_BIND_HOST" == ::1 ]] || { echo "API bind host must be loopback" >&2; exit 78; }
 [[ "$PAGE_SEASON" == 2026-27 ]] || { echo "PAGE_SEASON must be 2026-27" >&2; exit 78; }
 [[ "$PAGE_SOURCE_MODE" =~ ^(auto|orvt|olis)$ ]] || { echo "invalid PAGE_SOURCE_MODE" >&2; exit 78; }
+PAGE_REQUIRE_LIVE_ORVT=${PAGE_REQUIRE_LIVE_ORVT:-0}
+PAGE_ORVT_MIN_WEEKF=${PAGE_ORVT_MIN_WEEKF:-1}
+[[ "$PAGE_REQUIRE_LIVE_ORVT" =~ ^(0|1)$ ]] || { echo "PAGE_REQUIRE_LIVE_ORVT must be 0 or 1" >&2; exit 78; }
+if [[ ! "$PAGE_ORVT_MIN_WEEKF" =~ ^[0-9]+$ ]] || (( PAGE_ORVT_MIN_WEEKF < 1 || PAGE_ORVT_MIN_WEEKF > 53 )); then
+  echo "PAGE_ORVT_MIN_WEEKF must be an integer in [1,53]" >&2
+  exit 78
+fi
 [[ "$PAGE_ARTIFACT_FS_TYPE" == nfs || "$PAGE_ARTIFACT_FS_TYPE" == nfs4 ]] || { echo "artifact fs must be nfs/nfs4" >&2; exit 78; }
 
 REPO_ROOT=${PAGE_REPO_ROOT:-/opt/page/PAGe-m1-v2}
@@ -50,7 +57,12 @@ SERVICE_USER=${PAGE_SERVICE_USER:-page}
 SERVICE_GROUP=${PAGE_SERVICE_GROUP:-page}
 SYSTEMD_UNIT=/etc/systemd/system/page-weekly-api-v4.service
 SYSTEMD_ENV=/etc/page/weekly-api-v4.env
-PREFLIGHT_RESULT=/run/page-weekly-api-v4-preflight.json
+TRIGGER_HELPER=/usr/local/libexec/page-weekly-trigger
+TRIGGER_UNIT=/etc/systemd/system/page-weekly-trigger.service
+TRIGGER_TIMER=/etc/systemd/system/page-weekly-trigger.timer
+TRIGGER_ENV=/etc/page/weekly-trigger.env
+TRIGGER_CURL=/etc/page/weekly-trigger.curl
+TRIGGER_BODY=/etc/page/weekly-trigger-body.json
 EXPECTED_RELEASE=5472d08992b5a9da40a9419b75c7427847ff7b1999070041d5e38b0a71da853b
 
 [[ -d "$REPO_ROOT" ]] || { echo "repo root missing: $REPO_ROOT" >&2; exit 78; }
@@ -60,10 +72,15 @@ getent passwd "$SERVICE_USER" >/dev/null || { echo "service user missing: $SERVI
 getent group "$SERVICE_GROUP" >/dev/null || { echo "service group missing: $SERVICE_GROUP" >&2; exit 78; }
 [[ -f "$PAGE_API_TOKEN_FILE" && ! -L "$PAGE_API_TOKEN_FILE" ]] || { echo "token file missing/non-regular" >&2; exit 78; }
 [[ $(stat -c '%a' "$PAGE_API_TOKEN_FILE") =~ ^(400|440|600|640)$ ]] || { echo "token file permissions too broad" >&2; exit 78; }
+runuser -u "$SERVICE_USER" -- test -r "$PAGE_API_TOKEN_FILE" || { echo "token file is not readable by service user" >&2; exit 78; }
 
-for p in "$PAGE_ARTIFACT_MOUNT" "$PAGE_JOB_ROOT" "$PAGE_OUTPUT_ROOT" "$DEPLOYMENT_ROOT"; do
-  mkdir -p "$p"
+[[ -d "$PAGE_ARTIFACT_MOUNT" ]] || { echo "artifact mount missing: $PAGE_ARTIFACT_MOUNT" >&2; exit 78; }
+for p in "$PAGE_JOB_ROOT" "$PAGE_OUTPUT_ROOT" "$DEPLOYMENT_ROOT"; do
+  install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$p"
 done
+PREFLIGHT_RESULT="$PAGE_JOB_ROOT/.install-api-v4-preflight.json"
+ORVT_PREFLIGHT_RESULT="$PAGE_JOB_ROOT/.install-orvt-source-preflight.json"
+rm -f "$PREFLIGHT_RESULT" "$ORVT_PREFLIGHT_RESULT"
 
 actual_fstype=$(findmnt -n -o FSTYPE --target "$PAGE_ARTIFACT_MOUNT")
 actual_source=$(findmnt -n -o SOURCE --target "$PAGE_ARTIFACT_MOUNT")
@@ -82,6 +99,15 @@ case "$PAGE_SOURCE_MODE" in
 esac
 
 cd "$REPO_ROOT"
+
+if [[ "$PAGE_SOURCE_MODE" == orvt || "$PAGE_REQUIRE_LIVE_ORVT" == 1 ]]; then
+  runuser -u "$SERVICE_USER" -- "$PAGE_RSCRIPT" --vanilla 2026/run_page_orvt_source_preflight_v1.R \
+    "--season=$PAGE_SEASON" \
+    "--min-weekF=$PAGE_ORVT_MIN_WEEKF" \
+    "--result-path=$ORVT_PREFLIGHT_RESULT"
+  grep -q '"ok":true' "$ORVT_PREFLIGHT_RESULT" || { echo "live ORVT source preflight failed" >&2; cat "$ORVT_PREFLIGHT_RESULT" >&2; exit 70; }
+  cat "$ORVT_PREFLIGHT_RESULT"; echo
+fi
 
 build_args=(
   "--deployment-root=$DEPLOYMENT_ROOT"
@@ -103,13 +129,13 @@ if [[ -n "${PAGE_OLIS_FALLBACK:-}" ]]; then
   build_args+=("--olis-fallback=$PAGE_OLIS_FALLBACK")
 fi
 
-build_out=$($PAGE_RSCRIPT --vanilla scripts/build_v3_weekly_api_deployment_v4.R "${build_args[@]}")
+build_out=$(runuser -u "$SERVICE_USER" -- "$PAGE_RSCRIPT" --vanilla scripts/build_v3_weekly_api_deployment_v4.R "${build_args[@]}")
 printf '%s\n' "$build_out"
 DEPLOYMENT_ID=$(awk -F': ' '$1=="deployment_id"{print $2}' <<<"$build_out")
 DEPLOYMENT_DIR=$(awk -F': ' '$1=="deployment_dir"{print $2}' <<<"$build_out")
 [[ "$DEPLOYMENT_ID" =~ ^[0-9a-f]{64}$ && -d "$DEPLOYMENT_DIR" ]] || { echo "deployment builder did not return valid identity" >&2; exit 70; }
 
-$PAGE_RSCRIPT --vanilla 2026/run_page_weekly_api_preflight_v4.R \
+runuser -u "$SERVICE_USER" -- "$PAGE_RSCRIPT" --vanilla 2026/run_page_weekly_api_preflight_v4.R \
   "--deployment-dir=$DEPLOYMENT_DIR" \
   "--repo-root=$REPO_ROOT" \
   "--release-dir=$PAGE_RELEASE_DIR" \
@@ -145,19 +171,67 @@ sed \
   deploy/systemd/page-weekly-api-v4.service > "$TMP_UNIT"
 install -m 0644 -o root -g root "$TMP_UNIT" "$SYSTEMD_UNIT"
 
+# Install the reviewed manual trigger path, but deliberately leave its timer disabled.
+install -d -m 0755 -o root -g root /usr/local/libexec
+install -m 0750 -o root -g "$SERVICE_GROUP" deploy/systemd/page-weekly-trigger "$TRIGGER_HELPER"
+TMP_TRIGGER_UNIT=$(mktemp)
+trap 'rm -f "$TMP_ENV" "$TMP_UNIT" "$TMP_TRIGGER_UNIT"' EXIT
+sed \
+  -e "s|^User=.*|User=$SERVICE_USER|" \
+  -e "s|^Group=.*|Group=$SERVICE_GROUP|" \
+  deploy/systemd/page-weekly-trigger.service > "$TMP_TRIGGER_UNIT"
+install -m 0644 -o root -g root "$TMP_TRIGGER_UNIT" "$TRIGGER_UNIT"
+install -m 0644 -o root -g root deploy/systemd/page-weekly-trigger.timer "$TRIGGER_TIMER"
+
+cat > "$TRIGGER_ENV" <<EOF
+PAGE_API_URL=http://$PAGE_API_BIND_HOST:$PAGE_API_PORT
+PAGE_WEEKLY_CYCLE_ID_FILE=/run/page-weekly-api/current-publication-cycle-id
+PAGE_TRIGGER_CURL_CONFIG=$TRIGGER_CURL
+PAGE_TRIGGER_BODY=$TRIGGER_BODY
+PAGE_TRIGGER_POLL_SECONDS=10
+PAGE_TRIGGER_MAX_POLLS=180
+PAGE_TRIGGER_REQUIRE_SOURCE_MODE=orvt
+PAGE_TRIGGER_MIN_WEEKF=$PAGE_ORVT_MIN_WEEKF
+EOF
+chown root:"$SERVICE_GROUP" "$TRIGGER_ENV"
+chmod 0640 "$TRIGGER_ENV"
+
+install -m 0640 -o root -g "$SERVICE_GROUP" deploy/systemd/page-weekly-trigger-body.json.example "$TRIGGER_BODY"
+API_TOKEN=$(tr -d '\r\n' < "$PAGE_API_TOKEN_FILE")
+[[ "$API_TOKEN" =~ ^[0-9A-Fa-f]{64}$ ]] || { echo "API token content must be exactly 64 hex characters" >&2; exit 78; }
+umask 077
+{
+  printf '%s\n' 'silent' 'show-error' 'fail-with-body'
+  printf 'header = "Authorization: Bearer %s"\n' "$API_TOKEN"
+  printf '%s\n' 'header = "Content-Type: application/json"'
+} > "$TRIGGER_CURL"
+unset API_TOKEN
+chown root:"$SERVICE_GROUP" "$TRIGGER_CURL"
+chmod 0640 "$TRIGGER_CURL"
+
 systemctl daemon-reload
 systemctl disable --now page-weekly-trigger.timer 2>/dev/null || true
 systemctl enable --now page-weekly-api-v4.service
 systemctl --no-pager --full status page-weekly-api-v4.service
 
-if ! curl --fail --silent --show-error "http://$PAGE_API_BIND_HOST:$PAGE_API_PORT/v1/health" >/tmp/page-weekly-api-v4-health.json || \
-   ! curl --fail --silent --show-error "http://$PAGE_API_BIND_HOST:$PAGE_API_PORT/v1/readiness" >/tmp/page-weekly-api-v4-readiness.json; then
+HEALTH_JSON=/tmp/page-weekly-api-v4-health.json
+READINESS_JSON=/tmp/page-weekly-api-v4-readiness.json
+api_ready=0
+for _ in $(seq 1 30); do
+  health_ok=0
+  ready_ok=0
+  if curl --fail --silent --show-error "http://$PAGE_API_BIND_HOST:$PAGE_API_PORT/healthz" >"$HEALTH_JSON"; then health_ok=1; fi
+  if curl --fail --silent --show-error "http://$PAGE_API_BIND_HOST:$PAGE_API_PORT/readyz" >"$READINESS_JSON"; then ready_ok=1; fi
+  if [[ "$health_ok" == 1 && "$ready_ok" == 1 ]]; then api_ready=1; break; fi
+  sleep 2
+done
+if [[ "$api_ready" != 1 ]]; then
   echo "API v4 health/readiness failed; rolling service back to disabled/stopped" >&2
   systemctl disable --now page-weekly-api-v4.service || true
   exit 70
 fi
-cat /tmp/page-weekly-api-v4-health.json; echo
-cat /tmp/page-weekly-api-v4-readiness.json; echo
+cat "$HEALTH_JSON"; echo
+cat "$READINESS_JSON"; echo
 
 echo "API v4 installed and started. Weekly timer remains disabled."
 echo "Next: perform one reviewed real weekF12+ trigger and idempotent retry before enabling the timer."

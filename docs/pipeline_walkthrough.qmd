@@ -13,6 +13,13 @@ PAGe training is an offline workflow. The examples below are not executed
 during documentation builds because full fitting and nested LOSO are
 computationally substantial.
 
+::: {.callout-tip title="Start here for a user walkthrough"}
+For a concise, copy/paste-oriented training guide using the current public R
+API, see [`training_walkthrough.qmd`](training_walkthrough.qmd). Continue with
+[`realtime_deployment_walkthrough.qmd`](realtime_deployment_walkthrough.qmd)
+for current ORVT ingestion, direct R forecasting, and HTTP API usage.
+:::
+
 ## Prepare authorized surveillance data
 
 PAGe does not ship surveillance observations. Input must contain one row per

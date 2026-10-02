@@ -36,13 +36,14 @@ source('scripts/v3_shadow_release_helpers_v1.R')
   .api_validate_environment_manifest(file.path(repo,'governance/v3_weekly_api_environment_v1.tsv'))
 
   files <- c(
-    '2026/page_weekly_api_v4.R','2026/run_page_weekly_api_v4.R','2026/run_page_weekly_api_worker_v4.R','2026/run_page_weekly_api_preflight_v4.R','2026/run_page_probability_snapshot_v1.R',
-    'scripts/v3_weekly_api_helpers_v4.R','scripts/v3_weekly_api_deployment_helpers_v4.R','scripts/v3_probability_helpers_v1.R','scripts/build_v3_weekly_api_deployment_v4.R',
+    '2026/page_weekly_api_v4.R','2026/run_page_weekly_api_v4.R','2026/run_page_weekly_api_worker_v4.R','2026/run_page_weekly_api_preflight_v4.R','2026/run_page_orvt_source_preflight_v1.R','2026/run_page_probability_snapshot_v1.R','2026/run_page_a_shadow_snapshot_v1.R',
+    'scripts/v3_weekly_api_helpers_v4.R','scripts/v3_weekly_api_deployment_helpers_v4.R','scripts/v3_probability_helpers_v1.R','scripts/v3_a_shadow_helpers_v1.R','scripts/build_v3_weekly_api_deployment_v4.R',
     'governance/v3_weekly_api_environment_v1.tsv','governance/v3_weekly_api_routes_v1.csv','governance/v3_weekly_api_transaction_schema_v1.csv','governance/v3_weekly_api_policy_v4.tsv',
     'docs/v3-weekly-deployment-api-plan-2026-09-27.md','docs/v3-weekly-deployment-api-openapi-v1.yaml','docs/v3-weekly-deployment-api-operations-2026-09-27.md','docs/artifact-storage.md',
     'deploy/systemd/page-weekly-api-v4.service','deploy/systemd/page-weekly-trigger.service','deploy/systemd/page-weekly-trigger.timer','deploy/systemd/page-weekly-api-v4.env.example','deploy/systemd/page-weekly-trigger.env.example','deploy/systemd/page-weekly-trigger.curl.example','deploy/systemd/page-weekly-trigger-body.json.example','deploy/systemd/page-weekly-trigger',
-    'PAGe/tests/testthat/test-v3-weekly-api-core-v4.R','PAGe/tests/testthat/test-v3-weekly-api-http-v4.R','PAGe/tests/testthat/test-v3-weekly-api-v4-monitoring.R',
-    '2026/run_weekly_shadow_release_v5.R','scripts/v3_shadow_release_helpers_v1.R','scripts/v3_shadow_ops_helpers_v1.R'
+    'PAGe/tests/testthat/test-v3-weekly-api-core-v4.R','PAGe/tests/testthat/test-v3-weekly-api-http-v4.R','PAGe/tests/testthat/test-v3-weekly-api-v4-monitoring.R','PAGe/tests/testthat/test-v3-weekly-api-orvt-readiness.R',
+    '2026/run_weekly_shadow_release_v5.R','scripts/v3_shadow_release_helpers_v1.R','scripts/v3_shadow_ops_helpers_v1.R','scripts/v3_m1_b_runtime_helpers_v8.R',
+    'artifacts/m2-b-v3-shadow-v4/m2_b_v3_shadow_artifact.rds','docs/v3-m2-b-final-disposition-2026-09-26.md'
   )
   # Probability diagnostics are API-layer code. Canonical PAGe/R and model
   # bytes remain bound by forecast_release_id/.v3_release_validate(); do not
@@ -51,9 +52,14 @@ source('scripts/v3_shadow_release_helpers_v1.R')
     'scripts/v3_probability_helpers_v1.R',
     'governance/v3_probability_calibrator_v1.rds',
     'PAGe/tests/testthat/test-v3-probability.R')
-  files <- unique(c(files,probability_dependencies))
+  a_shadow_dependencies <- c(
+    'scripts/v3_a_shadow_helpers_v1.R',
+    '2026/run_page_a_shadow_snapshot_v1.R',
+    'governance/v3_a_exp050_h2_shadow_v1.rds',
+    'PAGe/tests/testthat/test-v3-a-shadow-api.R')
+  files <- unique(c(files,probability_dependencies,a_shadow_dependencies))
   missing <- files[!file.exists(file.path(repo,files))]; if(length(missing)) stop('API deployment source files missing: ',paste(missing,collapse=', '),call.=FALSE)
-  roles <- ifelse(files %in% probability_dependencies,'api_probability_dependency',ifelse(grepl('^PAGe/tests/',files),'api_test',ifelse(grepl('^deploy/',files),'deployment_template',ifelse(grepl('^governance/',files),'api_governance',ifelse(grepl('^docs/',files),'documentation',ifelse(grepl('run_weekly_shadow_release|v3_shadow_',files),'forecast_bootstrap','api_source'))))))
+  roles <- ifelse(files %in% probability_dependencies,'api_probability_dependency',ifelse(files %in% a_shadow_dependencies,'api_a_shadow_dependency',ifelse(grepl('^PAGe/tests/',files),'api_test',ifelse(grepl('^deploy/',files),'deployment_template',ifelse(grepl('^governance/',files),'api_governance',ifelse(grepl('^docs/',files),'documentation',ifelse(grepl('run_weekly_shadow_release|v3_shadow_|v3_m1_b_runtime_helpers_v8|m2-b-v3-shadow-v4|v3-m2-b-final-disposition',files),'forecast_bootstrap','api_source')))))))
   manifest <- data.frame(role=roles,path=files,sha256=vapply(file.path(repo,files),.api_sha256_file,character(1)),size_bytes=as.character(file.info(file.path(repo,files))$size),stringsAsFactors=FALSE)
   rscript_abs <- normalizePath(opt$rscript,winslash='/',mustWork=TRUE)
   olis_base <- if(is.null(opt$olis_fallback)||!nzchar(opt$olis_fallback)) 'none' else basename(opt$olis_fallback)

@@ -8,7 +8,7 @@ page_version_metrics()
 }
 \value{
 A data frame containing comparison scope, component, horizon, metric,
-v1/legacy, v2, v3 values, relative gains, evidence path, and caveat.
+  v1/legacy, v2, v3 values, relative gains, evidence path, and caveat.
 }
 \description{
 Returns the compact evidence table used by the PAGe version-comparison

@@ -16,6 +16,15 @@ completed for run ID `boundary-expansion-20260801T150000Z`; its candidate
 failed the locked NLL gate, so no refit or promotion followed. The private and
 disclosure-safe evidence is ignored by Git under `results/`.
 
+::: {.callout-tip title="User-facing walkthroughs"}
+For the model-building path, start with
+[`training_walkthrough.qmd`](training_walkthrough.qmd). For current official
+ORVT ingestion, direct R forecasting, reproducible weekly replay, and R client
+examples for the v4 HTTP API, use
+[`realtime_deployment_walkthrough.qmd`](realtime_deployment_walkthrough.qmd).
+This page remains the detailed acceptance/refit/promotion operator reference.
+:::
+
 ## Four-phase chain
 
 | Phase | Input state | Required action | Output |

@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: PAGe Weekly Shadow API
-  version: 4.1.0
-  description: Internal shadow-only API wrapping the governed PAGe weekly v2/v3 transaction and exposing validated M0/M1 monitoring, M2 forecasts, and experimental immutable probability queries.
+  version: 4.2.0
+  description: Internal shadow-only API wrapping the governed PAGe weekly v2/v3 transaction and exposing validated M0/M1 monitoring, M2 forecasts, an optional A+2 test-volume challenger, and experimental immutable probability queries.
 servers:
   - url: http://127.0.0.1:8088
 components:
@@ -26,10 +26,12 @@ components:
             m1: {type: object, description: B activity/timing state and posterior peak fields when available}
     Result:
       type: object
-      required: [run_id, season, origin_weekF, release_id, effective_panel_sha256, monitoring, forecasts, probabilities]
+      required: [run_id, season, origin_weekF, release_id, effective_panel_sha256, a_shadow_option, monitoring, forecasts, a_shadow, probabilities]
       properties:
         monitoring: {$ref: '#/components/schemas/Monitoring'}
         forecasts: {type: array}
+        a_shadow_option: {type: string, enum: ['off', 'exp050_h2']}
+        a_shadow: {type: object, description: Optional experimental A+2 EXP050 challenger; canonical forecasts remain unchanged}
         probabilities: {type: object, description: Experimental probability snapshot availability and query endpoints}
     ProbabilityQuery:
       type: object
@@ -51,6 +53,7 @@ components:
       properties:
         season: {type: string, const: '2026-27'}
         expected_release_id: {type: string, const: '5472d08992b5a9da40a9419b75c7427847ff7b1999070041d5e38b0a71da853b'}
+        a_shadow_option: {type: string, enum: ['off', 'exp050_h2'], default: 'off', description: Optional shadow-only A+2 challenger. Does not replace canonical A1 or alter probability calibration.}
 paths:
   /healthz:
     get:

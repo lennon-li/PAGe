@@ -12,7 +12,8 @@ tau_profile_se(
   tau0 = 0,
   tau_bounds = c(-12, 12),
   support = NULL,
-  weights = NULL
+  weights = NULL,
+  ab_prior = NULL
 )
 }
 \arguments{

@@ -1,7 +1,7 @@
 [Unit]
 Description=Trigger and monitor PAGe weekly shadow API run
-After=page-weekly-api.service
-Requires=page-weekly-api.service
+After=page-weekly-api-v4.service
+Requires=page-weekly-api-v4.service
 
 [Service]
 Type=oneshot

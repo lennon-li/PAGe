@@ -58,7 +58,7 @@ options(stringsAsFactors=FALSE)
   repo <- normalizePath(wc$repo_root,winslash='/',mustWork=TRUE); setwd(repo)
   dep <- normalizePath(wc$api_deployment_dir,winslash='/',mustWork=TRUE)
   .bootstrap_deployment_id(dep)
-  boot <- c('scripts/v3_weekly_api_deployment_helpers_v4.R','scripts/v3_weekly_api_helpers_v4.R','scripts/v3_shadow_release_helpers_v1.R','scripts/v3_shadow_ops_helpers_v1.R','2026/run_weekly_shadow_release_v5.R','scripts/v3_probability_helpers_v1.R','2026/run_page_probability_snapshot_v1.R')
+  boot <- c('scripts/v3_weekly_api_deployment_helpers_v4.R','scripts/v3_weekly_api_helpers_v4.R','scripts/v3_shadow_release_helpers_v1.R','scripts/v3_shadow_ops_helpers_v1.R','2026/run_weekly_shadow_release_v5.R','scripts/v3_probability_helpers_v1.R','2026/run_page_probability_snapshot_v1.R','scripts/v3_a_shadow_helpers_v1.R','2026/run_page_a_shadow_snapshot_v1.R')
   .bootstrap_validate(dep,repo,boot)
   source('scripts/v3_weekly_api_deployment_helpers_v4.R')
   source('scripts/v3_weekly_api_helpers_v4.R')
@@ -89,6 +89,8 @@ options(stringsAsFactors=FALSE)
     output_root=wc$output_root,source_mode=wc$source_mode,olis_fallback=wc$olis_fallback,
     rscript=wc$rscript,max_runtime_seconds=as.integer(wc$max_runtime_seconds),transaction_schema=wc$transaction_schema)
   if (!identical(req$season,cfg$season)||!identical(req$expected_release_id,cfg$forecast_release_id)) stop('Worker request/config mismatch.',call.=FALSE)
+  a_shadow_option <- as.character(req$a_shadow_option %||% 'off')
+  if (length(a_shadow_option)!=1L || !a_shadow_option %in% c('off','exp050_h2')) stop('Worker A shadow option invalid.',call.=FALSE)
   if (!requireNamespace('processx',quietly=TRUE)) stop('processx missing.',call.=FALSE)
 
   run_root <- file.path(cfg$output_root,'api-runs',opt$run_id)
@@ -141,6 +143,19 @@ options(stringsAsFactors=FALSE)
       cleanup_tree=TRUE,error_on_status=FALSE),error=function(e) NULL)
     if (is.null(prob_run) || !identical(as.integer(prob_run$status),0L))
       cat('experimental probability snapshot unavailable for run ',opt$run_id,'\n',sep='',file=stderr())
+  }
+  # Optional A test-volume challenger is computed only after the canonical
+  # transaction succeeds. It never alters canonical forecasts or probability
+  # calibration. Failure disables only the requested shadow projection.
+  if (!is.null(tx_dir) && !identical(a_shadow_option,'off')) {
+    sh_args <- c('--vanilla','2026/run_page_a_shadow_snapshot_v1.R',
+      paste0('--transaction-dir=',tx_dir),paste0('--job-dir=',job_dir),
+      paste0('--expected-release-id=',cfg$forecast_release_id),paste0('--option=',a_shadow_option))
+    sh_run <- tryCatch(processx::run(cfg$rscript,sh_args,wd=repo,env=child_env,
+      stdout=file.path(job_dir,'a-shadow-worker.stdout.log'),stderr=file.path(job_dir,'a-shadow-worker.stderr.log'),
+      timeout=min(180L,cfg$max_runtime_seconds),cleanup_tree=TRUE,error_on_status=FALSE),error=function(e) NULL)
+    if (is.null(sh_run) || !identical(as.integer(sh_run$status),0L))
+      cat('experimental A shadow snapshot unavailable for run ',opt$run_id,' option=',a_shadow_option,'\n',sep='',file=stderr())
   }
   proj <- tryCatch(.api_validate_and_project_transaction(cfg,opt$run_id,persist=TRUE),error=identity)
   if (inherits(proj,'error')) {

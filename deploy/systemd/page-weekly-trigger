@@ -6,6 +6,18 @@ set -eu
 : "${PAGE_TRIGGER_BODY:?}"
 : "${PAGE_TRIGGER_POLL_SECONDS:=10}"
 : "${PAGE_TRIGGER_MAX_POLLS:=180}"
+: "${PAGE_TRIGGER_REQUIRE_SOURCE_MODE:=}"
+: "${PAGE_TRIGGER_MIN_WEEKF:=}"
+
+case "$PAGE_TRIGGER_REQUIRE_SOURCE_MODE" in
+  ""|orvt|olis) : ;;
+  *) echo "PAGE_TRIGGER_REQUIRE_SOURCE_MODE must be empty, orvt, or olis" >&2; exit 2 ;;
+esac
+case "$PAGE_TRIGGER_MIN_WEEKF" in
+  "") : ;;
+  *[!0-9]*|0) echo "PAGE_TRIGGER_MIN_WEEKF must be empty or an integer in [1,53]" >&2; exit 2 ;;
+  *) [ "$PAGE_TRIGGER_MIN_WEEKF" -le 53 ] || { echo "PAGE_TRIGGER_MIN_WEEKF must be empty or an integer in [1,53]" >&2; exit 2; } ;;
+esac
 
 if [ ! -f "$PAGE_WEEKLY_CYCLE_ID_FILE" ] || [ -L "$PAGE_WEEKLY_CYCLE_ID_FILE" ] || [ ! -r "$PAGE_WEEKLY_CYCLE_ID_FILE" ]; then
   echo "cycle ID file must be a readable regular non-symlink file" >&2
@@ -27,7 +39,32 @@ while [ "$i" -lt "$PAGE_TRIGGER_MAX_POLLS" ]; do
   state=$(curl --config "$PAGE_TRIGGER_CURL_CONFIG" "${PAGE_API_URL}/v1/weekly-runs/${run_id}")
   status=$(printf '%s' "$state" | jq -er '.status')
   case "$status" in
-    succeeded) exit 0 ;;
+    succeeded)
+      if [ -n "$PAGE_TRIGGER_REQUIRE_SOURCE_MODE" ] || [ -n "$PAGE_TRIGGER_MIN_WEEKF" ]; then
+        provenance=$(curl --config "$PAGE_TRIGGER_CURL_CONFIG" \
+          "${PAGE_API_URL}/v1/weekly-runs/${run_id}/provenance")
+      fi
+      if [ -n "$PAGE_TRIGGER_REQUIRE_SOURCE_MODE" ]; then
+        actual_source_mode=$(printf '%s' "$provenance" | jq -er '.source_mode')
+        if [ "$actual_source_mode" != "$PAGE_TRIGGER_REQUIRE_SOURCE_MODE" ]; then
+          printf 'weekly API run used source_mode=%s; required=%s; run_id=%s\n' \
+            "$actual_source_mode" "$PAGE_TRIGGER_REQUIRE_SOURCE_MODE" "$run_id" >&2
+          exit 1
+        fi
+      fi
+      if [ -n "$PAGE_TRIGGER_MIN_WEEKF" ]; then
+        actual_origin_weekF=$(printf '%s' "$provenance" | jq -er '.origin_weekF')
+        case "$actual_origin_weekF" in
+          *[!0-9]*|"") echo "weekly API provenance has invalid origin_weekF" >&2; exit 1 ;;
+        esac
+        if [ "$actual_origin_weekF" -lt "$PAGE_TRIGGER_MIN_WEEKF" ]; then
+          printf 'weekly API run used origin_weekF=%s; required minimum=%s; run_id=%s\n' \
+            "$actual_origin_weekF" "$PAGE_TRIGGER_MIN_WEEKF" "$run_id" >&2
+          exit 1
+        fi
+      fi
+      exit 0
+      ;;
     failed) printf '%s\n' "$state" >&2; exit 1 ;;
     accepted|running) : ;;
     *) printf 'unexpected status: %s\n' "$status" >&2; exit 1 ;;

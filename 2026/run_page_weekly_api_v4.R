@@ -27,7 +27,7 @@ options(stringsAsFactors=FALSE)
 }
 .bootstrap <- function(dep,repo) {
   m <- utils::read.delim(file.path(dep,'deployment_manifest.tsv'),sep='\t',stringsAsFactors=FALSE,check.names=FALSE)
-  needed <- c('scripts/v3_weekly_api_deployment_helpers_v4.R','scripts/v3_weekly_api_helpers_v4.R','2026/page_weekly_api_v4.R','scripts/v3_shadow_release_helpers_v1.R','scripts/v3_shadow_ops_helpers_v1.R','2026/run_weekly_shadow_release_v5.R','scripts/v3_probability_helpers_v1.R','2026/run_page_probability_snapshot_v1.R')
+  needed <- c('scripts/v3_weekly_api_deployment_helpers_v4.R','scripts/v3_weekly_api_helpers_v4.R','2026/page_weekly_api_v4.R','scripts/v3_shadow_release_helpers_v1.R','scripts/v3_shadow_ops_helpers_v1.R','2026/run_weekly_shadow_release_v5.R','scripts/v3_probability_helpers_v1.R','2026/run_page_probability_snapshot_v1.R','scripts/v3_a_shadow_helpers_v1.R','2026/run_page_a_shadow_snapshot_v1.R')
   for (rel in needed) { r<-m[m$path==rel,,drop=FALSE]; if(nrow(r)!=1L||!identical(.bootstrap_sha(file.path(repo,rel)),r$sha256[[1]])) stop('API bootstrap hash validation failed.',call.=FALSE) }
   invisible(TRUE)
 }

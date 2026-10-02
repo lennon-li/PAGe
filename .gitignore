@@ -65,3 +65,6 @@ r-lib/
 abstracts.txt
 articles.txt
 semanticscholar.txt
+
+!PAGe/inst/extdata/**
+!PAGe/inst/report/**
