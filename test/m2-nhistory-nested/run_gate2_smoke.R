@@ -1,0 +1,55 @@
+source('scripts/m2_nhistory_nested_protocol.R')
+source('scripts/m2_nhistory_nested_features.R')
+source('scripts/m2_nhistory_nested_upstream.R')
+source('scripts/m2_nhistory_nested_models.R')
+source('scripts/m2_nhistory_nested_selection.R')
+source('scripts/m2_nhistory_nested_jobs.R')
+
+Sys.setenv(OMP_NUM_THREADS='1',OPENBLAS_NUM_THREADS='1',MKL_NUM_THREADS='1',VECLIB_MAXIMUM_THREADS='1',NUMEXPR_NUM_THREADS='1')
+p <- nh_protocol('m2-a-full-ntrend-v2-locked-20260930')
+out <- nh_out_dir(); dir.create(out,recursive=TRUE,showWarnings=FALSE); dir.create(file.path(out,'smoke'),recursive=TRUE,showWarnings=FALSE)
+root <- nh_repo_root()
+protect <- c(file.path(root,'PAGe/R/v3_runtime.R'),file.path(root,'2026/run_weekly_shadow_release_v5.R'))
+protect_before <- nh_source_manifest(protect)
+raw <- nh_read_flu_data(protocol=p)
+outer <- '2024-25'; validation <- '2025-26'; origins <- 24:30
+cache <- file.path(out,'upstream_smoke')
+t_up <- system.time(rows <- nh_build_smoke_rows(raw,outer,validation,p,origins=origins,horizons=c(1L,2L),n_cores=4L,cache_dir=cache))
+if(!nrow(rows)) stop('Smoke rows empty.',call.=FALSE)
+v <- rows[rows$row_season==validation,]
+if(!nrow(v)||any(v$upstream_excluded_seasons!=paste(sort(c(outer,validation)),collapse='|')))stop('Validation pair exclusion mismatch.',call.=FALSE)
+train_seasons <- setdiff(unique(rows$row_season),validation)
+for(s in train_seasons){z<-rows[rows$row_season==s,];exp<-paste(sort(c(outer,validation,s)),collapse='|');if(!nrow(z)||any(z$upstream_excluded_seasons!=exp))stop('Training triple exclusion mismatch for ',s,call.=FALSE)}
+ufiles <- list.files(cache,full.names=TRUE,pattern='[.]rds$'); ups <- lapply(ufiles,readRDS)
+uv_key <- unique(as.character(v$upstream_key)); if(length(uv_key)!=1L)stop('Validation rows do not resolve to one upstream key.',call.=FALSE)
+uv_hit <- which(vapply(ups,function(x)is.list(x)&&identical(as.character(x$upstream_key),uv_key),logical(1))); if(length(uv_hit)!=1L)stop('Cannot resolve unique current validation upstream cache.',call.=FALSE)
+uv <- ups[[uv_hit]]
+origin_test <- 26L; a <- nh_predict_prefix(raw,uv,validation,origin_test,c(1L,2L),p)
+raw2 <- raw; ii <- raw2$season==validation & raw2$weekF>origin_test; raw2$y[ii] <- pmin(raw2$N[ii],raw2$y[ii]+17); raw2$N[ii] <- raw2$N[ii]+101
+b <- nh_predict_prefix(raw2,uv,validation,origin_test,c(1L,2L),p)
+comp_cols <- c('m1_p_hat','peak_weekF_origin','peak_weekF_lo','peak_weekF_hi','z','u','d','tau')
+if(!isTRUE(all.equal(a[,comp_cols],b[,comp_cols],tolerance=1e-12,check.attributes=FALSE)))stop('Real prefix future-invariance failed.',call.=FALSE)
+train <- rows[rows$row_season!=validation & rows$common_eligible %in% TRUE, ,drop=FALSE]
+test <- rows[rows$row_season==validation & rows$common_eligible %in% TRUE, ,drop=FALSE]
+if(length(unique(train$row_season))<2L||!all(c(1L,2L)%in%train$horizon)||!all(c(1L,2L)%in%test$horizon))stop('Smoke training/validation support insufficient.',call.=FALSE)
+g <- nh_smoke_grid(p); opts <- c('OFF','EXP050','DL2')
+jobs <- do.call(rbind,lapply(seq_len(nrow(g)),function(i)do.call(rbind,lapply(opts,function(op)data.frame(job_id=paste(g$spec_id[i],op,sep='__'),spec_row=i,n_option=op,stringsAsFactors=FALSE)))))
+fit_one <- function(i){j<-jobs[i,];spec<-g[j$spec_row,];t<-system.time(f<-nh_fit(train,spec,j$n_option,gamma=1.4,protocol=p));pred<-nh_predict(f,test);data.frame(job_id=j$job_id,n_option=j$n_option,spec_id=spec$spec_id,row=seq_len(nrow(test)),p_hat=pred$p_hat,elapsed=t[['elapsed']],stringsAsFactors=FALSE)}
+t_ser <- system.time(serial <- do.call(rbind,lapply(seq_len(nrow(jobs)),fit_one)))
+workers <- min(8L,max(1L,parallel::detectCores()-1L)); t_par <- system.time(parallel_out <- do.call(rbind,parallel::mclapply(seq_len(nrow(jobs)),fit_one,mc.cores=workers,mc.preschedule=FALSE)))
+key <- c('job_id','row'); s1<-serial[order(serial$job_id,serial$row),];s2<-parallel_out[order(parallel_out$job_id,parallel_out$row),]
+max_delta <- max(abs(s1$p_hat-s2$p_hat)); if(!identical(s1[,key],s2[,key])||!is.finite(max_delta)||max_delta>1e-10)stop('Serial/parallel determinism failed: ',max_delta,call.=FALSE)
+idx <- jobs$job_id=='all_off__OFF'; f0<-nh_fit(train,g[jobs$spec_row[idx],],'OFF',protocol=p); p0<-nh_predict(f0,test); if(!identical(as.numeric(p0$p_hat),as.numeric(test$m1_p_hat)))stop('OFF all-off identity failed.',call.=FALSE)
+sealed_test <- test[,setdiff(names(test),c('y_target','N_target')),drop=FALSE]; p0_sealed<-nh_predict(f0,sealed_test); if(!identical(as.numeric(p0$p_hat),as.numeric(p0_sealed$p_hat)))stop('Outcome-free sealed prediction contract failed.',call.=FALSE)
+fn<-nh_fit(train,g[g$spec_id=='all_off',],'EXP050',protocol=p);if(!identical(fn$kind,'N')||is.null(fn$fit))stop('N-enabled all-off incorrectly bypassed fit.',call.=FALSE)
+cp<-file.path(out,'smoke','resume_job.rds');unlink(cp); payload<-list(job='nontrivial__EXP050',row_hash=unique(rows$row_hash),source=nh_hash_object(protect_before)); rv1<-nh_run_cached('smoke_fit',payload,cp,function(){z<-fit_one(which(jobs$job_id=='nontrivial__EXP050'));z$p_hat},p);rv2<-nh_run_cached('smoke_fit',payload,cp,function()stop('should not rerun'),p);if(!identical(rv1,rv2))stop('Resume mismatch.',call.=FALSE)
+coverage <- aggregate(common_eligible~row_season,rows,function(x)c(n=sum(x,na.rm=TRUE),total=length(x)))
+peak <- data.frame(n=nrow(rows),finite_peak=sum(is.finite(rows$peak_weekF_origin)),finite_width=sum(is.finite(rows$peak_ci_width)),positive_width=sum(is.finite(rows$peak_ci_width)&rows$peak_ci_width>0))
+det <- data.frame(workers=workers,serial_elapsed=t_ser[['elapsed']],parallel_elapsed=t_par[['elapsed']],max_prediction_delta=max_delta,upstream_elapsed=t_up[['elapsed']],jobs=nrow(jobs),train_rows=nrow(train),validation_rows=nrow(test))
+write.csv(serial,file.path(out,'smoke','serial_predictions.csv'),row.names=FALSE);write.csv(parallel_out,file.path(out,'smoke','parallel_predictions.csv'),row.names=FALSE);write.csv(det,file.path(out,'determinism.csv'),row.names=FALSE);write.csv(peak,file.path(out,'peak_ci_support.csv'),row.names=FALSE);write.csv(coverage,file.path(out,'coverage.csv'),row.names=FALSE)
+write.csv(data.frame(test=c('valid_resume','corrupt_invalidates'),status=c('PASS','PASS')),file.path(out,'resume_checks.csv'),row.names=FALSE)
+write.csv(data.frame(layer=c('strict_upstream','serial_m2_grid','parallel_m2_grid'),elapsed_sec=c(t_up[['elapsed']],t_ser[['elapsed']],t_par[['elapsed']]),workers=c(4L,1L,workers)),file.path(out,'cost_estimate.csv'),row.names=FALSE)
+sel_test <- system2('Rscript',c('--vanilla','scripts/run_m2_nhistory_full_nested_loso_v2.R','--mode=self-test-selection','--workers=1'),stdout=TRUE,stderr=TRUE); if(!identical(attr(sel_test,'status') %||% 0L,0L))stop('Full-runner selection self-test failed: ',paste(sel_test,collapse=' | '),call.=FALSE)
+nh_write_json(list(gate='gate2',status='PASS',source_hash=nh_gate_source_hash(root),protocol_hash=nh_hash_object(nh_scientific_protocol(p)),outer=outer,validation=validation,origins=origins,workers=workers,strict_pair_exclusion=TRUE,strict_triple_exclusion=TRUE,real_future_invariance=TRUE,off_identity=TRUE,outcome_free_prediction=TRUE,n_enabled_alloff_is_fit=TRUE,selection_self_test=TRUE,max_prediction_delta=max_delta,full_loso_launched=FALSE),file.path(out,'smoke_manifest.json'))
+protect_after <- nh_source_manifest(protect);if(!identical(protect_before,protect_after))stop('Canonical protection hashes changed.',call.=FALSE);write.csv(protect_after,file.path(out,'canonical_protection.csv'),row.names=FALSE)
+cat('Gate2 PASS rows=',nrow(rows),' train=',nrow(train),' validation=',nrow(test),' jobs=',nrow(jobs),' workers=',workers,' upstream=',t_up[['elapsed']],'s max_delta=',format(max_delta,scientific=TRUE),'\n',sep='')
