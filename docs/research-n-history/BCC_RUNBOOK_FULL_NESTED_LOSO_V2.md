@@ -23,9 +23,9 @@ The runner expects a sibling or explicitly named PAGe source tree. The locally v
 
 The currently pushed parent `6c64ce8361c5d14250205ffb1280d6ed0d8e1c4d` is also acceptable for this experiment: `PAGe/R/**` and `2026/run_weekly_shadow_release_v5.R` are unchanged between `6c64ce8` and `cbac857`; the latter commit only adds the separate probability API-side work. Gate 0 records the actual BCC source identity and hashes before fitting.
 
-Set `PAGE_NHISTORY_SOURCE_ROOT` if the BCC path differs.
+Set `PAGE_NHISTORY_CODE_ROOT` only if the canonical checkout is not the launcher root. Set `PAGE_NHISTORY_AUTHORITY_ROOT` to the directory containing the locked authority artifacts.
 
-The source tree must contain the canonical observation/timing inputs referenced by `protocol.json` and the frozen M0 grid authority. These four authorities are Git-ignored, so this bundle includes `bcc-source-overlay/` plus SHA-256 checks. The launcher installs missing copies or verifies existing copies and refuses to overwrite a mismatched authority. Gate 0 then hashes all authorities and relevant source files before any full search.
+The canonical code checkout and authority-artifact location are intentionally decoupled. The four authority files are Git-ignored, so `bcc-source-overlay/` supplies them with SHA-256 checks. The launcher installs missing copies or verifies existing copies under `PAGE_NHISTORY_AUTHORITY_ROOT` and refuses to overwrite a mismatch. Gate 0 separately hashes the current code checkout and every authority before any full search.
 
 ## What is implemented
 
@@ -74,10 +74,10 @@ Recommended first BCC allocation: 32–48 CPU cores with at least ~64–96 GB RA
 
 ## Commands
 
-From `PAGe-m2-a-full`:
+From the canonical `PAGe` checkout on `dev/n-history`:
 
 ```bash
-export PAGE_NHISTORY_SOURCE_ROOT=/path/to/PAGe-m1-v2
+export PAGE_NHISTORY_CODE_ROOT=/path/to/PAGe PAGE_NHISTORY_AUTHORITY_ROOT=/path/to/page-authorities
 export PAGE_WORKERS=48
 bash scripts/launch_m2_nhistory_bcc_v2.sh prepare
 ```
@@ -87,7 +87,7 @@ bash scripts/launch_m2_nhistory_bcc_v2.sh prepare
 Then build every strict upstream cache and immutable ledger:
 
 ```bash
-export PAGE_NHISTORY_SOURCE_ROOT=/path/to/PAGe-m1-v2
+export PAGE_NHISTORY_CODE_ROOT=/path/to/PAGe PAGE_NHISTORY_AUTHORITY_ROOT=/path/to/page-authorities
 export PAGE_WORKERS=48
 bash scripts/launch_m2_nhistory_bcc_v2.sh gate3
 ```
@@ -97,7 +97,7 @@ Gate 3 is resumable. Expected completed counts are 231 upstream artifacts, 616 r
 To launch the complete search after Gate 3 passes:
 
 ```bash
-export PAGE_NHISTORY_SOURCE_ROOT=/path/to/PAGe-m1-v2
+export PAGE_NHISTORY_CODE_ROOT=/path/to/PAGe PAGE_NHISTORY_AUTHORITY_ROOT=/path/to/page-authorities
 export PAGE_WORKERS=48
 bash scripts/launch_m2_nhistory_bcc_v2.sh full
 ```
@@ -107,7 +107,7 @@ The explicit `full` argument is treated as authorization for Gate 4/5 and sets `
 For a detached shell when the cluster policy permits it:
 
 ```bash
-nohup env PAGE_NHISTORY_SOURCE_ROOT=/path/to/PAGe-m1-v2 PAGE_WORKERS=48 \
+nohup env PAGE_NHISTORY_CODE_ROOT=/path/to/PAGe PAGE_NHISTORY_AUTHORITY_ROOT=/path/to/page-authorities PAGE_WORKERS=48 \
   bash scripts/launch_m2_nhistory_bcc_v2.sh full \
   > bcc-full-nested-loso-v2.nohup.log 2>&1 &
 ```

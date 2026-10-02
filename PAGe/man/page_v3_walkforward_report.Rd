@@ -3,7 +3,7 @@
 \title{Render the PAGe v3 walk-forward HTML report}
 \usage{
 page_v3_walkforward_report(
-  data,
+  data = NULL,
   season = NULL,
   origins = NULL,
   output_file = "PAGe_walkforward_report.html",
@@ -12,7 +12,7 @@ page_v3_walkforward_report(
 )
 }
 \arguments{
-\item{data}{A canonical typed A/B panel, an OLIS \code{.RData} snapshot, or a local official ORVT CSV accepted by \code{page_v3_forecast()}.}
+\item{data}{A canonical typed A/B panel, an OLIS \code{.RData} snapshot, or a local official ORVT CSV accepted by \code{page_v3_forecast()}. When \code{NULL} (the default), the current season is fetched from the live PHO ORVT feed via \code{getCurrentD()}.}
 \item{season}{Optional season label. Required where \code{page_v3_forecast()} requires it, for example for an ORVT CSV path.}
 \item{origins}{Integer origin weeks to expose as report tabs. Defaults to Weeks 8 through the latest available origin.}
 \item{output_file}{Destination HTML file. Parent directories are created.}

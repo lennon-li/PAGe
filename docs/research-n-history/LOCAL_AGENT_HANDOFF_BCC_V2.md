@@ -37,7 +37,7 @@ export NUMEXPR_NUM_THREADS=1
 export PAGE_WORKERS=32
 ```
 
-From the extracted `PAGe-m2-a-full` directory, with the sibling PAGe source checkout available as `../PAGe-m1-v2` (or set `PAGE_NHISTORY_SOURCE_ROOT` explicitly):
+From the canonical `PAGe` checkout on `dev/n-history`. The launcher uses that checkout as `PAGE_NHISTORY_CODE_ROOT`. If the Git-ignored authority artifacts are not installed in the same checkout, set `PAGE_NHISTORY_AUTHORITY_ROOT` to the artifact-bearing directory before running:
 
 ### 1. BCC prepare only
 

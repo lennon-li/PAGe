@@ -31,11 +31,11 @@ The launcher reruns Gates 0–2 on BCC before doing any full work. Gate 3 is res
 The scratch research checkout and the canonical PAGe source checkout should be siblings, e.g.:
 
 ```text
-/home/yeli/repos/PAGe-m2-a-full
-/home/yeli/repos/PAGe-m1-v2
+/home/yeli/repos/PAGe
+/home/yeli/repos/PAGe
 ```
 
-If the source checkout is elsewhere, set `PAGE_NHISTORY_SOURCE_ROOT` explicitly.
+If the canonical code checkout is elsewhere, set `PAGE_NHISTORY_CODE_ROOT`. Set `PAGE_NHISTORY_AUTHORITY_ROOT` separately when the locked authority artifacts are stored outside that checkout.
 
 The bundled `bcc-source-overlay/` contains the Git-ignored locked observation/timing/M0 authorities and is SHA-verified by the launcher before Gate 0.
 
@@ -59,9 +59,10 @@ The launcher checks these before execution.
 From the scratch checkout:
 
 ```bash
-cd /home/yeli/repos/PAGe-m2-a-full
+cd /home/yeli/repos/PAGe
 
-export PAGE_NHISTORY_SOURCE_ROOT=/home/yeli/repos/PAGe-m1-v2
+export PAGE_NHISTORY_CODE_ROOT=/home/yeli/repos/PAGe
+export PAGE_NHISTORY_AUTHORITY_ROOT=/path/to/page-authorities
 export PAGE_WORKERS=48
 export PAGE_MIN_MB_PER_WORKER=1200
 
@@ -95,7 +96,7 @@ For a staged launch instead:
 In another shell:
 
 ```bash
-cd /home/yeli/repos/PAGe-m2-a-full
+cd /home/yeli/repos/PAGe
 ./scripts/launch_m2_nhistory_bcc_v2.sh status
 ```
 

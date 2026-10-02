@@ -5,8 +5,8 @@ test_that("public namespace is compact and version-free", {
     "m1_passage_posterior", "m1_peak_posterior", "m1_predict",
     "m2_fit", "m2_predict", "page_forecast", "page_forecast_now",
     "page_label_ignitions", "page_load_kit", "page_load_surveillance",
-    "page_models", "page_save_kit", "page_season_calendar", "page_train",
-    "page_validate_kit", "page_walkforward_report", "plot_forecast",
+    "page_models", "page_render_report", "page_save_kit", "page_season_calendar", "page_train",
+    "page_validate_kit", "page_walkforward_qmd", "page_walkforward_report", "plot_forecast",
     "prepare_surveillance_data", "replay_holdout", "season_selection",
     "shared_denominator_correlation", "validate_season_selection",
     "validate_surveillance_data", "verify_promotion"

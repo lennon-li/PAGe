@@ -2,13 +2,13 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OVERLAY="$ROOT/bcc-source-overlay"
-TARGET="${PAGE_NHISTORY_SOURCE_ROOT:-${1:-}}"
+TARGET="${PAGE_NHISTORY_AUTHORITY_ROOT:-${PAGE_NHISTORY_SOURCE_ROOT:-${1:-}}}"
 if [[ -z "$TARGET" ]]; then
-  echo "Set PAGE_NHISTORY_SOURCE_ROOT or pass the PAGe source checkout as argument." >&2
+  echo "Set PAGE_NHISTORY_AUTHORITY_ROOT (or legacy PAGE_NHISTORY_SOURCE_ROOT) or pass an authority-root directory." >&2
   exit 2
 fi
+mkdir -p "$TARGET"
 TARGET="$(cd "$TARGET" && pwd)"
-[[ -f "$TARGET/PAGe/DESCRIPTION" ]] || { echo "Invalid PAGe source root: $TARGET" >&2; exit 3; }
 [[ -f "$OVERLAY/SHA256SUMS" ]] || { echo "Missing overlay SHA256SUMS" >&2; exit 3; }
 (cd "$OVERLAY" && sha256sum -c SHA256SUMS)
 while read -r sha rel; do
@@ -31,4 +31,4 @@ while read -r sha rel; do
     echo "installed $rel"
   fi
 done < "$OVERLAY/SHA256SUMS"
-echo "BCC source overlay PASS: $TARGET"
+echo "BCC authority overlay PASS: $TARGET"

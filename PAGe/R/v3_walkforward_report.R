@@ -224,7 +224,9 @@
 #' assets under `inst/extdata/v3-week12/report-support`.
 #'
 #' @param data A canonical typed A/B panel, an OLIS `.RData` snapshot, or a
-#'   local official ORVT CSV accepted by [page_v3_forecast()].
+#'   local official ORVT CSV accepted by [page_v3_forecast()]. When `NULL`
+#'   (the default), the current season is fetched from the live PHO ORVT feed
+#'   via [getCurrentD()].
 #' @param season Optional season label. Required where [page_v3_forecast()]
 #'   requires it (for example an ORVT CSV path).
 #' @param origins Integer origin weeks to expose as report tabs. Defaults to
@@ -236,7 +238,7 @@
 #' @param strict Passed to [page_v3_forecast()] and the typed-panel validator.
 #'
 #' @return Invisibly, the normalized path to the generated HTML report.
-page_v3_walkforward_report <- function(data,
+page_v3_walkforward_report <- function(data = NULL,
                                        season = NULL,
                                        origins = NULL,
                                        output_file = "PAGe_walkforward_report.html",
@@ -310,9 +312,13 @@ page_v3_walkforward_report <- function(data,
         support$intervals$horizon == r$horizon,
       , drop = FALSE
     ]
-    if (nrow(exact) == 1L && abs(exact$point_pct[[1L]] - r$forecast_pct[[1L]]) < 1e-9) {
+    is_match <- nrow(exact) == 1L &&
+      is.finite(exact$point_pct[[1L]]) &&
+      is.finite(r$forecast_pct[[1L]]) &&
+      abs(exact$point_pct[[1L]] - r$forecast_pct[[1L]]) < 1e-9
+    if (isTRUE(is_match)) {
       interval_parts[[length(interval_parts) + 1L]] <- exact
-    } else {
+    } else if (is.finite(r$forecast_pct[[1L]])) {
       q <- .page_v3_report_dynamic_interval(panel, support, r)
       if (!is.null(q)) interval_parts[[length(interval_parts) + 1L]] <- q
     }
@@ -460,13 +466,13 @@ page_v3_walkforward_report <- function(data,
     "__A_PEAK_DETAIL__" = if (a_timing) "M1 active" else "M1 timing unavailable",
     "__A_INTERVAL__" = a_interval,
     "__A_INTERVAL_DETAIL__" = if (a_timing) "Flu weeks" else "M1 timing unavailable",
-    "__A_FORECAST__" = if (nrow(fA) == 2L) paste0(
+    "__A_FORECAST__" = if (nrow(fA) == 2L && all(is.finite(fA$forecast_pct))) paste0(
       formatC(fA$forecast_pct[[1L]], format = "f", digits = 3), " / ",
       formatC(fA$forecast_pct[[2L]], format = "f", digits = 3), "%"
     ) else "Not available yet",
-    "__A_FORECAST_DETAIL__" = if (nrow(fA) == 2L) paste0(
+    "__A_FORECAST_DETAIL__" = if (nrow(fA) == 2L && all(is.finite(fA$forecast_pct))) paste0(
       "Weeks ", fA$target_weekF[[1L]], " / ", fA$target_weekF[[2L]]
-    ) else "Forecast unavailable",
+    ) else "Awaiting validated window",
     "__B_POS__" = paste0(formatC(100 * cur$p_B[[1L]], format = "f", digits = 3), "%"),
     "__B_Y__" = .page_v3_report_fmt_number(cur$y_B[[1L]]),
     "__B_N__" = .page_v3_report_fmt_number(cur$N_B[[1L]]),
@@ -476,13 +482,13 @@ page_v3_walkforward_report <- function(data,
     "__B_PEAK_DETAIL__" = if (b_timing) "M1-B timing active" else "M1-B timing unavailable",
     "__B_INTERVAL__" = "Not available yet",
     "__B_INTERVAL_DETAIL__" = "M1-B interval unavailable",
-    "__B_FORECAST__" = if (nrow(fB) == 2L) paste0(
+    "__B_FORECAST__" = if (nrow(fB) == 2L && all(is.finite(fB$forecast_pct))) paste0(
       formatC(fB$forecast_pct[[1L]], format = "f", digits = 4), " / ",
       formatC(fB$forecast_pct[[2L]], format = "f", digits = 4), "%"
     ) else "Not available yet",
-    "__B_FORECAST_DETAIL__" = if (nrow(fB) == 2L) paste0(
+    "__B_FORECAST_DETAIL__" = if (nrow(fB) == 2L && all(is.finite(fB$forecast_pct))) paste0(
       "Weeks ", fB$target_weekF[[1L]], " / ", fB$target_weekF[[2L]]
-    ) else "Forecast unavailable"
+    ) else "Awaiting validated window"
   )
   html <- template
   for (nm in names(tokens)) html <- .page_v3_report_replace(html, nm, tokens[[nm]])

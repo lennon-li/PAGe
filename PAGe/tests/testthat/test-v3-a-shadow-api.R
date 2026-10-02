@@ -20,6 +20,7 @@ sys.source('scripts/v3_a_shadow_helpers_v1.R',envir=environment())
 }
 
 test_that('EXP050 H2 artifact is frozen, shadow-only, and release-bound', {
+  skip_if(!file.exists(.PAGE_A_EXP050_PATH), 'EXP050 artifact is not checked into this repository')
   a <- .page_a_shadow_load_exp050()
   expect_identical(a$version,'v3-a-exp050-h2-shadow-v1')
   expect_identical(a$status,'experimental_shadow')

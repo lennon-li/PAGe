@@ -43,7 +43,9 @@ print.page_forecast_result <- function(x, ...) {
     m1 <- x$monitoring$A$m1
     if (isTRUE(m1$available)) {
       cat("  A peak: weekF", format(m1$peak_mean_weekF, digits = 4),
-          " (90% ", format(m1$peak_q05_weekF, digits = 4), "-", format(m1$peak_q95_weekF, digits = 4), ")\n", sep = "")
+        " (90% ", format(m1$peak_q05_weekF, digits = 4), "-", format(m1$peak_q95_weekF, digits = 4), ")\n",
+        sep = ""
+      )
     } else {
       cat("  A peak: unavailable (", m1$state, ")\n", sep = "")
     }
@@ -72,8 +74,57 @@ page_models <- function() {
 #' @inheritParams page_v3_walkforward_report
 #' @return Invisibly, the normalized path to the generated HTML report.
 #' @export
-page_walkforward_report <- function(...) {
-  page_v3_walkforward_report(...)
+page_walkforward_report <- function(data = NULL, ...) {
+  page_v3_walkforward_report(data = data, ...)
+}
+
+#' Render a PAGe Quarto walk-forward report
+#'
+#' Builds a cumulative Quarto (`.qmd`) walk-forward report for one season and,
+#' by default, renders it to a self-contained HTML document. The report covers
+#' Week 8 through the latest observed week with one as-of tab per origin week,
+#' and is sourced from the latest `hist*.RData` snapshot, a supplied
+#' OLIS/ORVT input, or the live ORVT feed.
+#'
+#' @param data Surveillance input. One of: `NULL` (default) to use the latest
+#'   `hist*.RData` snapshot found in the default IRVRI `OP` directory, falling
+#'   back to the live PHO ORVT feed; a directory containing `hist*.RData`
+#'   snapshots; a path to an OLIS `.RData`/`.rda` snapshot or ORVT `.csv`; or a
+#'   canonical typed A/B panel accepted by [page_v3_forecast()].
+#' @param season Optional season label (for example `"2026-27"`). When `NULL`
+#'   and an OLIS snapshot is supplied, the latest season present is used.
+#' @param output_dir Directory that receives the `.qmd`, any plot assets, and
+#'   the rendered `.html`.
+#' @param file_name Optional `.qmd` file name. Defaults to
+#'   `page_walkforward_<season>_week<origin>.qmd`.
+#' @param render When `TRUE` (default), render the `.qmd` to self-contained HTML
+#'   using the Quarto CLI.
+#' @param ... Reserved for future use.
+#'
+#' @return Invisibly, a named list with `qmd_path`, `html_path` (or
+#'   `NA_character_` when `render = FALSE`), the resolved `data` panel, and the
+#'   `forecasts` data frame.
+#' @export
+page_walkforward_qmd <- function(data = NULL,
+                                 season = NULL,
+                                 output_dir = "reports",
+                                 file_name = NULL,
+                                 render = TRUE,
+                                 ...) {
+  .page_walkforward_qmd_impl(
+    data = data,
+    season = season,
+    output_dir = output_dir,
+    file_name = file_name,
+    render = render,
+    ...
+  )
+}
+
+#' @rdname page_walkforward_qmd
+#' @export
+page_render_report <- function(...) {
+  page_walkforward_qmd(...)
 }
 
 #' Validate a PAGe kit

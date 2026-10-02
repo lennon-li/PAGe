@@ -10,7 +10,15 @@ case "$MODE" in
   *) echo "Usage: $0 {prepare|gate3|full|status}" >&2; exit 2 ;;
 esac
 
-export PAGE_NHISTORY_SOURCE_ROOT="${PAGE_NHISTORY_SOURCE_ROOT:-../PAGe-m1-v2}"
+export PAGE_NHISTORY_CODE_ROOT="${PAGE_NHISTORY_CODE_ROOT:-$ROOT}"
+if [[ -z "${PAGE_NHISTORY_AUTHORITY_ROOT:-}" ]]; then
+  if [[ -n "${PAGE_NHISTORY_SOURCE_ROOT:-}" ]]; then
+    PAGE_NHISTORY_AUTHORITY_ROOT="$PAGE_NHISTORY_SOURCE_ROOT"
+  else
+    PAGE_NHISTORY_AUTHORITY_ROOT="$ROOT"
+  fi
+fi
+export PAGE_NHISTORY_AUTHORITY_ROOT
 export PAGE_NHISTORY_NESTED_OUT="${PAGE_NHISTORY_NESTED_OUT:-artifacts/m2-a-full-ntrend-nested-loso-v2}"
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
@@ -79,7 +87,8 @@ exec > >(tee -a "$LOG") 2>&1
 echo "=== PAGe strict full nested LOSO BCC launcher ==="
 echo "mode=$MODE"
 echo "scratch_root=$ROOT"
-echo "source_root=$PAGE_NHISTORY_SOURCE_ROOT"
+echo "code_root=$PAGE_NHISTORY_CODE_ROOT"
+echo "authority_root=$PAGE_NHISTORY_AUTHORITY_ROOT"
 echo "out=$PAGE_NHISTORY_NESTED_OUT"
 echo "workers=$PAGE_WORKERS"
 echo "host=$(hostname)"
@@ -90,14 +99,14 @@ if [[ "$MODE" == "status" ]]; then
 fi
 
 command -v Rscript >/dev/null 2>&1 || { echo "Rscript not found" >&2; exit 3; }
-[[ -f "$PAGE_NHISTORY_SOURCE_ROOT/PAGe/DESCRIPTION" ]] || {
-  echo "PAGe source root not found: $PAGE_NHISTORY_SOURCE_ROOT" >&2; exit 3;
+[[ -f "$PAGE_NHISTORY_CODE_ROOT/PAGe/DESCRIPTION" ]] || {
+  echo "PAGe code root not found: $PAGE_NHISTORY_CODE_ROOT" >&2; exit 3;
 }
 
 # The locked observation/timing/M0 authorities are intentionally Git-ignored.
 # Install or verify the bundled source overlay before Gate 0.
 if [[ -f "$ROOT/bcc-source-overlay/SHA256SUMS" ]]; then
-  bash scripts/install_bcc_source_overlay_v2.sh "$PAGE_NHISTORY_SOURCE_ROOT"
+  bash scripts/install_bcc_source_overlay_v2.sh "$PAGE_NHISTORY_AUTHORITY_ROOT"
 fi
 
 Rscript --vanilla - <<'RS'

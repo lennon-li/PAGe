@@ -1,13 +1,31 @@
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
 nh_repo_root <- function() {
-  configured <- Sys.getenv("PAGE_NHISTORY_SOURCE_ROOT", "../PAGe-m1-v2")
-  candidates <- unique(c(configured, "../PAGe-m1-v2", "PAGe-m1-v2", "."))
+  configured <- Sys.getenv("PAGE_NHISTORY_CODE_ROOT", "")
+  legacy <- Sys.getenv("PAGE_NHISTORY_SOURCE_ROOT", "")
+  candidates <- unique(Filter(nzchar, c(configured, ".", "../PAGe", legacy)))
   for (x in candidates) {
     root <- suppressWarnings(normalizePath(x, mustWork = FALSE))
     if (file.exists(file.path(root, "PAGe", "DESCRIPTION"))) return(root)
   }
-  stop("Cannot locate the PAGe source root; set PAGE_NHISTORY_SOURCE_ROOT.", call. = FALSE)
+  stop("Cannot locate the PAGe code root; set PAGE_NHISTORY_CODE_ROOT.", call. = FALSE)
+}
+
+nh_authority_root <- function(protocol = nh_protocol()) {
+  configured <- Sys.getenv("PAGE_NHISTORY_AUTHORITY_ROOT", "")
+  legacy <- Sys.getenv("PAGE_NHISTORY_SOURCE_ROOT", "")
+  code_root <- nh_repo_root()
+  candidates <- unique(Filter(nzchar, c(configured, legacy, code_root)))
+  required <- c(unname(unlist(protocol$data_authority)), protocol$upstream$m0_grid_artifact)
+  for (x in candidates) {
+    root <- suppressWarnings(normalizePath(x, mustWork = FALSE))
+    if (all(file.exists(file.path(root, required)))) return(root)
+  }
+  stop(
+    "Cannot locate the locked N-history authority artifacts; set PAGE_NHISTORY_AUTHORITY_ROOT ",
+    "to a directory containing the observation, timing, eligibility, and M0-grid authorities.",
+    call. = FALSE
+  )
 }
 
 nh_out_dir <- function() {
@@ -246,11 +264,11 @@ nh_write_json <- function(x, path, pretty = TRUE) {
   jsonlite::write_json(x, path, auto_unbox = TRUE, pretty = pretty, null = "null")
 }
 
-nh_authority_paths <- function(protocol = nh_protocol(), root = nh_repo_root()) {
+nh_authority_paths <- function(protocol = nh_protocol(), root = nh_authority_root(protocol)) {
   unlist(lapply(protocol$data_authority, function(x) file.path(root, x)), use.names = TRUE)
 }
 
-nh_read_flu_data <- function(path = NULL, protocol = nh_protocol(), root = nh_repo_root()) {
+nh_read_flu_data <- function(path = NULL, protocol = nh_protocol(), root = nh_authority_root(protocol)) {
   if (is.null(path)) path <- nh_authority_paths(protocol, root)[["observations"]]
   d <- read.csv(path, stringsAsFactors = FALSE)
   required <- c("season", "weekF", "y_A", "N_A")
@@ -267,7 +285,7 @@ nh_read_flu_data <- function(path = NULL, protocol = nh_protocol(), root = nh_re
   d
 }
 
-nh_read_timing <- function(path = NULL, protocol = nh_protocol(), root = nh_repo_root()) {
+nh_read_timing <- function(path = NULL, protocol = nh_protocol(), root = nh_authority_root(protocol)) {
   if (is.null(path)) path <- nh_authority_paths(protocol, root)[["timing"]]
   x <- read.csv(path, stringsAsFactors = FALSE)
   required <- c("season", "A_ignition_weekF", "A_peak_weekF")
@@ -373,7 +391,7 @@ nh_planned_jobs <- function(protocol = nh_protocol()) {
       "gate4_stage_a_initial_not_launched",
       "gate4_stage_b_max_extra_not_launched"
     ),
-    planned_units = c(1L, NA_integer_, NA_integer_, 231L, n_inner * stage_a_specs * n_opts, n_inner * 14L * n_opts),
+    planned_units = c(1L, NA_integer_, NA_integer_, 231L, choose(n_outer, 2L) * stage_a_specs * n_opts, n_inner * 14L * n_opts),
     status = c("authorized", "authorized", "authorized", "not_launched", "not_authorized", "not_authorized"),
     stringsAsFactors = FALSE
   )
@@ -382,23 +400,30 @@ nh_planned_jobs <- function(protocol = nh_protocol()) {
 nh_write_gate0 <- function(out_dir = nh_out_dir(), protocol = nh_protocol()) {
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
   root <- nh_repo_root()
+  authority_root <- nh_authority_root(protocol)
   source_manifest <- nh_gate_source_manifest(root)
   source_hash <- nh_gate_source_hash(root)
   protocol_hash <- nh_hash_object(nh_scientific_protocol(protocol))
-  auth <- nh_authority_paths(protocol, root)
-  inputs <- c(auth, file.path(root, protocol$upstream$m0_grid_artifact),
-              "artifacts/m2-a-full-ntrend-nested-loso-v1/liz_astra_nested_loso_design.md")
+  auth <- nh_authority_paths(protocol, authority_root)
+  inputs <- c(auth, file.path(authority_root, protocol$upstream$m0_grid_artifact))
   validation <- nh_validate_inputs(protocol)
-  timing <- nh_read_timing(protocol=protocol,root=root)
+  timing <- nh_read_timing(protocol=protocol,root=authority_root)
   missing_timing <- setdiff(protocol$principal_seasons, as.character(timing$season[is.finite(timing$ignition_weekF) & is.finite(timing$peak_weekF)]))
   if(length(missing_timing)) stop("Principal seasons missing finite ignition/peak scoring labels: ",paste(missing_timing,collapse=", "),call.=FALSE)
   fold_index <- nh_make_fold_index(protocol); nh_assert_all_fold_contracts(fold_index,protocol)
   grid <- nh_grid_stage_a(protocol); nopts <- nh_n_options(protocol)
   if(nrow(grid)!=192L||nrow(nopts)!=10L||nrow(fold_index)!=1221L) stop("Protocol count invariant failed.",call.=FALSE)
   git <- function(args) tryCatch(system2("git", c("-C", root, args), stdout=TRUE, stderr=TRUE), error=function(e) NA_character_)
+  source_paths <- as.character(source_manifest$path)
+  source_status <- git(c("status", "--porcelain", "--untracked-files=no", "--", source_paths))
+  source_status <- source_status[!is.na(source_status) & nzchar(source_status)]
+  source_tree_dirty <- length(source_status) > 0L
   preflight <- list(
-    gate="gate0", status="PASS", run_id=protocol$run_id, source_root=normalizePath(root),
+    gate="gate0", status="PASS", run_id=protocol$run_id,
+    code_root=normalizePath(root), authority_root=normalizePath(authority_root),
+    source_root=normalizePath(root),
     branch=git(c("branch","--show-current"))[1], head=git(c("rev-parse","HEAD"))[1],
+    source_tree_dirty=source_tree_dirty, source_tree_status=source_status,
     source_hash=source_hash, protocol_hash=protocol_hash,
     stage_a_spec_count=nrow(grid), n_option_count=nrow(nopts), stage_a_joint_candidate_count=nrow(grid)*nrow(nopts),
     fold_roles=nrow(fold_index), inner_validation_contexts=110L,
@@ -406,7 +431,8 @@ nh_write_gate0 <- function(out_dir = nh_out_dir(), protocol = nh_protocol()) {
     upstream_recipe="local M0 36-grid LOSO + local fractional M1 reference/hyper; evaluated-row labels forbidden",
     boundary_policy=protocol$boundary, validation=validation[names(validation)!="coverage"],
     full_loso_launched=FALSE, gate4_authorized=FALSE,
-    notes=c("Scratch experiment is explicitly bound to the sibling PAGe source root and hashes it; it is not a Git worktree.",
+    notes=c("Experiment code is explicitly bound to the current PAGe code root and source-hashed.",
+            "Locked observations/timing/M0 authorities may live under a separate authority root and are independently hashed.",
             "Gate 0 performs zero scientific M2 fits.","Canonical v3 runtime/deployment files are read-only inputs to source protection hashes.")
   )
   nh_write_json(protocol,file.path(out_dir,"protocol.json")); write.csv(nh_input_manifest(inputs),file.path(out_dir,"input_manifest.csv"),row.names=FALSE)

@@ -7,6 +7,11 @@ source('scripts/m2_nhistory_nested_jobs.R')
 out <- nh_out_dir(); dir.create(out,recursive=TRUE,showWarnings=FALSE)
 p <- nh_protocol('m2-a-full-ntrend-v2-locked-20260930')
 checks <- list(); add <- function(name,ok,detail=''){checks[[length(checks)+1L]] <<- data.frame(test=name,status=if(isTRUE(ok))'PASS' else 'FAIL',detail=detail,stringsAsFactors=FALSE); if(!isTRUE(ok))stop(name,': ',detail,call.=FALSE)}
+code_root <- nh_repo_root(); authority_root <- nh_authority_root(p); authority_paths <- nh_authority_paths(p, authority_root)
+add('code_root_has_package', file.exists(file.path(code_root,'PAGe','DESCRIPTION')), code_root)
+add('authority_root_complete', all(file.exists(c(authority_paths,file.path(authority_root,p$upstream$m0_grid_artifact)))), authority_root)
+planned <- nh_planned_jobs(p); stage_a_plan <- planned$planned_units[planned$job_layer=='gate4_stage_a_initial_not_launched']
+add('stage_a_pair_symmetry_count', identical(as.numeric(stage_a_plan), 105600), paste('planned',stage_a_plan))
 expect_error <- function(expr,pattern=NULL){e<-tryCatch({force(expr);NULL},error=function(e)e); if(is.null(e))return(FALSE); if(is.null(pattern))TRUE else grepl(pattern,conditionMessage(e),fixed=FALSE)}
 folds <- nh_make_fold_index(p); add('fold_contracts',isTRUE(tryCatch({nh_assert_all_fold_contracts(folds,p);TRUE},error=function(e)FALSE)))
 fo <- folds[folds$fold_role=='outer',][1,]; add('outer_isolation',identical(sort(nh_split_set(fo$upstream_excluded_seasons)),sort(as.character(fo$outer_season))))

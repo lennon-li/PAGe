@@ -32,7 +32,7 @@
   .orvt_season_label(.orvt_season_start_year(season) + 1L)
 }
 
-.orvt_current_season <- function(start_week) {
+.orvt_current_season <- function(start_week = 27L) {
   mmwr <- MMWRweek::MMWRweek(Sys.Date())
   start_year <- if (mmwr$MMWRweek >= start_week) mmwr$MMWRyear else mmwr$MMWRyear - 1L
   .orvt_season_label(start_year)

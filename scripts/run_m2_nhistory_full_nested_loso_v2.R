@@ -70,6 +70,9 @@ assert_pre_gates <- function() {
   if (!identical(as.character(g0$source_hash), source_hash) || !identical(as.character(g0$protocol_hash), protocol_hash)) {
     stop("Gate 0 evidence is stale for the current source/protocol hash.", call. = FALSE)
   }
+  if (!identical(g0$source_tree_dirty, FALSE)) {
+    stop("Gate 0 source-hashed files are not commit-clean; commit the scientific source before Gate 3/full.", call. = FALSE)
+  }
   g1m <- read_json(file.path(out, "gate1_manifest.json"))
   if (!identical(as.character(g1m$status), "PASS") || !identical(as.character(g1m$source_hash), source_hash) ||
       !identical(as.character(g1m$protocol_hash), protocol_hash)) {
@@ -87,6 +90,7 @@ assert_pre_gates <- function() {
       !isTRUE(g2$strict_pair_exclusion) || !isTRUE(g2$strict_triple_exclusion) ||
       !isTRUE(g2$off_identity) || !isTRUE(g2$real_future_invariance) ||
       !isTRUE(g2$outcome_free_prediction) || !isTRUE(g2$selection_self_test) ||
+      !isTRUE(g2$score_cache_self_test) ||
       !is.finite(g2$max_prediction_delta) || g2$max_prediction_delta > 1e-10) {
     stop("Gate 2 smoke is not a strict PASS.", call. = FALSE)
   }
@@ -122,8 +126,13 @@ all_contexts <- function(sets) {
 }
 parallel_map <- function(X, FUN, n = workers) {
   n <- max(1L, min(as.integer(n), length(X)))
-  if (n <= 1L) return(lapply(X, FUN))
-  parallel::mclapply(X, FUN, mc.cores = n, mc.preschedule = FALSE)
+  out <- if (n <= 1L) lapply(X, FUN) else parallel::mclapply(X, FUN, mc.cores = n, mc.preschedule = FALSE)
+  bad <- which(vapply(out, inherits, logical(1), what = "try-error"))
+  if (length(bad)) {
+    msgs <- vapply(bad, function(i) paste0("[", i, "] ", as.character(out[[i]])[[1L]]), character(1))
+    stop("Parallel worker failure(s): ", paste(msgs, collapse = " | "), call. = FALSE)
+  }
+  out
 }
 
 checkpoint_value <- function(path) {
@@ -462,6 +471,96 @@ load_pair_obj <- function(pk) {
   checkpoint_value(as.character(hit$file))
 }
 
+validate_score_group <- function(value, req, pair_key_value, n_option_value, path = "<memory>") {
+  value <- as.data.frame(value, stringsAsFactors = FALSE)
+  req <- unique(as.data.frame(req, stringsAsFactors = FALSE)[, c("pair_key", "n_option", "spec_id"), drop = FALSE])
+  required_cols <- c(
+    "validation_season", "horizon", "spec_id", "n_option", "status",
+    "ordinary_loss", "n_loss", "mae", "brier", "rows", "forecast_rows",
+    "ordinary_weight_sum", "row_hash", "weight_hash", "fit_error",
+    "pair_key", "season_a", "season_b"
+  )
+  missing_cols <- setdiff(required_cols, names(value))
+  if (length(missing_cols)) {
+    stop("Score-group cache missing required columns at ", path, ": ", paste(missing_cols, collapse = ", "), call. = FALSE)
+  }
+  if (!nrow(value)) stop("Score-group cache is empty at ", path, call. = FALSE)
+  if (any(value$pair_key != pair_key_value)) stop("Score-group pair_key mismatch at ", path, call. = FALSE)
+  if (any(value$n_option != n_option_value)) stop("Score-group n_option mismatch at ", path, call. = FALSE)
+  expected_ids <- sort(unique(as.character(req$spec_id)))
+  observed_ids <- sort(unique(as.character(value$spec_id)))
+  if (!identical(observed_ids, expected_ids)) {
+    missing_ids <- setdiff(expected_ids, observed_ids)
+    extra_ids <- setdiff(observed_ids, expected_ids)
+    stop(
+      "Score-group spec coverage mismatch at ", path,
+      "; missing=", if (length(missing_ids)) paste(missing_ids, collapse = "|") else "<none>",
+      "; extra=", if (length(extra_ids)) paste(extra_ids, collapse = "|") else "<none>",
+      call. = FALSE
+    )
+  }
+  key <- value[, c("validation_season", "horizon", "spec_id"), drop = FALSE]
+  if (anyDuplicated(key)) stop("Score-group cache contains duplicate validation/horizon/spec rows at ", path, call. = FALSE)
+
+  # Every requested spec must score the identical validation-season/horizon
+  # ledger. A truncated checkpoint can otherwise retain all spec IDs while
+  # silently dropping one or more rows for a subset of specs, only failing much
+  # later during Stage-A/B selection.
+  ref_id <- expected_ids[[1L]]
+  ref <- value[value$spec_id == ref_id, c("validation_season", "horizon"), drop = FALSE]
+  ref <- unique(ref[order(ref$validation_season, ref$horizon), , drop = FALSE])
+  rownames(ref) <- NULL
+  for (id in expected_ids[-1L]) {
+    got <- value[value$spec_id == id, c("validation_season", "horizon"), drop = FALSE]
+    got <- unique(got[order(got$validation_season, got$horizon), , drop = FALSE])
+    rownames(got) <- NULL
+    if (!identical(got, ref)) {
+      stop("Score-group cache has non-rectangular validation/horizon coverage at ", path,
+           "; spec=", id, "; reference_spec=", ref_id, call. = FALSE)
+    }
+  }
+  invisible(TRUE)
+}
+
+validate_score_layer_assembly <- function(scores, request_map, layer = "<layer>") {
+  scores <- as.data.frame(scores, stringsAsFactors = FALSE)
+  req <- unique(as.data.frame(request_map, stringsAsFactors = FALSE)[,
+    c("pair_key", "n_option", "spec_id"), drop = FALSE])
+  if (!nrow(scores)) stop("Assembled score layer is empty for ", layer, call. = FALSE)
+
+  score_req <- unique(scores[, c("pair_key", "n_option", "spec_id"), drop = FALSE])
+  score_req <- score_req[order(score_req$pair_key, score_req$n_option, score_req$spec_id), , drop = FALSE]
+  req <- req[order(req$pair_key, req$n_option, req$spec_id), , drop = FALSE]
+  rownames(score_req) <- NULL; rownames(req) <- NULL
+  if (!identical(score_req, req)) {
+    stop("Assembled score-layer request coverage mismatch for ", layer, call. = FALSE)
+  }
+
+  global_key <- scores[, c("pair_key", "n_option", "spec_id", "validation_season", "horizon"), drop = FALSE]
+  if (anyDuplicated(global_key)) {
+    stop("Assembled score layer contains duplicate pair/N/spec/validation/horizon rows for ", layer, call. = FALSE)
+  }
+
+  groups <- split(scores, paste(scores$pair_key, scores$n_option, sep = "\r"))
+  for (gname in names(groups)) {
+    z <- groups[[gname]]
+    ids <- sort(unique(as.character(z$spec_id)))
+    ref <- unique(z[z$spec_id == ids[[1L]], c("validation_season", "horizon"), drop = FALSE])
+    ref <- ref[order(ref$validation_season, ref$horizon), , drop = FALSE]
+    rownames(ref) <- NULL
+    for (id in ids[-1L]) {
+      got <- unique(z[z$spec_id == id, c("validation_season", "horizon"), drop = FALSE])
+      got <- got[order(got$validation_season, got$horizon), , drop = FALSE]
+      rownames(got) <- NULL
+      if (!identical(got, ref)) {
+        stop("Assembled score layer has non-rectangular group coverage for ", layer,
+             "; group=", gname, "; spec=", id, call. = FALSE)
+      }
+    }
+  }
+  invisible(TRUE)
+}
+
 run_score_layer <- function(layer, request_map, catalog) {
   request_map <- unique(request_map[, c("pair_key", "n_option", "spec_id"), drop = FALSE])
   groups <- split(request_map, paste(request_map$pair_key, request_map$n_option, sep = "\r"))
@@ -477,7 +576,7 @@ run_score_layer <- function(layer, request_map, catalog) {
     payload <- list(pair_key = pk, pair_ledger_sha256 = ph, n_option = no, spec_ids = ids,
                     spec_catalog_hash = nh_hash_object(catalog[catalog$spec_id %in% ids, , drop = FALSE]),
                     source_hash = source_hash, protocol_hash = protocol_hash)
-    nh_run_cached(layer, payload, path, function() {
+    value <- nh_run_cached(layer, payload, path, function() {
       po <- load_pair_obj(pk)
       out_scores <- lapply(ids, function(id) {
         sp <- catalog[catalog$spec_id == id, , drop = FALSE]
@@ -489,11 +588,22 @@ run_score_layer <- function(layer, request_map, catalog) {
       z$pair_key <- pk; z$season_a <- pr[[1L]]; z$season_b <- pr[[2L]]
       z
     }, p)
+    validate_score_group(value, req, pk, no, path)
     data.frame(path = normalizePath(path), pair_key = pk, n_option = no, stringsAsFactors = FALSE)
   })
   manifest <- do.call(rbind, done)
-  vals <- lapply(manifest$path, checkpoint_value)
+  if (nrow(manifest) != length(groups)) stop("Score-group manifest row count mismatch for ", layer, call. = FALSE)
+  if (anyDuplicated(manifest[, c("pair_key", "n_option"), drop = FALSE])) stop("Score-group manifest contains duplicate pair/N groups for ", layer, call. = FALSE)
+  if (anyDuplicated(manifest$path)) stop("Score-group manifest contains duplicate checkpoint paths for ", layer, call. = FALSE)
+  if (any(!file.exists(manifest$path))) stop("Score-group manifest references missing checkpoint files for ", layer, call. = FALSE)
+  vals <- lapply(seq_len(nrow(manifest)), function(i) {
+    value <- checkpoint_value(manifest$path[[i]])
+    req <- groups[[paste(manifest$pair_key[[i]], manifest$n_option[[i]], sep = "\r")]]
+    validate_score_group(value, req, manifest$pair_key[[i]], manifest$n_option[[i]], manifest$path[[i]])
+    value
+  })
   scores <- do.call(rbind, vals)
+  validate_score_layer_assembly(scores, request_map, layer)
   atomic_csv(manifest, file.path(out, "jobs", paste0(layer, "_manifest.csv")))
   atomic_rds(scores, file.path(out, "inner", paste0(layer, "_scores.rds")))
   write_status(layer, "PASS", list(groups = nrow(manifest), score_rows = nrow(scores)))
@@ -833,6 +943,71 @@ run_full <- function() {
   invisible(TRUE)
 }
 
+score_cache_self_test <- function() {
+  req <- data.frame(
+    pair_key = rep("S1__S2", 2L), n_option = rep("EXP050", 2L),
+    spec_id = c("spec_a", "spec_b"), stringsAsFactors = FALSE
+  )
+  row <- function(spec, h = 1L) data.frame(
+    validation_season = "S2", horizon = as.integer(h), spec_id = spec,
+    n_option = "EXP050", status = "ok", ordinary_loss = 0.1, n_loss = 0.1,
+    mae = 0.01, brier = 0.001, rows = 1L, forecast_rows = 1L,
+    ordinary_weight_sum = 1, row_hash = "row", weight_hash = "weight", fit_error = "",
+    pair_key = "S1__S2", season_a = "S1", season_b = "S2", stringsAsFactors = FALSE
+  )
+  good <- rbind(row("spec_a"), row("spec_b"))
+  validate_score_group(good, req, "S1__S2", "EXP050", "self-test-good")
+
+  expect_fail <- function(value, pattern) {
+    e <- tryCatch({
+      validate_score_group(value, req, "S1__S2", "EXP050", "self-test-bad")
+      NULL
+    }, error = function(e) e)
+    if (is.null(e) || !grepl(pattern, conditionMessage(e), fixed = TRUE)) {
+      stop("Score-cache self-test did not fail as expected: ", pattern, call. = FALSE)
+    }
+  }
+  expect_fail(good[good$spec_id == "spec_a", , drop = FALSE], "spec coverage mismatch")
+  extra <- rbind(good, transform(row("spec_c"), spec_id = "spec_c"))
+  expect_fail(extra, "spec coverage mismatch")
+  dup <- rbind(good, good[good$spec_id == "spec_a", , drop = FALSE])
+  expect_fail(dup, "duplicate validation/horizon/spec rows")
+  bad_pair <- good; bad_pair$pair_key[[1L]] <- "S1__S3"
+  expect_fail(bad_pair, "pair_key mismatch")
+  bad_schema <- good[, setdiff(names(good), "ordinary_loss"), drop = FALSE]
+  expect_fail(bad_schema, "missing required columns")
+
+  # A cache can contain every requested spec ID yet still be truncated for one
+  # spec. This must fail at the cache boundary, before Stage-A assembly.
+  good2 <- rbind(
+    row("spec_a", 1L), row("spec_a", 2L),
+    row("spec_b", 1L), row("spec_b", 2L)
+  )
+  validate_score_group(good2, req, "S1__S2", "EXP050", "self-test-rectangular-good")
+  truncated <- good2[-which(good2$spec_id == "spec_b" & good2$horizon == 2L), , drop = FALSE]
+  expect_fail(truncated, "non-rectangular validation/horizon coverage")
+
+  req2 <- rbind(req, transform(req, pair_key = "S1__S3"))
+  layer_good <- rbind(good2, transform(good2, pair_key = "S1__S3", season_b = "S3"))
+  validate_score_layer_assembly(layer_good, req2, "self-test-layer-good")
+  layer_dup <- rbind(layer_good, layer_good[1L, , drop = FALSE])
+  e_layer <- tryCatch({ validate_score_layer_assembly(layer_dup, req2, "self-test-layer-dup"); NULL }, error = function(e) e)
+  if (is.null(e_layer) || !grepl("duplicate pair/N/spec/validation/horizon rows", conditionMessage(e_layer), fixed = TRUE)) {
+    stop("Score-cache self-test did not reject duplicate assembled rows.", call. = FALSE)
+  }
+
+  pe <- tryCatch({
+    parallel_map(1:2, function(i) { if (i == 2L) stop("forced_parallel_failure", call. = FALSE); i }, n = 2L)
+    NULL
+  }, error = function(e) e)
+  if (is.null(pe) || !grepl("Parallel worker failure", conditionMessage(pe), fixed = TRUE) ||
+      !grepl("forced_parallel_failure", conditionMessage(pe), fixed = TRUE)) {
+    stop("Score-cache self-test did not fail closed on a parallel worker error.", call. = FALSE)
+  }
+  cat("Score-cache self-test PASS\n")
+  invisible(TRUE)
+}
+
 selection_self_test <- function() {
   outer <- p$principal_seasons[[1L]]
   vals <- setdiff(p$principal_seasons, outer)
@@ -868,6 +1043,10 @@ if (mode == "self-test-selection") {
   selection_self_test()
   quit(save = "no", status = 0L, runLast = FALSE)
 }
+if (mode == "self-test-score-cache") {
+  score_cache_self_test()
+  quit(save = "no", status = 0L, runLast = FALSE)
+}
 
 assert_pre_gates()
 if (mode == "status") {
@@ -890,5 +1069,5 @@ if (mode == "status") {
 } else if (mode == "full") {
   run_full()
 } else {
-  stop("Unknown --mode. Use dry-run, status, gate3, full, or self-test-selection.", call. = FALSE)
+  stop("Unknown --mode. Use dry-run, status, gate3, full, self-test-selection, or self-test-score-cache.", call. = FALSE)
 }

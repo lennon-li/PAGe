@@ -6,7 +6,22 @@ OUT="${PAGE_NHISTORY_NESTED_OUT:-artifacts/m2-a-full-ntrend-nested-loso-v2}"
 
 echo "=== PAGe full nested LOSO status ==="
 echo "root=$ROOT"
+echo "code_root=${PAGE_NHISTORY_CODE_ROOT:-$ROOT}"
+echo "authority_root=${PAGE_NHISTORY_AUTHORITY_ROOT:-${PAGE_NHISTORY_SOURCE_ROOT:-$ROOT}}"
 echo "out=$OUT"
+if [[ -f "$OUT/preflight_report.json" ]]; then
+  Rscript --vanilla - "$OUT/preflight_report.json" <<'RS'
+p <- commandArgs(TRUE)[1]
+`%||%` <- function(a,b) if (is.null(a)) b else a
+x <- jsonlite::read_json(p, simplifyVector = TRUE)
+cat("preflight_code_root=", x$code_root %||% x$source_root, "\n", sep="")
+cat("preflight_authority_root=", x$authority_root %||% "<legacy/unknown>", "\n", sep="")
+cat("preflight_head=", x$head %||% "<unknown>", "\n", sep="")
+cat("preflight_source_hash=", x$source_hash %||% "<unknown>", "\n", sep="")
+cat("preflight_source_tree_dirty=", x$source_tree_dirty %||% NA, "\n", sep="")
+RS
+fi
+
 if [[ -f "$OUT/run_status.json" ]]; then
   cat "$OUT/run_status.json"
   echo

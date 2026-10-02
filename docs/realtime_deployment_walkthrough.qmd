@@ -167,17 +167,56 @@ Pre-ignition seasons can legitimately return zero M2 forecast rows. That is a va
 
 ## 6. Generate the walk-forward HTML report from R
 
-The package can render the same interactive walk-forward report used for the current 2026-27 weekly review. Supply either a canonical typed A+B panel as a data frame or the official ORVT CSV path accepted by `page_forecast()`.
+The package can render walk-forward surveillance reports across four data-sourcing options. Supply a live feed (`data = NULL`), an IRVRI OLIS daily extract (`.RData`), an official PHO ORVT CSV, or an in-memory typed A+B panel.
+
+### Sourcing and splicing surveillance data
+
+Users can choose how to source and splice surveillance data into the reporting engine:
+
+1. **Live PHO ORVT feed (`data = NULL`):** Automatically downloads the latest provincial data from Public Health Ontario over HTTP via `getCurrentD()`.
+2. **IRVRI OLIS daily `.RData` snapshot:** Supply a path to `hist_olis_daily_*.RData` (e.g. from `~/repos/IRVRI/wf_output/num_test_trend_latest/` or `~/repos/IRVRI/OP/`). The engine sums positive and total test counts across age groups (`Adult`, `Pediatric`, `Senior`) by date and aggregates them into Sunday–Saturday MMWR weeks.
+3. **Official PHO ORVT CSV:** Supply a path to a downloaded `ORVT_Lab_Testing_Data_*.csv`.
+4. **Typed weekly panel:** Supply a data frame containing `weekF`, `y_A`, `N_A`, `y_B`, `N_B` (with optional `season`, `week_start_date`, `week_end_date`).
+
+### Generating reports
+
+**Option 1: Quarto (`.qmd`) + HTML with nested weekly as-of tabsets**
+
+`page_render_report()` (alias `page_walkforward_qmd()`) writes a clean, transparent Quarto `.qmd` featuring nested weekly tabs (`::: {.panel-tabset}`) from Week 8 through the latest observed week, then renders it to self-contained HTML:
 
 ```{r}
+# Automatically detects latest IRVRI RData snapshot or live feed:
+report <- page_render_report(
+  data = NULL,
+  season = "2026-27",
+  output_dir = "reports",
+  render = TRUE
+)
+
+report$qmd_path
+report$html_path
+```
+
+**Option 2: Direct interactive HTML report**
+
+`page_walkforward_report()` renders directly to HTML using the packaged template and embedded Plotly runtime:
+
+```{r}
+# From the live feed:
+report_file <- page_walkforward_report(
+  data = NULL,
+  season = "2026-27",
+  output_file = "PAGe_2026-27_walkforward.html",
+  self_contained = TRUE
+)
+
+# Or from an official ORVT CSV:
 report_file <- page_walkforward_report(
   data = orvt_file,
   season = "2026-27",
   output_file = "PAGe_2026-27_week12_walkforward.html",
   self_contained = TRUE
 )
-
-report_file
 ```
 
 For an already-canonical typed panel:

@@ -1,6 +1,6 @@
 # BCC deployment — strict full nested LOSO v2
 
-Status: **READY_FOR_GATE3 / READY TO DEPLOY**
+Status: **SOURCE-HARDENED; FRESH GATES REQUIRED BEFORE FULL DEPLOYMENT**
 
 Run ID: `m2-a-full-ntrend-v2-locked-20260930`
 
@@ -10,19 +10,16 @@ Production eligible: `FALSE`
 
 This package runs the strict full M1-offset-subset M2 ± N research experiment. It does not modify canonical v3 runtime/deployment state.
 
-## Required layout
+## Required layout and root contract
 
-Place the two checkouts as siblings:
+Run the experiment from the canonical `PAGe` checkout on `dev/n-history`. Code and locked authorities are separate concepts:
 
-```text
-<work-parent>/
-  PAGe-m1-v2/      # PAGe source checkout
-  PAGe-m2-a-full/  # this experiment package
-```
+- `PAGE_NHISTORY_CODE_ROOT` — the canonical Git checkout whose package/research source is executed and source-hashed. Defaults to the checkout containing the launcher.
+- `PAGE_NHISTORY_AUTHORITY_ROOT` — a directory containing the locked observation, timing, eligibility, and M0-grid authority artifacts. It may be the code checkout when the overlay is installed there, or a separate artifact-bearing directory.
 
-The default source path is `../PAGe-m1-v2`. Override with `PAGE_NHISTORY_SOURCE_ROOT=/absolute/path/to/PAGe` if needed.
+The legacy `PAGE_NHISTORY_SOURCE_ROOT` is accepted only as an authority-root fallback for older deployments; it no longer determines which package source is executed.
 
-The source checkout must contain `PAGe/DESCRIPTION`. The launcher verifies/installs the bundled Git-ignored authority files from `bcc-source-overlay/` by SHA-256 and refuses to overwrite mismatched existing files.
+The launcher verifies/installs the bundled Git-ignored authority files from `bcc-source-overlay/` by SHA-256 and refuses to overwrite mismatched existing files. Gate 0 records `code_root`, `authority_root`, Git branch/head, source hash, and authority hashes separately.
 
 ## R dependencies
 
@@ -41,10 +38,10 @@ The launcher checks these before any scientific work.
 
 ## Pre-deployment evidence
 
-Current local evidence:
+The source-hardening changes invalidate prior gate hashes. The following items describe the required checks and previously demonstrated invariants; Gates 0–2 must be regenerated from the committed branch before Gate 3/full:
 
 - Gate 0: `PASS`
-- Gate 1 contract/adversarial tests: `19/19 PASS`
+- Gate 1 contract/adversarial tests: `27/27 PASS`
 - Gate 2 sealed-contract smoke: `PASS`
 - strict pair exclusion: `TRUE`
 - strict triple exclusion: `TRUE`
@@ -52,7 +49,7 @@ Current local evidence:
 - OFF identity: `TRUE`
 - outcome-free prediction: `TRUE`
 - 1-worker vs 8-worker max prediction delta: `0`
-- BCC dry-run status: `READY_FOR_GATE3`
+- BCC dry-run status after fresh committed-source Gates 0–2: must be `READY_FOR_GATE3`
 - exclusion sets: `231`
 - causal replay contexts: `616`
 - unordered inner training sets: `55`
@@ -60,11 +57,11 @@ Current local evidence:
 - initial Stage-A fits with pair symmetry: `105,600`
 - Stage-B upper bound before deduplication: `15,400`
 
-The launcher reruns Gates 0–2 on BCC before Gate 3 or the full search.
+The launcher reruns Gates 0–2 on BCC before Gate 3 or the full search. Gate 2 now includes a fail-closed score-cache integrity self-test, and the full controller rejects parallel worker failures before score-group assembly. Gate 3/full also require the source-hashed scientific files to be commit-clean.
 
 ## Recommended deployment
 
-From `PAGe-m2-a-full`:
+From the canonical `PAGe` checkout on `dev/n-history`:
 
 ```bash
 export PAGE_WORKERS=32

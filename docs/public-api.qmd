@@ -24,17 +24,35 @@ page_season_calendar(...)
 
 `page_load_surveillance()` is the normal data-ingestion entry point. `prepare_surveillance_data()` and `validate_surveillance_data()` expose the canonical data contract when users already have surveillance data in memory.
 
-## End-to-end forecasting
+## End-to-end forecasting and reporting
 
 ```r
 forecast <- page_forecast(data, season = "2026-27")
 
+# Direct HTML walk-forward report:
 page_walkforward_report(
-  data,
+  data = NULL, # defaults to live PHO feed or local input
   season = "2026-27",
   output_file = "PAGe_walkforward.html"
 )
+
+# Quarto .qmd + HTML report with nested as-of weekly tabsets:
+report <- page_render_report(
+  data = NULL, # auto-detects latest IRVRI RData or live feed
+  season = "2026-27",
+  output_dir = "reports",
+  render = TRUE
+)
 ```
+
+### Surveillance data sourcing options
+
+Users can choose how to source and splice surveillance data across four supported formats:
+
+1. **Live PHO ORVT feed (`data = NULL`):** Automatically connects to Public Health Ontario over HTTP via `getCurrentD()` and downloads the latest public provincial data.
+2. **IRVRI OLIS daily extract (`.RData`):** Pass a path to `hist_olis_daily_*.RData` (e.g. from `~/repos/IRVRI/wf_output/num_test_trend_latest/` or `~/repos/IRVRI/OP/`). The loader rolls up age-stratified test counts (`Adult`, `Pediatric`, `Senior`) and aggregates daily counts into Sunday–Saturday MMWR weeks. When `data = NULL` in `page_render_report()`, the latest snapshot is auto-discovered by filename date.
+3. **Official PHO ORVT CSV:** Pass a local path to an `ORVT_Lab_Testing_Data_*.csv` file. The parser extracts Ontario-level weekly positives and total tests for Flu A and Flu B.
+4. **Typed weekly panel:** Supply an in-memory data frame containing canonical columns `weekF`, `y_A`, `N_A`, `y_B`, and `N_B` (with optional `season`, `p_A`, `p_B`, `week_start_date`, `week_end_date`).
 
 Additional operational functions are:
 

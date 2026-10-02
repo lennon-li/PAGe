@@ -72,7 +72,7 @@ nh_load_page_source <- function(root = nh_repo_root()) {
   invisible(TRUE)
 }
 
-nh_m0_grid <- function(protocol = nh_protocol(), root = nh_repo_root()) {
+nh_m0_grid <- function(protocol = nh_protocol(), root = nh_authority_root(protocol)) {
   p <- file.path(root, protocol$upstream$m0_grid_artifact)
   if (!file.exists(p)) stop("Missing frozen M0 grid authority: ", p, call. = FALSE)
   x <- readRDS(p)

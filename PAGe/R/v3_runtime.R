@@ -525,7 +525,7 @@ page_v3_models <- function() {
   out
 }
 
-.page_v3_panel <- function(data, season = NULL, strict = TRUE) {
+.page_v3_panel <- function(data = NULL, season = NULL, strict = TRUE) {
   if (!is.logical(strict) || length(strict) != 1L || is.na(strict)) {
     stop("`strict` must be TRUE or FALSE.", call. = FALSE)
   }
@@ -592,6 +592,29 @@ page_v3_models <- function() {
     } else {
       stop("Path input must be an OLIS .RData/.rda snapshot or ORVT .csv file.", call. = FALSE)
     }
+  } else if (is.null(data)) {
+    if (is.null(season)) season <- .orvt_current_season()
+    a <- getCurrentD(data = NULL, virus = "Influenza A", season = season, include_predecessor = FALSE)
+    b <- getCurrentD(data = NULL, virus = "Influenza B", season = season, include_predecessor = FALSE)
+    a <- a[a$season == season, , drop = FALSE]
+    b <- b[b$season == season, , drop = FALSE]
+    if (!nrow(a) || !nrow(b) || !identical(as.integer(a$weekF), as.integer(b$weekF)) ||
+        !all(as.Date(a$week_start_date) == as.Date(b$week_start_date))) {
+      stop("ORVT A/B weekly coverage is misaligned.", call. = FALSE)
+    }
+    data <- data.frame(
+      season = season,
+      weekF = a$weekF,
+      week_start_date = as.character(a$week_start_date),
+      week_end_date = as.character(a$week_end_date),
+      y_A = a$y, N_A = a$N, p_A = a$p,
+      y_B = b$y, N_B = b$N, p_B = b$p,
+      denominator_regime = "orvt_type_specific",
+      stringsAsFactors = FALSE
+    )
+    kind <- "orvt_feed"
+    source_path <- attr(a, "source_url_or_path") %||% "live_orvt_feed"
+    source_sha <- attr(a, "sha256") %||% NA_character_
   }
 
   d <- as.data.frame(data, stringsAsFactors = FALSE)
