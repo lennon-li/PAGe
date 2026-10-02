@@ -94,8 +94,6 @@ and
 ## Examples
 
 ``` r
-params <- m1_make_params()
-#> Error in m1_make_params(): could not find function "m1_make_params"
-params_custom <- m1_make_params(slope_weight = 12, temperature = 0.15)
-#> Error in m1_make_params(slope_weight = 12, temperature = 0.15): could not find function "m1_make_params"
+params <- PAGe:::m1_make_params()
+params_custom <- PAGe:::m1_make_params(slope_weight = 12, temperature = 0.15)
 ```
