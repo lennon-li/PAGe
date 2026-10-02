@@ -18,7 +18,7 @@ suppressPackageStartupMessages({
   library(MMWRweek)
 })
 
-raw <- PAGe::load_flu_hist(hist_path)
+raw <- PAGe:::load_flu_hist(hist_path)
 n_weeks_in_start_year <- function(start_year) {
   52L + as.integer(
     MMWRweek::MMWRweek(as.Date(paste0(as.integer(start_year), "-12-31")))$MMWRweek == 53L
@@ -50,13 +50,13 @@ m1_current <- m1
 m1_current$artifact_id <- current_m1_id
 
 message("[2015 replay] fitting selected spec: ", tuning$best_spec_id)
-m2_fit <- PAGe::fit_m2(
+m2_fit <- PAGe:::fit_m2(
   allD, selection, m0 = m0, m1 = m1_current,
   config = tuning$best_spec, n_cores = n_cores, verbose = TRUE
 )
-m2 <- PAGe::freeze_m2(m2_fit, tuning = tuning)
-kit <- PAGe::assemble_kit(m0, m1_current, m2, best_spec_id = tuning$best_spec_id)
-PAGe::validate_page_kit(kit)
+m2 <- PAGe:::freeze_m2(m2_fit, tuning = tuning)
+kit <- PAGe:::assemble_kit(m0, m1_current, m2, best_spec_id = tuning$best_spec_id)
+PAGe:::validate_page_kit(kit)
 
 kit_path <- file.path(artifact_dir, "candidate_pre_holdout_drop_test.rds")
 replay_path <- file.path(artifact_dir, "holdout_2015_16_replay_drop_test.rds")
@@ -64,7 +64,7 @@ saveRDS(m2, file.path(artifact_dir, "m2_frozen_drop_test.rds"))
 saveRDS(kit, kit_path)
 
 message("[2015 replay] running strict unseen replay")
-replay <- PAGe::replay_season_holdout(
+replay <- PAGe:::replay_season_holdout(
   kit, allD, season = "2015-16", kit_compatibility = "strict"
 )
 stopifnot(identical(as.character(replay$status), "unseen_replay_complete"))

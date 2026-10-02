@@ -28,7 +28,7 @@ public_synthetic_git_commit <- function() {
 }
 
 public_synthetic_data <- function(seed = 2026L) {
-  simulated <- PAGe::simulate_flu_seasons(
+  simulated <- PAGe:::simulate_flu_seasons(
     S = 3L, weeks = seq_len(16L), seed = seed
   )
   labels <- c("2023-24", "2024-25", "2025-26")
@@ -134,8 +134,8 @@ public_synthetic_replay <- function(kit, allD, season) {
     season = season,
     status = "unseen_replay_complete",
     predictions = predictions,
-    metrics = PAGe::summarize_forecast_metrics(predictions),
-    diagnostics = PAGe::summarize_replay_diagnostics(predictions),
+    metrics = PAGe:::summarize_forecast_metrics(predictions),
+    diagnostics = PAGe:::summarize_replay_diagnostics(predictions),
     ignition_week = 5,
     ignition_status = "synthetic_locked",
     eligible_for_refresh = FALSE
@@ -211,7 +211,7 @@ run_public_synthetic_release <- function(
     stop("Synthetic acceptance gate unexpectedly failed.", call. = FALSE)
   }
   promotion_bundle <- readRDS(acceptance$paths$private_bundle)
-  promotion_manifest <- PAGe::read_result_manifest(
+  promotion_manifest <- PAGe:::read_result_manifest(
     acceptance$paths$manifest
   )
 
@@ -282,7 +282,7 @@ run_public_synthetic_release <- function(
     code_commit = code_commit,
     run_timestamp = run_timestamp
   )
-  loaded_kit <- PAGe::load_promoted_kit(
+  loaded_kit <- PAGe:::load_promoted_kit(
     promotion$promoted_kit_path,
     promotion$manifest_json_path
   )

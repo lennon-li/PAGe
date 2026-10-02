@@ -68,7 +68,7 @@ test_that("bundled v3 runtime projections bind exact source and runtime identiti
 })
 
 test_that("packaged M2 runtime projections contain no raw target count frames", {
-  models <- page_v3_models()
+  models <- page_models()
   expect_s3_class(models$m2_a, "page_v3_m2a_runtime")
   expect_s3_class(models$m2_b, "page_v3_m2b_runtime")
   expect_false("fit" %in% names(models$m2_a))
@@ -80,7 +80,7 @@ test_that("packaged M2 runtime projections contain no raw target count frames", 
 
 test_that("v3 package runtime has no repo source dependency", {
   bodies <- c(
-    deparse(body(page_v3_forecast)),
+    deparse(body(page_forecast)),
     deparse(body(.v3_internal(".page_v3_m2b_forecast"))),
     deparse(body(.v3_internal(".page_v3_validate_bundle")))
   )
@@ -89,8 +89,8 @@ test_that("v3 package runtime has no repo source dependency", {
 
 test_that("pre-weekF12 returns a governed not-issued result", {
   panel <- read.csv(.v3_fixture("ignition-panel.csv"), stringsAsFactors = FALSE, check.names = FALSE)
-  out <- page_v3_forecast(panel[panel$weekF <= 11, ], season = "2026-27")
-  expect_s3_class(out, "page_v3_forecast")
+  out <- page_forecast(panel[panel$weekF <= 11, ], season = "2026-27")
+  expect_s3_class(out, "page_forecast_result")
   expect_false(out$issued)
   expect_identical(out$origin_weekF, 11L)
   expect_true(all(out$forecasts$route == "not_issued"))
@@ -102,7 +102,7 @@ test_that("pre-weekF12 returns a governed not-issued result", {
 test_that("weekF12 ignition result equals retained audited v4 output", {
   .v3_clear_cache()
   panel <- read.csv(.v3_fixture("ignition-panel.csv"), stringsAsFactors = FALSE, check.names = FALSE)
-  out <- page_v3_forecast(panel, season = "2026-27", origin_weekF = 12)
+  out <- page_forecast(panel, season = "2026-27", origin_weekF = 12)
   expected <- .v3_expected("ignition-expected.json")
   expect_true(out$issued)
   expect_equal(out$forecasts$forecast_pct, vapply(expected$forecasts, `[[`, numeric(1), "v3_pct"), tolerance = 1e-12)
@@ -119,7 +119,7 @@ test_that("weekF12 ignition result equals retained audited v4 output", {
 
 test_that("weekF12 no-ignition result equals retained audited v4 output", {
   panel <- read.csv(.v3_fixture("no-ignition-panel.csv"), stringsAsFactors = FALSE, check.names = FALSE)
-  out <- page_v3_forecast(panel, season = "2026-27", origin_weekF = 12)
+  out <- page_forecast(panel, season = "2026-27", origin_weekF = 12)
   expected <- .v3_expected("no-ignition-expected.json")
   expect_true(out$issued)
   expect_equal(out$forecasts$forecast_pct, vapply(expected$forecasts, `[[`, numeric(1), "v3_pct"), tolerance = 1e-12)
@@ -130,8 +130,8 @@ test_that("weekF12 no-ignition result equals retained audited v4 output", {
 
 test_that("OLIS and typed panel inputs are numerically identical", {
   panel <- read.csv(.v3_fixture("ignition-panel.csv"), stringsAsFactors = FALSE, check.names = FALSE)
-  from_panel <- page_v3_forecast(panel, season = "2026-27", origin_weekF = 12)
-  from_olis <- page_v3_forecast(.v3_fixture("ignition.RData"), season = "2026-27", origin_weekF = 12)
+  from_panel <- page_forecast(panel, season = "2026-27", origin_weekF = 12)
+  from_olis <- page_forecast(.v3_fixture("ignition.RData"), season = "2026-27", origin_weekF = 12)
   expect_equal(from_olis$forecasts$forecast, from_panel$forecasts$forecast, tolerance = 1e-14)
   expect_equal(from_olis$monitoring$A$m1$peak_mean_weekF, from_panel$monitoring$A$m1$peak_mean_weekF, tolerance = 1e-14)
   expect_identical(from_olis$provenance$input_kind, "olis_rdata")
@@ -140,7 +140,7 @@ test_that("OLIS and typed panel inputs are numerically identical", {
 test_that("strict typed panels fail on positivity/count disagreement", {
   panel <- read.csv(.v3_fixture("ignition-panel.csv"), stringsAsFactors = FALSE, check.names = FALSE)
   panel$p_A[[12L]] <- panel$p_A[[12L]] + 0.01
-  expect_error(page_v3_forecast(panel, season = "2026-27"), "p_A disagrees")
+  expect_error(page_forecast(panel, season = "2026-27"), "p_A disagrees")
 })
 
 test_that("tampered bundled model bytes fail closed", {
@@ -155,7 +155,7 @@ test_that("tampered bundled model bytes fail closed", {
 
 test_that("v3 print method reports ignition peak and routes", {
   panel <- read.csv(.v3_fixture("ignition-panel.csv"), stringsAsFactors = FALSE, check.names = FALSE)
-  out <- page_v3_forecast(panel, season = "2026-27", origin_weekF = 12)
+  out <- page_forecast(panel, season = "2026-27", origin_weekF = 12)
   expect_output(print(out), "A ignition: yes")
   expect_output(print(out), "A peak: weekF")
   expect_output(print(out), "exact_B1_fallback")
@@ -165,7 +165,7 @@ test_that("v3 print method reports ignition peak and routes", {
 test_that("package-native active B posterior-C2 equals governed v5 helper fixture", {
   input <- read.csv(.v3_fixture("b-active-input.csv"), stringsAsFactors = FALSE, check.names = FALSE)
   expected <- read.csv(.v3_fixture("b-active-expected.csv"), stringsAsFactors = FALSE, check.names = FALSE)
-  models <- page_v3_models()
+  models <- page_models()
   runtime <- if (exists(".page_v3_m2b_forecast", inherits = TRUE)) {
     get(".page_v3_m2b_forecast", inherits = TRUE)
   } else {
@@ -191,8 +191,8 @@ test_that("OLIS rows outside requested season do not alter current-season runtim
   tmp <- tempfile(fileext = ".RData")
   r <- env$r
   save(r, file = tmp)
-  base <- page_v3_forecast(src, season = "2026-27", origin_weekF = 12)
-  got <- page_v3_forecast(tmp, season = "2026-27", origin_weekF = 12)
+  base <- page_forecast(src, season = "2026-27", origin_weekF = 12)
+  got <- page_forecast(tmp, season = "2026-27", origin_weekF = 12)
   expect_equal(got$forecasts$forecast, base$forecasts$forecast, tolerance = 1e-14)
   expect_equal(got$monitoring$A$m1$peak_mean_weekF, base$monitoring$A$m1$peak_mean_weekF, tolerance = 1e-14)
 })
@@ -206,5 +206,5 @@ test_that("OLIS input fails closed on invalid counts", {
   tmp <- tempfile(fileext = ".RData")
   r <- env$r
   save(r, file = tmp)
-  expect_error(page_v3_forecast(tmp, season = "2026-27", origin_weekF = 12), "invalid positive/test counts")
+  expect_error(page_forecast(tmp, season = "2026-27", origin_weekF = 12), "invalid positive/test counts")
 })

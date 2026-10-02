@@ -28,7 +28,7 @@ test_that("M2 boundary action keeps raw and governed selections distinct", {
     class = "page_m2_tuning"
   )
 
-  action <- PAGe::boundary_action_plan(
+  action <- PAGe:::boundary_action_plan(
     tuning,
     stage = "M2", selection_method = "one_se"
   )

@@ -22,7 +22,7 @@ test_that("NLL sensitivity extraction reports values and adjacent gains", {
     class = "page_m2_tuning"
   )
 
-  out <- PAGe::extract_nll_sensitivity(tuning)
+  out <- PAGe:::extract_nll_sensitivity(tuning)
   expect_s3_class(out, "page_nll_sensitivity")
   expect_true(all(c("overall", "by_season", "gains") %in% names(out)))
   expect_setequal(unique(out$overall$parameter), c("alpha_state", "k_sp"))
@@ -61,7 +61,7 @@ test_that("NLL sensitivity accepts named result collections", {
       class = "page_m2_tuning"
     )
   }
-  out <- PAGe::extract_nll_sensitivity(
+  out <- PAGe:::extract_nll_sensitivity(
     list(`2017-18` = make_result(0), `2018-19` = make_result(0.02))
   )
   expect_setequal(unique(out$overall$run), c("2017-18", "2018-19"))
@@ -74,11 +74,11 @@ test_that("NLL sensitivity validates metrics and parameters", {
     summary = data.frame(spec_id = "s1", bernoulli_nll = 0.4)
   )
   expect_error(
-    PAGe::extract_nll_sensitivity(bad, parameters = "missing"),
+    PAGe:::extract_nll_sensitivity(bad, parameters = "missing"),
     "No requested parameter"
   )
   expect_error(
-    PAGe::extract_nll_sensitivity(bad, metric = "missing"),
+    PAGe:::extract_nll_sensitivity(bad, metric = "missing"),
     "metric"
   )
 })
@@ -96,7 +96,7 @@ test_that("NLL sensitivity plot is a ggplot and exposes all parameters", {
     ),
     class = "page_m2_tuning"
   )
-  p <- PAGe::plot_nll_sensitivity(tuning)
+  p <- PAGe:::plot_nll_sensitivity(tuning)
   expect_s3_class(p, "ggplot")
   expect_true(any(vapply(p$layers, function(layer) {
     inherits(layer$geom, "GeomPoint")
@@ -123,14 +123,14 @@ test_that("M2 boundary gate accepts a matched small outward NLL gain", {
     ),
     class = "page_m2_tuning"
   )
-  report <- PAGe::inspect_tuning_boundaries(
+  report <- PAGe:::inspect_tuning_boundaries(
     tuning, stage = "M2", warn = FALSE,
     min_nll_gain = c(alpha_state = 0.01)
   )
   expect_equal(report$decision, "stop_small_gain")
   expect_equal(report$nll_gain, 0.01)
 
-  default_report <- PAGe::inspect_tuning_boundaries(
+  default_report <- PAGe:::inspect_tuning_boundaries(
     tuning, stage = "M2", warn = FALSE
   )
   expect_equal(default_report$min_nll_gain, 0.001)
@@ -157,7 +157,7 @@ test_that("M2 boundary gate does not hide missing matched evidence", {
     ),
     class = "page_m2_tuning"
   )
-  report <- PAGe::inspect_tuning_boundaries(
+  report <- PAGe:::inspect_tuning_boundaries(
     tuning, stage = "M2", warn = FALSE,
     min_nll_gain = c(alpha_state = 0.01)
   )

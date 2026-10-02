@@ -1,5 +1,5 @@
 test_that("plan_training is a read-only governed dry run", {
-  expect_equal(PAGe::default_m1_hard_caps()$k_ref, c(lower = 10L, upper = 50L))
+  expect_equal(PAGe:::default_m1_hard_caps()$k_ref, c(lower = 10L, upper = 50L))
   data <- data.frame(
     season = rep(c("a", "b"), each = 30),
     weekF = rep(1:30, 2),
@@ -7,7 +7,7 @@ test_that("plan_training is a read-only governed dry run", {
     N = 10L
   )
   checkpoint <- tempfile()
-  plan <- PAGe::plan_training(
+  plan <- PAGe:::plan_training(
     data,
     prospective_holdout = NULL,
     checkpoint_dir = checkpoint,
@@ -55,7 +55,7 @@ test_that("boundary_action_plan exposes raw/final reports and next grid", {
     ),
     class = "page_m1_tuning"
   )
-  action <- PAGe::boundary_action_plan(
+  action <- PAGe:::boundary_action_plan(
     tuning, stage = "M1", steps = c(k_ref = 5, slope_weight = 4)
   )
   expect_s3_class(action, "page_boundary_action_plan")

@@ -81,7 +81,7 @@ test_that("public and legacy runtimes retain failed M1 origins", {
     m2_production = list(family = "legacy")
   )
   m0 <- list(ign_out = fx$ign, iWeek_locked = 18L, iWeek_lockedF = 18)
-  m1 <- suppressWarnings(PAGe::run_m1_alignment(
+  m1 <- suppressWarnings(PAGe:::run_m1_alignment(
     kit, current, m0,
     walk_start = 18L, verbose = FALSE
   ))
@@ -95,7 +95,7 @@ test_that("public and legacy runtimes retain failed M1 origins", {
     make_soft_cap_fn = function(...) identity,
     .package = "PAGe"
   )
-  legacy <- suppressWarnings(PAGe::run_m2_forecast(
+  legacy <- suppressWarnings(PAGe:::run_m2_forecast(
     legacy_kit, current, m1,
     verbose = FALSE
   ))
@@ -108,7 +108,7 @@ test_that("public and legacy runtimes retain failed M1 origins", {
   subset_kit$m2_production <- list(
     family = PAGe:::m2_subset_family(), fit = list()
   )
-  subset <- suppressWarnings(PAGe::run_m2_forecast(
+  subset <- suppressWarnings(PAGe:::run_m2_forecast(
     subset_kit, current, m1,
     verbose = FALSE
   ))

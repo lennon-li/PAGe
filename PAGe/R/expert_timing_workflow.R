@@ -2,7 +2,6 @@
 #'
 #' Creates a Plotly review without assigning truth. Peak truth is derived
 #' separately by the retrospective GAM procedure.
-#' @export
 review_expert_ignition <- function(data,
                                    season = NULL,
                                    existing_annotation = NULL,
@@ -69,7 +68,6 @@ review_expert_ignition <- function(data,
 }
 
 #' Finalize numeric expert ignition after review
-#' @export
 finalize_expert_ignition_review <- function(review,
                                             ignition_week_decimal,
                                             annotator,
@@ -94,7 +92,6 @@ finalize_expert_ignition_review <- function(review,
 }
 
 #' Save versioned expert ignition annotations
-#' @export
 write_expert_ignition_annotations <- function(annotations, path, overwrite = FALSE) {
   if (file.exists(path) && !overwrite) stop("Refusing to overwrite existing annotation release.", call. = FALSE)
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)

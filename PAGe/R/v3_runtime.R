@@ -487,7 +487,6 @@
 #' Load and validate the frozen PAGe v3 weekF12 model bundle
 #' @return Named list containing M0-A, M1-A, M2-A, M1-B and M2-B artifacts,
 #'   plus `release_id`, `manifest`, and `manifest_sha256` metadata.
-#' @export
 page_v3_models <- function() {
   if (exists("models", envir = .page_v3_cache, inherits = FALSE)) {
     return(get("models", envir = .page_v3_cache))
@@ -646,7 +645,6 @@ page_v3_models <- function() {
 #' @param strict When `TRUE`, supplied positivity columns must agree exactly
 #'   (within numerical tolerance) with the supplied positive/test counts.
 #' @return An object of class `page_v3_forecast`.
-#' @export
 page_v3_forecast <- function(data, season = NULL, origin_weekF = NULL, strict = TRUE) {
   panel_info <- .page_v3_panel(data, season = season, strict = strict)
   panel <- panel_info$data

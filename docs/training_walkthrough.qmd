@@ -107,14 +107,14 @@ The four season sets are checked for consistency and are carried through the gov
 
 ## 5. Recommended high-level training API
 
-For most users, `page_train_workflow()` is the simplest public entry point. It combines expert ignition annotations with the governed `train_pipeline()` lifecycle and returns a frozen kit.
+For most users, `page_train()` is the simplest public entry point. It combines expert ignition annotations with the governed `train_pipeline()` lifecycle and returns a frozen kit.
 
 ### Refresh a locked specification
 
 Use `mode = "refresh"` when the model specification has already been selected and only a fixed-spec refit is intended.
 
 ```{r}
-trained <- page_train_workflow(
+trained <- page_train(
   data = history,
   labels = labels,
   mode = "refresh",
@@ -126,7 +126,7 @@ trained <- page_train_workflow(
 )
 
 trained
-validate_page_kit(trained$kit, mode = "frozen")
+page_validate_kit(trained$kit, mode = "frozen")
 ```
 
 ### Retune when model selection is intended
@@ -134,7 +134,7 @@ validate_page_kit(trained$kit, mode = "frozen")
 Retuning is a development operation and should be completed without looking at the prospective holdout.
 
 ```{r}
-trained <- page_train_workflow(
+trained <- page_train(
   data = history,
   labels = labels,
   mode = "retune",
@@ -160,91 +160,36 @@ page_save_kit(
 )
 
 kit <- page_load_kit("results/kits/candidate_pre_holdout.rds")
-validate_page_kit(kit, mode = "frozen")
+page_validate_kit(kit, mode = "frozen")
 ```
 
 `page_save_kit()` validates the frozen kit before atomically publishing it. `page_load_kit()` validates again on load.
 
-## 7. Lower-level governed stage API
+## 7. Advanced model-level API
 
-Use this interface when a developer needs stage-by-stage tuning evidence or wants to stop at a governance boundary.
+The supported public training workflow is `page_train()`. Use `mode = "retune"` when PAGe should run the governed tuning and model-selection lifecycle; low-level tuning, boundary, freeze, and artifact-assembly helpers are package internals.
+
+Researchers who need direct component access can work with fixed, explicitly chosen configurations through the stable model-level API:
 
 ```{r}
-# M0: ignition
-m0_tuning <- tune_m0(history, selection = selection)
-validate_m0_tuning(m0_tuning)
+# Advanced scientific interfaces; config objects are explicit inputs.
+m0 <- m0_fit(history, selection, config = m0_config)
+m0_state <- m0_detect(m0_kit, current_data)
 
-m0 <- fit_m0(
-  history,
-  selection,
-  config = m0_tuning$best_params
-) |>
-  freeze_m0(tuning = m0_tuning)
-
-# M1: alignment / timing
-m1_tuning <- tune_m1(
-  history,
-  m0 = m0,
-  selection = selection
-)
-validate_m1_tuning(m1_tuning, check_boundaries = TRUE)
-
-m1_best <- m1_tuning$best[1, , drop = FALSE]
-m1_config <- m1_make_params(
-  k_ref = m1_best$k_ref,
-  temperature = m1_best$multi_temperature,
-  rise_weight = m1_best$align_rise_weight,
-  slope_window = m1_best$slope_window,
-  slope_weight = m1_best$slope_weight
+m1 <- m1_fit(history, selection, m0, config = m1_config)
+m1_state <- m1_predict(m1_kit, current_data, m0_state)
+peak_posterior <- m1_peak_posterior(
+  library = m1_library,
+  current_data = current_data,
+  activation_week = ignition_week,
+  origin_week = origin_week
 )
 
-m1 <- fit_m1(
-  history,
-  selection,
-  m0,
-  config = m1_config
-) |>
-  freeze_m1(tuning = m1_tuning)
-
-# M2: one- and two-week positivity forecasts
-m2_tuning <- tune_m2(
-  history,
-  selection,
-  m0,
-  m1,
-  grid = default_m2_grid()
-)
-validate_m2_tuning(m2_tuning)
-
-m2 <- fit_m2(
-  history,
-  selection,
-  m0,
-  m1,
-  config = m2_tuning$best_spec
-) |>
-  freeze_m2(tuning = m2_tuning)
-
-kit <- assemble_kit(m0, m1, m2)
-validate_page_kit(kit, mode = "frozen")
+m2 <- m2_fit(history, selection, m0, m1, config = m2_config)
+m2_state <- m2_predict(m2_kit, current_data, m1_state)
 ```
 
-The required lifecycle is:
-
-```text
-tune_m0 -> validate_m0_tuning -> fit_m0 -> freeze_m0
-    |
-    v
-tune_m1 -> validate_m1_tuning -> fit_m1 -> freeze_m1
-    |
-    v
-tune_m2 -> validate_m2_tuning -> fit_m2 -> freeze_m2
-    |
-    v
-assemble_kit -> validate_page_kit
-```
-
-A downstream stage will reject incompatible draft or mismatched upstream artifacts.
+For ordinary training, do not manually reproduce the internal tune/validate/freeze chain. `page_train()` owns those governance boundaries and returns the validated training result and kit. Repository-owned historical reproductions may still call internal helpers explicitly, but those helpers are not part of the supported external API.
 
 ## 8. Inspect training provenance
 

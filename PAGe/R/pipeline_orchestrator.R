@@ -34,7 +34,6 @@
 #' structural binary axis with a zero cap.
 #'
 #' @return A named non-negative numeric vector covering every tuned M2 axis.
-#' @export
 default_m2_nll_gain_caps <- function() {
   c(
     delta = 0,
@@ -370,7 +369,6 @@ default_m2_nll_gain_caps <- function() {
 #'
 #' @return A data frame with M2 parameters, stable \code{spec_id}, and
 #'   semicolon-separated \code{provenance} for every row.
-#' @export
 plan_m2_grid <- function(previous_results = NULL,
                          max_finalists = 6L,
                          max_specs = 64L) {
@@ -644,7 +642,6 @@ plan_m2_grid <- function(previous_results = NULL,
 #'   attached \code{preflight} and \code{boundary_actions} reports, and
 #'   deployment \code{kit}. When supplied, \code{timing_labels_v2} preserves
 #'   the complete timing-v2 label object or list used for training.
-#' @export
 train_pipeline <- function(
   allD,
   mode = c("refresh", "retune"),

@@ -6,7 +6,7 @@ test_that("M2 rejects a basis larger than per-lead data support", {
     z_ema = rep(c(-0.5, 0, 0.5), 2),
     stringsAsFactors = FALSE
   )
-  spec <- PAGe::stage2_make_spec(k_f = 4L, k_e = 0L)
+  spec <- PAGe:::stage2_make_spec(k_f = 4L, k_e = 0L)
   expect_error(
     PAGe:::.validate_m2_spec_support(d_train, spec),
     "requests k_logit_f_eff=4"

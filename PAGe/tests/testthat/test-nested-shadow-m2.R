@@ -5,7 +5,7 @@ shadow_fixture <- function(action = "keep_m1", all_off = FALSE,
   seen <- new.env(parent = emptyenv())
   seen$fits <- list()
   seen$replays <- list()
-  config <- PAGe::m2_subset_config(
+  config <- PAGe:::m2_subset_config(
     h1 = PAGe:::m2_subset_spec(intercept = !all_off),
     h2 = PAGe:::m2_subset_spec(intercept = !all_off)
   )
@@ -38,7 +38,7 @@ shadow_fixture <- function(action = "keep_m1", all_off = FALSE,
       if (!nrow(rows)) {
         return(list(decision = action, reasons = character()))
       }
-      PAGe::decide_m2_vs_m1(
+      PAGe:::decide_m2_vs_m1(
         rows,
         outcome_col = "outcome", m1_col = "m1_prediction",
         m2_col = "m2_prediction", season_col = "season", origin_col = "origin",
@@ -75,7 +75,7 @@ shadow_fixture <- function(action = "keep_m1", all_off = FALSE,
     assemble_kit = function(m0, m1, m2, best_spec_id) {
       list(m0 = m0, m1 = m1, m2 = m2, best_spec_id = best_spec_id)
     },
-    validate_page_kit = function(x, ...) {
+    page_validate_kit = function(x, ...) {
       if (x$m2$is_shadow && identical(failure, "validate")) stop("forced validation failure")
       invisible(x)
     },
@@ -115,7 +115,7 @@ shadow_fixture <- function(action = "keep_m1", all_off = FALSE,
 }
 
 shadow_run <- function(fixture, directory, enabled = TRUE) {
-  do.call(PAGe::run_outer_fold, c(list(
+  do.call(PAGe:::run_outer_fold, c(list(
     data = fixture$data, holdout = "C", artifact_dir = directory,
     shadow_m2 = enabled
   ), fixture$args))
@@ -186,7 +186,7 @@ test_that("accepted and all-off candidates reuse primary predictions", {
 test_that("final all-season training never builds a shadow", {
   f <- shadow_fixture()
   directory <- withr::local_tempdir()
-  result <- do.call(PAGe::train_outer_fold, c(list(
+  result <- do.call(PAGe:::train_outer_fold, c(list(
     data = f$data, holdout = NULL, artifact_dir = directory
   ), f$args))
   expect_identical(result$shadow_m2$status, "final_fit_no_shadow")
@@ -217,7 +217,7 @@ test_that("legacy completed folds resume as absent alongside new shadows", {
   f <- shadow_fixture()
   directory <- withr::local_tempdir()
   args <- c(list(data = f$data, holdouts = c("B", "C"), artifact_dir = directory), f$args)
-  first <- do.call(PAGe::nested_season_evaluation, args)
+  first <- do.call(PAGe:::nested_season_evaluation, args)
   path <- file.path(directory, "B", "outer_fold_result.rds")
   old <- readRDS(path)
   old[c("shadow_status", "shadow_metrics", "shadow_m1_prediction_equal")] <- NULL
@@ -226,7 +226,7 @@ test_that("legacy completed folds resume as absent alongside new shadows", {
   saveRDS(old, path)
   hash <- tools::md5sum(path)
   count <- length(f$seen$fits)
-  resumed <- do.call(PAGe::nested_season_evaluation, args)
+  resumed <- do.call(PAGe:::nested_season_evaluation, args)
   expect_identical(length(f$seen$fits), count)
   expect_identical(tools::md5sum(path), hash)
   expect_identical(resumed$folds$B$shadow_status, "absent")

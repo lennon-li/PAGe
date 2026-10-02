@@ -36,7 +36,7 @@ test_that("replay retains bounds, stages, missing targets and failed predictions
     ign_out = list(ign_week_locked = 1L),
     params_df = data.frame(eval_week = 1:3, peak_weekF = c(3, 3, 3)),
     m1_curves = data.frame(newWeek = 1:3, p_hat = c(.1, .2, .3)))
-  out <- PAGe::replay_season_holdout(
+  out <- PAGe:::replay_season_holdout(
     list(m2_production = list(training_seasons = "2024-25")), d, runner = runner)
   expect_equal(out$predictions$p_lo, c(.1, .15, .25, .3))
   expect_equal(out$predictions$p_hi, c(.3, .35, .45, .5))
@@ -52,7 +52,7 @@ test_that("no-ignition replay is retained as an explicit failure", {
   d <- data.frame(season = "2025-26", weekF = 1:3, y = 0, N = 100)
   runner <- function(...) list(m2_preds = data.frame(),
     ign_out = list(ign_week_locked = NA_integer_))
-  out <- PAGe::replay_season_holdout(
+  out <- PAGe:::replay_season_holdout(
     list(m2_production = list(training_seasons = "2024-25")), d, runner = runner)
   expect_identical(out$status, "unseen_replay_failed")
   expect_identical(out$failure_code, "ignition_unavailable")
@@ -64,7 +64,7 @@ test_that("alignment failures preserve their origin and reason", {
   testthat::local_mocked_bindings(run_alignment_prospective_multi = function(...) {
     stop("alignment solver failed")
   }, .package = "PAGe")
-  out <- PAGe::run_m1_alignment(list(M1_PARAMS = list()),
+  out <- PAGe:::run_m1_alignment(list(M1_PARAMS = list()),
     data.frame(weekF = 1:3),
     list(iWeek_locked = 1L, ign_out = list(ign_week_locked = 1L)),
     walk_start = 1L, verbose = FALSE)

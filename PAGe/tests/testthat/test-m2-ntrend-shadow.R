@@ -35,7 +35,7 @@ test_that("N-trend feature uses only exact past weeks", {
 
 test_that("window zero is explicit OFF and remains tunable", {
   d <- make_ntrend_test_data(5L)
-  fit <- fit_m2_a_ntrend_shadow(d, windows = 0L, off_tolerance = 0)
+  fit <- PAGe:::fit_m2_a_ntrend_shadow(d, windows = 0L, off_tolerance = 0)
   expect_s3_class(fit, "page_m2_a_ntrend_shadow")
   expect_identical(fit$selected_window, 0L)
   expect_false(grepl("ntrend", paste(deparse(stats::formula(fit$full_fit)), collapse = " ")))
@@ -43,33 +43,33 @@ test_that("window zero is explicit OFF and remains tunable", {
 
 test_that("tuner requires the OFF candidate", {
   d <- make_ntrend_test_data(4L)
-  expect_error(fit_m2_a_ntrend_shadow(d, windows = 1:3), "must include 0")
+  expect_error(PAGe:::fit_m2_a_ntrend_shadow(d, windows = 1:3), "must include 0")
 })
 
 
 test_that("OFF preference can disable a lower-NLL nonzero candidate within tolerance", {
   d <- make_ntrend_test_data(6L, feedback = TRUE)
-  raw <- fit_m2_a_ntrend_shadow(d, windows = c(0L, 2L), off_tolerance = 0)
-  tolerant <- fit_m2_a_ntrend_shadow(d, windows = c(0L, 2L), off_tolerance = 1e6)
+  raw <- PAGe:::fit_m2_a_ntrend_shadow(d, windows = c(0L, 2L), off_tolerance = 0)
+  tolerant <- PAGe:::fit_m2_a_ntrend_shadow(d, windows = c(0L, 2L), off_tolerance = 1e6)
   expect_identical(tolerant$selected_window, 0L)
   expect_false(grepl("ntrend", paste(deparse(stats::formula(tolerant$full_fit)), collapse = " ")))
 })
 
 test_that("runtime N-trend prediction is future invariant", {
   d <- make_ntrend_test_data(6L, feedback = TRUE)
-  fit <- fit_m2_a_ntrend_shadow(d, windows = c(0L, 1L, 2L, 3L), off_tolerance = 0)
+  fit <- PAGe:::fit_m2_a_ntrend_shadow(d, windows = c(0L, 1L, 2L, 3L), off_tolerance = 0)
   current <- d[d$season == unique(d$season)[6L], c("weekF", "y", "N")]
   current <- current[current$weekF <= 20L, ]
-  p1 <- predict_m2_a_ntrend_shadow(fit, current, origin_week = 20L)
+  p1 <- PAGe:::predict_m2_a_ntrend_shadow(fit, current, origin_week = 20L)
   leaked <- rbind(current, data.frame(weekF = 21:22, y = c(99999, 99999), N = c(100000, 100000)))
-  p2 <- predict_m2_a_ntrend_shadow(fit, leaked, origin_week = 20L)
+  p2 <- PAGe:::predict_m2_a_ntrend_shadow(fit, leaked, origin_week = 20L)
   expect_equal(p1$forecast_pct, p2$forecast_pct, tolerance = 1e-12)
   expect_identical(p1$ntrend_window, p2$ntrend_window)
 })
 
 test_that("shadow artifact reports both LOSO and chronological evidence", {
   d <- make_ntrend_test_data(6L, feedback = TRUE)
-  fit <- fit_m2_a_ntrend_shadow(d, windows = c(0L, 2L), min_chronological_train_seasons = 3L)
+  fit <- PAGe:::fit_m2_a_ntrend_shadow(d, windows = c(0L, 2L), min_chronological_train_seasons = 3L)
   expect_true(nrow(fit$loso_summary$overall) == 2L)
   expect_true(nrow(fit$chronological_summary$overall) == 2L)
   expect_true(all(c(0L, 2L) %in% fit$loso_summary$overall$window))

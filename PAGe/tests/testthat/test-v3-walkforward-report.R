@@ -1,4 +1,4 @@
-test_that("page_v3_walkforward_report reproduces the governed Week-12 report", {
+test_that("page_walkforward_report reproduces the governed Week-12 report", {
   panel_path <- system.file(
     "extdata", "v3-week12", "report-support", "week12_panel_fixture.csv",
     package = "PAGe"
@@ -7,7 +7,7 @@ test_that("page_v3_walkforward_report reproduces the governed Week-12 report", {
   panel <- utils::read.csv(panel_path, stringsAsFactors = FALSE, check.names = FALSE)
 
   out <- tempfile(fileext = ".html")
-  path <- page_v3_walkforward_report(
+  path <- page_walkforward_report(
     panel,
     season = "2026-27",
     output_file = out,

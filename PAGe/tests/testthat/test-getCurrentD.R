@@ -1,6 +1,6 @@
 test_that("old ORVT layout aggregates PHUs and maps dates to PAGe weeks", {
   path <- testthat::test_path("fixtures", "orvt_old.txt")
-  result <- PAGe::getCurrentD(path, season = "2025-26", include_predecessor = FALSE)
+  result <- PAGe:::getCurrentD(path, season = "2025-26", include_predecessor = FALSE)
 
   expect_identical(attr(result, "pho_layout"), "surveillance_period")
   expect_equal(result$week, c(27L, 28L, 53L, 1L))
@@ -13,7 +13,7 @@ test_that("old ORVT layout aggregates PHUs and maps dates to PAGe weeks", {
 
 test_that("the exact Ontario row supplies the provincial value", {
   path <- testthat::test_path("fixtures", "orvt_ontario_present.txt")
-  result <- PAGe::getCurrentD(path, season = "2025-26", include_predecessor = FALSE)
+  result <- PAGe:::getCurrentD(path, season = "2025-26", include_predecessor = FALSE)
 
   expect_equal(result$N, c(50, 100))
   expect_equal(result$y, c(5, 10))
@@ -28,7 +28,7 @@ test_that("missing Ontario rows fall back to the PHU sum with provenance", {
   path <- testthat::test_path("fixtures", "orvt_no_ontario.txt")
   result <- NULL
   expect_warning(
-    result <- PAGe::getCurrentD(path, season = "2025-26", include_predecessor = FALSE),
+    result <- PAGe:::getCurrentD(path, season = "2025-26", include_predecessor = FALSE),
     "no exact `Ontario` row"
   )
 
@@ -41,7 +41,7 @@ test_that("missing Ontario rows fall back to the PHU sum with provenance", {
 
 test_that("Eastern Ontario Health Unit remains a PHU, not the provincial row", {
   path <- testthat::test_path("fixtures", "orvt_ontario_substring.txt")
-  result <- PAGe::getCurrentD(path, season = "2025-26", include_predecessor = FALSE)
+  result <- PAGe:::getCurrentD(path, season = "2025-26", include_predecessor = FALSE)
 
   expect_equal(result$N, 20)
   expect_equal(result$y, 2)
@@ -59,14 +59,14 @@ test_that("inconsistent Ontario totals fail closed", {
   utils::write.csv(bad, bad_path, row.names = FALSE)
 
   expect_error(
-    PAGe::getCurrentD(bad_path, season = "2025-26", include_predecessor = FALSE),
+    PAGe:::getCurrentD(bad_path, season = "2025-26", include_predecessor = FALSE),
     "Ontario.*disagree"
   )
 })
 
 test_that("new ORVT layout handles non-ISO dates and the 53-week calendar", {
   path <- testthat::test_path("fixtures", "orvt_new.txt")
-  result <- PAGe::getCurrentD(path, season = "2025-26", include_predecessor = FALSE)
+  result <- PAGe:::getCurrentD(path, season = "2025-26", include_predecessor = FALSE)
 
   expect_identical(attr(result, "pho_layout"), "respiratory_season")
   expect_equal(attr(result, "n_weeks"), 4L)
@@ -77,8 +77,8 @@ test_that("new ORVT layout handles non-ISO dates and the 53-week calendar", {
 
 test_that("predecessor selection and provenance are explicit", {
   path <- testthat::test_path("fixtures", "orvt_new.txt")
-  only_current <- PAGe::getCurrentD(path, season = "2026-27", include_predecessor = FALSE)
-  with_previous <- PAGe::getCurrentD(path, season = "2026-27", include_predecessor = TRUE)
+  only_current <- PAGe:::getCurrentD(path, season = "2026-27", include_predecessor = FALSE)
+  with_previous <- PAGe:::getCurrentD(path, season = "2026-27", include_predecessor = TRUE)
 
   expect_setequal(unique(only_current$season), "2026-27")
   expect_setequal(unique(with_previous$season), c("2025-26", "2026-27"))
@@ -96,7 +96,7 @@ test_that("conflicting PHU-week duplicates fail closed", {
   on.exit(unlink(bad_path), add = TRUE)
   writeLines(bad, bad_path)
   expect_error(
-    PAGe::getCurrentD(bad_path, season = "2025-26", include_predecessor = FALSE),
+    PAGe:::getCurrentD(bad_path, season = "2025-26", include_predecessor = FALSE),
     "Conflicting duplicate"
   )
 })
@@ -107,7 +107,7 @@ test_that("default URL resolution falls back to the second candidate", {
   withr::local_options(PAGe.orvt_reader = function(url) {
     if (grepl("2026-27_2027-28", url, fixed = TRUE)) bytes else stop("not readable")
   })
-  result <- PAGe::getCurrentD(
+  result <- PAGe:::getCurrentD(
     season = "2026-27", base_url = "https://example.test/orvt/",
     include_predecessor = FALSE
   )
@@ -119,7 +119,7 @@ test_that("download cache stores the raw bytes under timestamp and digest", {
   bytes <- readBin(path, what = "raw", n = file.info(path)$size)
   cache <- tempfile("orvt-cache-")
   withr::local_options(PAGe.orvt_reader = function(url) bytes)
-  PAGe::getCurrentD(
+  PAGe:::getCurrentD(
     data = "https://example.test/orvt.csv", season = "2025-26",
     include_predecessor = FALSE, cache_dir = cache
   )

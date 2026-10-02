@@ -31,13 +31,13 @@
 test_that("M2 nested callers charge expansion from the tuner's returned grid", {
   fx <- .r6_m2_boundary_fixture()
   expect_error(
-    PAGe::boundary_action_plan(
+    PAGe:::boundary_action_plan(
       fx$tuning,
       stage = "M2", max_specs = nrow(fx$initial) + 12L
     ),
     "exceeds max_specs"
   )
-  plan <- PAGe::boundary_action_plan(
+  plan <- PAGe:::boundary_action_plan(
     fx$tuning,
     stage = "M2", max_specs = nrow(fx$actual) + 12L
   )

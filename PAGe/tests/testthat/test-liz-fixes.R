@@ -118,7 +118,7 @@ test_that("M1 rebuilds an M0 handoff without preprocessing metadata", {
     learn_alignment_hyperparams = function(...) list(slope = 8),
     .package = "PAGe"
   )
-  out <- PAGe::build_m1(
+  out <- PAGe:::build_m1(
     allD = data.frame(
       season = aligned$season, weekF = aligned$newWeek,
       y = aligned$y, N = aligned$y + aligned$neg
@@ -144,7 +144,7 @@ test_that("undated ORVT input requires an explicit source calendar", {
   withr::defer(unlink(path))
   utils::write.csv(raw, path, row.names = FALSE)
   expect_error(
-    PAGe::getCurrentD(path, season = "2025-26", include_predecessor = FALSE),
+    PAGe:::getCurrentD(path, season = "2025-26", include_predecessor = FALSE),
     "source_calendar"
   )
   source_calendar <- data.frame(
@@ -155,7 +155,7 @@ test_that("undated ORVT input requires an explicit source calendar", {
       "2025-08-17", "2026-08-30"
     ))
   )
-  out <- PAGe::getCurrentD(path,
+  out <- PAGe:::getCurrentD(path,
     season = "2025-26",
     include_predecessor = FALSE, source_calendar = source_calendar
   )

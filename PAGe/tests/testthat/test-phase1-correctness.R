@@ -171,11 +171,11 @@ test_that("F3 tune and fit receive identical smoothing and ignition settings", {
   for (mode in c("legacy", "fractional")) {
     for (p in list(list(), list(k_deriv = 12L, peak_weight_boost = 2, peak_weight_decay = 0.5))) {
       m0 <- list(best_params = list(p_thr = 0.01), manual_labels = labels, flag_args = list(w_min = 10L))
-      fit <- PAGe::build_m1(.phase1_data(), m0,
+      fit <- PAGe:::build_m1(.phase1_data(), m0,
         exclude = character(), exclude_live = FALSE,
         m1_params = p, timing_mode = mode
       )
-      PAGe::tune_m1(.phase1_data(), m0,
+      PAGe:::tune_m1(.phase1_data(), m0,
         m1 = list(m1_params = p),
         grid = data.frame(k_ref = 6L), n_cores = 1L, checkpoint_dir = withr::local_tempdir(),
         timing_mode = mode, verbose = FALSE

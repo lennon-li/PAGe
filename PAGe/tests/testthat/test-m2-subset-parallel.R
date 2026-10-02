@@ -173,7 +173,7 @@ test_that("tune_m2 forwards worker count to the subset family", {
     },
     .package = "PAGe"
   )
-  PAGe::tune_m2(data.frame(), list(), list(), list(), data.frame(),
+  PAGe:::tune_m2(data.frame(), list(), list(), list(), data.frame(),
     family = "offset_subset_v1", n_cores = 2L
   )
   expect_identical(captured, 2L)

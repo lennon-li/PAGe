@@ -1,91 +1,157 @@
 # PAGe workflow status map
 
-Last reconciled: 2026-08-11. This map makes the discoverable entry points
-explicit without deleting historical research. Status describes intended use
-and separately identifies local private-data evidence. Reported historical M2
-LOSO remains conditional on globally selected M0/M1 settings; it is not fully
-nested validation. A local frozen acceptance replay was completed for
-`2025-26` under run ID `boundary-expansion-20260801T150000Z`; the candidate
-failed the locked NLL gate, while horizon and phase gates passed. Its ignored
-private/audit evidence is under `results/user-test/` and `results/audit/`.
-No post-promotion refit or registry promotion occurred.
+Last reconciled: 2026-10-02.
 
-The working incumbent is the existing private `v16-corrected` frozen kit used
-by that replay (`alpha_state = 0.20`, `k_sp = 8`, `bias_alpha = 0.05`). The
-pre-holdout comparator is the ignored `dev_kit.rds` under the corresponding
-`results/user-test/v16-corrected-20260730T034430Z/artifacts/` run; do not use
-that run's `final_kit.rds`, which includes `2025-26`. The artifact remains
-outside version control; the repository records the specification and
-provenance caveat rather than claiming to reconstruct the original research
-artifact.
+This document describes the current canonical source layout and supported user-facing workflow after repository consolidation and public-API cleanup. Historical implementation names and archived research remain available for reproducibility, but they are not part of the supported external package contract.
 
-Large private run products for BCC are stored on the mounted NFS share
-`/mnt/nfsv4/Users/yeli/PAGe-artifacts/`; see
-[`artifact-storage.md`](artifact-storage.md). The package checkout remains
-source-only.
+## Canonical repository and branches
 
-## Operational workflow
+The canonical repository is `/home/yeli/repos/PAGe`.
 
-| Entry point or family | Status | Use and safe replacement |
-|---|---|---|
-| Guarded stage API: `validate_season_selection()`, `tune_*()`, `validate_*_tuning()`, `fit_*()`, `freeze_*()`, `assemble_kit()` | canonical | Preferred low-level training interface. It enforces explicit disjoint season sets, structural and boundary-validated tuning results, frozen upstream dependencies, matching artifact identities, and guarded kit assembly. Governed retunes stop on unresolved M0 edges before M1 and unresolved M1 edges before M2. |
-| `docs/tuning-playbook.md` | canonical | Grid-design and expansion guidance: boundary reports, adjacent-step expansion, valid null/constraint boundaries, stage-specific parameter tips, stopping rules, and the prohibition on post-holdout tuning. The package calls are `inspect_tuning_boundaries()` and `expand_tuning_grid()`; checkpoint reuse is documented for each stage. |
-| `docs/long-job-supervision.md` | canonical | Long jobs use a detached zero-token watchdog and compact status records. AI involvement is limited to launch/preflight, detected exceptions, and bounded terminal review unless the user explicitly approves a monitoring cadence and token budget. |
-| High-level package API: `load_flu_hist()`, `prepare_surveillance_data()`, `train_pipeline()`, `run_pipeline()`, `run_prospective_pipeline()`, `replay_season_holdout()`, `check_promotion()`, `verify_promotion_evidence()` | canonical compatibility | `train_pipeline()` now composes the guarded stage lifecycle for refresh and retune, including explicit season selection, M0/M1 boundary gates before downstream stages, frozen upstream identities, and governed M2 racing full evaluation. It preserves the compatibility result shape. Supply authorized surveillance data through an explicit `load_flu_hist(path)` argument or `PAGE_FLU_HIST_FILE`; observations are not bundled. A bare promotion report cannot release a holdout. `replay_season_holdout()` requires the runner to return an independent evaluation schedule and rejects duplicated, unmatched, or inconsistent forecast keys. |
-| Legacy stage builders: `build_m0()`, `build_m1()`, `build_m2()`, `train_m2()` | compatibility | Retained for existing callers and as underlying statistical implementations. New stage-controlled workflows should call the guarded tune/validate/fit/freeze API instead. |
+The active branch topology is:
 
-The canonical `build_m2()` path enforces fold-specific label isolation:
-`manual_labels_train` excludes the held-out season and
-`manual_labels_test = NULL`. Checkpoints made with a held-out label available
-to evaluation are not valid prospective evidence and must be recomputed.
-| Frozen runtime: `run_pipeline(..., mode = "frozen")` and `run_prospective_pipeline(..., mode = "frozen")` | canonical | Canonical deployment behavior: a pre-trained/frozen kit with online updates. |
-| `scripts/acceptance/replay_2025_26.R` | canonical | Manual, opt-in confirmatory replay and decision-evidence entry point. It requires authorized data plus candidate and incumbent kits, verifies both excluded `2025-26`, and writes private replay/bundle files separately from aggregate audit evidence. Canonical kit identity is strict by default; only a legacy incumbent may use the explicit compatibility option. The local boundary-expansion replay completed with a failed NLL gate; evidence is preserved but does not authorize refit or promotion. |
-| `season2526/run_retrain_venkata.R` | canonical | Post-acceptance fixed-spec refresh only. It requires the passing decision bundle, its manifest, the exact candidate and incumbent kits, and authorized data, then constructs artifact-bound verified evidence. Use `--preflight-only` first. Private model output and disclosure-safe manifests are separate and never overwritten. No completed real-data refit is preserved here. |
-| `scripts/promotion/promote_post_refit.R` | canonical | Final immutable registration step. It validates the complete acceptance-to-refit hash chain and kit identities, supports `--preflight-only`, writes a private promoted kit and separate disclosure-safe deployment manifest, and refuses destination collisions. No completed promotion is preserved here. |
-| `load_promoted_kit()` | canonical | Verified deployment loader. It requires explicit immutable kit and deployment-manifest paths, checks their SHA-256/spec/training-season binding, and has no mutable `current` discovery path. |
-| `mode = "weekly_refit"`, `nested_loso_m2_eval_weekly_refit()`, and older weekly-refit explanations | research-only | Compatibility/comparison behavior, not the validated production path. Use frozen mode for deployment; retain weekly refit only when explicitly studying compatibility behavior. |
+```text
+                         dev/n-history
+                        /
+master ----------------+
+                        \
+                         dev/survival-peak
+```
 
-## Historical and research workflows
+- `master` — current supported PAGe R package and operational pipeline.
+- `dev/n-history` — test-volume / N-history predictor research.
+- `dev/survival-peak` — survival/hazard peak-timing research.
 
-| Entry point or family | Status | Why / safe replacement |
-|---|---|---|
-| `scripts/fresh_run/00_shared.R` and stages `01_m0.R` through `07_compare.R` | research-only | Preserved historical/research workflow. It loads private local files and has no promotion chain. Use the high-level API and governed release workflow for new production work. |
-| `test/` standalone LOSO harness | deprecated/non-running | Invalid LOSO harness: it uses a global pooled template, retrospective test-season ignition, and is not walk-forward. Its hyperparameter outputs must not be used. |
-| `scripts/fresh_run/04e_m2_loso_v16.R`, `04f_m2_loso_v16_expand.R`, and `05b_m2_production_v16.R` | research-only | v16 research and kit-building history. Private result artifacts are absent, and the builder does not itself establish a promoted immutable production artifact. Use `train_pipeline()` followed by the governed release workflow. |
-| `scripts/fresh_run/04h_m2_loso_v17_adaptive_ba.R`, `04k_m2_loso_v18_spread.R`, `03b_m1_kappa_sweep.R`, and other experiment-specific fresh-run stages | research-only | Retained for hypotheses and comparisons; they are not deployment instructions. Use the canonical API for production work. |
-| `scripts/run_nested_loso_v14.R`, `run_nested_loso_v14b.R`, and `_rebuild_m2_production_v14.R` | superseded | Historical v14 search/build path. Do not rebuild a kit from it; use the canonical API and governed release workflow. |
-| `scripts/run_nested_loso_v15.R`, `run_nested_loso_v15_postfix*.R`, `_rebuild_m2_production_v15*.R`, and `scripts/fresh_run/05_m2_production.R` | superseded | Historical v15/v15-postfix builders and evaluation paths. Do not treat their saved filenames or reported metrics as current deployment evidence. Use the canonical API and governed release workflow. |
-| Other root tuning, diagnostic, and `run_nested_loso_v2`--`v13*` scripts | superseded | Historical investigation scripts, retained for provenance. Use the high-level API unless reproducing a specifically scoped research result. |
-| Root `task.md` | superseded | Historical M0 tuning task record, now clearly labelled. It is not an implementation plan or source of current parameters. |
+The parallel `PAGe-m1-v2` and `PAGe-m2-a-full` workspaces are no longer canonical source repositories.
 
-## Governed release workflow
+## Current production pipeline
 
-The canonical sequence is frozen candidate/incumbent acceptance excluding
-`2025-26`, immutable decision evidence, fixed-spec refresh including `2025-26`,
-then immutable registry publication and verified loading. The exact operator
-commands and private/audit boundaries are in
-[`deployment-workflow.qmd`](deployment-workflow.qmd).
+The supported production chain is:
 
-Retuning is a pre-acceptance development activity. Any change made after
-viewing the holdout starts a new development cycle and cannot inherit the
-previous decision. By contrast, the post-acceptance refresh retains the
-accepted configuration and only releases the holdout into its training data.
+```text
+official surveillance input / canonical panel
+    ↓
+M0 ignition
+    ↓
+M1 timing / peak inference
+    ↓
+M2 one- and two-week forecasts
+    ↓
+stratified aggregation when requested
+    ↓
+immutable release / provenance
+    ↓
+weekly API and walk-forward report
+```
 
-`season2526/reproduce_retrain.qmd` describes the acceptance-to-refresh
-subsequence. Its pre-existing rendered HTML is stale and is not evidence that a
-private-data run completed.
+The frozen implementation still carries internal development-generation identifiers where required for artifact identity and reproducibility. Those identifiers are intentionally not exposed in public function names.
 
-## Rendered documentation
+## Supported public R API
 
-The checked-in `docs/*.html` files are generated snapshots, not canonical
-instructions. Their source QMD/Markdown and this status map govern current use.
-Some HTML predates the audit and may retain retired numbers or weekly-refit
-language. Do not re-render them until their sources and verified private-data
-evidence have been reconciled. In particular, generated HTML does not establish
-that a private-data replay, refit, or numeric result occurred.
+The package exports a compact stable interface. The complete reference is [`public-api.qmd`](public-api.qmd).
 
-## Classification limits
+### Data and surveillance
 
-This map intentionally does not choose between conflicting M1 peak-MAE values
-or reported M2 NLL values. Those require the corresponding private artifacts,
-provenance, and reproducible result summaries.
+- `page_load_surveillance()`
+- `prepare_surveillance_data()`
+- `validate_surveillance_data()`
+- `validate_season_selection()`
+- `page_season_calendar()`
+
+### Forecasting and reporting
+
+- `page_forecast()`
+- `page_forecast_now()`
+- `page_walkforward_report()`
+- `page_models()`
+- `plot_forecast()`
+
+### Training and kit lifecycle
+
+- `page_train()`
+- `page_save_kit()`
+- `page_load_kit()`
+- `page_validate_kit()`
+- `page_label_ignitions()`
+- `season_selection()`
+
+### Stratified aggregation
+
+- `aggregate_strata()`
+- `aggregate_strata_draws()`
+- `shared_denominator_correlation()`
+
+### Advanced component-level scientific API
+
+- `m0_fit()` / `m0_detect()`
+- `m1_fit()` / `m1_predict()`
+- `m1_peak_posterior()` / `m1_passage_posterior()`
+- `m2_fit()` / `m2_predict()`
+
+### Evaluation and governance
+
+- `evaluate_forecasts()`
+- `replay_holdout()`
+- `check_promotion()`
+- `verify_promotion()`
+
+## Internal implementation interfaces
+
+Low-level tuning, validation, freezing, fold-running, cache, artifact-construction, and historical versioned functions are intentionally internal. Examples include the historical `tune_*`, `freeze_*`, `build_*`, and development-generation runtime functions.
+
+Repository-owned reproduction scripts may use `PAGe:::` to reach those internals when exact historical replay requires it. That does not make those helpers part of the supported external API.
+
+The developer-oriented [`stage-api-map.md`](stage-api-map.md) and [`tuning-playbook.md`](tuning-playbook.md) document those internals.
+
+## Operational source and reproducibility
+
+Current operational tooling includes:
+
+- strict ORVT/source preflight under `2026/`;
+- reproducible weekly transaction scripts under `scripts/`;
+- API v4 deployment and monitoring tooling;
+- corrected `page-weekly-api-v4.service` systemd dependencies;
+- source, panel, release, and transaction hashing;
+- the R-generated walk-forward report.
+
+The HTML report is a generated artifact. The source of truth is the R package renderer and bundled report template; report HTML should not be hand-maintained.
+
+## Stratified aggregation contract
+
+PAGe supports aggregation across pathogen types, age groups, regions, sites, or other strata.
+
+- Independent strata: analytic variance propagation with zero off-diagonal covariance.
+- Shared-denominator mutually exclusive categories: multinomial correlation structure.
+- Correlated strata: user-supplied correlation or covariance matrices.
+- Joint posterior/simulation draws: preferred when available because dependence and asymmetry are propagated directly.
+- Weighted denominator partitions such as age groups: normalized weighted means.
+
+The current Flu A+B walk-forward report sums the separately issued A and B component forecasts and displays a model-mean confidence interval generated through the generic aggregation API. Its current dependence label is `independent_model_mean`; this is distinct from a shared-denominator sampling/predictive interval.
+
+## Research branches
+
+### `dev/n-history`
+
+Contains test-volume / N-history research, including lagged-volume features, EXP-family summaries, acceleration/relative-volume candidates, selection experiments, and related shadow evaluations. Production `master` must not depend on these research features unless they pass a future governed promotion cycle.
+
+### `dev/survival-peak`
+
+Contains survival/hazard peak-timing research, synthetic validation, nested evaluation, and related M1 alternatives. Production `master` continues to use the currently frozen timing implementation until a future governed replacement is accepted.
+
+## Manuscript workspace
+
+All manuscript-specific protocols, drafts, literature review, publication analyses, result tables, and manuscript-only execution scripts live under `manuscript/`.
+
+Production package code remains under `PAGe/`; operational code remains under `2026/` and `scripts/`; manuscript-specific runners live under `manuscript/scripts/`.
+
+The manuscript may call the supported public PAGe API. Historical publication reproductions may use internal functions when exact frozen-analysis reproduction requires them, but those internal calls are not external API commitments.
+
+## Historical and archived workflows
+
+Legacy seasonal runners, superseded training scripts, old fresh-run workflows, and historical model-generation code are retained under `archive/` or dated historical documentation for provenance. They should not be treated as current package or deployment instructions.
+
+Immutable artifact names, schema identifiers, release IDs, and archived filenames may continue to contain `v1`, `v2`, `v3`, or other historical version labels. Those identifiers are part of provenance and should not be renamed merely to match the public API.
+
+## Current validation baseline
+
+Repository consolidation established the current master against package build, focused runtime/report/aggregation tests, Week-12 forecast identity checks, and ORVT/API readiness checks. Subsequent public-API cleanup must preserve those numerical and operational identities; API renaming alone is not authorization to alter frozen forecast behavior.

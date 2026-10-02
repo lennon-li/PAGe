@@ -73,7 +73,6 @@
 #'
 #' @return A named list containing the Legacy Model M0 parameters, tuning grid,
 #'   and M1 calibration prior.
-#' @export
 legacy_model_settings <- function() {
   list(
     name = "Legacy Model",
@@ -153,7 +152,6 @@ legacy_model_settings <- function() {
 #' params <- m1_make_params()
 #' params_custom <- m1_make_params(slope_weight = 12, temperature = 0.15)
 #'
-#' @export
 m1_make_params <- function(k_ref = 25L,
                            ref_method = "fs",
                            temperature = 0.25,
@@ -214,7 +212,6 @@ m1_make_params <- function(k_ref = 25L,
 #' explicitly approved \code{slope_weight = 4} extension.
 #'
 #' @return A tibble with 25 rows (5 k_ref x 5 slope_weight combinations).
-#' @export
 default_m1_grid <- function() {
   if (!requireNamespace("tidyr", quietly = TRUE)) stop("Need 'tidyr'.")
   tidyr::crossing(
@@ -235,7 +232,6 @@ default_m1_grid <- function() {
 #'
 #' @return A data frame with M2 parameters, stable specification IDs, and
 #'   provenance.
-#' @export
 default_m2_grid <- function() {
   plan_m2_grid()
 }
@@ -274,7 +270,6 @@ default_m2_grid <- function() {
 #'   may be \code{NULL} for legacy minimal inputs, in which case
 #'   \code{build_m1()} rebuilds the alignment rather than silently using an
 #'   incomplete handoff.
-#' @export
 compact_m0_artifact_for_m1 <- function(m0) {
   if (!is.list(m0)) {
     stop("`m0` must be a complete M0 artifact list.", call. = FALSE)
@@ -323,7 +318,6 @@ compact_m0_artifact_for_m1 <- function(m0) {
 #' @return A list with \code{aligned} (aligned data frame), \code{seasons_used},
 #'   \code{manual_labels}, \code{flag_args}, and \code{best_params}.
 #'
-#' @export
 build_m0 <- function(allD,
                      exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
                      manual_labels = .default_manual_labels(),
@@ -429,7 +423,6 @@ build_m0 <- function(allD,
 #'   \code{seasons_used}, \code{manual_labels}, and \code{flag_args}. Pass directly to
 #'   \code{build_m1()}, \code{build_m2()}, and \code{train_m2()}.
 #'
-#' @export
 tune_m0 <- function(allD,
                     loso_seasons = "all",
                     exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
@@ -559,7 +552,6 @@ tune_m0 <- function(allD,
 #'   \code{m1_params}, and \code{seasons_used}. Pass to \code{tune_m1()},
 #'   \code{build_m2()}, and \code{train_m2()}.
 #'
-#' @export
 build_m1 <- function(allD,
                      m0,
                      exclude = c("2011-12", "2015-16", "2020-21", "2021-22"),
@@ -669,7 +661,6 @@ build_m1 <- function(allD,
 #'   M1-C policy selection.
 #' @return A `page_m1_v2_stage` object containing `library`, `calibrator`, and
 #'   a deterministic artifact identity.
-#' @export
 build_m1_v2_timing <- function(allD, peak_truth, activation_table,
                                k = 8L, grid_step = 0.01, tau_step = 0.1,
                                amplitude_grid = seq(0.08, 0.44, by = 0.02),
@@ -752,7 +743,6 @@ build_m1_v2_timing <- function(allD, peak_truth, activation_table,
 #' @return Output of \code{tune_m1_alignment()} -- a list with per-spec MAE
 #'   scores and the best spec parameters.
 #'
-#' @export
 tune_m1 <- function(allD,
                     m0,
                     m1 = NULL,
@@ -953,7 +943,6 @@ tune_m1 <- function(allD,
 #'
 #' @return A named list with the M2-only fold handoff. The original cache is
 #'   not modified.
-#' @export
 compact_m1_cache_for_m2 <- function(m1_cache,
                                     timing_mode = c("legacy", "fractional")) {
   timing_mode <- match.arg(timing_mode)
@@ -1123,7 +1112,6 @@ compact_m1_cache_for_m2 <- function(m1_cache,
 #'   (ranked by Bernoulli NLL), \code{scores}, \code{cv_results}, and
 #'   \code{grid}. Pass \code{best_spec} to \code{train_m2()}.
 #'
-#' @export
 build_m2 <- function(allD,
                      m0,
                      m1,
@@ -1583,7 +1571,6 @@ build_m2 <- function(allD,
 #'   \code{spec}, \code{training_seasons}, and \code{spec_version}. Pass to
 #'   \code{assemble_kit()}.
 #'
-#' @export
 train_m2 <- function(allD,
                      m0,
                      m1,
@@ -1746,7 +1733,6 @@ train_m2 <- function(allD,
 #'   inputs add \code{season_selection}, \code{stage_artifact_ids}, and
 #'   \code{governance_id}.
 #'
-#' @export
 assemble_kit <- function(m0,
                          m1,
                          m2_model,

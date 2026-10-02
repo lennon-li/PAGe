@@ -3,7 +3,7 @@ test_that("timing-v2 exposes midpoint ignition and explicit peak truth", {
     season = "demo", ignition = c(18L, 19L), peak = c(27L, 28L),
     peak_observed = 27L
   )
-  targets <- PAGe::as_timing_targets_v2(labels)
+  targets <- PAGe:::as_timing_targets_v2(labels)
 
   expect_equal(targets$ignition_target_weekF, 18.5)
   expect_equal(targets$peak_observed_weekF, 27)
@@ -15,11 +15,11 @@ test_that("timing-v2 application propagates decimal ignition coordinates", {
   raw <- data.frame(
     season = "demo", weekF = 1:4, y = 1:4, N = rep(10L, 4)
   )
-  review <- PAGe::review_season_timing_v2(raw)
-  labels <- PAGe::finalize_season_timing_v2(
+  review <- PAGe:::review_season_timing_v2(raw)
+  labels <- PAGe:::finalize_season_timing_v2(
     review, ignition = c(2L, 3L), peak = c(3L, 4L), n_weeks = 4L
   )
-  out <- PAGe::apply_timing_labels_v2(raw, labels, anchor_week = 2.5)
+  out <- PAGe:::apply_timing_labels_v2(raw, labels, anchor_week = 2.5)
 
   expect_equal(unique(out$iWeekF), 2.5)
   expect_type(out$newWeek, "double")
@@ -45,7 +45,7 @@ test_that("fractional M0 training passes midpoint targets and phase inputs", {
     .package = "PAGe"
   )
 
-  fit <- PAGe::fitIgnition_timing_v2(data, labels, verbose = FALSE)
+  fit <- PAGe:::fitIgnition_timing_v2(data, labels, verbose = FALSE)
   expect_equal(seen$truth$ignition_target_weekF, 2.5)
   expect_equal(seen$data$phase, as.integer(seen$data$weekF >= 2.5))
   expect_equal(fit$timing$target, "ignition_target_weekF")
@@ -61,7 +61,7 @@ test_that("standalone fractional M0 supplies the detector classifier input", {
     eps = 0, n_consec = 2L, L = 2L, K_sum = 2L, N_req = 3L,
     w_min = 2L, w_max = 12L
   )
-  out <- PAGe::run_ignition_weekly_timing_v2(data, params, start_week = 2L)
+  out <- PAGe:::run_ignition_weekly_timing_v2(data, params, start_week = 2L)
   expect_true(is.data.frame(out$df))
   expect_true("iWeek_hat_dynamicF" %in% names(out$df))
 })
@@ -122,12 +122,12 @@ test_that("run_pipeline exposes the opt-in timing mode to every stage", {
     },
     .package = "PAGe"
   )
-  PAGe::run_pipeline(
+  PAGe:::run_pipeline(
     workflow_kit(), workflow_surveillance("2025-26", 1:2),
     timing_mode = "fractional", verbose = FALSE
   )
   expect_identical(seen$m0, "fractional")
   expect_identical(seen$m1, "fractional")
   expect_identical(seen$m2, "fractional")
-  expect_identical(eval(formals(PAGe::run_pipeline)$timing_mode)[[1L]], "legacy")
+  expect_identical(eval(formals(PAGe:::run_pipeline)$timing_mode)[[1L]], "legacy")
 })

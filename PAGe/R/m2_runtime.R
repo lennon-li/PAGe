@@ -643,7 +643,6 @@ stage2_predict_series <- function(pp,
 #' @param base_size Base font size passed to \code{ggplot2::theme_minimal()}.
 #'
 #' @return A \code{ggplot} object if \code{facet=TRUE}; otherwise a named list of \code{ggplot} objects.
-#' @export
 plot_stage2 <- function(ppp,
                         ign_week,
                         facet = TRUE,

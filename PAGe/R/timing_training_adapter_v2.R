@@ -8,7 +8,6 @@
 #' @param labels A \code{page_season_timing_v2} or
 #'   \code{page_timing_labels_v2} object, or a list of those objects.
 #' @return A named integer vector mapping season to the earlier ignition week.
-#' @export
 as_manual_labels_v2 <- function(labels) {
   objects <- .timing_v2_as_objects(labels)
   values <- lapply(objects, `[[`, "scoring_ignition_labels")
@@ -35,7 +34,6 @@ as_manual_labels_v2 <- function(labels) {
 #' @param labels A timing-v2 label object or list of objects.
 #' @return A data frame with one row per season and numeric ignition and peak
 #'   targets, normalized pairs, and second-label provenance.
-#' @export
 as_timing_targets_v2 <- function(labels) {
   objects <- .timing_v2_as_objects(labels)
   rows <- lapply(objects, function(x) {

@@ -13,9 +13,11 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
 PAGe evolved in stages, and the evaluation ledgers changed with the model. A single pooled "v1 vs v2 vs v3" score would mix different targets, origins, pathogens, and model-routing decisions. This vignette therefore reports only comparisons supported by matched or explicitly chronological evidence.
 
+This vignette is a historical compatibility diagnostic. `page_version_metrics()` is intentionally internal and is not part of the supported public API.
+
 ```{r metrics}
 library(PAGe)
-metrics <- page_version_metrics()
+metrics <- PAGe:::page_version_metrics()
 metrics[, c(
   "comparison_scope", "component", "horizon", "metric", "unit",
   "n_rows", "n_seasons", "v1_legacy", "v2", "v3",
@@ -80,5 +82,5 @@ PAGe does not currently publish a single universal v1/v2/v3 score. In particular
 The full table, evidence paths, and caveats are available programmatically:
 
 ```{r all-metrics}
-page_version_metrics()
+PAGe:::page_version_metrics()
 ```

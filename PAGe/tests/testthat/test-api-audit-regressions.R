@@ -10,7 +10,7 @@ test_that("subset train_m2 applies exclusions before delegating", {
   data <- data.frame(
     season = c("keep", "drop"), weekF = 1:2, y = 1, N = 10
   )
-  out <- PAGe::train_m2(
+  out <- PAGe:::train_m2(
     data,
     m0 = list(), m1 = list(),
     best_spec = list(family = PAGe:::m2_subset_family()),
@@ -80,50 +80,50 @@ test_that("subset train_m2 applies exclusions before delegating", {
 
 test_that("subset tuning rejects incomplete, non-finite, or non-ok folds", {
   tuning <- .audit_subset_tuning()
-  expect_silent(PAGe::validate_m2_tuning(tuning))
+  expect_silent(PAGe:::validate_m2_tuning(tuning))
 
   incomplete <- tuning
   incomplete$scores <- incomplete$scores[-1L, , drop = FALSE]
-  expect_error(PAGe::validate_m2_tuning(incomplete), "complete")
+  expect_error(PAGe:::validate_m2_tuning(incomplete), "complete")
 
   duplicate <- tuning
   duplicate$scores <- rbind(duplicate$scores, duplicate$scores[1L, ])
-  expect_error(PAGe::validate_m2_tuning(duplicate), "duplicated")
+  expect_error(PAGe:::validate_m2_tuning(duplicate), "duplicated")
 
   nonfinite <- tuning
   nonfinite$scores$bernoulli_nll[1L] <- NA_real_
-  expect_error(PAGe::validate_m2_tuning(nonfinite), "finite")
+  expect_error(PAGe:::validate_m2_tuning(nonfinite), "finite")
 
   failed <- tuning
   failed$scores$status[1L] <- "failed"
-  expect_error(PAGe::validate_m2_tuning(failed), "successful")
+  expect_error(PAGe:::validate_m2_tuning(failed), "successful")
 })
 
 test_that("subset tuning checks selected/grid identity and provenance", {
   tuning <- .audit_subset_tuning()
   bad_switch <- tuning
   bad_switch$selected[[1L]]$k_z <- 3L
-  expect_error(PAGe::validate_m2_tuning(bad_switch), "identity")
+  expect_error(PAGe:::validate_m2_tuning(bad_switch), "identity")
 
   bad_config_switch <- tuning
   bad_config_switch$selected_config$h1$k_z <- 3L
-  expect_error(PAGe::validate_m2_tuning(bad_config_switch), "identity")
+  expect_error(PAGe:::validate_m2_tuning(bad_config_switch), "identity")
 
   bad_config_count <- tuning
   bad_config_count$selected_config$h1$enabled_count <- 1L
-  expect_error(PAGe::validate_m2_tuning(bad_config_count), "identity")
+  expect_error(PAGe:::validate_m2_tuning(bad_config_count), "identity")
 
   bad_selected_id <- tuning
   bad_selected_id$selected[[1L]]$id <- "i0_kz3_ku0_kd0"
-  expect_error(PAGe::validate_m2_tuning(bad_selected_id), "identity")
+  expect_error(PAGe:::validate_m2_tuning(bad_selected_id), "identity")
 
   bad_selected_count <- tuning
   bad_selected_count$selected[[1L]]$enabled_count <- 1L
-  expect_error(PAGe::validate_m2_tuning(bad_selected_count), "identity")
+  expect_error(PAGe:::validate_m2_tuning(bad_selected_count), "identity")
 
   bad_provenance <- tuning
   bad_provenance$declaration_provenance <- NULL
-  expect_error(PAGe::validate_m2_tuning(bad_provenance), "provenance")
+  expect_error(PAGe:::validate_m2_tuning(bad_provenance), "provenance")
 })
 
 test_that("subset tuning permits omitted unselected failed candidates", {
@@ -136,7 +136,7 @@ test_that("subset tuning permits omitted unselected failed candidates", {
   tuning$scores$rows[failed] <- 0
   tuning$scores$trials[failed] <- 0
   tuning$summary <- tuning$summary[tuning$summary$spec_id != failed_id, , drop = FALSE]
-  expect_silent(PAGe::validate_m2_tuning(tuning))
+  expect_silent(PAGe:::validate_m2_tuning(tuning))
 })
 
 test_that("subset freeze rejects non-subset tuning evidence", {
@@ -152,10 +152,10 @@ test_that("subset freeze rejects non-subset tuning evidence", {
     data_id = "data-id"
   )
   expect_error(
-    PAGe::freeze_m2(fit, tuning = structure(list(), class = "page_m2_tuning")),
+    PAGe:::freeze_m2(fit, tuning = structure(list(), class = "page_m2_tuning")),
     "wrong class"
   )
-  expect_silent(PAGe::freeze_m2(fit))
+  expect_silent(PAGe:::freeze_m2(fit))
 })
 
 test_that("subset runtime preserves point forecasts and interval columns", {
@@ -201,24 +201,24 @@ test_that("prepare_page_data validates MMWR week 53 by implied year", {
   make_data <- function(season, week) {
     data.frame(season = season, week = week, y = 1, N = 10)
   }
-  valid <- PAGe::prepare_page_data(
+  valid <- PAGe:::prepare_page_data(
     make_data("2025-26", 53L), "y", "week", "season", "N",
     week_type = "mmwr"
   )
   expect_equal(valid$weekF, 27)
   expect_error(
-    PAGe::prepare_page_data(
+    PAGe:::prepare_page_data(
       make_data("2023-24", 53L), "y", "week", "season", "N",
       week_type = "mmwr"
     ),
     "invalid"
   )
-  start_one <- PAGe::prepare_page_data(
+  start_one <- PAGe:::prepare_page_data(
     make_data("2025-26", 53L), "y", "week", "season", "N",
     week_type = "mmwr", start_week = 1L
   )
   expect_equal(start_one$weekF, 53)
-  rollover <- PAGe::prepare_page_data(
+  rollover <- PAGe:::prepare_page_data(
     make_data("2025-26", 1L), "y", "week", "season", "N",
     week_type = "mmwr", start_week = 27L
   )

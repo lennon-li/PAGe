@@ -32,8 +32,8 @@ registry_test_manifest <- function(kit_path,
                                    role = "promoted_deployment_kit",
                                    spec_id = "spec-promoted",
                                    training_seasons = c("2024-25", "2025-26")) {
-  kit_hash <- PAGe::hash_file_sha256(kit_path)
-  PAGe::new_result_manifest(
+  kit_hash <- PAGe:::hash_file_sha256(kit_path)
+  PAGe:::new_result_manifest(
     artifact_role = role,
     classification = "disclosure_safe",
     code_commit = "ab3aeb6",
@@ -60,12 +60,12 @@ test_that("result manifests round-trip through immutable RDS and JSON files", {
   for (extension in c(".rds", ".json")) {
     path <- tempfile(fileext = extension)
     expect_identical(
-      PAGe::write_result_manifest(manifest, path),
+      PAGe:::write_result_manifest(manifest, path),
       normalizePath(path, mustWork = TRUE)
     )
-    restored <- PAGe::read_result_manifest(path)
+    restored <- PAGe:::read_result_manifest(path)
     expect_s3_class(restored, "page_result_manifest")
-    expect_true(PAGe::validate_result_manifest(restored))
+    expect_true(PAGe:::validate_result_manifest(restored))
     expect_identical(restored$provenance$spec_id, "spec-promoted")
     expect_identical(
       restored$provenance$training_seasons,
@@ -80,19 +80,19 @@ test_that("manifest writes reject collisions and unsupported formats", {
   manifest <- registry_test_manifest(kit_path)
   path <- tempfile(fileext = ".rds")
 
-  PAGe::write_result_manifest(manifest, path)
-  original_hash <- PAGe::hash_file_sha256(path)
+  PAGe:::write_result_manifest(manifest, path)
+  original_hash <- PAGe:::hash_file_sha256(path)
   expect_error(
-    PAGe::write_result_manifest(manifest, path),
+    PAGe:::write_result_manifest(manifest, path),
     "already exists"
   )
-  expect_identical(PAGe::hash_file_sha256(path), original_hash)
+  expect_identical(PAGe:::hash_file_sha256(path), original_hash)
   expect_error(
-    PAGe::write_result_manifest(manifest, tempfile(fileext = ".txt")),
+    PAGe:::write_result_manifest(manifest, tempfile(fileext = ".txt")),
     "extension"
   )
   expect_error(
-    PAGe::read_result_manifest(tempfile(fileext = ".txt")),
+    PAGe:::read_result_manifest(tempfile(fileext = ".txt")),
     "extension"
   )
 })
@@ -100,11 +100,11 @@ test_that("manifest writes reject collisions and unsupported formats", {
 test_that("manifest readers fail closed on malformed or invalid files", {
   malformed <- tempfile(fileext = ".json")
   writeLines("{not-json", malformed)
-  expect_error(PAGe::read_result_manifest(malformed), "Could not read")
+  expect_error(PAGe:::read_result_manifest(malformed), "Could not read")
 
   invalid <- tempfile(fileext = ".rds")
   saveRDS(list(schema = "not-a-manifest"), invalid)
-  expect_error(PAGe::read_result_manifest(invalid), "Invalid result manifest")
+  expect_error(PAGe:::read_result_manifest(invalid), "Invalid result manifest")
 })
 
 test_that("promoted kits load from full-kit and training-result artifacts", {
@@ -118,12 +118,12 @@ test_that("promoted kits load from full-kit and training-result artifacts", {
     kit_path <- tempfile(fileext = ".rds")
     manifest_path <- tempfile(fileext = ".json")
     saveRDS(artifact, kit_path)
-    PAGe::write_result_manifest(
+    PAGe:::write_result_manifest(
       registry_test_manifest(kit_path),
       manifest_path
     )
 
-    loaded <- PAGe::load_promoted_kit(kit_path, manifest_path)
+    loaded <- PAGe:::load_promoted_kit(kit_path, manifest_path)
     expect_identical(
       loaded$m2_production$best_spec_id,
       "spec-promoted"
@@ -139,23 +139,23 @@ test_that("promoted-kit loading rejects wrong roles and tampering", {
   kit_path <- tempfile(fileext = ".rds")
   manifest_path <- tempfile(fileext = ".rds")
   saveRDS(registry_test_kit(), kit_path)
-  PAGe::write_result_manifest(
+  PAGe:::write_result_manifest(
     registry_test_manifest(kit_path, role = "candidate_deployment_kit"),
     manifest_path
   )
   expect_error(
-    PAGe::load_promoted_kit(kit_path, manifest_path),
+    PAGe:::load_promoted_kit(kit_path, manifest_path),
     "promoted_deployment_kit"
   )
 
-  PAGe::write_result_manifest(
+  PAGe:::write_result_manifest(
     registry_test_manifest(kit_path),
     manifest_path,
     overwrite = TRUE
   )
   writeBin(charToRaw("tamper"), kit_path)
   expect_error(
-    PAGe::load_promoted_kit(kit_path, manifest_path),
+    PAGe:::load_promoted_kit(kit_path, manifest_path),
     "SHA-256"
   )
 })
@@ -171,7 +171,7 @@ test_that("promoted-kit loading explicitly rejects private manifests", {
   )
 
   expect_error(
-    PAGe::load_promoted_kit(kit_path, tempfile(fileext = ".rds")),
+    PAGe:::load_promoted_kit(kit_path, tempfile(fileext = ".rds")),
     "disclosure_safe"
   )
 })
@@ -181,22 +181,22 @@ test_that("promoted-kit loading enforces manifest and kit identity", {
   manifest_path <- tempfile(fileext = ".rds")
   saveRDS(registry_test_kit(), kit_path)
 
-  PAGe::write_result_manifest(
+  PAGe:::write_result_manifest(
     registry_test_manifest(kit_path, spec_id = "wrong-spec"),
     manifest_path
   )
   expect_error(
-    PAGe::load_promoted_kit(kit_path, manifest_path),
+    PAGe:::load_promoted_kit(kit_path, manifest_path),
     "spec_id"
   )
 
-  PAGe::write_result_manifest(
+  PAGe:::write_result_manifest(
     registry_test_manifest(kit_path, training_seasons = "2025-26"),
     manifest_path,
     overwrite = TRUE
   )
   expect_error(
-    PAGe::load_promoted_kit(kit_path, manifest_path),
+    PAGe:::load_promoted_kit(kit_path, manifest_path),
     "training_seasons"
   )
 })
@@ -207,13 +207,13 @@ test_that("promoted-kit loading rejects a rehashed mismatched M2 spec", {
   kit <- registry_test_kit()
   kit$best_spec$bias_alpha <- 1
   saveRDS(kit, kit_path)
-  PAGe::write_result_manifest(
+  PAGe:::write_result_manifest(
     registry_test_manifest(kit_path),
     manifest_path
   )
 
   expect_error(
-    PAGe::load_promoted_kit(kit_path, manifest_path),
+    PAGe:::load_promoted_kit(kit_path, manifest_path),
     "best_spec.*m2_production\\$spec"
   )
 })
@@ -228,20 +228,20 @@ test_that("promoted-kit loading rejects missing hashes and invalid kits", {
   )
   saveRDS(manifest, manifest_path)
   expect_error(
-    PAGe::load_promoted_kit(kit_path, manifest_path),
+    PAGe:::load_promoted_kit(kit_path, manifest_path),
     "promoted_kit"
   )
 
   invalid_kit <- registry_test_kit()
   invalid_kit$m0_params <- NULL
   saveRDS(invalid_kit, kit_path)
-  PAGe::write_result_manifest(
+  PAGe:::write_result_manifest(
     registry_test_manifest(kit_path),
     manifest_path,
     overwrite = TRUE
   )
   expect_error(
-    PAGe::load_promoted_kit(kit_path, manifest_path),
+    PAGe:::load_promoted_kit(kit_path, manifest_path),
     "m0_params"
   )
 })

@@ -68,7 +68,6 @@
 #'   \code{M1_PARAMS}, \code{m0_params}, \code{m2_production},
 #'   \code{best_spec}, \code{flag_args}, \code{manual_labels},
 #'   \code{hist_data}, \code{m1_train_preds}, and \code{template_df}.
-#' @export
 load_prospective_kit <- function(data_dir,
                                  ref_file = "ref_production.rds",
                                  m2_file = "m2_production.rds",
@@ -262,7 +261,6 @@ load_prospective_kit <- function(data_dir,
 #'     \item{overridden}{Logical; \code{TRUE} if the manual override was applied.}
 #'   }
 #'
-#' @export
 run_m0_detection <- function(kit,
                              current_data,
                              manual_ign_week = NA_integer_,
@@ -333,7 +331,6 @@ run_m0_detection <- function(kit,
 #' @param verbose Emit progress messages.
 #' @return A list with `status`, sequential `timing_df`, `m2_handoff`, and the
 #'   carried `m0_result`.
-#' @export
 run_m1_v2_timing <- function(kit, current_data, m0_result, verbose = TRUE) {
   stage <- kit$m1_v2 %||% NULL
   if (is.null(stage)) {
@@ -617,7 +614,6 @@ run_m1_v2_timing <- function(kit, current_data, m0_result, verbose = TRUE) {
 #'     \item{m0_result}{The M0 result passed in, carried forward for M2.}
 #'   }
 #'
-#' @export
 run_m1_alignment <- function(kit,
                              current_data,
                              m0_result,
@@ -783,7 +779,6 @@ run_m1_alignment <- function(kit,
 #'   \code{m1_p}, \code{m1_lo}, \code{m1_hi},
 #'   \code{m2_p}, \code{m2_lo}, \code{m2_hi}.
 #'
-#' @export
 run_m2_forecast <- function(kit,
                             current_data,
                             m1_result,
@@ -1258,7 +1253,6 @@ run_m2_forecast <- function(kit,
 #'   \code{pred_df}, \code{last_obs}, and \code{ign_out}. The plot fields are
 #'   consumed directly by \code{plot_forecast()}.
 #'
-#' @export
 run_prospective_pipeline <- function(kit,
                                      current_data,
                                      walk_start = 5L,
@@ -1389,19 +1383,15 @@ run_prospective_pipeline <- function(kit,
 # ============================================================
 
 #' @rdname run_m0_detection
-#' @export
 run_m0 <- function(kit, current_data, ...) run_m0_detection(kit, current_data, ...)
 
 #' @rdname run_m1_alignment
-#' @export
 run_m1 <- function(kit, current_data, m0_result, ...) run_m1_alignment(kit, current_data, m0_result, ...)
 
 #' @rdname run_m2_forecast
-#' @export
 run_m2 <- function(kit, current_data, m1_result, ...) run_m2_forecast(kit, current_data, m1_result, ...)
 
 #' @rdname run_prospective_pipeline
-#' @export
 run_pipeline <- function(kit, current_data,
                          timing_mode = c("legacy", "fractional"), ...) {
   run_prospective_pipeline(

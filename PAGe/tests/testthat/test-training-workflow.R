@@ -35,7 +35,7 @@ test_that("page_label_ignitions fails closed on incomplete or invalid reproducib
   expect_error(page_label_ignitions(d, annotator = "test", interactive = FALSE), "Supply `ignition_weeks`")
 })
 
-test_that("page_train_workflow forwards user labels and never falls back to defaults", {
+test_that("page_train forwards user labels and never falls back to defaults", {
   d <- rbind(
     data.frame(season = "2022-23", weekF = 10:14, y = c(1, 2, 4, 9, 15), N = 1000),
     data.frame(season = "2023-24", weekF = 10:14, y = c(1, 3, 5, 8, 13), N = 1000)
@@ -50,7 +50,7 @@ test_that("page_train_workflow forwards user labels and never falls back to defa
     },
     .package = "PAGe"
   )
-  x <- page_train_workflow(
+  x <- page_train(
     d,
     ignition_weeks = c("2022-23" = 12.75, "2023-24" = 13.2),
     annotator = "test",
@@ -65,7 +65,7 @@ test_that("page_train_workflow forwards user labels and never falls back to defa
   expect_identical(seen$mode, "refresh")
 })
 
-test_that("page_train_workflow requires labels for every trainable season", {
+test_that("page_train requires labels for every trainable season", {
   d <- rbind(
     data.frame(season = "2022-23", weekF = 10:14, y = 1:5, N = 1000),
     data.frame(season = "2023-24", weekF = 10:14, y = 2:6, N = 1000)
@@ -79,7 +79,7 @@ test_that("page_train_workflow requires labels for every trainable season", {
     interactive = FALSE
   )
   expect_error(
-    page_train_workflow(d, labels = ann, prospective_holdout = NULL, n_cores = 1, verbose = FALSE),
+    page_train(d, labels = ann, prospective_holdout = NULL, n_cores = 1, verbose = FALSE),
     "Missing: 2023-24"
   )
 })
@@ -106,7 +106,7 @@ test_that("unreleased prospective holdout does not require or inject its ignitio
     },
     .package = "PAGe"
   )
-  x <- page_train_workflow(
+  x <- page_train(
     d,
     labels = labels,
     prospective_holdout = "2023-24",
@@ -143,7 +143,7 @@ test_that("supplied holdout and excluded labels are stripped before training", {
     },
     .package = "PAGe"
   )
-  page_train_workflow(
+  page_train(
     d,
     labels = labels,
     prospective_holdout = "2023-24",
@@ -178,7 +178,7 @@ test_that("automatic labeling excludes unreleased holdout and excluded seasons",
     },
     .package = "PAGe"
   )
-  x <- page_train_workflow(
+  x <- page_train(
     d,
     prospective_holdout = "2023-24",
     exclude = "2021-22",

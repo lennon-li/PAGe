@@ -14,7 +14,7 @@ test_that("page_version_metrics exposes only scoped verified comparisons", {
 })
 
 test_that("v3 model accessor exposes public release metadata", {
-  x <- page_v3_models()
+  x <- page_models()
   expect_identical(x$release_id, "5472d08992b5a9da40a9419b75c7427847ff7b1999070041d5e38b0a71da853b")
   expect_s3_class(x$manifest, "data.frame")
   expect_identical(nrow(x$manifest), 5L)

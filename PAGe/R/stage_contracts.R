@@ -663,7 +663,6 @@ season_selection.default <- function(x, ...) {
 #' @param ... Reserved for future use.
 #'
 #' @return A \code{page_m0_fit} list in \code{draft} state.
-#' @export
 fit_m0 <- function(data, selection, config, ...) {
   .validate_stage_config(config)
   training_data <- .selected_training_data(data, selection)
@@ -693,7 +692,6 @@ fit_m0 <- function(data, selection, config, ...) {
 #' @param ... Reserved.
 #'
 #' @return The \code{page_m0_fit} in \code{frozen} state.
-#' @export
 freeze_m0 <- function(fit, tuning = NULL, ...) {
   if (inherits(tuning, "page_m0_tuning") && !is.null(tuning$selection)) {
     tuning <- validate_m0_tuning(
@@ -826,7 +824,6 @@ freeze_m0 <- function(fit, tuning = NULL, ...) {
 #'
 #' @return A data frame with tested range, selected value, boundary, decision,
 #'   and reason for every varying numeric axis.
-#' @export
 inspect_tuning_boundaries <- function(x,
                                       stage = c("M0", "M1", "M2"),
                                       grid = NULL,
@@ -1060,7 +1057,6 @@ inspect_tuning_boundaries <- function(x,
 #'
 #' @return A list containing `selected`, `selected_spec_id`, the best and
 #'   selected scores, and the backoff gain.
-#' @export
 select_m1_candidate <- function(x, min_gain = 0.05, prefer_simpler = TRUE,
                                 hard_caps = NULL) {
   if (!inherits(x, "page_m1_tuning")) {
@@ -1193,7 +1189,6 @@ select_m1_candidate <- function(x, min_gain = 0.05, prefer_simpler = TRUE,
 #' governed entry points use this object when no override is supplied.
 #'
 #' @return A named list of normalized lower/upper bounds.
-#' @export
 default_m1_hard_caps <- function() {
   list(k_ref = c(lower = 10L, upper = 50L))
 }
@@ -1481,7 +1476,6 @@ default_m1_hard_caps <- function() {
 #'
 #' @return The original grid with new boundary rows appended. New rows carry
 #'   `provenance = "boundary:<parameter>"` when that column is available.
-#' @export
 expand_tuning_grid <- function(x,
                                stage = c("M0", "M1", "M2"),
                                grid = NULL,
@@ -1701,7 +1695,6 @@ expand_tuning_grid <- function(x,
 #' @param ... Reserved.
 #'
 #' @return \code{x}, invisibly, if valid.
-#' @export
 validate_m0_tuning <- function(x, grid = NULL, check_boundaries = FALSE, ...) {
   if (!inherits(x, "page_m0_tuning")) {
     stop("`x` must be a `page_m0_tuning` object.", call. = FALSE)
@@ -1761,7 +1754,6 @@ validate_m0_tuning <- function(x, grid = NULL, check_boundaries = FALSE, ...) {
 #' @param ... Reserved.
 #'
 #' @return A \code{page_m1_fit} list in \code{draft} state.
-#' @export
 fit_m1 <- function(data, selection, m0, config, ...) {
   .require_frozen_stage(m0, "m0")
   .check_selection_match(selection, m0$selection)
@@ -1794,7 +1786,6 @@ fit_m1 <- function(data, selection, m0, config, ...) {
 #' @param ... Reserved.
 #'
 #' @return The \code{page_m1_fit} in \code{frozen} state.
-#' @export
 freeze_m1 <- function(fit, tuning = NULL, ...) {
   if (inherits(tuning, "page_m1_tuning") && !is.null(tuning$selection)) {
     # Preserve an explicit structural k_ref cap through the final freeze
@@ -1827,7 +1818,6 @@ freeze_m1 <- function(fit, tuning = NULL, ...) {
 #' @param ... Reserved.
 #'
 #' @return \code{x}, invisibly, if valid.
-#' @export
 validate_m1_tuning <- function(x,
                                check_boundaries = FALSE,
                                hard_caps = NULL,
@@ -1915,7 +1905,6 @@ validate_m1_tuning <- function(x,
 #' @param ... Additional arguments passed to \code{build_m2()}.
 #'
 #' @return A governed \code{page_m2_tuning} result.
-#' @export
 tune_m2 <- function(data, selection, m0, m1, grid,
                     family = c("offset_subset_v1", "legacy"),
                     allow_legacy = FALSE, ...) {
@@ -1996,7 +1985,6 @@ tune_m2 <- function(data, selection, m0, m1, grid,
 #' @param ... Reserved.
 #'
 #' @return A \code{page_m2_fit} list in \code{draft} state.
-#' @export
 fit_m2 <- function(data, selection, m0, m1, config, family = NULL,
                    allow_legacy = FALSE, ...) {
   family <- family %||% config$family %||% m2_subset_family()
@@ -2074,7 +2062,6 @@ fit_m2 <- function(data, selection, m0, m1, config, family = NULL,
 #' @param ... Reserved.
 #'
 #' @return The \code{page_m2_fit} in \code{frozen} state.
-#' @export
 freeze_m2 <- function(fit, tuning = NULL, ...) {
   is_subset_fit <- identical(
     fit$family %||% fit$config$family,
@@ -2134,7 +2121,6 @@ freeze_m2 <- function(fit, tuning = NULL, ...) {
 #' @param ... Reserved.
 #'
 #' @return \code{x}, invisibly, if valid.
-#' @export
 validate_m2_tuning <- function(x,
                                check_boundaries = FALSE,
                                min_nll_gain = NULL,

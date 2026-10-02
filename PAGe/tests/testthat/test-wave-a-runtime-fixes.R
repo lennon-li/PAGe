@@ -1,5 +1,5 @@
 test_that("run_m1_alignment returns an empty result for an exhausted walk", {
-  out <- PAGe::run_m1_alignment(
+  out <- PAGe:::run_m1_alignment(
     kit = list(),
     current_data = data.frame(weekF = 1:4),
     m0_result = list(iWeek_locked = 10L),
@@ -25,7 +25,7 @@ test_that("m1_walkforward_predictions returns empty output when the walk starts 
 })
 
 test_that("train_m2 restores its caller future plan", {
-  body_text <- paste(deparse(body(PAGe::train_m2)), collapse = " ")
+  body_text <- paste(deparse(body(PAGe:::train_m2)), collapse = " ")
   expect_match(body_text, "old_future_plan")
   expect_match(body_text, "on\\.exit\\(future::plan\\(old_future_plan\\), add = TRUE\\)")
   expect_false(grepl("future::plan\\(future::sequential\\)", body_text))

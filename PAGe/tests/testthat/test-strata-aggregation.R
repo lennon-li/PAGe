@@ -1,6 +1,6 @@
 test_that("shared-denominator correlation matches multinomial identity", {
   p <- c(A = 0.05, B = 0.02)
-  R <- page_shared_denominator_correlation(p)
+  R <- shared_denominator_correlation(p)
   expected <- -sqrt((p[["A"]] * p[["B"]]) /
                       ((1 - p[["A"]]) * (1 - p[["B"]])))
   expect_equal(R["A", "B"], expected, tolerance = 1e-14)
@@ -11,10 +11,10 @@ test_that("shared-denominator correlation matches multinomial identity", {
 test_that("shared-denominator analytic aggregation reproduces correlated sum", {
   p <- c(A = 0.05, B = 0.02)
   se <- c(A = 0.004, B = 0.002)
-  R <- page_shared_denominator_correlation(p)
+  R <- shared_denominator_correlation(p)
   expected_se <- sqrt(se[[1]]^2 + se[[2]]^2 + 2 * R[1, 2] * se[[1]] * se[[2]])
 
-  z <- page_aggregate_strata(
+  z <- aggregate_strata(
     estimate = p,
     se = se,
     method = "sum",
@@ -30,7 +30,7 @@ test_that("shared-denominator analytic aggregation reproduces correlated sum", {
 
 test_that("asymmetric component intervals remain asymmetric after aggregation", {
   p <- c(A = 0.05, B = 0.02)
-  z <- page_aggregate_strata(
+  z <- aggregate_strata(
     estimate = p,
     lower = c(A = 0.043, B = 0.017),
     upper = c(A = 0.061, B = 0.026),
@@ -48,7 +48,7 @@ test_that("independent age strata use normalized denominator weights", {
   n <- c(`0-17` = 100, `18-64` = 300, `65+` = 100)
   se <- c(`0-17` = 0.01, `18-64` = 0.02, `65+` = 0.03)
 
-  z <- page_aggregate_strata(
+  z <- aggregate_strata(
     estimate = p,
     se = se,
     method = "weighted_mean",
@@ -73,11 +73,11 @@ test_that("explicit correlation and covariance paths are equivalent", {
   ), 3, 3, byrow = TRUE, dimnames = list(names(p), names(p)))
   Sigma <- diag(se) %*% R %*% diag(se)
 
-  a <- page_aggregate_strata(
+  a <- aggregate_strata(
     p, se = se, method = "weighted_mean", weights = c(1, 2, 1),
     dependence = "correlation", correlation = R
   )
-  b <- page_aggregate_strata(
+  b <- aggregate_strata(
     p, method = "weighted_mean", weights = c(1, 2, 1),
     dependence = "covariance", covariance = Sigma
   )
@@ -95,7 +95,7 @@ test_that("draw aggregation preserves joint dependence", {
   z2 <- 0.6 * z1 + sqrt(1 - 0.6^2) * rnorm(n)
   draws <- cbind(A = 0.05 + 0.005 * z1, B = 0.02 + 0.003 * z2)
 
-  out <- page_aggregate_strata_draws(
+  out <- aggregate_strata_draws(
     draws,
     method = "sum",
     bounds = c(0, 1),
@@ -119,7 +119,7 @@ test_that("draw aggregation composes across age and virus axes", {
   # Virus first, then age.
   young_ab <- rowSums(x[, c("young_A", "young_B")])
   old_ab <- rowSums(x[, c("old_A", "old_B")])
-  virus_then_age <- page_aggregate_strata_draws(
+  virus_then_age <- aggregate_strata_draws(
     cbind(young = young_ab, old = old_ab),
     method = "weighted_mean", weights = w, bounds = c(0, 1), keep_draws = TRUE
   )
@@ -127,7 +127,7 @@ test_that("draw aggregation composes across age and virus axes", {
   # Age first, then virus.
   all_a <- w[["young"]] * x[, "young_A"] + w[["old"]] * x[, "old_A"]
   all_b <- w[["young"]] * x[, "young_B"] + w[["old"]] * x[, "old_B"]
-  age_then_virus <- page_aggregate_strata_draws(
+  age_then_virus <- aggregate_strata_draws(
     cbind(A = all_a, B = all_b),
     method = "sum", bounds = c(0, 1), keep_draws = TRUE
   )
@@ -137,7 +137,7 @@ test_that("draw aggregation composes across age and virus axes", {
 
 test_that("shared denominator rejects impossible multinomial partition", {
   expect_error(
-    page_shared_denominator_correlation(c(A = 0.8, B = 0.5)),
+    shared_denominator_correlation(c(A = 0.8, B = 0.5)),
     "sum\\(p\\) <= 1"
   )
 })

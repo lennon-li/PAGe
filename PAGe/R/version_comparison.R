@@ -8,7 +8,6 @@
 #'
 #' @return A data frame containing comparison scope, component, horizon, metric,
 #'   v1/legacy, v2, v3 values, relative gains, evidence path, and caveat.
-#' @export
 page_version_metrics <- function() {
   path <- system.file("extdata", "page-version-comparison.csv", package = "PAGe")
   if (!nzchar(path) || !file.exists(path)) {

@@ -69,7 +69,7 @@ n_weeks_in_start_year <- function(start_year) {
     as.Date(paste0(as.integer(start_year), "-12-31"))
   )$MMWRweek == 53L)
 }
-raw <- PAGe::load_flu_hist(hist_path)
+raw <- PAGe:::load_flu_hist(hist_path)
 calendar <- PAGe::page_season_calendar(
   dates = as.Date(raw$week_start_date), start_week = 27L
 )
@@ -92,7 +92,7 @@ if ("2025-26" %in% m0$selection$training_seasons) stop("Holdout present in train
 
 write_status("tuning", sprintf("specs=%d; training_seasons=%d", nrow(grid), length(m0$selection$training_seasons)))
 t0 <- Sys.time()
-result <- PAGe::tune_m1(
+result <- PAGe:::tune_m1(
   allD,
   m0 = m0,
   m1 = list(m1_params = PAGe:::.default_m1_params()),

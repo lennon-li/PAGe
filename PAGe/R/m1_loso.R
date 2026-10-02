@@ -1123,7 +1123,6 @@ loso_walkforward_weights <- function(allD,
 #' )
 #' res$best
 #' }
-#' @export
 tune_m1_alignment <- function(allD,
                               params,
                               grid,

@@ -140,7 +140,6 @@
 #' @param min_chronological_train_seasons Minimum prior seasons for chronological scoring.
 #' @param off_tolerance Absolute mean-NLL tolerance favoring the zero/off candidate.
 #' @return A `page_m2_a_ntrend_shadow` artifact with LOSO and chronological scores.
-#' @export
 fit_m2_a_ntrend_shadow <- function(weekly_data, windows = 0:4, min_origin_week = 13L,
                                    min_chronological_train_seasons = 3L,
                                    off_tolerance = 1e-4) {
@@ -261,7 +260,6 @@ fit_m2_a_ntrend_shadow <- function(weekly_data, windows = 0:4, min_origin_week =
 #' @param origin_week Forecast origin.
 #' @param horizons Integer horizons, default 1 and 2.
 #' @return Data frame of shadow predictions.
-#' @export
 predict_m2_a_ntrend_shadow <- function(artifact, weekly_data, origin_week, horizons = c(1L, 2L)) {
   if (!inherits(artifact, "page_m2_a_ntrend_shadow") || is.null(artifact$full_fit)) stop("Invalid M2-A N-trend shadow artifact.", call. = FALSE)
   d <- as.data.frame(weekly_data)

@@ -21,7 +21,7 @@ No repository-level `source()` calls or external model directories are required 
 
 ```{r models, eval=FALSE}
 library(PAGe)
-models <- page_v3_models()
+models <- page_models()
 attr(models, "release_id")
 attr(models, "manifest")
 ```
@@ -31,7 +31,7 @@ Every packaged runtime file is SHA-256 verified before use. The manifest also re
 ## Run from an OLIS snapshot
 
 ```{r olis, eval=FALSE}
-result <- page_v3_forecast(
+result <- page_forecast(
   "path/to/hist_olis.RData",
   season = "2026-27"
 )
@@ -56,7 +56,7 @@ The package also accepts a data frame with one aligned row per week and these re
 `season`, `weekF`, `y_A`, `N_A`, `p_A`, `y_B`, `N_B`, `p_B`.
 
 ```{r panel, eval=FALSE}
-result <- page_v3_forecast(
+result <- page_forecast(
   typed_ab_panel,
   season = "2026-27",
   origin_weekF = 12
@@ -81,7 +81,7 @@ Influenza B:
 - B+2 uses posterior-C2 only when causal B timing is available;
 - otherwise B+2 is exact B1 fallback.
 
-Before weekF12, `page_v3_forecast()` returns a valid object with `issued = FALSE` and does not silently turn early diagnostics into issued forecasts.
+Before weekF12, `page_forecast()` returns a valid object with `issued = FALSE` and does not silently turn early diagnostics into issued forecasts.
 
 ## Weekly operation
 
@@ -90,7 +90,7 @@ A minimal weekly R job is simply:
 ```{r weekly, eval=FALSE}
 library(PAGe)
 
-result <- page_v3_forecast(
+result <- page_forecast(
   "/secure/path/hist_olis.RData",
   season = "2026-27"
 )

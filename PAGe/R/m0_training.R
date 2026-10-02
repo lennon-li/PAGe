@@ -410,7 +410,6 @@ fitIgnition <- function(
 #' @param use_plotly If TRUE returns \code{plotly::ggplotly(p)}. Default TRUE.
 #' @param ncol Optional integer; number of columns in \code{facet_wrap()}.
 #' @return A ggplot object, or plotly object if \code{use_plotly=TRUE}.
-#' @export
 plot_cls_models_by_season <- function(ign_fit,
                                       score_cols = c(
                                         base  = "p_cls_p",
@@ -584,7 +583,6 @@ detect_ignition_from_tuning <- function(tuned,
 #' det_all <- detect_ignition_from_tuning(tuned, alignedD)
 #' plot_season_detection_table(det_all, "2019-20")
 #' }
-#' @export
 plot_season_detection_table <- function(det_all, season) {
   stopifnot(is.list(det_all), !is.null(det_all$data))
 
@@ -1718,7 +1716,6 @@ loso_M0v2 <- function(dat,
 #' @param use_plotly If TRUE return plotly::ggplotly(p). Default TRUE.
 #'
 #' @return ggplot or plotly object.
-#' @export
 plot_ignition_detect_vs_truth <- function(det_out,
                                           x_col = "weekF",
                                           y_cols = c("p", "p_sm"),

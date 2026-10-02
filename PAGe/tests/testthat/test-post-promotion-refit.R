@@ -55,9 +55,9 @@ refit_bundle <- function(data_path, candidate_path, report = refit_passing_repor
   )
   withr::defer(unlink(incumbent_path), envir = parent.frame())
   hashes <- c(
-    authorized_data = PAGe::hash_file_sha256(data_path),
-    candidate = PAGe::hash_file_sha256(candidate_path),
-    incumbent = PAGe::hash_file_sha256(incumbent_path)
+    authorized_data = PAGe:::hash_file_sha256(data_path),
+    candidate = PAGe:::hash_file_sha256(candidate_path),
+    incumbent = PAGe:::hash_file_sha256(incumbent_path)
   )
   list(
     schema = "page_holdout_decision_bundle", schema_version = 1L,
@@ -70,9 +70,9 @@ refit_bundle <- function(data_path, candidate_path, report = refit_passing_repor
 refit_promotion_manifest <- function(bundle, bundle_path) {
   hashes <- c(
     bundle$source_artifact_hashes,
-    promotion_bundle = PAGe::hash_file_sha256(bundle_path)
+    promotion_bundle = PAGe:::hash_file_sha256(bundle_path)
   )
-  PAGe::new_result_manifest(
+  PAGe:::new_result_manifest(
     artifact_role = "holdout_acceptance_decision", classification = "disclosure_safe",
     code_commit = "ab3aeb6", run_timestamp = "2026-07-28T12:00:00Z",
     r_version = "4.4.1", package_versions = c(PAGe = "0.2.0"),
@@ -274,10 +274,10 @@ test_that("successful fixed refresh binds the saved artifact hash in its manifes
     code_commit = "ab3aeb6"
   )
   expect_true(file.exists(result$artifact_path))
-  expect_true(PAGe::validate_result_manifest(result$manifest))
+  expect_true(PAGe:::validate_result_manifest(result$manifest))
   expect_identical(
     result$manifest$provenance$source_artifact_hashes[["refit_artifact"]],
-    PAGe::hash_file_sha256(result$artifact_path)
+    PAGe:::hash_file_sha256(result$artifact_path)
   )
   expect_identical(result$manifest$provenance$row_counts[["training"]], 1L)
   expect_identical(result$manifest$provenance$evaluation_seasons, "none")
@@ -302,7 +302,7 @@ test_that("an existing immutable output prevents the refresh from starting", {
   artifact_path <- file.path(
     output_dir,
     page_refit_filename(
-      "locked-v16", PAGe::hash_file_sha256(data_path), PAGe::hash_file_sha256(bundle_path)
+      "locked-v16", PAGe:::hash_file_sha256(data_path), PAGe:::hash_file_sha256(bundle_path)
     )
   )
   file.create(artifact_path)

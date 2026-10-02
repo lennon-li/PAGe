@@ -20,7 +20,6 @@
 #'
 #' @return A `page_boundary_action_plan` containing raw/final selections,
 #'   reports, unresolved axes, and `next_grid` (or `NULL` when settled).
-#' @export
 boundary_action_plan <- function(
   tuning,
   stage = c("M0", "M1", "M2"),

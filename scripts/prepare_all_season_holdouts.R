@@ -71,8 +71,8 @@ suppressPackageStartupMessages(library(PAGe))
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(output_dir, "folds"), showWarnings = FALSE)
 
-raw <- PAGe::load_flu_hist(input_path)
-prepared <- PAGe::prepare_page_data(
+raw <- PAGe:::load_flu_hist(input_path)
+prepared <- PAGe:::prepare_page_data(
   raw,
   outcome_col = "pos_flua",
   week_col = "week",
@@ -101,7 +101,7 @@ if (!length(holdouts) || any(!holdouts %in% eligible)) {
   )
 }
 
-manual_ignition <- PAGe::page_manual_ignition_labels()
+manual_ignition <- PAGe:::page_manual_ignition_labels()
 # Labels are generated for every eligible season, not only the requested
 # holdouts, so a `--holdouts` subset still yields complete training labels.
 missing_ignition <- setdiff(eligible, names(manual_ignition))
@@ -120,7 +120,7 @@ make_pair <- function(value, n_weeks) {
 timing_labels <- setNames(vector("list", length(eligible)), eligible)
 season_rows <- lapply(all_seasons, function(season) {
   season_data <- prepared[as.character(prepared$season) == season, , drop = FALSE]
-  review <- PAGe::review_season_timing_v2(
+  review <- PAGe:::review_season_timing_v2(
     prepared,
     season = season,
     smooth_window = smooth_window,
@@ -136,7 +136,7 @@ season_rows <- lapply(all_seasons, function(season) {
     )
   }
   if (season %in% eligible) {
-    timing_labels[[season]] <- PAGe::finalize_season_timing_v2(
+    timing_labels[[season]] <- PAGe:::finalize_season_timing_v2(
       review,
       ignition = make_pair(manual_ignition[[season]], n_weeks),
       peak = make_pair(peak, n_weeks),
@@ -262,7 +262,7 @@ readme <- c(
   paste0("- Prepared rows: `", nrow(prepared), "`"),
   "",
   "Each `folds/<holdout>/` directory contains `training_data.rds`, `holdout_data.rds`, `timing_labels_training.rds`, and `training_seasons.txt`.",
-  "The fold label file excludes the corresponding holdout and is ready for `PAGe::nested_season_evaluation()`.",
+  "The fold label file excludes the corresponding holdout and is ready for `PAGe:::nested_season_evaluation()`.",
   "",
   "Reproduce with:",
   "",
