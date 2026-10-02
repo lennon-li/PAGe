@@ -75,7 +75,7 @@ shadow_fixture <- function(action = "keep_m1", all_off = FALSE,
     assemble_kit = function(m0, m1, m2, best_spec_id) {
       list(m0 = m0, m1 = m1, m2 = m2, best_spec_id = best_spec_id)
     },
-    page_validate_kit = function(x, ...) {
+    validate_page_kit = function(x, ...) {
       if (x$m2$is_shadow && identical(failure, "validate")) stop("forced validation failure")
       invisible(x)
     },

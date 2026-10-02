@@ -119,7 +119,7 @@ test_that("train_outer_fold skips M0/M1/top-level-M2 on a second call into the s
     fit_m2 = function(...) list(stage = "m2"),
     freeze_m2 = function(x, ...) x,
     assemble_kit = function(...) list(ok = TRUE),
-    page_validate_kit = function(x, ...) invisible(x)
+    validate_page_kit = function(x, ...) invisible(x)
   )
 
   labels <- lapply(c("A", "B", "C"), function(season) {

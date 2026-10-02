@@ -207,7 +207,7 @@ test_that("outer training isolates labels and forwards primary weighting", {
     fit_m2 = function(...) list(stage = "m2"),
     freeze_m2 = function(x, ...) x,
     assemble_kit = function(...) list(ok = TRUE),
-    page_validate_kit = function(x, ...) invisible(x)
+    validate_page_kit = function(x, ...) invisible(x)
   )
 
   labels <- lapply(c("A", "B", "C"), function(season) {
@@ -373,7 +373,7 @@ test_that("train_outer_fold forwards every control override and derives the fall
     },
     freeze_m2 = function(x, ...) x,
     assemble_kit = function(...) list(ok = TRUE),
-    page_validate_kit = function(x, ...) invisible(x)
+    validate_page_kit = function(x, ...) invisible(x)
   )
 
   result <- PAGe:::train_outer_fold(
