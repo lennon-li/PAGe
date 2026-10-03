@@ -1,4 +1,12 @@
 #' Build expert ignition review objects for all seasons
+#'
+#' @param data Surveillance data containing the seasons to review.
+#' @param seasons Optional character vector of season identifiers to review.
+#'   Defaults to all seasons present in \code{data}.
+#' @param existing_annotations Optional existing annotation object or list of
+#'   annotations to overlay.
+#' @param ... Additional arguments passed to \code{review_expert_ignition()}.
+#' @return A named list of \code{page_expert_ignition_review_v2} objects.
 review_expert_ignition_set <- function(data, seasons = NULL, existing_annotations = NULL, ...) {
   canonical <- prepare_surveillance_data(data)
   available <- sort(unique(as.character(canonical$season)))
@@ -11,6 +19,12 @@ review_expert_ignition_set <- function(data, seasons = NULL, existing_annotation
 }
 
 #' Create a blank ignition annotation sheet
+#'
+#' @param data Surveillance data used to populate the sheet.
+#' @param annotator Non-empty annotator identifier.
+#' @param annotation_version Non-empty annotation version label.
+#' @param positivity_version Non-empty positivity-definition version label.
+#' @return A data frame with one blank annotation row per season.
 expert_ignition_annotation_sheet <- function(data, annotator, annotation_version, positivity_version) {
   canonical <- prepare_surveillance_data(data)
   annotator <- .expert_timing_nonempty(annotator, "annotator")

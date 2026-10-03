@@ -20,6 +20,8 @@
 #'   (default 5L).
 #' @param week_col Character; name of the week column in \code{currentSeason}
 #'   (default \code{"weekF"}).
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition
+#'   coordinates; \code{"fractional"} preserves numeric (decimal) coordinates.
 #'
 #' @return A list with four elements:
 #' \describe{

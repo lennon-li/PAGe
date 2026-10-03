@@ -251,8 +251,9 @@ test_that("getCurrentD validates inputs and represents zero-test weeks safely", 
 
 test_that("functions used by the documented workflow are exported", {
   workflow_functions <- c(
-    "load_flu_hist", "build_m0", "build_m1", "train_m2", "assemble_kit",
-    "getCurrentD", "run_pipeline", "plot_forecast"
+    "page_train", "page_forecast", "page_walkforward_report",
+    "page_load_surveillance", "page_models", "aggregate_strata",
+    "plot_forecast"
   )
 
   expect_setequal(

@@ -28,6 +28,9 @@ Actual start is \code{max(walk_start, iWeek_locked)}.}
 
 \item{verbose}{Logical. Emit progress messages (default \code{TRUE}).}
 
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
+
 \item{...}{Additional arguments forwarded by the \code{run_m1()} alias.}
 }
 \value{

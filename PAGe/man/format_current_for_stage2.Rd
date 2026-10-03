@@ -26,6 +26,9 @@ here but retained for signature compatibility with \code{refit_stage2_weekly}).}
 \code{spec$anchorWeek}.}
 
 \item{season_label}{Character label for the current season (default \code{"current"}).}
+
+\item{timing_mode}{Character. \code{"legacy"} uses integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
 }
 \value{
 data.frame with the required Stage-2 columns, ready to \code{rbind} with

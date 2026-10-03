@@ -105,6 +105,9 @@ When supplied, the earlier ignition weeks are converted to the existing
 M0/M1 training contract, while the complete timing-v2 object is retained
 in the result for provenance. Cannot be combined with \code{manual_labels}.}
 
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
+
 \item{m1_min_gain}{Minimum M1 Weibull-MAE improvement, in weeks, required to
 justify a more flexible `k_ref` candidate (default 0.05).}
 

@@ -34,6 +34,10 @@ fresh-run values and is returned for downstream M1/M2 training.}
 \item{k_deriv}{Integer. GAM basis functions for derivative smoothing (default
 \code{10L}).}
 
+\item{timing_truth}{Optional data frame with \code{season} and
+\code{ignition_target_weekF} columns. When supplied, aligned timing uses
+these decimal targets instead of the flagged integer ignition weeks.}
+
 \item{peak_weight_boost, peak_weight_decay}{Derivative smoothing rise boost and decay.}
 }
 \value{

@@ -460,6 +460,9 @@ nested_loso_m2_eval_frozen_bias <- function(allD,
 #'   \code{flagIgnition()} without override (no retrospective label leakage).
 #' @param flag_args Named list forwarded to \code{flagIgnition()}.
 #' @param verbose Logical.
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates
+#'   through the weekly refits.
 #' @return Same structure as \code{nested_loso_m2_eval()}: list with
 #'   \code{scores} and \code{predictions}.
 nested_loso_m2_eval_weekly_refit <- function(allD,

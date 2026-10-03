@@ -6,6 +6,12 @@
 \usage{
 validate_expert_ignition_annotation(x)
 }
+\arguments{
+\item{x}{A \code{page_expert_ignition_annotation_v2} object.}
+}
+\value{
+Invisibly, the validated annotation.
+}
 \description{
 Validate an expert ignition annotation
 }

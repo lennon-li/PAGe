@@ -271,6 +271,8 @@ stage2_ramp_weight <- function(t_since, K = 3L) {
 #' @param m1_preds Optional M1 walk-forward predictions used for stacking.
 #' @param feature_ranges Optional training feature scales reused for prediction.
 #' @param verbose Logical.
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #'
 #' @return data.frame stacked across leads with engineered covariates.
 prep_stage2_joint <- function(dat,
@@ -960,6 +962,8 @@ stage2_spec_from_tuning <- function(tuned2) {
 #' @param lambda_w,w_floor Training time-decay rate and minimum weight.
 #' @param m1_preds Optional M1 walk-forward predictions used for stacking.
 #' @param verbose logical.
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #'
 train_stage2_joint <- function(dat,
                                template_df,
@@ -1042,6 +1046,8 @@ train_stage2_joint <- function(dat,
 #' @param spec Stage-2 spec from \code{stage2_make_spec()}. Must contain
 #'   \code{spec$anchorWeek}.
 #' @param season_label Character label for the current season (default \code{"current"}).
+#' @param timing_mode Character. \code{"legacy"} uses integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #' @return data.frame with the required Stage-2 columns, ready to \code{rbind} with
 #'   historical aligned data.
 format_current_for_stage2 <- function(currentSeason,
@@ -1099,6 +1105,8 @@ format_current_for_stage2 <- function(currentSeason,
 #'   the original \code{spec$k_s} is restored once at least that many post-ignition
 #'   origin weeks are available in \code{current_obs}.
 #' @param verbose Logical. Print progress messages.
+#' @param timing_mode Character. \code{"legacy"} uses integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #' @return Output of \code{train_stage2_joint()} on the combined dataset.
 refit_stage2_weekly <- function(current_obs,
                                 iWeek_used,

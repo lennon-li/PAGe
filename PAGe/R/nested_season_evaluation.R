@@ -1234,6 +1234,11 @@
 #'   M1 references (rows of `r` exclude `r` and the gate season) and identical
 #'   estimator settings, and both are recorded in run provenance and kit
 #'   metadata.
+#' @param scoring Scoring contract: \code{"page_v2"} (default) uses the
+#'   retrospective phase weights, while \code{"legacy_0_12"} retains the old
+#'   post-ignition 0:12 weighting.
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #'
 #' @return A `page_outer_training` object containing the season selection,
 #'   tuning results, boundary histories, adoption evidence, frozen stages, and

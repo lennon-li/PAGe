@@ -103,6 +103,15 @@ weighted squared per-template GAM SE (from \code{g_s_mu_se}) to the
 between-template variance, yielding a total-variance spread. When per-template
 SEs are unavailable (zero or missing) the method falls back to between-only
 for that forecast week and increments \code{spread_fallback_count}.}
+
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
+
+\item{prep}{Optional precomputed alignment prep object (as returned when
+\code{return_prep = TRUE}). When \code{NULL}, the prep is built internally.}
+
+\item{return_prep}{Logical; when \code{TRUE}, include the built alignment
+prep object in the result for reuse across calls.}
 }
 \value{
 List with the same structure as

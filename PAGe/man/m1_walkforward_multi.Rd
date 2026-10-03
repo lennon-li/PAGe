@@ -79,6 +79,9 @@ Passed to \code{m1_walkforward_predictions()} and onward to
 
 \item{verbose}{Logical; print progress (default TRUE).}
 
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
+
 \item{peak_stabilization}{Character; \code{"legacy"} (default) or
 \code{"causal"}.}
 

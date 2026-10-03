@@ -28,6 +28,9 @@ run_prospective_pipeline() in frozen mode.}
 canonical \code{m2_production}; \code{"legacy_m2"} explicitly permits a
 legacy \code{m2} field with a warning.}
 
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
+
 \item{...}{Additional runner arguments.}
 }
 \value{

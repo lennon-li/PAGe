@@ -29,5 +29,5 @@ draws <- cbind(
   A = rnorm(1000, 0.05, 0.005),
   B = rnorm(1000, 0.02, 0.003)
 )
-page_aggregate_strata_draws(draws, method = "sum", bounds = c(0, 1))
+aggregate_strata_draws(draws, method = "sum", bounds = c(0, 1))
 }

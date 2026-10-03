@@ -634,6 +634,8 @@ plan_m2_grid <- function(previous_results = NULL,
 #'   holdout it is derived exclusively from verified promotion evidence.
 #' @param m2_spec_id Optional identity for an unreleased fixed refresh M2 spec;
 #'   it is derived from promotion evidence after holdout acceptance.
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #'
 #' @return A transparent list with \code{mode}, \code{components},
 #'   \code{tuning} (NULL for refresh), \code{grid},

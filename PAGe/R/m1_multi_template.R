@@ -47,6 +47,12 @@
 #'   between-template variance, yielding a total-variance spread. When per-template
 #'   SEs are unavailable (zero or missing) the method falls back to between-only
 #'   for that forecast week and increments \code{spread_fallback_count}.
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
+#' @param prep Optional precomputed alignment prep object (as returned when
+#'   \code{return_prep = TRUE}). When \code{NULL}, the prep is built internally.
+#' @param return_prep Logical; when \code{TRUE}, include the built alignment
+#'   prep object in the result for reuse across calls.
 #'
 #' @return List with the same structure as
 #'   \code{align_forecast_pipeline_dilate()} output, plus:
@@ -515,6 +521,8 @@ align_multi_template <- function(currentD,
 #'   causal mode.
 #' @param stabilizer_max_jump_weeks Positive maximum causal peak movement per
 #'   origin (default 2 weeks).
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #'
 #' @return List with same structure as \code{run_alignment_prospective()} output.
 run_alignment_prospective_multi <- function(

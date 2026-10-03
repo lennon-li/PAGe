@@ -581,7 +581,7 @@ detect_ignition_from_tuning <- function(tuned,
 #' @examples
 #' \dontrun{
 #' det_all <- detect_ignition_from_tuning(tuned, alignedD)
-#' plot_season_detection_table(det_all, "2019-20")
+#' PAGe:::plot_season_detection_table(det_all, "2019-20")
 #' }
 plot_season_detection_table <- function(det_all, season) {
   stopifnot(is.list(det_all), !is.null(det_all$data))
@@ -951,6 +951,8 @@ detectIgnition_oneSeason <- function(d_now, params) {
 #' @param ncores Integer >= 1. Number of cores.
 #' @param verbose Logical. Print progress.
 #' @param progress_every Integer. Chunk size for progress updates.
+#' @param timing_mode Character. \code{"legacy"} scores integer ignition
+#'   weeks; \code{"fractional"} scores decimal ignition timing.
 #' @return List with best params, full results, runtime, and evaluation tables.
 tuneIgnitionGrid_M0v2 <- function(ign_fit,
                                   grid,

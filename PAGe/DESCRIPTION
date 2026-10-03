@@ -45,6 +45,7 @@ Suggests:
     knitr,
     kableExtra,
     pkgdown,
+    quarto,
     rmarkdown,
     testthat (>= 3.0.0),
     withr,

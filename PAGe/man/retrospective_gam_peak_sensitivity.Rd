@@ -11,6 +11,20 @@ retrospective_gam_peak_sensitivity(
   grid_step = 0.01
 )
 }
+\arguments{
+\item{data}{One completed season of surveillance data accepted by
+\code{prepare_surveillance_data()}.}
+
+\item{season}{Optional season identifier.}
+
+\item{k_values}{Integer vector of cubic regression spline basis dimensions to
+compare.}
+
+\item{grid_step}{Decimal-week resolution used to locate each fitted maximum.}
+}
+\value{
+A data frame of peak-location sensitivity summaries.
+}
 \description{
 Audit peak-location sensitivity across simple GAM basis dimensions
 }

@@ -45,11 +45,11 @@
 #'   for any season after combining horizons. The default zero is a strict
 #'   historical non-degradation rule.
 #' @param eps Probability clipping value used in the NLL calculation.
-#' @param scoring Scoring contract: code{"page_v2"} uses the retrospective
-#'   phase weights (default), while code{"legacy_0_12"} retains the old
+#' @param scoring Scoring contract: \code{"page_v2"} uses the retrospective
+#'   phase weights (default), while \code{"legacy_0_12"} retains the old
 #'   post-ignition 0:12 weighting.
 #' @param score_weight_col Optional precomputed row-weight column. When
-#'   omitted, code{weight_page_v2} or code{weight_legacy} is used when
+#'   omitted, \code{weight_page_v2} or \code{weight_legacy} is used when
 #'   available for the selected contract.
 #'
 #' @return A \code{page_m2_baseline_decision} list with \code{decision},

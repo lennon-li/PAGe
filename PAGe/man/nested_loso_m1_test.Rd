@@ -62,6 +62,9 @@ Passed to \code{m1_walkforward_predictions()} and onward to
 \code{run_alignment_prospective_multi()}.}
 
 \item{verbose}{Logical; print progress.}
+
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
 }
 \value{
 Tibble of M1 walk-forward predictions for the test season,

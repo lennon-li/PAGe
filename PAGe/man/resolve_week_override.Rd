@@ -33,7 +33,7 @@ Applies an override week to an estimated week using a selected policy:
 }
 }
 \examples{
-resolve_week_override(18, NULL)
-resolve_week_override(18, 20, mode = "cap")
-resolve_week_override(NA, 15, mode = "replace")
+PAGe:::resolve_week_override(18, NULL)
+PAGe:::resolve_week_override(18, 20, mode = "cap")
+PAGe:::resolve_week_override(NA, 15, mode = "replace")
 }

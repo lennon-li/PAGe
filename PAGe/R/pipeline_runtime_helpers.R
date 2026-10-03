@@ -16,8 +16,8 @@
 #'
 #' @examples
 #' \dontrun{
-#' get_full_cycle_weeks(2025)
-#' get_full_cycle_weeks(2026)
+#' PAGe:::get_full_cycle_weeks(2025)
+#' PAGe:::get_full_cycle_weeks(2026)
 #' }
 get_full_cycle_weeks <- function(year) {
   # epiweek() is provided by lubridate
@@ -107,9 +107,9 @@ get_gam_cls <- function(ign_fit_or_gam) {
 #' @return A list with elements \code{final}, \code{est}, \code{overridden}, \code{override}.
 #'
 #' @examples
-#' resolve_week_override(18, NULL)
-#' resolve_week_override(18, 20, mode = "cap")
-#' resolve_week_override(NA, 15, mode = "replace")
+#' PAGe:::resolve_week_override(18, NULL)
+#' PAGe:::resolve_week_override(18, 20, mode = "cap")
+#' PAGe:::resolve_week_override(NA, 15, mode = "replace")
 resolve_week_override <- function(week_est,
                                   override_week = NULL,
                                   mode = c("replace", "cap", "floor", "nearest_valid"),

@@ -31,6 +31,9 @@ boundary reports, decisions, frozen stages, and the final kit.}
 \item{timing_labels}{Optional timing-v2 label object or list of objects;
 passed through to `train_outer_fold()` after holdout isolation.}
 
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
+
 \item{gate_nesting}{Inner-gate nesting depth. `"full"` (default) re-runs
 selection, inside each gate season's excluded dataset, for every upstream
 axis the recipe actually tunes (M0 always; M1 only when its grid has more

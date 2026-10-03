@@ -36,6 +36,8 @@
 #'   \code{"causal"}.
 #' @param stabilizer_max_jump_weeks Positive maximum causal peak movement per
 #'   origin (default 2 weeks).
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #'
 #' @return A tibble with columns:
 #' \describe{
@@ -305,6 +307,8 @@ m1_walkforward_predictions <- function(seasonD,
 #'   \code{"causal"}.
 #' @param stabilizer_max_jump_weeks Positive maximum causal peak movement per
 #'   origin (default 2 weeks).
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #' @param season_ignition Optional named list of season-local ignition outputs.
 #'   When supplied, these are used instead of refitting M0 for the named
 #'   seasons. This is used by the fully nested M2 adoption gate with

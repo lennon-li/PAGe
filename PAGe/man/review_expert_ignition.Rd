@@ -13,6 +13,24 @@ review_expert_ignition(
   show_counts = TRUE
 )
 }
+\arguments{
+\item{data}{Surveillance data containing the season to review.}
+
+\item{season}{Optional season identifier. Required when \code{data} holds
+more than one season.}
+
+\item{existing_annotation}{Optional existing
+\code{page_expert_ignition_annotation_v2} object to overlay on the review.}
+
+\item{weekF_start, weekF_end}{Optional numeric display-window bounds on the
+\code{weekF} axis. Defaults to the full observed range.}
+
+\item{show_counts}{Logical; include positive and tested counts in the hover
+text.}
+}
+\value{
+A \code{page_expert_ignition_review_v2} object.
+}
 \description{
 Creates a Plotly review without assigning truth. Peak truth is derived
 separately by the retrospective GAM procedure.

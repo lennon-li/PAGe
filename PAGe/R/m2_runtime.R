@@ -82,6 +82,8 @@ stage2_extract_hyperparams <- function(best_mean_nll) {
 #' @param n_weeks Integer. Length of the full season axis (52 or 53).
 #' @param eps Numeric small constant passed to derivative calculations.
 #' @param date_col Character. Name of the date column in \code{currentSeason} (default tries \code{"date"}).
+#' @param timing_mode Character. \code{"legacy"} uses integer week coordinates;
+#'   \code{"fractional"} preserves numeric (decimal) ignition and aligned weeks.
 #'
 #' @return A list with:
 #' \describe{

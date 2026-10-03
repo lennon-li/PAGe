@@ -58,6 +58,10 @@ curve via \code{compute_align_weights()}.}
 i.e. no boost by default).}
 
 \item{peak_decay}{Numeric; exponential decay rate after peak (default 0.3).}
+
+\item{ab_prior}{Optional list with \code{a_mean}, \code{a_sd},
+\code{log_b_mean}, and \code{log_b_sd} supplying a Gaussian prior for the
+legacy scale/intercept model. \code{NULL} disables the prior.}
 }
 \value{
 list with tau, delta, a, b, pred_df, peak, nll, etc.

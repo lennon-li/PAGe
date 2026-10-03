@@ -44,6 +44,14 @@ retrospective_gam_peak_truth <- function(data, season = NULL, k = 8L, grid_step 
 }
 
 #' Audit peak-location sensitivity across simple GAM basis dimensions
+#'
+#' @param data One completed season of surveillance data accepted by
+#'   \code{prepare_surveillance_data()}.
+#' @param season Optional season identifier.
+#' @param k_values Integer vector of cubic regression spline basis dimensions to
+#'   compare.
+#' @param grid_step Decimal-week resolution used to locate each fitted maximum.
+#' @return A data frame of peak-location sensitivity summaries.
 retrospective_gam_peak_sensitivity <- function(data, season = NULL, k_values = c(5L, 6L, 8L, 10L), grid_step = 0.01) {
   fits <- lapply(k_values, function(k) retrospective_gam_peak_truth(data, season = season, k = k, grid_step = grid_step))
   out <- data.frame(
@@ -59,9 +67,9 @@ retrospective_gam_peak_sensitivity <- function(data, season = NULL, k_values = c
 
 #' Build frozen retrospective peak truth v1 for one or more seasons
 #'
-#' Uses k=8 for the point estimate and k in {5,6,8,10} to quantify smoothing
-#' sensitivity. The sensitivity interval is diagnostic, not a confidence
-#' interval.
+#' Uses k=8 for the point estimate and k values of 5, 6, 8, and 10 to quantify
+#' smoothing sensitivity. The sensitivity interval is diagnostic, not a
+#' confidence interval.
 #' @param data Completed surveillance data containing one or more seasons.
 #' @param seasons Optional season vector. Defaults to all seasons.
 #' @param grid_step Peak-location grid resolution.

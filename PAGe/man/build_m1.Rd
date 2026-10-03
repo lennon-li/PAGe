@@ -33,6 +33,13 @@ fewer than \code{min_live_weeks} observed weeks are also excluded
 
 \item{m1_params}{Named list of M1 alignment parameters. Defaults to the
 canonical production specification.}
+
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
+
+\item{timing_truth}{Optional data frame with \code{season} and
+\code{ignition_target_weekF} columns used when \code{timing_mode =
+"fractional"}.}
 }
 \value{
 A list with \code{ref}, \code{hyper}, \code{aligned_train},

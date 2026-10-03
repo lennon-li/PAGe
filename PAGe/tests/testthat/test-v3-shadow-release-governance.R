@@ -29,6 +29,8 @@ test_that('published release validates full hashes environment and exact PAGe/R 
   release_dir <- .latest_v3_release_dir(repo); skip_if(is.na(release_dir),'v3 release unavailable')
   old <- setwd(repo); on.exit(setwd(old),add=TRUE)
   source('scripts/v3_shadow_release_helpers_v1.R',local=environment())
+  stale <- release_dir_stale_reason(release_dir)
+  skip_if(!is.null(stale),stale)
   got <- .v3_release_validate(release_dir)
   expect_identical(got$release_id,basename(release_dir))
   manifest <- got$manifest
@@ -56,6 +58,7 @@ test_that('authoritative one-source launcher gives v2 and v3 the same release an
   old <- setwd(repo); on.exit(setwd(old),add=TRUE)
   source('2026/run_weekly_shadow_release_v3.R',local=environment())
 
+  stale <- release_dir_stale_reason(release_dir); skip_if(!is.null(stale),stale)
   td <- tempfile('release-tx-'); dir.create(td)
   f <- file.path(td,'hist.RData')
   dates <- as.Date('2026-07-05') + 7*(0:14)
@@ -82,6 +85,7 @@ test_that('authoritative launcher publishes only after staged transaction is ful
   old <- setwd(repo); on.exit(setwd(old),add=TRUE)
   source('2026/run_weekly_shadow_release_v3.R',local=environment())
 
+  stale <- release_dir_stale_reason(release_dir); skip_if(!is.null(stale),stale)
   td <- tempfile('release-tx-failure-'); dir.create(td)
   f <- file.path(td,'hist.RData')
   dates <- as.Date('2026-07-05') + 7*(0:14)

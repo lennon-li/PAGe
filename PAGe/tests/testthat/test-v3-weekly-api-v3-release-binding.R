@@ -79,6 +79,7 @@ test_that('API v3 binds canonical weekF12 release and closes weekF11', {
   make_olis_fixture(fixture12, 12L)
   make_olis_fixture(fixture11, 11L)
   release_dir <- file.path(repo, 'artifacts/v3-shadow-release-v3', .PAGE_FORECAST_RELEASE_ID)
+  stale <- release_dir_stale_reason(release_dir); skip_if(!is.null(stale), stale)
   opt <- list(deployment_root = dep_root, artifact_mount = mount,
     artifact_fs_type = NULL, artifact_mount_source = NULL, job_root = job,
     output_root = out, source_mode = 'olis', season = '2026-27',

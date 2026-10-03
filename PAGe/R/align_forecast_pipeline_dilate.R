@@ -62,6 +62,9 @@
 #' @param rise_weight Numeric; weight for ignition-to-peak weeks (default 1.0,
 #'   i.e. no boost by default).
 #' @param peak_decay Numeric; exponential decay rate after peak (default 0.3).
+#' @param ab_prior Optional list with \code{a_mean}, \code{a_sd},
+#'   \code{log_b_mean}, and \code{log_b_sd} supplying a Gaussian prior for the
+#'   legacy scale/intercept model. \code{NULL} disables the prior.
 #'
 #' @return list with tau, delta, a, b, pred_df, peak, nll, etc.
 align_forecast_pipeline_dilate <- function(currentD,

@@ -75,12 +75,12 @@ historical non-degradation rule.}
 
 \item{eps}{Probability clipping value used in the NLL calculation.}
 
-\item{scoring}{Scoring contract: code{"page_v2"} uses the retrospective
-phase weights (default), while code{"legacy_0_12"} retains the old
+\item{scoring}{Scoring contract: \code{"page_v2"} uses the retrospective
+phase weights (default), while \code{"legacy_0_12"} retains the old
 post-ignition 0:12 weighting.}
 
 \item{score_weight_col}{Optional precomputed row-weight column. When
-omitted, code{weight_page_v2} or code{weight_legacy} is used when
+omitted, \code{weight_page_v2} or \code{weight_legacy} is used when
 available for the selected contract.}
 }
 \value{

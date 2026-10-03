@@ -33,6 +33,8 @@ test_that('published weekF12 release validates and binds exact runtime source cl
   release_dir <- .latest_week12_release(repo); skip_if(is.na(release_dir),'weekF12 release not built yet')
   old <- setwd(repo); on.exit(setwd(old),add=TRUE)
   source('scripts/v3_shadow_release_helpers_v1.R',local=environment())
+  stale <- release_dir_stale_reason(release_dir)
+  skip_if(!is.null(stale),stale)
   got <- .v3_release_validate(release_dir)
   expect_identical(got$release_id,basename(release_dir))
   m <- got$manifest

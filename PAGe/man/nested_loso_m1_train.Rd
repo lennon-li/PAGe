@@ -65,6 +65,9 @@ Passed to \code{m1_walkforward_multi()} and onward to
 \item{parallel}{Logical; run M1 seasons in parallel (default TRUE).}
 
 \item{verbose}{Logical; print progress.}
+
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
 }
 \value{
 Tibble of M1 walk-forward predictions for training seasons

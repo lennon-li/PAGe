@@ -27,6 +27,9 @@ run_m2(kit, current_data, m1_result, ...)
 
 \item{verbose}{Logical. Emit progress messages (default \code{TRUE}).}
 
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
+
 \item{...}{Additional arguments forwarded by the \code{run_m2()} alias.}
 }
 \value{

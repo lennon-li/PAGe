@@ -250,6 +250,8 @@ load_prospective_kit <- function(data_dir,
 #' @param manual_ign_week Integer or \code{NA_integer_}. When set, overrides
 #'   the M0 automatic ignition estimate with a known value.
 #' @param verbose Logical. Emit progress messages (default \code{TRUE}).
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #' @param ... Additional arguments forwarded by the \code{run_m0()} alias.
 #'
 #' @return A list with:
@@ -602,6 +604,8 @@ run_m1_v2_timing <- function(kit, current_data, m0_result, verbose = TRUE) {
 #' @param walk_start Integer. Minimum evaluation week (default \code{5L}).
 #'   Actual start is \code{max(walk_start, iWeek_locked)}.
 #' @param verbose Logical. Emit progress messages (default \code{TRUE}).
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #' @param ... Additional arguments forwarded by the \code{run_m1()} alias.
 #'
 #' @return A list with:
@@ -772,6 +776,8 @@ run_m1_alignment <- function(kit,
 #' @param m1_result Output of \code{run_m1_alignment()}.
 #' @param mode Character. \code{"frozen"} (default) or \code{"weekly_refit"}.
 #' @param verbose Logical. Emit progress messages (default \code{TRUE}).
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #' @param ... Additional arguments forwarded by the \code{run_m2()} alias.
 #'
 #' @return A list with \code{m2_preds}: tibble with columns

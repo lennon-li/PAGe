@@ -609,6 +609,10 @@ cov_tau_delta_from_profile <- function(fit, h_tau = 0.1, h_del = 0.005) {
   list(V = V, center = c(tau0, del0))
 }
 
+.page_alignment_failure <- function(reason) {
+  structure(Inf, reason = as.character(reason)[1L])
+}
+
 #' Safe penalised NLL objective for tau/delta optimisation
 #'
 #' Evaluates the normalised negative binomial log-likelihood penalised by a
@@ -626,14 +630,17 @@ cov_tau_delta_from_profile <- function(fit, h_tau = 0.1, h_del = 0.005) {
 #'   included in \code{par}.
 #' @param lam Numeric; ridge penalty coefficient on \code{delta}.
 #' @param w Numeric vector of observation weights.
+#' @param min_support Minimum number of finite, in-support observations required
+#'   before the objective is evaluated.
+#' @param support Optional logical vector marking observations eligible for the
+#'   objective. \code{NULL} uses all observations.
+#' @param ab_prior Optional list with \code{a_mean}, \code{a_sd},
+#'   \code{log_b_mean}, and \code{log_b_sd} supplying a Gaussian prior for the
+#'   scale/intercept parameters. \code{NULL} disables the prior.
 #'
 #' @return A single numeric scalar; failed candidates are `Inf` with a
 #'   diagnostic `reason` attribute.
 #' @keywords internal
-.page_alignment_failure <- function(reason) {
-  structure(Inf, reason = as.character(reason)[1L])
-}
-
 safe_obj <- function(par, t, y, n, gfun, allow_scale, lam, w,
                      min_support = 4L, support = NULL, ab_prior = NULL) {
   out <- try(

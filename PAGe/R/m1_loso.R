@@ -88,6 +88,15 @@
 #'   restart, completed seasons are loaded from the checkpoint and skipped.
 #'   Delete the file to force a full rerun.
 #' @param verbose Logical. Print per-season progress (default \code{TRUE}).
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition
+#'   coordinates; \code{"fractional"} preserves numeric (decimal) coordinates.
+#' @param timing_truth Optional data frame with \code{season} and
+#'   \code{ignition_target_weekF} columns used to score fractional ignition
+#'   timing. Required when \code{timing_mode = "fractional"} and ignition timing
+#'   is evaluated.
+#' @param checkpoint_identity Optional list overriding the auto-derived
+#'   checkpoint identity used to validate a resumed \code{checkpoint_file}.
+#'   When \code{NULL}, an identity is derived from the run inputs.
 #'
 #' @return A list with three elements:
 #' \describe{

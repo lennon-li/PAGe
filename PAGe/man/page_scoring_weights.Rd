@@ -24,10 +24,10 @@ page_scoring_weights(
 \item{decline}{Weight for the declining limb (`t > P + turning_after`).}
 
 \item{turning_before}{Whole-number offset from the observed peak at which
-the turning window begins. The default is code{-1}.}
+the turning window begins. The default is \code{-1}.}
 
 \item{turning_after}{Whole-number offset from the observed peak at which
-the turning window ends. The default is code{3}.}
+the turning window ends. The default is \code{3}.}
 }
 \value{
 A list of class `page_scoring_weights` with elements `pre_ignition`,
@@ -45,7 +45,7 @@ build covariates available at forecast time. Fractional peak labels are
 used on their native week scale; the resulting boundaries are not rounded.
 }
 \examples{
-page_scoring_weights()
-page_scoring_weights(turning_before = 0L, turning_after = 0L, decline = 0)
+PAGe:::page_scoring_weights()
+PAGe:::page_scoring_weights(turning_before = 0L, turning_after = 0L, decline = 0)
 
 }

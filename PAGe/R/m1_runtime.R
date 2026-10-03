@@ -40,6 +40,8 @@
 #'   function when `peak_stabilization = "causal"`.
 #' @param stabilizer_max_jump_weeks Positive maximum causal peak movement per
 #'   origin (default 2 weeks).
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #'
 #' @return A named list with components:
 #' \describe{

@@ -52,6 +52,15 @@ numbers that must be converted using \code{start_week}.}
 column. Required for non-YYYY-YY season labels when \code{week_type =
 "mmwr"}.}
 
+\item{date_col}{Optional character scalar naming a calendar date column.
+Used with \code{week_type = "mmwr"} to derive the season and validate the
+mapped week. Mutually informative with \code{mmwr_year_col}.}
+
+\item{mmwr_year_col}{Optional character scalar naming the MMWR year column.
+Used with \code{week_type = "mmwr"} to resolve the season when season
+labels are not in \code{YYYY-YY} form. Supply at most one of
+\code{start_year_col} and \code{mmwr_year_col}.}
+
 \item{tolerance}{Numeric tolerance passed to
 \code{\link{prepare_surveillance_data}} for consistency checks.}
 }

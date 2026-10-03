@@ -41,6 +41,13 @@ nested_loso_build_fold(
 \item{flag_args}{Named list of arguments forwarded to \code{flagIgnition()}.}
 
 \item{verbose}{Logical; print progress messages.}
+
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
+
+\item{timing_truth}{Optional data frame with \code{season} and
+\code{ignition_target_weekF} columns used when \code{timing_mode =
+"fractional"}.}
 }
 \value{
 A named list with components:

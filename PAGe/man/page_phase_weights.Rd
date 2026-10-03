@@ -33,6 +33,14 @@ ignition week `I` and observed peak week `P`. Fractional weeks are allowed.
 missing `I` or `P` is an error. When `TRUE`, such rows receive phase
 `"censored"` and weight `NA`, leaving the caller to decide how to treat
 them.}
+
+\item{y_col, n_col}{Optional length-one column names for observed positive
+and total counts. Used to derive the observed peak week when
+\code{peak_col} is not supplied.}
+
+\item{completed_col}{Optional length-one column name with a logical flag
+marking completed seasons. When supplied, only completed seasons
+contribute a derived observed peak.}
 }
 \value{
 `rows` as a data frame with two appended columns: `phase` (character
@@ -61,8 +69,8 @@ rows <- data.frame(
   target = c(9, 10, 31, 35),
   ignition = 10, peak = 30
 )
-page_phase_weights(
-  rows, page_scoring_weights(), "season", "target",
+PAGe:::page_phase_weights(
+  rows, PAGe:::page_scoring_weights(), "season", "target",
   "ignition", "peak"
 )
 

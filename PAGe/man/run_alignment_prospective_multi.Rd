@@ -74,6 +74,9 @@ contain \code{eta_mat}.}
 Passed to \code{align_multi_template()} to select the \code{logit_spread}
 computation method. See \code{\link{align_multi_template}} for details.}
 
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
+
 \item{peak_stabilization}{Character; \code{"legacy"} (default) or
 \code{"causal"}.}
 

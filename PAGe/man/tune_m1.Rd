@@ -47,6 +47,13 @@ used, and the result is a \code{page_m1_tuning}.}
 coordinate system. Defaults to labels stored in \code{m0}. M1 tuning
 applies its historical one-week coordinate offset after resolving this
 value.}
+
+\item{timing_truth}{Optional data frame with \code{season} and
+\code{ignition_target_weekF} columns used when \code{timing_mode =
+"fractional"}.}
+
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
 }
 \value{
 Output of \code{tune_m1_alignment()} -- a list with per-spec MAE

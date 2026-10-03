@@ -216,7 +216,7 @@ flagIgnition <- function(
 #' @return Named integer vector mapping season labels (e.g. \code{"2015-16"}) to
 #'   ignition weekF integer values.
 #' @examples
-#' page_manual_ignition_labels()
+#' PAGe:::page_manual_ignition_labels()
 page_manual_ignition_labels <- function() {
   c(
     "2012-13" = 18L,

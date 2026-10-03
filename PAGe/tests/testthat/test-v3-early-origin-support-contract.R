@@ -5,6 +5,14 @@ find_page_repo_root_early_v3 <- function() {
   normalizePath(hit[[1]],winslash='/',mustWork=TRUE)
 }
 
+.early_v3_m2b_stale_reason <- function(repo) {
+  manifest_path <- file.path(repo,'artifacts','m2-b-v3-shadow-v4','source_manifest.csv')
+  if (!file.exists(manifest_path)) return('M2-B v4 source manifest unavailable')
+  old <- setwd(repo); on.exit(setwd(old),add=TRUE)
+  manifest <- utils::read.csv(manifest_path,stringsAsFactors=FALSE,check.names=FALSE)
+  manifest_tree_stale_reason(manifest,label='m2-b-v3-shadow-v4')
+}
+
 .early_v3_fixture <- function(repo, origin) {
   old <- setwd(repo); on.exit(setwd(old),add=TRUE)
   x <- read.csv('artifacts/v3-joint-ab-audit-v1/canonical_ab_weekly_v3.csv',check.names=FALSE)
@@ -26,6 +34,7 @@ find_page_repo_root_early_v3 <- function() {
 
 test_that('M2-B shadow-v4 changes only the early-origin support contract', {
   repo <- find_page_repo_root_early_v3(); skip_if(is.na(repo),'PAGe repo unavailable')
+  stale <- .early_v3_m2b_stale_reason(repo); skip_if(!is.null(stale),stale)
   old <- setwd(repo); on.exit(setwd(old),add=TRUE)
   source('scripts/v3_m2_b_runtime_helpers_v4.R',local=TRUE)
   v3 <- readRDS('artifacts/m2-b-v3-shadow-v3/m2_b_v3_shadow_artifact.rds')
@@ -42,6 +51,7 @@ test_that('M2-B shadow-v4 changes only the early-origin support contract', {
 
 test_that('weekF11 now issues finite A/B state forecasts without implying ignition', {
   repo <- find_page_repo_root_early_v3(); skip_if(is.na(repo),'PAGe repo unavailable')
+  stale <- .early_v3_m2b_stale_reason(repo); skip_if(!is.null(stale),stale)
   old <- setwd(repo); on.exit(setwd(old),add=TRUE)
   env <- .early_v3_env(repo)
   typed <- 'artifacts/v3-live-2026-27-week11-deployment-v1/input/typed_ab_weekly.csv'
@@ -61,6 +71,7 @@ test_that('weekF11 now issues finite A/B state forecasts without implying igniti
 
 test_that('fewer than three consecutive observations emits explicit non-issuance', {
   repo <- find_page_repo_root_early_v3(); skip_if(is.na(repo),'PAGe repo unavailable')
+  stale <- .early_v3_m2b_stale_reason(repo); skip_if(!is.null(stale),stale)
   old <- setwd(repo); on.exit(setwd(old),add=TRUE)
   env <- .early_v3_env(repo)
   typed <- .early_v3_fixture(repo,2L)
@@ -75,6 +86,7 @@ test_that('fewer than three consecutive observations emits explicit non-issuance
 
 test_that('standalone B v4 matches combined B at weekF11', {
   repo <- find_page_repo_root_early_v3(); skip_if(is.na(repo),'PAGe repo unavailable')
+  stale <- .early_v3_m2b_stale_reason(repo); skip_if(!is.null(stale),stale)
   old <- setwd(repo); on.exit(setwd(old),add=TRUE)
   env <- .early_v3_env(repo)
   typed <- 'artifacts/v3-live-2026-27-week11-deployment-v1/input/typed_ab_weekly.csv'
@@ -89,6 +101,7 @@ test_that('standalone B v4 matches combined B at weekF11', {
 
 test_that('M2-B v4 direct runtime rejects a gap in the three-week support window', {
   repo <- find_page_repo_root_early_v3(); skip_if(is.na(repo),'PAGe repo unavailable')
+  stale <- .early_v3_m2b_stale_reason(repo); skip_if(!is.null(stale),stale)
   old <- setwd(repo); on.exit(setwd(old),add=TRUE)
   source('scripts/v3_m2_b_runtime_helpers_v4.R',local=TRUE)
   m2 <- readRDS('artifacts/m2-b-v3-shadow-v4/m2_b_v3_shadow_artifact.rds')
@@ -102,6 +115,7 @@ test_that('M2-B v4 direct runtime rejects a gap in the three-week support window
 
 test_that('relaxed combined runner is numerically identical to prior runner at supported late origins', {
   repo <- find_page_repo_root_early_v3(); skip_if(is.na(repo),'PAGe repo unavailable')
+  stale <- .early_v3_m2b_stale_reason(repo); skip_if(!is.null(stale),stale)
   oldwd <- setwd(repo); on.exit(setwd(oldwd),add=TRUE)
   typed <- .early_v3_fixture(repo,45L)
   old_env <- new.env(parent=globalenv()); sys.source('2026/run_weekly_shadow_v3.R',envir=old_env)

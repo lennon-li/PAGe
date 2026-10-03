@@ -50,6 +50,13 @@ checkpoints. Reuse the same directory when expanding a grid.}
 \item{previous_results}{Optional prior M0 tuning result. When supplied,
 completed grid scores are reused and only appended specifications are
 evaluated.}
+
+\item{timing_truth}{Optional data frame with \code{season} and
+\code{ignition_target_weekF} columns used when \code{timing_mode =
+"fractional"}.}
+
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition
+coordinates; \code{"fractional"} preserves numeric (decimal) coordinates.}
 }
 \value{
 A list with \code{best_params}, \code{tuning} (full

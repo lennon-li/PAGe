@@ -6,6 +6,18 @@
 \usage{
 write_expert_ignition_annotations(annotations, path, overwrite = FALSE)
 }
+\arguments{
+\item{annotations}{One or more \code{page_expert_ignition_annotation_v2}
+objects.}
+
+\item{path}{Output CSV path.}
+
+\item{overwrite}{Logical; when \code{FALSE} (default), refuse to replace an
+existing annotation release.}
+}
+\value{
+Invisibly, the normalized output path.
+}
 \description{
 Save versioned expert ignition annotations
 }

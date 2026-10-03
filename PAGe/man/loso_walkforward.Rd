@@ -131,6 +131,18 @@ restart, completed seasons are loaded from the checkpoint and skipped.
 Delete the file to force a full rerun.}
 
 \item{verbose}{Logical. Print per-season progress (default \code{TRUE}).}
+
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition
+coordinates; \code{"fractional"} preserves numeric (decimal) coordinates.}
+
+\item{timing_truth}{Optional data frame with \code{season} and
+\code{ignition_target_weekF} columns used to score fractional ignition
+timing. Required when \code{timing_mode = "fractional"} and ignition timing
+is evaluated.}
+
+\item{checkpoint_identity}{Optional list overriding the auto-derived
+checkpoint identity used to validate a resumed \code{checkpoint_file}.
+When \code{NULL}, an identity is derived from the run inputs.}
 }
 \value{
 A list with three elements:

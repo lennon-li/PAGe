@@ -30,6 +30,9 @@ either \code{N} or \code{neg}. Optional columns: \code{season}, \code{p}.}
 
 \item{week_col}{Character; name of the week column in \code{currentSeason}
 (default \code{"weekF"}).}
+
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition
+coordinates; \code{"fractional"} preserves numeric (decimal) coordinates.}
 }
 \value{
 A list with four elements:

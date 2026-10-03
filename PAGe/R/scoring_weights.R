@@ -62,9 +62,9 @@ as_page_scoring_weights <- function(weights) {
 #'   (`P - turning_before <= t <= P + turning_after`).
 #' @param decline Weight for the declining limb (`t > P + turning_after`).
 #' @param turning_before Whole-number offset from the observed peak at which
-#'   the turning window begins. The default is code{-1}.
+#'   the turning window begins. The default is \code{-1}.
 #' @param turning_after Whole-number offset from the observed peak at which
-#'   the turning window ends. The default is code{3}.
+#'   the turning window ends. The default is \code{3}.
 #'
 #' @return A list of class `page_scoring_weights` with elements `pre_ignition`,
 #'   `rise`, `turning`, `decline`, `turning_before`, and `turning_after`.
@@ -76,8 +76,8 @@ as_page_scoring_weights <- function(weights) {
 #' used on their native week scale; the resulting boundaries are not rounded.
 #'
 #' @examples
-#' page_scoring_weights()
-#' page_scoring_weights(turning_before = 0L, turning_after = 0L, decline = 0)
+#' PAGe:::page_scoring_weights()
+#' PAGe:::page_scoring_weights(turning_before = 0L, turning_after = 0L, decline = 0)
 #'
 page_scoring_weights <- function(pre_ignition = 0, rise = 2, turning = 3,
                                  decline = 1, turning_before = -1L,
@@ -186,6 +186,12 @@ page_scoring_weights <- function(pre_ignition = 0, rise = 2, turning = 3,
 #'   scored target week `t`; `ignition_col` and `peak_col` carry the season's
 #'   ignition week `I` and observed peak week `P`. Fractional weeks are allowed.
 #'   `I` and `P` must be constant within each season.
+#' @param y_col,n_col Optional length-one column names for observed positive
+#'   and total counts. Used to derive the observed peak week when
+#'   \code{peak_col} is not supplied.
+#' @param completed_col Optional length-one column name with a logical flag
+#'   marking completed seasons. When supplied, only completed seasons
+#'   contribute a derived observed peak.
 #' @param allow_censored Logical. When `FALSE` (default), a season with a
 #'   missing `I` or `P` is an error. When `TRUE`, such rows receive phase
 #'   `"censored"` and weight `NA`, leaving the caller to decide how to treat
@@ -212,8 +218,8 @@ page_scoring_weights <- function(pre_ignition = 0, rise = 2, turning = 3,
 #'   target = c(9, 10, 31, 35),
 #'   ignition = 10, peak = 30
 #' )
-#' page_phase_weights(
-#'   rows, page_scoring_weights(), "season", "target",
+#' PAGe:::page_phase_weights(
+#'   rows, PAGe:::page_scoring_weights(), "season", "target",
 #'   "ignition", "peak"
 #' )
 #'

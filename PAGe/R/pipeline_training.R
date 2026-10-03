@@ -149,8 +149,8 @@ legacy_model_settings <- function() {
 #'   \code{build_m1()}, \code{build_m2()}, and \code{train_m2()}.
 #'
 #' @examples
-#' params <- m1_make_params()
-#' params_custom <- m1_make_params(slope_weight = 12, temperature = 0.15)
+#' params <- PAGe:::m1_make_params()
+#' params_custom <- PAGe:::m1_make_params(slope_weight = 12, temperature = 0.15)
 #'
 m1_make_params <- function(k_ref = 25L,
                            ref_method = "fs",
@@ -315,6 +315,9 @@ compact_m0_artifact_for_m1 <- function(m0) {
 #'   \code{10L}).
 #'
 #' @param peak_weight_boost,peak_weight_decay Derivative smoothing rise boost and decay.
+#' @param timing_truth Optional data frame with \code{season} and
+#'   \code{ignition_target_weekF} columns. When supplied, aligned timing uses
+#'   these decimal targets instead of the flagged integer ignition weeks.
 #' @return A list with \code{aligned} (aligned data frame), \code{seasons_used},
 #'   \code{manual_labels}, \code{flag_args}, and \code{best_params}.
 #'
@@ -417,6 +420,11 @@ build_m0 <- function(allD,
 #' @param selection Optional governed \code{page_season_selection}. When
 #'   supplied, only its training seasons are used and the returned object is a
 #'   \code{page_m0_tuning}.
+#' @param timing_truth Optional data frame with \code{season} and
+#'   \code{ignition_target_weekF} columns used when \code{timing_mode =
+#'   "fractional"}.
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition
+#'   coordinates; \code{"fractional"} preserves numeric (decimal) coordinates.
 #'
 #' @return A list with \code{best_params}, \code{tuning} (full
 #'   \code{loso_M0v2()} output), the complete \code{grid}, \code{aligned},
@@ -547,6 +555,11 @@ tune_m0 <- function(allD,
 #' @param min_live_weeks Integer. Partial-season threshold (default \code{20L}).
 #' @param m1_params Named list of M1 alignment parameters. Defaults to the
 #'   canonical production specification.
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
+#' @param timing_truth Optional data frame with \code{season} and
+#'   \code{ignition_target_weekF} columns used when \code{timing_mode =
+#'   "fractional"}.
 #'
 #' @return A list with \code{ref}, \code{hyper}, \code{aligned_train},
 #'   \code{m1_params}, and \code{seasons_used}. Pass to \code{tune_m1()},
@@ -739,6 +752,11 @@ build_m1_v2_timing <- function(allD, peak_truth, activation_table,
 #'   coordinate system. Defaults to labels stored in \code{m0}. M1 tuning
 #'   applies its historical one-week coordinate offset after resolving this
 #'   value.
+#' @param timing_truth Optional data frame with \code{season} and
+#'   \code{ignition_target_weekF} columns used when \code{timing_mode =
+#'   "fractional"}.
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #'
 #' @return Output of \code{tune_m1_alignment()} -- a list with per-spec MAE
 #'   scores and the best spec parameters.
@@ -940,6 +958,8 @@ tune_m1 <- function(allD,
 #'
 #' @param m1_cache Named list of complete Phase 1 fold artifacts, as produced
 #'   internally by \code{build_m2()}.
+#' @param timing_mode Character. \code{"legacy"} or \code{"fractional"};
+#'   retained to keep the compacted handoff consistent with the M2 path.
 #'
 #' @return A named list with the M2-only fold handoff. The original cache is
 #'   not modified.
@@ -1107,6 +1127,11 @@ compact_m1_cache_for_m2 <- function(m1_cache,
 #'   to \pkg{future} workers. When \code{NULL} (default), the limit is raised
 #'   only as needed for the prepared M1 cache, with a 2 GiB safety ceiling.
 #' @param verbose Logical. Print progress.
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
+#' @param timing_truth Optional data frame with \code{season} and
+#'   \code{ignition_target_weekF} columns used when \code{timing_mode =
+#'   "fractional"}.
 #'
 #' @return A list with \code{best_spec}, \code{best_spec_id}, \code{summary}
 #'   (ranked by Bernoulli NLL), \code{scores}, \code{cv_results}, and
@@ -1566,6 +1591,11 @@ build_m2 <- function(allD,
 #'   is kept (production training uses the current season).
 #' @param n_cores Integer number of workers for M1 walk-forward predictions.
 #' @param verbose Logical. Print progress.
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
+#' @param timing_truth Optional data frame with \code{season} and
+#'   \code{ignition_target_weekF} columns used when \code{timing_mode =
+#'   "fractional"}.
 #'
 #' @return A list with \code{fit} (GAM), \code{feature_ranges}, \code{m1_train_preds},
 #'   \code{spec}, \code{training_seasons}, and \code{spec_version}. Pass to

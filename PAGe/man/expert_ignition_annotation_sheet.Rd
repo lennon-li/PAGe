@@ -11,6 +11,18 @@ expert_ignition_annotation_sheet(
   positivity_version
 )
 }
+\arguments{
+\item{data}{Surveillance data used to populate the sheet.}
+
+\item{annotator}{Non-empty annotator identifier.}
+
+\item{annotation_version}{Non-empty annotation version label.}
+
+\item{positivity_version}{Non-empty positivity-definition version label.}
+}
+\value{
+A data frame with one blank annotation row per season.
+}
 \description{
 Create a blank ignition annotation sheet
 }

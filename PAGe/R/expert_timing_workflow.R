@@ -2,6 +2,17 @@
 #'
 #' Creates a Plotly review without assigning truth. Peak truth is derived
 #' separately by the retrospective GAM procedure.
+#'
+#' @param data Surveillance data containing the season to review.
+#' @param season Optional season identifier. Required when \code{data} holds
+#'   more than one season.
+#' @param existing_annotation Optional existing
+#'   \code{page_expert_ignition_annotation_v2} object to overlay on the review.
+#' @param weekF_start,weekF_end Optional numeric display-window bounds on the
+#'   \code{weekF} axis. Defaults to the full observed range.
+#' @param show_counts Logical; include positive and tested counts in the hover
+#'   text.
+#' @return A \code{page_expert_ignition_review_v2} object.
 review_expert_ignition <- function(data,
                                    season = NULL,
                                    existing_annotation = NULL,
@@ -68,6 +79,18 @@ review_expert_ignition <- function(data,
 }
 
 #' Finalize numeric expert ignition after review
+#'
+#' @param review A \code{page_expert_ignition_review_v2} object from
+#'   \code{review_expert_ignition()}.
+#' @param ignition_week_decimal Expert decimal ignition week.
+#' @param annotator Non-empty annotator identifier.
+#' @param annotation_version Non-empty annotation version label.
+#' @param positivity_version Non-empty positivity-definition version label.
+#' @param ignition_interval Optional ordered two-value decimal ignition interval
+#'   containing \code{ignition_week_decimal}.
+#' @param comment Optional free-text comment.
+#' @param annotated_at Annotation timestamp; defaults to the current time.
+#' @return A \code{page_expert_ignition_annotation_v2} object.
 finalize_expert_ignition_review <- function(review,
                                             ignition_week_decimal,
                                             annotator,
@@ -92,6 +115,13 @@ finalize_expert_ignition_review <- function(review,
 }
 
 #' Save versioned expert ignition annotations
+#'
+#' @param annotations One or more \code{page_expert_ignition_annotation_v2}
+#'   objects.
+#' @param path Output CSV path.
+#' @param overwrite Logical; when \code{FALSE} (default), refuse to replace an
+#'   existing annotation release.
+#' @return Invisibly, the normalized output path.
 write_expert_ignition_annotations <- function(annotations, path, overwrite = FALSE) {
   if (file.exists(path) && !overwrite) stop("Refusing to overwrite existing annotation release.", call. = FALSE)
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)

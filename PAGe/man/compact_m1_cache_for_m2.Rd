@@ -9,6 +9,9 @@ compact_m1_cache_for_m2(m1_cache, timing_mode = c("legacy", "fractional"))
 \arguments{
 \item{m1_cache}{Named list of complete Phase 1 fold artifacts, as produced
 internally by \code{build_m2()}.}
+
+\item{timing_mode}{Character. \code{"legacy"} or \code{"fractional"};
+retained to keep the compacted handoff consistent with the M2 path.}
 }
 \value{
 A named list with the M2-only fold handoff. The original cache is

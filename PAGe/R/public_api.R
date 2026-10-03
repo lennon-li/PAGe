@@ -23,6 +23,7 @@ page_train <- function(...) {
 #' panel, OLIS snapshot, or supported ORVT input.
 #'
 #' @inheritParams page_v3_forecast
+#' @param ... Arguments passed to \code{page_v3_forecast()}.
 #' @return The current PAGe forecast result.
 #' @export
 page_forecast <- function(...) {
@@ -72,6 +73,7 @@ page_models <- function() {
 #' Generates the current self-contained A/B/A+B walk-forward HTML report.
 #'
 #' @inheritParams page_v3_walkforward_report
+#' @param ... Arguments passed to \code{page_v3_walkforward_report()}.
 #' @return Invisibly, the normalized path to the generated HTML report.
 #' @export
 page_walkforward_report <- function(data = NULL, ...) {
@@ -130,6 +132,7 @@ page_render_report <- function(...) {
 #' Validate a PAGe kit
 #'
 #' @inheritParams validate_page_kit
+#' @param ... Arguments passed to \code{validate_page_kit()}.
 #' @return Invisibly, the validated kit.
 #' @export
 page_validate_kit <- function(...) {
@@ -141,6 +144,7 @@ page_validate_kit <- function(...) {
 #' Stable public wrapper for analytic aggregation across arbitrary strata.
 #'
 #' @inheritParams page_aggregate_strata
+#' @param ... Arguments passed to \code{page_aggregate_strata()}.
 #' @return A `page_strata_aggregate` object.
 #' @export
 aggregate_strata <- function(...) {
@@ -152,6 +156,7 @@ aggregate_strata <- function(...) {
 #' Preferred aggregation path when posterior or simulation draws are available.
 #'
 #' @inheritParams page_aggregate_strata_draws
+#' @param ... Arguments passed to \code{page_aggregate_strata_draws()}.
 #' @return A `page_strata_aggregate_draws` object.
 #' @export
 aggregate_strata_draws <- function(...) {
@@ -161,6 +166,7 @@ aggregate_strata_draws <- function(...) {
 #' Shared-denominator multinomial correlation
 #'
 #' @inheritParams page_shared_denominator_correlation
+#' @param ... Arguments passed to \code{page_shared_denominator_correlation()}.
 #' @return A stratum correlation matrix.
 #' @export
 shared_denominator_correlation <- function(...) {
@@ -172,6 +178,7 @@ shared_denominator_correlation <- function(...) {
 #' Advanced model-level interface for fitting the ignition component.
 #'
 #' @inheritParams fit_m0
+#' @param ... Arguments passed to \code{fit_m0()}.
 #' @return A draft M0 fit artifact.
 #' @export
 m0_fit <- function(...) {
@@ -183,6 +190,7 @@ m0_fit <- function(...) {
 #' Advanced model-level runtime interface for the ignition component.
 #'
 #' @inheritParams run_m0
+#' @param ... Arguments passed to \code{run_m0()}.
 #' @return The current M0 ignition state.
 #' @export
 m0_detect <- function(...) {
@@ -194,6 +202,7 @@ m0_detect <- function(...) {
 #' Advanced model-level interface for fitting the timing component.
 #'
 #' @inheritParams fit_m1
+#' @param ... Arguments passed to \code{fit_m1()}.
 #' @return A draft M1 fit artifact.
 #' @export
 m1_fit <- function(...) {
@@ -205,6 +214,7 @@ m1_fit <- function(...) {
 #' Runs the current governed M1 timing implementation.
 #'
 #' @inheritParams run_m1_v2_timing
+#' @param ... Arguments passed to \code{run_m1_v2_timing()}.
 #' @return The current M1 timing result.
 #' @export
 m1_predict <- function(...) {
@@ -214,6 +224,7 @@ m1_predict <- function(...) {
 #' Compute the M1 peak-time posterior
 #'
 #' @inheritParams m1_v2_peak_posterior
+#' @param ... Arguments passed to \code{m1_v2_peak_posterior()}.
 #' @return A peak-time posterior result.
 #' @export
 m1_peak_posterior <- function(...) {
@@ -223,6 +234,7 @@ m1_peak_posterior <- function(...) {
 #' Compute the M1 peak-passage posterior
 #'
 #' @inheritParams m1_v2_passage_posterior
+#' @param ... Arguments passed to \code{m1_v2_passage_posterior()}.
 #' @return A peak-passage posterior result.
 #' @export
 m1_passage_posterior <- function(...) {
@@ -235,6 +247,7 @@ m1_passage_posterior <- function(...) {
 #' component.
 #'
 #' @inheritParams fit_m2
+#' @param ... Arguments passed to \code{fit_m2()}.
 #' @return A draft M2 fit artifact.
 #' @export
 m2_fit <- function(...) {
@@ -246,6 +259,7 @@ m2_fit <- function(...) {
 #' Advanced model-level runtime interface for the short-horizon component.
 #'
 #' @inheritParams run_m2
+#' @param ... Arguments passed to \code{run_m2()}.
 #' @return One- and two-week-ahead M2 forecast output.
 #' @export
 m2_predict <- function(...) {
@@ -257,6 +271,7 @@ m2_predict <- function(...) {
 #' Stable public wrapper around the governed nested season evaluation.
 #'
 #' @inheritParams nested_season_evaluation
+#' @param ... Arguments passed to \code{nested_season_evaluation()}.
 #' @return A nested season evaluation result.
 #' @export
 evaluate_forecasts <- function(...) {
@@ -266,6 +281,7 @@ evaluate_forecasts <- function(...) {
 #' Replay a frozen holdout season
 #'
 #' @inheritParams replay_season_holdout
+#' @param ... Arguments passed to \code{replay_season_holdout()}.
 #' @return A holdout replay result.
 #' @export
 replay_holdout <- function(...) {
@@ -275,6 +291,7 @@ replay_holdout <- function(...) {
 #' Verify promotion evidence
 #'
 #' @inheritParams verify_promotion_evidence
+#' @param ... Arguments passed to \code{verify_promotion_evidence()}.
 #' @return Promotion-evidence verification output.
 #' @export
 verify_promotion <- function(...) {

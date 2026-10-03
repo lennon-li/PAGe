@@ -42,6 +42,9 @@ season, weekF, phase, newWeek, y, N.}
 \item{feature_ranges}{Optional training feature scales reused for prediction.}
 
 \item{verbose}{Logical.}
+
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
 }
 \value{
 data.frame stacked across leads with engineered covariates.

@@ -17,6 +17,32 @@ new_expert_ignition_annotation(
   comment = NULL
 )
 }
+\arguments{
+\item{season}{Non-empty season identifier.}
+
+\item{ignition_week_decimal}{Expert decimal ignition week within
+\code{[1, n_weeks + 1)}.}
+
+\item{n_weeks}{Integer season length (at least 2); defaults to 52.}
+
+\item{ignition_interval}{Optional ordered two-value decimal interval
+containing \code{ignition_week_decimal}.}
+
+\item{annotator}{Non-empty annotator identifier.}
+
+\item{annotation_version}{Non-empty annotation version label.}
+
+\item{annotated_at}{Annotation timestamp (POSIXct or string).}
+
+\item{data_snapshot_id}{Non-empty identifier of the reviewed data snapshot.}
+
+\item{positivity_version}{Non-empty positivity-definition version label.}
+
+\item{comment}{Optional free-text comment.}
+}
+\value{
+A \code{page_expert_ignition_annotation_v2} object.
+}
 \description{
 Create one expert decimal ignition annotation
 }

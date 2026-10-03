@@ -11,6 +11,20 @@ review_expert_ignition_set(
   ...
 )
 }
+\arguments{
+\item{data}{Surveillance data containing the seasons to review.}
+
+\item{seasons}{Optional character vector of season identifiers to review.
+Defaults to all seasons present in \code{data}.}
+
+\item{existing_annotations}{Optional existing annotation object or list of
+annotations to overlay.}
+
+\item{...}{Additional arguments passed to \code{review_expert_ignition()}.}
+}
+\value{
+A named list of \code{page_expert_ignition_review_v2} objects.
+}
 \description{
 Build expert ignition review objects for all seasons
 }

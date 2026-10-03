@@ -63,6 +63,9 @@ increase this to protect against catastrophic false-early ignition.}
 
 \item{iWeek}{Logical. Use \code{truth_col} if available; otherwise infer from \code{phase_col}.}
 
+\item{timing_mode}{Character. \code{"legacy"} scores integer ignition
+weeks; \code{"fractional"} scores decimal ignition timing.}
+
 \item{ncores}{Integer >= 1. Number of cores.}
 
 \item{verbose}{Logical. Print progress.}

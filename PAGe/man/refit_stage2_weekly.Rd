@@ -40,6 +40,9 @@ the original \code{spec$k_s} is restored once at least that many post-ignition
 origin weeks are available in \code{current_obs}.}
 
 \item{verbose}{Logical. Print progress messages.}
+
+\item{timing_mode}{Character. \code{"legacy"} uses integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
 }
 \value{
 Output of \code{train_stage2_joint()} on the combined dataset.

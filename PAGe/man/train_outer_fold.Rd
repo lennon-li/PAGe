@@ -89,6 +89,10 @@ manuscript protocol is `0`.}
 \item{late_weight}{Phase weight for targets later than `early_max_t_since`.
 The manuscript protocol is `1`.}
 
+\item{scoring}{Scoring contract: \code{"page_v2"} (default) uses the
+retrospective phase weights, while \code{"legacy_0_12"} retains the old
+post-ignition 0:12 weighting.}
+
 \item{score_scale}{M2 tuning scale. The manuscript primary is `equal_week`;
 `test_count` is available as a sensitivity analysis.}
 
@@ -139,6 +143,9 @@ fewer than `parallel::detectCores()`.}
 boundary reports, decisions, frozen stages, and the final kit.}
 
 \item{verbose}{Logical progress flag.}
+
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
 
 \item{gate_nesting}{Inner-gate nesting depth. `"full"` (default) re-runs
 selection, inside each gate season's excluded dataset, for every upstream

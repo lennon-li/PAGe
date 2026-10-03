@@ -29,6 +29,7 @@ test_that('API v2 binds relaxed forecast release and worker issues at weekF11', 
   dir.create(job,recursive=TRUE); dir.create(out); dir.create(dep_root)
   fixture <- file.path(td,'hist.RData'); make_early_fixture(fixture)
   release_dir <- file.path(repo,'artifacts/v3-shadow-release-v2',.PAGE_FORECAST_RELEASE_ID)
+  stale <- release_dir_stale_reason(release_dir); skip_if(!is.null(stale),stale)
   opt <- list(deployment_root=dep_root,artifact_mount=mount,artifact_fs_type=NULL,artifact_mount_source=NULL,job_root=job,output_root=out,source_mode='olis',season='2026-27',bind_host='127.0.0.1',port='8088',rscript=Sys.which('Rscript'),forecast_release_dir=release_dir,olis_fallback=fixture,max_runtime_seconds='300',mode='test')
   dep <- .api_build_deployment(opt,repo)
   expect_true(file.exists(file.path(dep$deployment_dir,'deployment_manifest.tsv')))

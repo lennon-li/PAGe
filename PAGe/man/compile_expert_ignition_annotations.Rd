@@ -6,6 +6,13 @@
 \usage{
 compile_expert_ignition_annotations(annotations)
 }
+\arguments{
+\item{annotations}{One or more \code{page_expert_ignition_annotation_v2}
+objects.}
+}
+\value{
+A data frame with one flat row per annotation.
+}
 \description{
 Compile expert ignition annotations to flat storage rows
 }

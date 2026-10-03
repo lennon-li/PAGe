@@ -46,6 +46,9 @@ train_stage2_joint(
 \item{m1_preds}{Optional M1 walk-forward predictions used for stacking.}
 
 \item{verbose}{logical.}
+
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
 }
 \description{
 Preferred usage: pass only \code{spec}. The function will use \code{spec$best_row}

@@ -20,5 +20,5 @@ These labels are retrospective and must never be supplied for a held-out
 LOSO test season (use \code{manual_labels_test = NULL} in LOSO eval paths).
 }
 \examples{
-page_manual_ignition_labels()
+PAGe:::page_manual_ignition_labels()
 }

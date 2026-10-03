@@ -49,6 +49,10 @@ labels for the test season. Default \code{NULL} = use prospective
 \item{flag_args}{Named list forwarded to \code{flagIgnition()}.}
 
 \item{verbose}{Logical.}
+
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates
+through the weekly refits.}
 }
 \value{
 Same structure as \code{nested_loso_m2_eval()}: list with

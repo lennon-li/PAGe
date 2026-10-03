@@ -65,6 +65,13 @@ to \pkg{future} workers. When \code{NULL} (default), the limit is raised
 only as needed for the prepared M1 cache, with a 2 GiB safety ceiling.}
 
 \item{verbose}{Logical. Print progress.}
+
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
+
+\item{timing_truth}{Optional data frame with \code{season} and
+\code{ignition_target_weekF} columns used when \code{timing_mode =
+"fractional"}.}
 }
 \value{
 A list with \code{best_spec}, \code{best_spec_id}, \code{summary}

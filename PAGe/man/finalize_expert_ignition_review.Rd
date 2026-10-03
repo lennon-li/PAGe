@@ -15,6 +15,28 @@ finalize_expert_ignition_review(
   annotated_at = Sys.time()
 )
 }
+\arguments{
+\item{review}{A \code{page_expert_ignition_review_v2} object from
+\code{review_expert_ignition()}.}
+
+\item{ignition_week_decimal}{Expert decimal ignition week.}
+
+\item{annotator}{Non-empty annotator identifier.}
+
+\item{annotation_version}{Non-empty annotation version label.}
+
+\item{positivity_version}{Non-empty positivity-definition version label.}
+
+\item{ignition_interval}{Optional ordered two-value decimal ignition interval
+containing \code{ignition_week_decimal}.}
+
+\item{comment}{Optional free-text comment.}
+
+\item{annotated_at}{Annotation timestamp; defaults to the current time.}
+}
+\value{
+A \code{page_expert_ignition_annotation_v2} object.
+}
 \description{
 Finalize numeric expert ignition after review
 }

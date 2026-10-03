@@ -8,6 +8,20 @@
 .expert_timing_coordinate_version <- "page-continuous-week-v1"
 
 #' Create one expert decimal ignition annotation
+#'
+#' @param season Non-empty season identifier.
+#' @param ignition_week_decimal Expert decimal ignition week within
+#'   \code{[1, n_weeks + 1)}.
+#' @param n_weeks Integer season length (at least 2); defaults to 52.
+#' @param ignition_interval Optional ordered two-value decimal interval
+#'   containing \code{ignition_week_decimal}.
+#' @param annotator Non-empty annotator identifier.
+#' @param annotation_version Non-empty annotation version label.
+#' @param annotated_at Annotation timestamp (POSIXct or string).
+#' @param data_snapshot_id Non-empty identifier of the reviewed data snapshot.
+#' @param positivity_version Non-empty positivity-definition version label.
+#' @param comment Optional free-text comment.
+#' @return A \code{page_expert_ignition_annotation_v2} object.
 new_expert_ignition_annotation <- function(
     season,
     ignition_week_decimal,
@@ -49,6 +63,9 @@ new_expert_ignition_annotation <- function(
 }
 
 #' Validate an expert ignition annotation
+#'
+#' @param x A \code{page_expert_ignition_annotation_v2} object.
+#' @return Invisibly, the validated annotation.
 validate_expert_ignition_annotation <- function(x) {
   if (!inherits(x, "page_expert_ignition_annotation_v2")) {
     stop("`x` must be created by `new_expert_ignition_annotation()`.", call. = FALSE)
@@ -72,6 +89,10 @@ validate_expert_ignition_annotation <- function(x) {
 }
 
 #' Compile expert ignition annotations to flat storage rows
+#'
+#' @param annotations One or more \code{page_expert_ignition_annotation_v2}
+#'   objects.
+#' @return A data frame with one flat row per annotation.
 compile_expert_ignition_annotations <- function(annotations) {
   if (inherits(annotations, "page_expert_ignition_annotation_v2")) annotations <- list(annotations)
   if (!is.list(annotations) || !length(annotations)) {

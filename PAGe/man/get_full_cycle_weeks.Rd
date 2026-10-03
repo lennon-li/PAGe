@@ -19,7 +19,7 @@ of the year.
 }
 \examples{
 \dontrun{
-get_full_cycle_weeks(2025)
-get_full_cycle_weeks(2026)
+PAGe:::get_full_cycle_weeks(2025)
+PAGe:::get_full_cycle_weeks(2026)
 }
 }

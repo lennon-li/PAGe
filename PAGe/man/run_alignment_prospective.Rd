@@ -71,6 +71,9 @@ required before attempting alignment (default \code{4L}).}
 
 \item{trough_weight, rise_weight, peak_decay}{Alignment-loss controls.}
 
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
+
 \item{peak_stabilization}{Character; `"legacy"` (default) preserves the
 existing stateless peak output, while `"causal"` uses the stabilized
 decimal peak candidate.}

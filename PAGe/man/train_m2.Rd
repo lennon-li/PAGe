@@ -34,6 +34,13 @@ is kept (production training uses the current season).}
 \item{n_cores}{Integer number of workers for M1 walk-forward predictions.}
 
 \item{verbose}{Logical. Print progress.}
+
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
+
+\item{timing_truth}{Optional data frame with \code{season} and
+\code{ignition_target_weekF} columns used when \code{timing_mode =
+"fractional"}.}
 }
 \value{
 A list with \code{fit} (GAM), \code{feature_ranges}, \code{m1_train_preds},

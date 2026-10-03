@@ -42,6 +42,9 @@ If FALSE, uses \code{newWeek = weekF}.}
 \item{eps}{Numeric small constant passed to derivative calculations.}
 
 \item{date_col}{Character. Name of the date column in \code{currentSeason} (default tries \code{"date"}).}
+
+\item{timing_mode}{Character. \code{"legacy"} uses integer week coordinates;
+\code{"fractional"} preserves numeric (decimal) ignition and aligned weeks.}
 }
 \value{
 A list with:

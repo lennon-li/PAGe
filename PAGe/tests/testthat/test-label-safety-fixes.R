@@ -57,9 +57,9 @@ test_that("flagIgnition with page_manual_ignition_labels() bypasses detection", 
 # Item 2: page_manual_ignition_labels accessor
 # =====================================================================
 
-test_that("page_manual_ignition_labels is exported and returns named integers", {
-  expect_true("page_manual_ignition_labels" %in% getNamespaceExports("PAGe"),
-    label = "Item 5.2: accessor should be exported")
+test_that("page_label_ignitions is exported and manual labels resolve internally", {
+  expect_true("page_label_ignitions" %in% getNamespaceExports("PAGe"),
+    label = "Item 5.2: public labelling entry point should be exported")
   labs <- PAGe:::page_manual_ignition_labels()
   expect_type(labs, "integer")
   expect_true(!is.null(names(labs)))

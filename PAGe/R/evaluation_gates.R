@@ -672,6 +672,8 @@ race_m2_candidates <- function(grid,
 #' @param kit_compatibility Identity mode. The default \code{"strict"} requires
 #'   canonical \code{m2_production}; \code{"legacy_m2"} explicitly permits a
 #'   legacy \code{m2} field with a warning.
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #' @param ... Additional runner arguments.
 #'
 #' @return Replay predictions, standardized metrics, and explicit workflow

@@ -24,6 +24,11 @@
 #' @param manual_labels Optional named list of manual ignition labels.
 #' @param flag_args Named list of arguments forwarded to \code{flagIgnition()}.
 #' @param verbose Logical; print progress messages.
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
+#' @param timing_truth Optional data frame with \code{season} and
+#'   \code{ignition_target_weekF} columns used when \code{timing_mode =
+#'   "fractional"}.
 #'
 #' @return A named list with components:
 #'   \describe{
@@ -165,6 +170,8 @@ nested_loso_build_fold <- function(allD,
 #' @param spread_method Character; \code{"between"} (default) or \code{"total"}.
 #'   Passed to \code{m1_walkforward_multi()} and onward to
 #'   \code{run_alignment_prospective_multi()}.
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #'
 #' @return Tibble of M1 walk-forward predictions for training seasons
 #'   (columns: season, eval_weekF, target_weekF, h, m1_p_hat, ...).
@@ -249,6 +256,8 @@ nested_loso_m1_train <- function(allD,
 #' @param verbose Logical; print progress.
 #' @param fail_fast Logical; rethrow unsupported-model errors instead of
 #'   converting them to a warning and \code{NULL} (default \code{FALSE}).
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #'
 #' @return Output of \code{train_stage2_joint()} (list with \code{fit},
 #'   \code{train_data}, ...), or \code{NULL} if training fails.
@@ -340,6 +349,8 @@ nested_loso_m2_train <- function(fold,
 #' @param spread_method Character; \code{"between"} (default) or \code{"total"}.
 #'   Passed to \code{m1_walkforward_predictions()} and onward to
 #'   \code{run_alignment_prospective_multi()}.
+#' @param timing_mode Character. \code{"legacy"} preserves integer ignition and
+#'   aligned coordinates; \code{"fractional"} preserves numeric coordinates.
 #'
 #' @return Tibble of M1 walk-forward predictions for the test season,
 #'   or a zero-row tibble if no ignition detected.

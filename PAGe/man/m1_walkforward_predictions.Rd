@@ -74,6 +74,9 @@ alignment-loss controls.}
 Passed to \code{run_alignment_prospective_multi()} to select the
 \code{logit_spread} computation method.}
 
+\item{timing_mode}{Character. \code{"legacy"} preserves integer ignition and
+aligned coordinates; \code{"fractional"} preserves numeric coordinates.}
+
 \item{peak_stabilization}{Character; \code{"legacy"} (default) or
 \code{"causal"}.}
 
