@@ -49,8 +49,8 @@ pp (8), B+1 0.154921 pp (7), and B+2 state/fallback 0.154897 pp (7). There
 were zero B timing activations at weekF12. These are support checks only.
 
 The 2026–27 weekF8–11 report is diagnostic and pre-issuance. Authoritative
-current score-to-date values from the CSV are A+1 0.4121391 pp (n=3), A+2
-0.6495239 pp (n=2), B+1 0.02855612 pp (n=3), and B+2 0.04773192 pp (n=2).
+current score-to-date values from the CSV are A+1 0.4121899 pp (n=3), A+2
+0.5535410 pp (n=2), B+1 0.0284583 pp (n=3), and B+2 0.0481438 pp (n=2).
 They replace stale A+2/B+2 prose in an older end-to-end audit. No observed
 weekF12+ result is available at this update. The first eligible shadow run
 must retain its as-issued source and panel provenance and be scored only after
@@ -83,15 +83,13 @@ Package-native workflow is implemented in `PAGe/R/training_workflow.R` and
 `PAGe/R/v3_runtime.R`, with frozen artifacts in
 `PAGe/inst/models/v3-week12/` and vignettes in `PAGe/vignettes/`.
 `page_label_ignitions()` plots seasons and collects expert decimal ignition
-labels; `page_train_workflow()` delegates to governed `train_pipeline()` and
-does not supply hidden default labels; `page_save_kit()` and `page_load_kit()`
-save and restore a kit; `page_v3_forecast()` runs the bundled canonical
-artifacts.
+labels; `page_train()` implements governed training and does not supply hidden default labels; `page_save_kit()` and `page_load_kit()`
+save and restore a kit; `page_forecast()` runs the bundled canonical artifacts.
 
 Source-tree and clean installed-package v3 tests are 52/52 green and training-workflow tests are 16/16 green. The exact tarball installs into an isolated library and exposes all six new public functions. Package-native weekF12 equivalence to the audited v4 transaction
 has maximum forecast absolute difference 4.44e-15 percentage points, exact
 route/state equivalence, and identical OLIS versus typed-panel results.
-These establish both source-tree and clean installed-package integration/equivalence. The exact built tarball installs successfully, all six new exports are present, and the installed package passes the same 52/52 v3 runtime plus 16/16 training-workflow assertions. The three new vignettes render successfully. A terminal full `R CMD check` summary remains incomplete in this sandbox because long check calls are interrupted after install/load/namespace/static stages; no package error is present in the partial terminal log.
+These establish both source-tree and clean installed-package integration/equivalence. The exact built tarball installs successfully, all six new exports are present, and the installed package passes the same 52/52 v3 runtime plus 16/16 training-workflow assertions. The three new vignettes render successfully. Full `R CMD build` and `R CMD check --no-manual` were executed and verified in Asgard on `PAGe_0.3.0.tar.gz` (commit `0baf0b9`), passing with 0 ERRORs, 0 WARNINGs, and 1 NOTE for standard unquoted global variables. All 7,143 unit tests across 136 test files passed (0 failures, 0 errors, 18 skipped stale release-binding tests).
 
 API v4 is an operational monitoring layer for supplement/implementation
 detail, not the primary user product. Its current focused regression suites are
@@ -120,6 +118,20 @@ API probability layer is an operational implementation supplement and is not a
 replacement for the manuscript's prespecified retrospective probabilistic
 estimands or scoring protocol.
 
+
+The public data contract supports live HTTP feeds through
+`getCurrentD(data = NULL)`, prospective IRVRI daily snapshots
+(`hist_olis_daily_YYYY_MM_DD.RData`) aggregated to complete MMWR weeks, official
+PHO weekly surveillance CSVs, and in-memory typed panels (`weekF`, `y_A`, `N_A`,
+`y_B`, `N_B`). `page_load_surveillance()` and `aggregate_strata()` support
+loading and aggregation. `page_walkforward_report()` and
+`page_render_report()` produce pure-Markdown `.qmd` tabsets and self-contained
+interactive HTML, including `reports/page_walkforward_2026-27_week12.html`.
+Internal `v3_*` functions are private implementation details beneath the
+stabilized 0.3.0 public API. This reporting engine describes retrospective
+walk-forward replay; all v3 outputs remain shadow-only with
+`production_eligible=FALSE`.
+
 ## Manuscript actions and open evidence
 
 The controlling revisions are in [`PLAN.md`](PLAN.md),
@@ -127,8 +139,7 @@ The controlling revisions are in [`PLAN.md`](PLAN.md),
 [`RESULTS.md`](RESULTS.md), and [`TODO.md`](TODO.md). Historical prior-cycle
 Results remain separate and unchanged. The remaining manuscript gates are:
 
-1. Obtain a terminal full `R CMD check` summary in a stable environment and preserve it.
-2. Preserve the already-rendered vignette outputs with the final package evidence.
-3. Reconcile all manuscript tables and text to machine-readable current artifacts.
-4. Capture the first observed weekF12+ run and later score its forecasts when target observations are available.
-5. Complete data-custodian publication authorization and the applicable research-ethics/REB determination before submission.
+1. Preserve the verified package build/check summary and rendered vignette outputs with the final package evidence.
+2. Reconcile remaining manuscript tables and text to machine-readable current artifacts.
+3. Capture the first observed weekF12+ run and later score its forecasts when target observations are available.
+4. Complete data-custodian publication authorization and the applicable research-ethics/REB determination before submission.

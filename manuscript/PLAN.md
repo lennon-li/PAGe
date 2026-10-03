@@ -27,10 +27,12 @@ Last updated: 2026-09-28
 > - Ontario RSV and multi-pathogen validation are superseded for this paper.
 >   Keep their prior rationale below as history; do not carry their tasks or
 >   claims into the active manuscript plan.
-> - Active submission gates: obtain a terminal full `R CMD check` summary in a stable environment,
->   reconcile manuscript values against current
->   machine-readable results, and report the first observed 2026-27 weekF12+
->   run when available. No weekF12 observed result exists yet.
+> - Full `R CMD build` and `R CMD check --no-manual` passed in Asgard on
+>   `PAGe_0.3.0.tar.gz` (commit `0baf0b9`): 0 ERRORs, 0 WARNINGs, and 1 NOTE
+>   (standard unquoted global variables); all 7,143 tests across 136 files
+>   passed (0 failures, 0 errors, 18 skipped stale release-binding tests).
+>   Week 8–11 score-to-date values are reconciled to the machine-readable
+>   artifact. The first observed 2026-27 weekF12+ run remains pending.
 
 > **Amendment 2026-09-15: Epidemics target and new-cycle evidence**
 >

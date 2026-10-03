@@ -16,10 +16,10 @@ reproducibility and operating surface.
   absence of a common-ledger M0 comparison.
 - [x] Document package-native training, frozen-kit, and forecasting workflow.
 - [x] Install the exact built tarball into an isolated library and rerun the v3 runtime and training-workflow suites (52/52 + 16/16).
-- [ ] Obtain a terminal full `R CMD check` summary in a stable environment; the current AgentPorter/R 4.6 sandbox interrupts long check calls after install/load/namespace stages.
+- [x] Execute and verify full `R CMD build` and `R CMD check --no-manual` on `PAGe_0.3.0.tar.gz` (commit `0baf0b9`) in Asgard: 0 ERRORs, 0 WARNINGs, 1 NOTE (standard unquoted global variables); all 7,143 unit tests across 136 files passed (0 failures, 0 errors, 18 skipped stale release-binding tests).
 - [x] Build and review the three new package vignettes (`train-your-own-page`, `deploy-and-forecast`, `canonical-v3-week12`).
-- [ ] Reconcile every manuscript result/table against its current
-  machine-readable artifact, including the authoritative 2026–27 CSV values.
+- [x] Reconcile the Week 8–11 score-to-date values against the authoritative
+  machine-readable CSV; remaining manuscript tables are still subject to review.
 - [ ] Run and preserve the first observed 2026–27 weekF12+ shadow transaction;
   score only after its target observations are available. Do not call the
   current weekF8–11 diagnostic a prospective issuance result.

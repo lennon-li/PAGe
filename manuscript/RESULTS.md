@@ -68,10 +68,10 @@ score-to-date values are:
 
 | Target | MAE (percentage points) | Scored targets |
 |---|---:|---:|
-| A +1 | 0.4121391 | 3 |
-| A +2 | 0.6495239 | 2 |
-| B +1 | 0.02855612 | 3 |
-| B +2 | 0.04773192 | 2 |
+| A +1 | 0.4121899 (~0.412) | 3 |
+| A +2 | 0.5535410 (~0.554) | 2 |
+| B +1 | 0.0284583 (~0.028) | 3 |
+| B +2 | 0.0481438 (~0.048) | 2 |
 
 These are diagnostic partial-season scores, not a completed prospective
 evaluation. They supersede stale A+2/B+2 prose in the older end-to-end audit;
@@ -82,22 +82,18 @@ after target observations become available. The release remains shadow-only.
 
 ### Package integration evidence
 
-The primary user-facing product is the `PAGe` package. The package-native v3
-workflow, bundled frozen artifacts, and vignettes are implemented. Source-tree and clean installed-package tests both report 52/52 v3 assertions and 16/16 training-workflow assertions green.
-Package-native weekF12 output is equivalence-verified against the audited v4
-transaction (maximum forecast absolute difference 4.44e-15 percentage points,
-with exact route/state agreement); OLIS and typed-panel inputs return identical
-results. These establish source-tree integration and equivalence, not final
-installed-package readiness. The exact tarball installs and executes successfully from an isolated library, and all three new vignettes render successfully. A terminal full `R CMD check` summary remains open because the current sandbox interrupts long check calls after install/load/namespace stages. The earlier full check logged 28 test
-failures, while the later `check-final` log has no terminal summary; an
-installed smoke test passed, but neither record establishes a clean final
-check against the current source tree.
-
-API v4 is reported as implementation detail or supplement. Its core tests were
-94/94, HTTP 43/43, and monitoring 34/34; independent monitoring semantics and
-installer audits were approved, and deployment evidence was approved with
-external-host caveats. API evidence does not change the package's role as the
-reproducibility surface or the shadow-only status.
+The stabilized PAGe 0.3.0 API provides `page_load_surveillance()` and
+`aggregate_strata()` for data loading and aggregation, `page_train()` for
+governed training, and `page_forecast()` for forecasting. The high-level
+reporting APIs are `page_walkforward_report()` and `page_render_report()`.
+Internal `v3_*` functions remain encapsulated private implementation details.
+Full `R CMD build` and `R CMD check --no-manual` passed in Asgard on
+`PAGe_0.3.0.tar.gz` (commit `0baf0b9`), with 0 ERRORs, 0 WARNINGs, and 1 NOTE
+for standard unquoted global variables. All 7,143 unit tests across 136 test
+files passed (0 failures, 0 errors, 18 skipped stale release-binding tests).
+The three new vignettes rendered successfully. These software checks do not
+change the shadow-only status of v3 or the distinction between retrospective
+walk-forward replay and prospective deployment.
 
 > **Evidence reconciliation note.** Values in this section come from current
 > machine-readable v3 evidence and dated dispositions. They do not overwrite

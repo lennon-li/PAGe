@@ -37,11 +37,21 @@ stale A+2/B+2 prose in the older end-to-end audit. WeekF12 replay metrics are
 support-only. The 1.677% M0 result is a counterfactual ignition diagnostic, not
 an observation. No overall legacy/v2/v3 ranking is supported.
 
-The package subsection should describe `page_label_ignitions()` for plotted
-expert decimal labels, `page_train_workflow()` delegating to governed
-`train_pipeline()` without hidden labels, `page_save_kit()`/
-`page_load_kit()`, and the bundled canonical artifacts used by
-`page_v3_forecast()`. Source-tree and clean installed-package equivalence are verified; the three new vignettes render successfully. A terminal full `R CMD check` summary remains open because long check calls in the current AgentPorter/R 4.6 sandbox terminate at the transport layer after passing install/load/namespace stages.
+The package subsection should describe the stabilized PAGe 0.3.0 public API:
+`page_load_surveillance()` and `aggregate_strata()` support data ingestion;
+`page_label_ignitions()` collects explicit expert labels; `page_train()` runs
+governed training; `page_save_kit()` and `page_load_kit()` preserve trained
+kits; and `page_forecast()` issues forecasts from frozen artifacts. Internal
+`v3_*` functions are private implementation details encapsulated under this
+public API. The reporting APIs `page_walkforward_report()` and
+`page_render_report()` generate pure-Markdown `.qmd` tabsets and self-contained
+interactive HTML dashboards, including
+`reports/page_walkforward_2026-27_week12.html`. Full `R CMD build` and
+`R CMD check --no-manual` passed in Asgard on `PAGe_0.3.0.tar.gz` (commit
+`0baf0b9`): 0 ERRORs, 0 WARNINGs, and 1 NOTE for standard unquoted global
+variables. All 7,143 unit tests in 136 test files passed (0 failures, 0 errors,
+18 skipped stale release-binding tests). The three new vignettes render
+successfully.
 
 Status: **authoring guide; the standalone Methods draft and reporting schemas
 are finalized, while numerical Results remain blocked by the evidence gates in
@@ -273,6 +283,17 @@ implementation package distributed separately.
 
 ### 2.1 Weekly surveillance contract
 
+PAGe 0.3.0 accepts four interchangeable Ontario influenza data regimes:
+zero-configuration live HTTP feeds via `getCurrentD(data = NULL)`; prospective
+IRVRI daily age-stratified snapshots named
+`hist_olis_daily_YYYY_MM_DD.RData`, rolled up by age strata and daily counts to
+complete MMWR weeks; official PHO weekly surveillance spreadsheets in CSV
+format; and in-memory typed panels containing `weekF`, `y_A`, `N_A`, `y_B`, and
+`N_B`. `page_load_surveillance()` loads surveillance inputs and
+`aggregate_strata()` aggregates age strata where required. These are input
+routes to the same weekly panel contract, not separate empirical applications.
+
+
 - **Purpose:** Define positive count, test denominator, positivity, MMWR-based
   season and week, and permitted metadata.
 - **Claim:** The binomial count/denominator representation preserves varying
@@ -380,7 +401,7 @@ tuning and fitting inputs must precede the origin (protocol v2.0 section 1.2).
   origin; M2 is adopted only if the mean phase-weighted gain clears
   `max(floor, qt(0.95, n - 1) * SD / sqrt(n))` overall and per horizon with no
   season degrading, and otherwise forecasts equal M1.
-- **Evidence:** Pseudocode and governed `train_pipeline()` contract; protocol
+- **Evidence:** `page_train()` implements the governed training contract; protocol
   v2.0 section 2 (gate and cadence rows) and section 5.5.
 - **Display:** Figure 1 plus Algorithm 1.
 - **Status:** `[DRAFT REQUIRED]`
