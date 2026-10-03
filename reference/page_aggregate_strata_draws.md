@@ -60,6 +60,11 @@ draws <- cbind(
   A = rnorm(1000, 0.05, 0.005),
   B = rnorm(1000, 0.02, 0.003)
 )
-page_aggregate_strata_draws(draws, method = "sum", bounds = c(0, 1))
-#> Error in page_aggregate_strata_draws(draws, method = "sum", bounds = c(0,     1)): could not find function "page_aggregate_strata_draws"
+aggregate_strata_draws(draws, method = "sum", bounds = c(0, 1))
+#> PAGe stratified aggregate (draw-based)
+#>   method:      sum
+#>   draws:       1000
+#>   mean:        0.069893
+#>   median:      0.0700119
+#>   95.0% interval: [0.0579073, 0.0819568]
 ```

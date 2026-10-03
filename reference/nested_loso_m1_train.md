@@ -105,6 +105,11 @@ nested_loso_m1_train(
 
   Logical; print progress.
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
 ## Value
 
 Tibble of M1 walk-forward predictions for training seasons (columns:

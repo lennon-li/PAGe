@@ -123,6 +123,12 @@ train_outer_fold(
   Phase weight for targets later than \`early_max_t_since\`. The
   manuscript protocol is \`1\`.
 
+- scoring:
+
+  Scoring contract: `"page_v2"` (default) uses the retrospective phase
+  weights, while `"legacy_0_12"` retains the old post-ignition 0:12
+  weighting.
+
 - score_scale:
 
   M2 tuning scale. The manuscript primary is \`equal_week\`;
@@ -211,6 +217,11 @@ train_outer_fold(
 - verbose:
 
   Logical progress flag.
+
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
 
 - gate_nesting:
 

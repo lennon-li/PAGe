@@ -76,6 +76,16 @@ tune_m1(
   Defaults to labels stored in `m0`. M1 tuning applies its historical
   one-week coordinate offset after resolving this value.
 
+- timing_truth:
+
+  Optional data frame with `season` and `ignition_target_weekF` columns
+  used when `timing_mode = "fractional"`.
+
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
 ## Value
 
 Output of

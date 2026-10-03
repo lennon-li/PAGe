@@ -70,7 +70,7 @@
 
     
     
-<p>This vignette starts from a kit created by <code><a href="../reference/PAGe-public-api.html">page_train()</a></code>
+<p>This vignette starts from a kit created by <code><a href="../reference/page_train.html">page_train()</a></code>
 or another governed PAGe training path. Deployment is an R-package
 operation: the model does not require a shell installer or a systemd
 service.</p>
@@ -135,13 +135,13 @@ scheduling infrastructure is separate.</p>
 </h2>
 <p>If you want the audited pretrained Influenza A/B v3 weekF12 model
 rather than a kit trained from your own data, use
-<code><a href="../reference/PAGe-public-api.html">page_forecast()</a></code>. Its canonical runtime bundle is shipped
+<code><a href="../reference/page_forecast.html">page_forecast()</a></code>. Its canonical runtime bundle is shipped
 with PAGe and validated by hash at runtime. M0/M1 retain exact canonical
 bytes; M2 ships deterministic runtime-only projections that preserve
 source artifact IDs and source SHA-256 provenance without bundling
 historical target-count frames.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">v3</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/PAGe-public-api.html">page_forecast</a></span><span class="op">(</span></span>
+<code class="sourceCode R"><span><span class="va">v3</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/page_forecast.html">page_forecast</a></span><span class="op">(</span></span>
 <span>  <span class="st">"path/to/hist_olis.RData"</span>,</span>
 <span>  season <span class="op">=</span> <span class="st">"2026-27"</span></span>
 <span><span class="op">)</span></span>

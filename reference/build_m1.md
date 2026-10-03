@@ -57,6 +57,16 @@ build_m1(
   Named list of M1 alignment parameters. Defaults to the canonical
   production specification.
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
+- timing_truth:
+
+  Optional data frame with `season` and `ignition_target_weekF` columns
+  used when `timing_mode = "fractional"`.
+
 ## Value
 
 A list with `ref`, `hyper`, `aligned_train`, `m1_params`, and

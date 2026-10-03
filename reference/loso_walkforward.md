@@ -229,6 +229,23 @@ loso_walkforward(
 
   Logical. Print per-season progress (default `TRUE`).
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition coordinates;
+  `"fractional"` preserves numeric (decimal) coordinates.
+
+- timing_truth:
+
+  Optional data frame with `season` and `ignition_target_weekF` columns
+  used to score fractional ignition timing. Required when
+  `timing_mode = "fractional"` and ignition timing is evaluated.
+
+- checkpoint_identity:
+
+  Optional list overriding the auto-derived checkpoint identity used to
+  validate a resumed `checkpoint_file`. When `NULL`, an identity is
+  derived from the run inputs.
+
 ## Value
 
 A list with three elements:

@@ -206,6 +206,21 @@ between-template variance, yielding a total-variance spread. When per-template
 SEs are unavailable (zero or missing) the method falls back to between-only
 for that forecast week and increments <code>spread_fallback_count</code>.</p></dd>
 
+
+<dt id="arg-timing-mode">timing_mode<a class="anchor" aria-label="anchor" href="#arg-timing-mode"></a></dt>
+<dd><p>Character. <code>"legacy"</code> preserves integer ignition and
+aligned coordinates; <code>"fractional"</code> preserves numeric coordinates.</p></dd>
+
+
+<dt id="arg-prep">prep<a class="anchor" aria-label="anchor" href="#arg-prep"></a></dt>
+<dd><p>Optional precomputed alignment prep object (as returned when
+<code>return_prep = TRUE</code>). When <code>NULL</code>, the prep is built internally.</p></dd>
+
+
+<dt id="arg-return-prep">return_prep<a class="anchor" aria-label="anchor" href="#arg-return-prep"></a></dt>
+<dd><p>Logical; when <code>TRUE</code>, include the built alignment
+prep object in the result for reuse across calls.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>

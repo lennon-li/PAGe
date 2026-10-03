@@ -88,7 +88,7 @@ Influenza B:
 - otherwise B+2 is exact B1 fallback.
 
 Before weekF12,
-[`page_forecast()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
+[`page_forecast()`](https://lennon-li.github.io/PAGe/reference/page_forecast.md)
 returns a valid object with `issued = FALSE` and does not silently turn
 early diagnostics into issued forecasts.
 

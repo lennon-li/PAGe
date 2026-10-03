@@ -71,6 +71,11 @@ build_stage2_pseudo_prospective_list(
   Character. Name of the date column in `currentSeason` (default tries
   `"date"`).
 
+- timing_mode:
+
+  Character. `"legacy"` uses integer week coordinates; `"fractional"`
+  preserves numeric (decimal) ignition and aligned weeks.
+
 ## Value
 
 A list with:

@@ -104,6 +104,11 @@ run_alignment_prospective(
 
   Alignment-loss controls.
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
 - peak_stabilization:
 
   Character; \`"legacy"\` (default) preserves the existing stateless

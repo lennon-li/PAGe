@@ -24,6 +24,9 @@ LOSO test season (use `manual_labels_test = NULL` in LOSO eval paths).
 ## Examples
 
 ``` r
-page_manual_ignition_labels()
-#> Error in page_manual_ignition_labels(): could not find function "page_manual_ignition_labels"
+PAGe:::page_manual_ignition_labels()
+#> 2012-13 2013-14 2014-15 2015-16 2016-17 2017-18 2018-19 2019-20 2022-23 2023-24 
+#>      18      20      20      24      19      20      19      22      15      20 
+#> 2024-25 2025-26 
+#>      23      19 
 ```

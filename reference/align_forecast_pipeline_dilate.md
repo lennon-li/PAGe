@@ -93,6 +93,12 @@ align_forecast_pipeline_dilate(
 
   Numeric; exponential decay rate after peak (default 0.3).
 
+- ab_prior:
+
+  Optional list with `a_mean`, `a_sd`, `log_b_mean`, and `log_b_sd`
+  supplying a Gaussian prior for the legacy scale/intercept model.
+  `NULL` disables the prior.
+
 ## Value
 
 list with tau, delta, a, b, pred_df, peak, nll, etc.

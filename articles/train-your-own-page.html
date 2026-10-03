@@ -95,11 +95,11 @@ rather than this tiny schema illustration.</p>
 <h2 id="one-call-interactive-workflow">One-call interactive workflow<a class="anchor" aria-label="anchor" href="#one-call-interactive-workflow"></a>
 </h2>
 <p>If you want PAGe to lead the workflow, omit <code>labels</code> and
-<code>ignition_weeks</code>. <code><a href="../reference/PAGe-public-api.html">page_train()</a></code> will plot each
+<code>ignition_weeks</code>. <code><a href="../reference/page_train.html">page_train()</a></code> will plot each
 season first, prompt for the expert decimal ignition week, validate the
 complete label set, and only then start training:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/PAGe-public-api.html">page_train</a></span><span class="op">(</span></span>
+<code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/page_train.html">page_train</a></span><span class="op">(</span></span>
 <span>  <span class="va">seasonal_data</span>,</span>
 <span>  annotator <span class="op">=</span> <span class="st">"your-name"</span>,</span>
 <span>  interactive <span class="op">=</span> <span class="cn">TRUE</span>,</span>
@@ -157,13 +157,13 @@ future peak information.</p>
 <div class="section level2">
 <h2 id="train-a-model">3. Train a model<a class="anchor" aria-label="anchor" href="#train-a-model"></a>
 </h2>
-<p><code><a href="../reference/PAGe-public-api.html">page_train()</a></code> reuses the package’s governed
+<p><code><a href="../reference/page_train.html">page_train()</a></code> reuses the package’s governed
 <code><a href="../reference/train_pipeline.html">train_pipeline()</a></code> implementation. It does not create a
 second training engine.</p>
 <p>A fixed-specification refresh is the fastest path when the model
 structure has already been selected:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/PAGe-public-api.html">page_train</a></span><span class="op">(</span></span>
+<code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/page_train.html">page_train</a></span><span class="op">(</span></span>
 <span>  <span class="va">seasonal_data</span>,</span>
 <span>  labels <span class="op">=</span> <span class="va">labels</span>,</span>
 <span>  mode <span class="op">=</span> <span class="st">"refresh"</span>,</span>
@@ -177,7 +177,7 @@ tuning, <strong>and expert ignition review</strong>. Let the workflow
 label only the trainable seasons, or supply ignition weeks that omit the
 holdout:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/PAGe-public-api.html">page_train</a></span><span class="op">(</span></span>
+<code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/page_train.html">page_train</a></span><span class="op">(</span></span>
 <span>  <span class="va">seasonal_data</span>,</span>
 <span>  ignition_weeks <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
 <span>    <span class="st">"2018-19"</span> <span class="op">=</span> <span class="fl">19.4</span>,</span>
@@ -193,7 +193,7 @@ holdout:</p>
 <span>  checkpoint_dir <span class="op">=</span> <span class="st">"checkpoints/page-retune"</span>,</span>
 <span>  n_cores <span class="op">=</span> <span class="fl">8</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p><code><a href="../reference/PAGe-public-api.html">page_train()</a></code> excludes unreleased holdout and explicitly
+<p><code><a href="../reference/page_train.html">page_train()</a></code> excludes unreleased holdout and explicitly
 excluded seasons before its interactive review step. If a pre-existing
 label set contains those seasons, their labels are retained in the
 returned provenance object but stripped before
@@ -213,7 +213,7 @@ kit:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit</span><span class="op">$</span><span class="va">labels</span><span class="op">$</span><span class="va">table</span></span>
 <span><span class="va">fit</span><span class="op">$</span><span class="va">training_result</span></span>
-<span><span class="fu"><a href="../reference/PAGe-public-api.html">page_validate_kit</a></span><span class="op">(</span><span class="va">fit</span><span class="op">$</span><span class="va">kit</span>, mode <span class="op">=</span> <span class="st">"frozen"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/page_validate_kit.html">page_validate_kit</a></span><span class="op">(</span><span class="va">fit</span><span class="op">$</span><span class="va">kit</span>, mode <span class="op">=</span> <span class="st">"frozen"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="../reference/page_save_kit.html">page_save_kit</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"artifacts/my-page-kit.rds"</span><span class="op">)</span></span></code></pre></div>
 <p>The saved kit is self-contained for frozen forecasting.

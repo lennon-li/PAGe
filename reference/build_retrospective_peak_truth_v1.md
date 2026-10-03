@@ -1,8 +1,8 @@
 # Build frozen retrospective peak truth v1 for one or more seasons
 
-Uses k=8 for the point estimate and k in 5,6,8,10 to quantify smoothing
-sensitivity. The sensitivity interval is diagnostic, not a confidence
-interval.
+Uses k=8 for the point estimate and k values of 5, 6, 8, and 10 to
+quantify smoothing sensitivity. The sensitivity interval is diagnostic,
+not a confidence interval.
 
 ## Usage
 

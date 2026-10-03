@@ -81,7 +81,7 @@ directories are required after package installation.</p>
 </h2>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://lennon-li.github.io/PAGe/">PAGe</a></span><span class="op">)</span></span>
-<span><span class="va">models</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/PAGe-public-api.html">page_models</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">models</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/page_models.html">page_models</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">models</span>, <span class="st">"release_id"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">models</span>, <span class="st">"manifest"</span><span class="op">)</span></span></code></pre></div>
 <p>Every packaged runtime file is SHA-256 verified before use. The
@@ -96,7 +96,7 @@ target-count frames. The runtime remains <code>shadow_only</code> and
 <h2 id="run-from-an-olis-snapshot">Run from an OLIS snapshot<a class="anchor" aria-label="anchor" href="#run-from-an-olis-snapshot"></a>
 </h2>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/PAGe-public-api.html">page_forecast</a></span><span class="op">(</span></span>
+<code class="sourceCode R"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/page_forecast.html">page_forecast</a></span><span class="op">(</span></span>
 <span>  <span class="st">"path/to/hist_olis.RData"</span>,</span>
 <span>  season <span class="op">=</span> <span class="st">"2026-27"</span></span>
 <span><span class="op">)</span></span>
@@ -119,7 +119,7 @@ and these required columns:</p>
 <code>N_A</code>, <code>p_A</code>, <code>y_B</code>, <code>N_B</code>,
 <code>p_B</code>.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/PAGe-public-api.html">page_forecast</a></span><span class="op">(</span></span>
+<code class="sourceCode R"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/page_forecast.html">page_forecast</a></span><span class="op">(</span></span>
 <span>  <span class="va">typed_ab_panel</span>,</span>
 <span>  season <span class="op">=</span> <span class="st">"2026-27"</span>,</span>
 <span>  origin_weekF <span class="op">=</span> <span class="fl">12</span></span>
@@ -145,7 +145,7 @@ policy.</li>
 <li>B+2 uses posterior-C2 only when causal B timing is available;</li>
 <li>otherwise B+2 is exact B1 fallback.</li>
 </ul>
-<p>Before weekF12, <code><a href="../reference/PAGe-public-api.html">page_forecast()</a></code> returns a valid object
+<p>Before weekF12, <code><a href="../reference/page_forecast.html">page_forecast()</a></code> returns a valid object
 with <code>issued = FALSE</code> and does not silently turn early
 diagnostics into issued forecasts.</p>
 </div>
@@ -156,7 +156,7 @@ diagnostics into issued forecasts.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://lennon-li.github.io/PAGe/">PAGe</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/PAGe-public-api.html">page_forecast</a></span><span class="op">(</span></span>
+<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/page_forecast.html">page_forecast</a></span><span class="op">(</span></span>
 <span>  <span class="st">"/secure/path/hist_olis.RData"</span>,</span>
 <span>  season <span class="op">=</span> <span class="st">"2026-27"</span></span>
 <span><span class="op">)</span></span>

@@ -49,6 +49,11 @@ nested_loso_m2_train(
   Logical; rethrow unsupported-model errors instead of converting them
   to a warning and `NULL` (default `FALSE`).
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
 ## Value
 
 Output of

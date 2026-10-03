@@ -11,7 +11,7 @@ forecasting release and do not alter model identity.
 
 ``` r
 page_v3_walkforward_report(
-  data,
+  data = NULL,
   season = NULL,
   origins = NULL,
   output_file = "PAGe_walkforward_report.html",
@@ -27,6 +27,9 @@ page_v3_walkforward_report(
   A canonical typed A/B panel, an OLIS `.RData` snapshot, or a local
   official ORVT CSV accepted by
   [`page_v3_forecast()`](https://lennon-li.github.io/PAGe/reference/page_v3_forecast.md).
+  When `NULL` (the default), the current season is fetched from the live
+  PHO ORVT feed via
+  [`getCurrentD()`](https://lennon-li.github.io/PAGe/reference/getCurrentD.md).
 
 - season:
 

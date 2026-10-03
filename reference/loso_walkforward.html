@@ -271,6 +271,24 @@ Delete the file to force a full rerun.</p></dd>
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
 <dd><p>Logical. Print per-season progress (default <code>TRUE</code>).</p></dd>
 
+
+<dt id="arg-timing-mode">timing_mode<a class="anchor" aria-label="anchor" href="#arg-timing-mode"></a></dt>
+<dd><p>Character. <code>"legacy"</code> preserves integer ignition
+coordinates; <code>"fractional"</code> preserves numeric (decimal) coordinates.</p></dd>
+
+
+<dt id="arg-timing-truth">timing_truth<a class="anchor" aria-label="anchor" href="#arg-timing-truth"></a></dt>
+<dd><p>Optional data frame with <code>season</code> and
+<code>ignition_target_weekF</code> columns used to score fractional ignition
+timing. Required when <code>timing_mode = "fractional"</code> and ignition timing
+is evaluated.</p></dd>
+
+
+<dt id="arg-checkpoint-identity">checkpoint_identity<a class="anchor" aria-label="anchor" href="#arg-checkpoint-identity"></a></dt>
+<dd><p>Optional list overriding the auto-derived
+checkpoint identity used to validate a resumed <code>checkpoint_file</code>.
+When <code>NULL</code>, an identity is derived from the run inputs.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>

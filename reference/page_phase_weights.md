@@ -48,6 +48,18 @@ page_phase_weights(
   \`"censored"\` and weight \`NA\`, leaving the caller to decide how to
   treat them.
 
+- y_col, n_col:
+
+  Optional length-one column names for observed positive and total
+  counts. Used to derive the observed peak week when `peak_col` is not
+  supplied.
+
+- completed_col:
+
+  Optional length-one column name with a logical flag marking completed
+  seasons. When supplied, only completed seasons contribute a derived
+  observed peak.
+
 ## Value
 
 \`rows\` as a data frame with two appended columns: \`phase\` (character
@@ -74,9 +86,13 @@ rows <- data.frame(
   target = c(9, 10, 31, 35),
   ignition = 10, peak = 30
 )
-page_phase_weights(
-  rows, page_scoring_weights(), "season", "target",
+PAGe:::page_phase_weights(
+  rows, PAGe:::page_scoring_weights(), "season", "target",
   "ignition", "peak"
 )
-#> Error in page_phase_weights(rows, page_scoring_weights(), "season", "target",     "ignition", "peak"): could not find function "page_phase_weights"
+#>   season target ignition peak        phase weight
+#> 1     s1      9       10   30 pre_ignition      0
+#> 2     s1     10       10   30         rise      2
+#> 3     s1     31       10   30      turning      3
+#> 4     s1     35       10   30      decline      1
 ```

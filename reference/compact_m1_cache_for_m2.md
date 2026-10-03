@@ -21,6 +21,11 @@ compact_m1_cache_for_m2(m1_cache, timing_mode = c("legacy", "fractional"))
   by
   [`build_m2()`](https://lennon-li.github.io/PAGe/reference/build_m2.md).
 
+- timing_mode:
+
+  Character. `"legacy"` or `"fractional"`; retained to keep the
+  compacted handoff consistent with the M2 path.
+
 ## Value
 
 A named list with the M2-only fold handoff. The original cache is not

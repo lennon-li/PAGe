@@ -68,6 +68,11 @@ prep_stage2_joint(
 
   Logical.
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
 ## Value
 
 data.frame stacked across leads with engineered covariates.

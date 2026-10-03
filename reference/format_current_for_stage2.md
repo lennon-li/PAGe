@@ -44,6 +44,11 @@ format_current_for_stage2(
 
   Character label for the current season (default `"current"`).
 
+- timing_mode:
+
+  Character. `"legacy"` uses integer ignition and aligned coordinates;
+  `"fractional"` preserves numeric coordinates.
+
 ## Value
 
 data.frame with the required Stage-2 columns, ready to `rbind` with

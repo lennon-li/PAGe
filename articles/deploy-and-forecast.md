@@ -1,7 +1,7 @@
 # Deploy a Frozen PAGe Kit and Forecast New Weeks
 
 This vignette starts from a kit created by
-[`page_train()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
+[`page_train()`](https://lennon-li.github.io/PAGe/reference/page_train.md)
 or another governed PAGe training path. Deployment is an R-package
 operation: the model does not require a shell installer or a systemd
 service.
@@ -75,7 +75,7 @@ scheduling infrastructure is separate.
 
 If you want the audited pretrained Influenza A/B v3 weekF12 model rather
 than a kit trained from your own data, use
-[`page_forecast()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md).
+[`page_forecast()`](https://lennon-li.github.io/PAGe/reference/page_forecast.md).
 Its canonical runtime bundle is shipped with PAGe and validated by hash
 at runtime. M0/M1 retain exact canonical bytes; M2 ships deterministic
 runtime-only projections that preserve source artifact IDs and source

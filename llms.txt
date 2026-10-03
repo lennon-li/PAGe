@@ -390,26 +390,6 @@ Run individual stages or the complete weekly pipeline.
 
 Building blocks for advanced development and evaluation.
 
-- [`page_train()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`page_forecast()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`page_models()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`page_walkforward_report()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`page_validate_kit()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`aggregate_strata()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`aggregate_strata_draws()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`shared_denominator_correlation()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`m0_fit()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`m0_detect()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`m1_fit()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`m1_predict()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`m1_peak_posterior()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`m1_passage_posterior()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`m2_fit()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`m2_predict()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`evaluate_forecasts()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`replay_holdout()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`verify_promotion()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  : Stable PAGe public API
 - [`alignIgnition()`](https://lennon-li.github.io/PAGe/reference/alignIgnition.md)
   : Align within-season week index by shifting ignition to a common
   anchor week
@@ -453,6 +433,8 @@ Building blocks for advanced development and evaluation.
   : Fit the M1-v2 passage-confirmation policy
 - [`fit_m2()`](https://lennon-li.github.io/PAGe/reference/fit_m2.md) :
   Fit an M2 forecast configuration (draft artifact)
+- [`fit_m2_a_ntrend_shadow()`](https://lennon-li.github.io/PAGe/reference/fit_m2_a_ntrend_shadow.md)
+  : Tune a causal test-volume trend for the M2-A state forecast
 - [`fit_m2_offset_correction()`](https://lennon-li.github.io/PAGe/reference/fit_m2_offset_correction.md)
   : Fit a regularized binomial M2 offset correction.
 - [`fit_peak_calibration()`](https://lennon-li.github.io/PAGe/reference/fit_peak_calibration.md)
@@ -467,8 +449,16 @@ Building blocks for advanced development and evaluation.
   : Learn tau/delta bounds and penalty from historical seasons
 - [`loso_walkforward()`](https://lennon-li.github.io/PAGe/reference/loso_walkforward.md)
   : Walk-forward alignment evaluation with LOSO reference curves
+- [`m1_fit()`](https://lennon-li.github.io/PAGe/reference/m1_fit.md) :
+  Fit M1
 - [`m1_make_params()`](https://lennon-li.github.io/PAGe/reference/m1_make_params.md)
   : Construct an M1 alignment parameter list
+- [`m1_passage_posterior()`](https://lennon-li.github.io/PAGe/reference/m1_passage_posterior.md)
+  : Compute the M1 peak-passage posterior
+- [`m1_peak_posterior()`](https://lennon-li.github.io/PAGe/reference/m1_peak_posterior.md)
+  : Compute the M1 peak-time posterior
+- [`m1_predict()`](https://lennon-li.github.io/PAGe/reference/m1_predict.md)
+  : Predict timing with M1
 - [`m1_v2_activation_table_from_m0_loso()`](https://lennon-li.github.io/PAGe/reference/m1_v2_activation_table_from_m0_loso.md)
   : Construct governed M1-v2 activations from an M0 LOSO result
 - [`m1_v2_apply_bias_calibration()`](https://lennon-li.github.io/PAGe/reference/m1_v2_apply_bias_calibration.md)
@@ -484,8 +474,12 @@ Building blocks for advanced development and evaluation.
 - [`m1_walkforward_predictions()`](https://lennon-li.github.io/PAGe/reference/m1_walkforward_predictions.md)
   : Run M1 walk-forward for one season and collect predictions at target
   weeks
+- [`m2_fit()`](https://lennon-li.github.io/PAGe/reference/m2_fit.md) :
+  Fit M2
 - [`m2_offset_baseline()`](https://lennon-li.github.io/PAGe/reference/m2_offset_baseline.md)
   : Return the exact no-correction M1 baseline on the probability scale
+- [`m2_predict()`](https://lennon-li.github.io/PAGe/reference/m2_predict.md)
+  : Predict with M2
 - [`m2_predict_one()`](https://lennon-li.github.io/PAGe/reference/m2_predict_one.md)
   : Predict M2 positivity from a fitted Stage-2 GAM (single row)
 - [`m2_subset_config()`](https://lennon-li.github.io/PAGe/reference/m2_subset_config.md)
@@ -541,29 +535,13 @@ Building blocks for advanced development and evaluation.
 
 Compatibility helpers and implementation details.
 
-- [`page_train()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`page_forecast()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`page_models()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`page_walkforward_report()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`page_validate_kit()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`aggregate_strata()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`aggregate_strata_draws()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`shared_denominator_correlation()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`m0_fit()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`m0_detect()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`m1_fit()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`m1_predict()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`m1_peak_posterior()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`m1_passage_posterior()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`m2_fit()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`m2_predict()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`evaluate_forecasts()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`replay_holdout()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  [`verify_promotion()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
-  : Stable PAGe public API
 - [`add_prospective_derivs_link()`](https://lennon-li.github.io/PAGe/reference/add_prospective_derivs_link.md)
   : Prospective (real-time safe) derivatives of positivity on the logit
   scale
+- [`aggregate_strata()`](https://lennon-li.github.io/PAGe/reference/aggregate_strata.md)
+  : Aggregate stratified forecasts
+- [`aggregate_strata_draws()`](https://lennon-li.github.io/PAGe/reference/aggregate_strata_draws.md)
+  : Aggregate joint forecast draws across strata
 - [`alignIgnition()`](https://lennon-li.github.io/PAGe/reference/alignIgnition.md)
   : Align within-season week index by shifting ignition to a common
   anchor week
@@ -647,6 +625,8 @@ Compatibility helpers and implementation details.
   : Estimate a reference (template) curve for influenza positivity
 - [`estimate_season_re_online()`](https://lennon-li.github.io/PAGe/reference/estimate_season_re_online.md)
   : Estimate season random effect causally from accumulated observations
+- [`evaluate_forecasts()`](https://lennon-li.github.io/PAGe/reference/evaluate_forecasts.md)
+  : Evaluate forecasts with nested season validation
 - [`expand_grid_specs()`](https://lennon-li.github.io/PAGe/reference/expand_grid_specs.md)
   : Expand a hyperparameter grid into Stage-2 spec objects (ALL
   hyperparams can vary)
@@ -684,6 +664,8 @@ Compatibility helpers and implementation details.
   : Fit the M1-v2 passage-confirmation policy
 - [`fit_m2()`](https://lennon-li.github.io/PAGe/reference/fit_m2.md) :
   Fit an M2 forecast configuration (draft artifact)
+- [`fit_m2_a_ntrend_shadow()`](https://lennon-li.github.io/PAGe/reference/fit_m2_a_ntrend_shadow.md)
+  : Tune a causal test-volume trend for the M2-A state forecast
 - [`fit_m2_offset_correction()`](https://lennon-li.github.io/PAGe/reference/fit_m2_offset_correction.md)
   : Fit a regularized binomial M2 offset correction.
 - [`fit_peak_calibration()`](https://lennon-li.github.io/PAGe/reference/fit_peak_calibration.md)
@@ -730,8 +712,20 @@ Compatibility helpers and implementation details.
   : Load pre-built model artifacts for prospective deployment
 - [`loso_walkforward()`](https://lennon-li.github.io/PAGe/reference/loso_walkforward.md)
   : Walk-forward alignment evaluation with LOSO reference curves
+- [`m0_detect()`](https://lennon-li.github.io/PAGe/reference/m0_detect.md)
+  : Detect epidemic ignition with M0
+- [`m0_fit()`](https://lennon-li.github.io/PAGe/reference/m0_fit.md) :
+  Fit M0
+- [`m1_fit()`](https://lennon-li.github.io/PAGe/reference/m1_fit.md) :
+  Fit M1
 - [`m1_make_params()`](https://lennon-li.github.io/PAGe/reference/m1_make_params.md)
   : Construct an M1 alignment parameter list
+- [`m1_passage_posterior()`](https://lennon-li.github.io/PAGe/reference/m1_passage_posterior.md)
+  : Compute the M1 peak-passage posterior
+- [`m1_peak_posterior()`](https://lennon-li.github.io/PAGe/reference/m1_peak_posterior.md)
+  : Compute the M1 peak-time posterior
+- [`m1_predict()`](https://lennon-li.github.io/PAGe/reference/m1_predict.md)
+  : Predict timing with M1
 - [`m1_v2_activation_table_from_m0_loso()`](https://lennon-li.github.io/PAGe/reference/m1_v2_activation_table_from_m0_loso.md)
   : Construct governed M1-v2 activations from an M0 LOSO result
 - [`m1_v2_apply_bias_calibration()`](https://lennon-li.github.io/PAGe/reference/m1_v2_apply_bias_calibration.md)
@@ -747,8 +741,12 @@ Compatibility helpers and implementation details.
 - [`m1_walkforward_predictions()`](https://lennon-li.github.io/PAGe/reference/m1_walkforward_predictions.md)
   : Run M1 walk-forward for one season and collect predictions at target
   weeks
+- [`m2_fit()`](https://lennon-li.github.io/PAGe/reference/m2_fit.md) :
+  Fit M2
 - [`m2_offset_baseline()`](https://lennon-li.github.io/PAGe/reference/m2_offset_baseline.md)
   : Return the exact no-correction M1 baseline on the probability scale
+- [`m2_predict()`](https://lennon-li.github.io/PAGe/reference/m2_predict.md)
+  : Predict with M2
 - [`m2_predict_one()`](https://lennon-li.github.io/PAGe/reference/m2_predict_one.md)
   : Predict M2 positivity from a fitted Stage-2 GAM (single row)
 - [`m2_subset_config()`](https://lennon-li.github.io/PAGe/reference/m2_subset_config.md)
@@ -808,6 +806,8 @@ Compatibility helpers and implementation details.
   : Aggregate stratified forecasts with explicit dependence
 - [`page_aggregate_strata_draws()`](https://lennon-li.github.io/PAGe/reference/page_aggregate_strata_draws.md)
   : Aggregate joint posterior or simulation draws across strata
+- [`page_forecast()`](https://lennon-li.github.io/PAGe/reference/page_forecast.md)
+  : Forecast with the current PAGe production release
 - [`page_forecast_now()`](https://lennon-li.github.io/PAGe/reference/page_forecast_now.md)
   : Produce a real-time forecast from a frozen kit and any supported
   source
@@ -819,6 +819,8 @@ Compatibility helpers and implementation details.
   : Load current-season surveillance data from any supported source
 - [`page_manual_ignition_labels()`](https://lennon-li.github.io/PAGe/reference/page_manual_ignition_labels.md)
   : Pre-verified historical manual ignition labels
+- [`page_models()`](https://lennon-li.github.io/PAGe/reference/page_models.md)
+  : Inspect the current PAGe production model bundle
 - [`page_phase_weights()`](https://lennon-li.github.io/PAGe/reference/page_phase_weights.md)
   : Derive per-row phase weights from observed ignition and peak weeks
 - [`page_save_kit()`](https://lennon-li.github.io/PAGe/reference/page_save_kit.md)
@@ -830,6 +832,8 @@ Compatibility helpers and implementation details.
 - [`page_shared_denominator_correlation()`](https://lennon-li.github.io/PAGe/reference/page_shared_denominator_correlation.md)
   : Multinomial correlation for mutually exclusive shared-denominator
   strata
+- [`page_train()`](https://lennon-li.github.io/PAGe/reference/page_train.md)
+  : Train the PAGe forecasting system
 - [`page_train_workflow()`](https://lennon-li.github.io/PAGe/reference/page_train_workflow.md)
   : Label ignition, train PAGe, and return a deployable frozen kit
 - [`page_v3_forecast()`](https://lennon-li.github.io/PAGe/reference/page_v3_forecast.md)
@@ -838,8 +842,15 @@ Compatibility helpers and implementation details.
   : Load and validate the frozen PAGe v3 weekF12 model bundle
 - [`page_v3_walkforward_report()`](https://lennon-li.github.io/PAGe/reference/page_v3_walkforward_report.md)
   : Render the PAGe v3 walk-forward HTML report
+- [`page_validate_kit()`](https://lennon-li.github.io/PAGe/reference/page_validate_kit.md)
+  : Validate a PAGe kit
 - [`page_version_metrics()`](https://lennon-li.github.io/PAGe/reference/page_version_metrics.md)
   : Verified PAGe version-comparison metrics
+- [`page_walkforward_qmd()`](https://lennon-li.github.io/PAGe/reference/page_walkforward_qmd.md)
+  [`page_render_report()`](https://lennon-li.github.io/PAGe/reference/page_walkforward_qmd.md)
+  : Render a PAGe Quarto walk-forward report
+- [`page_walkforward_report()`](https://lennon-li.github.io/PAGe/reference/page_walkforward_report.md)
+  : Render the PAGe walk-forward report
 - [`peak_status_from_align()`](https://lennon-li.github.io/PAGe/reference/peak_status_from_align.md)
   : Determine whether the epidemic peak has passed
 - [`peak_summary_from_fit()`](https://lennon-li.github.io/PAGe/reference/peak_summary_from_fit.md)
@@ -875,6 +886,8 @@ Compatibility helpers and implementation details.
   snapshots
 - [`plot_stage2_joint_fit_by_season()`](https://lennon-li.github.io/PAGe/reference/plot_stage2_joint_fit_by_season.md)
   : Prepare Stage-2 M1 features from aligned prospective data
+- [`predict_m2_a_ntrend_shadow()`](https://lennon-li.github.io/PAGe/reference/predict_m2_a_ntrend_shadow.md)
+  : Predict from an M2-A test-volume-trend shadow artifact
 - [`predict_m2_offset_correction()`](https://lennon-li.github.io/PAGe/reference/predict_m2_offset_correction.md)
   : Predict an M2 offset correction and return its residual link
   contribution.
@@ -895,6 +908,8 @@ Compatibility helpers and implementation details.
 - [`refit_stage2_weekly()`](https://lennon-li.github.io/PAGe/reference/refit_stage2_weekly.md)
   : Refit Stage-2 GAM with current-season data for weekly prospective
   forecasting
+- [`replay_holdout()`](https://lennon-li.github.io/PAGe/reference/replay_holdout.md)
+  : Replay a frozen holdout season
 - [`replay_season_holdout()`](https://lennon-li.github.io/PAGe/reference/replay_season_holdout.md)
   : Replay a season that was unseen by a pre-trained kit
 - [`resolve_week_override()`](https://lennon-li.github.io/PAGe/reference/resolve_week_override.md)
@@ -950,6 +965,8 @@ Compatibility helpers and implementation details.
   : Select an M1 candidate with a practical-gain backoff rule
 - [`select_m2_candidate()`](https://lennon-li.github.io/PAGe/reference/select_m2_candidate.md)
   : Select an M2 candidate from full nested-LOSO results
+- [`shared_denominator_correlation()`](https://lennon-li.github.io/PAGe/reference/shared_denominator_correlation.md)
+  : Shared-denominator multinomial correlation
 - [`simulate_flu_seasons()`](https://lennon-li.github.io/PAGe/reference/simulate_flu_seasons.md)
   : Simulate synthetic flu seasons for package examples
 - [`stage2_build_joint_formula()`](https://lennon-li.github.io/PAGe/reference/stage2_build_joint_formula.md)
@@ -1011,6 +1028,8 @@ Compatibility helpers and implementation details.
   : Validate and normalize a season selection
 - [`validate_surveillance_data()`](https://lennon-li.github.io/PAGe/reference/validate_surveillance_data.md)
   : Validate canonical PAGe surveillance data
+- [`verify_promotion()`](https://lennon-li.github.io/PAGe/reference/verify_promotion.md)
+  : Verify promotion evidence
 - [`verify_promotion_evidence()`](https://lennon-li.github.io/PAGe/reference/verify_promotion_evidence.md)
   : Verify Artifact-Bound Holdout Promotion Evidence
 - [`write_expert_ignition_annotations()`](https://lennon-li.github.io/PAGe/reference/write_expert_ignition_annotations.md)

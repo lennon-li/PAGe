@@ -105,6 +105,16 @@ build_m2(
 
   Logical. Print progress.
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
+- timing_truth:
+
+  Optional data frame with `season` and `ignition_target_weekF` columns
+  used when `timing_mode = "fractional"`.
+
 ## Value
 
 A list with `best_spec`, `best_spec_id`, `summary` (ranked by Bernoulli

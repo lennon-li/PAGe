@@ -43,6 +43,11 @@ run_m2(kit, current_data, m1_result, ...)
 
   Logical. Emit progress messages (default `TRUE`).
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
 - ...:
 
   Additional arguments forwarded by the `run_m2()` alias.

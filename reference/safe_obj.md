@@ -8,7 +8,19 @@ than as a large finite score.
 ## Usage
 
 ``` r
-.page_alignment_failure(reason)
+safe_obj(
+  par,
+  t,
+  y,
+  n,
+  gfun,
+  allow_scale,
+  lam,
+  w,
+  min_support = 4L,
+  support = NULL,
+  ab_prior = NULL
+)
 ```
 
 ## Arguments
@@ -45,6 +57,22 @@ than as a large finite score.
 - w:
 
   Numeric vector of observation weights.
+
+- min_support:
+
+  Minimum number of finite, in-support observations required before the
+  objective is evaluated.
+
+- support:
+
+  Optional logical vector marking observations eligible for the
+  objective. `NULL` uses all observations.
+
+- ab_prior:
+
+  Optional list with `a_mean`, `a_sd`, `log_b_mean`, and `log_b_sd`
+  supplying a Gaussian prior for the scale/intercept parameters. `NULL`
+  disables the prior.
 
 ## Value
 

@@ -77,6 +77,11 @@ train_stage2_joint(
 
   logical.
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
 ## Details
 
 Backward compatible: if `spec=NULL`, you may pass `best_mean_nll` and

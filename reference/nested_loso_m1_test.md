@@ -99,6 +99,11 @@ nested_loso_m1_test(
 
   Logical; print progress.
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
 ## Value
 
 Tibble of M1 walk-forward predictions for the test season, or a zero-row

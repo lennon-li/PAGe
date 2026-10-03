@@ -47,6 +47,11 @@ run_outer_fold(
   Optional timing-v2 label object or list of objects; passed through to
   \`train_outer_fold()\` after holdout isolation.
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
 - gate_nesting:
 
   Inner-gate nesting depth. \`"full"\` (default) re-runs selection,

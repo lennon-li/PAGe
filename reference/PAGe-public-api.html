@@ -45,41 +45,23 @@
     <p>These functions define the stable user-facing PAGe interface. Development-generation labels such as v1, v2, and v3 are intentionally absent from public function names. Historical versioned implementation functions remain internal so frozen releases and repository-owned reproduction workflows can retain exact provenance.</p>
     </div>
 
-    <div class="section level2">
-    <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">page_train</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span><span class="fu">page_forecast</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span><span class="fu">page_models</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="fu">page_walkforward_report</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span><span class="fu">page_validate_kit</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span><span class="fu">aggregate_strata</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span><span class="fu">aggregate_strata_draws</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span><span class="fu">shared_denominator_correlation</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span><span class="fu">m0_fit</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span><span class="fu">m0_detect</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span><span class="fu">m1_fit</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span><span class="fu">m1_predict</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span><span class="fu">m1_peak_posterior</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span><span class="fu">m1_passage_posterior</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span><span class="fu">m2_fit</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span><span class="fu">m2_predict</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span><span class="fu">evaluate_forecasts</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span><span class="fu">replay_holdout</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span>
-<span><span class="fu">verify_promotion</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span></code></pre></div>
-    </div>
 
-    <div class="section level2">
-    <h2 id="arguments">Arguments<a class="anchor" aria-label="anchor" href="#arguments"></a></h2>
-
-
-<dl><dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
-<dd><p>Arguments passed to the corresponding governed PAGe implementation. See the function-specific examples and the public API walkthrough for the supported workflow.</p></dd>
-
-</dl></div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p><code>page_train()</code>, <code>page_forecast()</code>, <code>page_walkforward_report()</code>, and the kit helpers are high-level PAGe workflows. <code>m0_*</code>, <code>m1_*</code>, and <code>m2_*</code> functions provide the advanced scientific component interface. <code>aggregate_strata()</code> and <code>aggregate_strata_draws()</code> support general stratified aggregation, including pathogen types, age groups, regions, sites, independent strata, explicit correlation/covariance structures, and joint simulation draws.</p>
+    <p><code><a href="page_train.html">page_train()</a></code>, <code><a href="page_forecast.html">page_forecast()</a></code>, <code><a href="page_walkforward_report.html">page_walkforward_report()</a></code>, <code><a href="page_walkforward_qmd.html">page_walkforward_qmd()</a></code>, and the kit helpers are high-level PAGe workflows. <code>m0_*</code>, <code>m1_*</code>, and <code>m2_*</code> functions provide the advanced scientific component interface. <code><a href="aggregate_strata.html">aggregate_strata()</a></code> and <code><a href="aggregate_strata_draws.html">aggregate_strata_draws()</a></code> support general stratified aggregation, including pathogen types, age groups, regions, sites, independent strata, explicit correlation/covariance structures, and joint simulation draws. <code><a href="page_walkforward_qmd.html">page_render_report()</a></code> is an alias for <code><a href="page_walkforward_qmd.html">page_walkforward_qmd()</a></code>, which emits a cumulative Quarto <code>.qmd</code> with per-origin as-of tabsets and optionally renders it to HTML.</p>
 <p>The complete supported namespace is documented in <code>docs/public-api.qmd</code> in the source repository.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
+    <div class="dont-index"><p><code><a href="page_train.html">page_train</a></code>, <code><a href="page_forecast.html">page_forecast</a></code>, <code><a href="page_models.html">page_models</a></code>,
+<code><a href="page_walkforward_report.html">page_walkforward_report</a></code>, <code><a href="page_walkforward_qmd.html">page_walkforward_qmd</a></code>,
+<code><a href="page_validate_kit.html">page_validate_kit</a></code>, <code><a href="aggregate_strata.html">aggregate_strata</a></code>,
+<code><a href="aggregate_strata_draws.html">aggregate_strata_draws</a></code>, <code><a href="shared_denominator_correlation.html">shared_denominator_correlation</a></code>,
+<code><a href="m0_fit.html">m0_fit</a></code>, <code><a href="m0_detect.html">m0_detect</a></code>, <code><a href="m1_fit.html">m1_fit</a></code>,
+<code><a href="m1_predict.html">m1_predict</a></code>, <code><a href="m1_peak_posterior.html">m1_peak_posterior</a></code>,
+<code><a href="m1_passage_posterior.html">m1_passage_posterior</a></code>, <code><a href="m2_fit.html">m2_fit</a></code>, <code><a href="m2_predict.html">m2_predict</a></code>,
+<code><a href="evaluate_forecasts.html">evaluate_forecasts</a></code>, <code><a href="replay_holdout.html">replay_holdout</a></code>,
+<code><a href="verify_promotion.html">verify_promotion</a></code>.</p></div>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

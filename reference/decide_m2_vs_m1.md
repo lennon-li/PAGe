@@ -110,15 +110,14 @@ decide_m2_vs_m1(
 
 - scoring:
 
-  Scoring contract: code"page_v2" uses the retrospective phase weights
-  (default), while code"legacy_0_12" retains the old post-ignition 0:12
+  Scoring contract: `"page_v2"` uses the retrospective phase weights
+  (default), while `"legacy_0_12"` retains the old post-ignition 0:12
   weighting.
 
 - score_weight_col:
 
-  Optional precomputed row-weight column. When omitted,
-  codeweight_page_v2 or codeweight_legacy is used when available for the
-  selected contract.
+  Optional precomputed row-weight column. When omitted, `weight_page_v2`
+  or `weight_legacy` is used when available for the selected contract.
 
 ## Value
 

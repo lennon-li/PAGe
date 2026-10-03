@@ -67,6 +67,11 @@ refit_stage2_weekly(
 
   Logical. Print progress messages.
 
+- timing_mode:
+
+  Character. `"legacy"` uses integer ignition and aligned coordinates;
+  `"fractional"` preserves numeric coordinates.
+
 ## Value
 
 Output of

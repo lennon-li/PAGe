@@ -48,6 +48,11 @@ replay_season_holdout(
   `m2_production`; `"legacy_m2"` explicitly permits a legacy `m2` field
   with a warning.
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
 - ...:
 
   Additional runner arguments.

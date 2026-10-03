@@ -125,6 +125,11 @@ m1_walkforward_multi(
 
   Logical; print progress (default TRUE).
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
 - peak_stabilization:
 
   Character; `"legacy"` (default) or `"causal"`.

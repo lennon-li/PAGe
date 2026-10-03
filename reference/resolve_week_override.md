@@ -49,10 +49,43 @@ A list with elements `final`, `est`, `overridden`, `override`.
 ## Examples
 
 ``` r
-resolve_week_override(18, NULL)
-#> Error in resolve_week_override(18, NULL): could not find function "resolve_week_override"
-resolve_week_override(18, 20, mode = "cap")
-#> Error in resolve_week_override(18, 20, mode = "cap"): could not find function "resolve_week_override"
-resolve_week_override(NA, 15, mode = "replace")
-#> Error in resolve_week_override(NA, 15, mode = "replace"): could not find function "resolve_week_override"
+PAGe:::resolve_week_override(18, NULL)
+#> $final
+#> [1] 18
+#> 
+#> $est
+#> [1] 18
+#> 
+#> $overridden
+#> [1] FALSE
+#> 
+#> $override
+#> [1] NA
+#> 
+PAGe:::resolve_week_override(18, 20, mode = "cap")
+#> $final
+#> [1] 18
+#> 
+#> $est
+#> [1] 18
+#> 
+#> $overridden
+#> [1] TRUE
+#> 
+#> $override
+#> [1] 20
+#> 
+PAGe:::resolve_week_override(NA, 15, mode = "replace")
+#> $final
+#> [1] 15
+#> 
+#> $est
+#> [1] NA
+#> 
+#> $overridden
+#> [1] TRUE
+#> 
+#> $override
+#> [1] 15
+#> 
 ```

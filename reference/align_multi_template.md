@@ -158,6 +158,21 @@ align_multi_template(
   unavailable (zero or missing) the method falls back to between-only
   for that forecast week and increments `spread_fallback_count`.
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
+- prep:
+
+  Optional precomputed alignment prep object (as returned when
+  `return_prep = TRUE`). When `NULL`, the prep is built internally.
+
+- return_prep:
+
+  Logical; when `TRUE`, include the built alignment prep object in the
+  result for reuse across calls.
+
 ## Value
 
 List with the same structure as

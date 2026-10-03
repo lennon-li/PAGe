@@ -53,6 +53,12 @@ build_m0(
 
   Integer. GAM basis functions for derivative smoothing (default `10L`).
 
+- timing_truth:
+
+  Optional data frame with `season` and `ignition_target_weekF` columns.
+  When supplied, aligned timing uses these decimal targets instead of
+  the flagged integer ignition weeks.
+
 - peak_weight_boost, peak_weight_decay:
 
   Derivative smoothing rise boost and decay.

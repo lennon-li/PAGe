@@ -158,6 +158,11 @@ train_pipeline(
   contract, while the complete timing-v2 object is retained in the
   result for provenance. Cannot be combined with `manual_labels`.
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
 - m1_min_gain:
 
   Minimum M1 Weibull-MAE improvement, in weeks, required to justify a

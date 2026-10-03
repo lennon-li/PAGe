@@ -128,6 +128,19 @@ column. Required for non-YYYY-YY season labels when <code>week_type =
 "mmwr"</code>.</p></dd>
 
 
+<dt id="arg-date-col">date_col<a class="anchor" aria-label="anchor" href="#arg-date-col"></a></dt>
+<dd><p>Optional character scalar naming a calendar date column.
+Used with <code>week_type = "mmwr"</code> to derive the season and validate the
+mapped week. Mutually informative with <code>mmwr_year_col</code>.</p></dd>
+
+
+<dt id="arg-mmwr-year-col">mmwr_year_col<a class="anchor" aria-label="anchor" href="#arg-mmwr-year-col"></a></dt>
+<dd><p>Optional character scalar naming the MMWR year column.
+Used with <code>week_type = "mmwr"</code> to resolve the season when season
+labels are not in <code>YYYY-YY</code> form. Supply at most one of
+<code>start_year_col</code> and <code>mmwr_year_col</code>.</p></dd>
+
+
 <dt id="arg-tolerance">tolerance<a class="anchor" aria-label="anchor" href="#arg-tolerance"></a></dt>
 <dd><p>Numeric tolerance passed to
 <code><a href="prepare_surveillance_data.html">prepare_surveillance_data</a></code> for consistency checks.</p></dd>

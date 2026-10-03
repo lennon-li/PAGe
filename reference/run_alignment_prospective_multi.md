@@ -121,6 +121,11 @@ run_alignment_prospective_multi(
   [`align_multi_template`](https://lennon-li.github.io/PAGe/reference/align_multi_template.md)
   for details.
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
 - peak_stabilization:
 
   Character; `"legacy"` (default) or `"causal"`.

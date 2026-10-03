@@ -119,6 +119,11 @@ m1_walkforward_predictions(
   [`run_alignment_prospective_multi()`](https://lennon-li.github.io/PAGe/reference/run_alignment_prospective_multi.md)
   to select the `logit_spread` computation method.
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
 - peak_stabilization:
 
   Character; `"legacy"` (default) or `"causal"`.

@@ -47,6 +47,11 @@ run_ignition_weekly(
   Character; name of the week column in `currentSeason` (default
   `"weekF"`).
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition coordinates;
+  `"fractional"` preserves numeric (decimal) coordinates.
+
 ## Value
 
 A list with four elements:

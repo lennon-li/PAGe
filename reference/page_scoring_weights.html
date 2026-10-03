@@ -86,12 +86,12 @@ season's ignition week (`I`) and its observed peak week (`P`).</p>
 
 <dt id="arg-turning-before">turning_before<a class="anchor" aria-label="anchor" href="#arg-turning-before"></a></dt>
 <dd><p>Whole-number offset from the observed peak at which
-the turning window begins. The default is code-1.</p></dd>
+the turning window begins. The default is <code>-1</code>.</p></dd>
 
 
 <dt id="arg-turning-after">turning_after<a class="anchor" aria-label="anchor" href="#arg-turning-after"></a></dt>
 <dd><p>Whole-number offset from the observed peak at which
-the turning window ends. The default is code3.</p></dd>
+the turning window ends. The default is <code>3</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -109,10 +109,48 @@ used on their native week scale; the resulting boundaries are not rounded.</p>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="fu">page_scoring_weights</span><span class="op">(</span><span class="op">)</span></span></span>
-<span class="r-err co"><span class="r-pr">#&gt;</span> <span class="error">Error in page_scoring_weights():</span> could not find function "page_scoring_weights"</span>
-<span class="r-in"><span><span class="fu">page_scoring_weights</span><span class="op">(</span>turning_before <span class="op">=</span> <span class="fl">0L</span>, turning_after <span class="op">=</span> <span class="fl">0L</span>, decline <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span></span>
-<span class="r-err co"><span class="r-pr">#&gt;</span> <span class="error">Error in page_scoring_weights(turning_before = 0L, turning_after = 0L,     decline = 0):</span> could not find function "page_scoring_weights"</span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="fu">PAGe</span><span class="fu">:::</span><span class="fu">page_scoring_weights</span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $pre_ignition</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $rise</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 2</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $turning</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 3</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $decline</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $turning_before</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] -1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $turning_after</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 3</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> attr(,"class")</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "page_scoring_weights"</span>
+<span class="r-in"><span><span class="fu">PAGe</span><span class="fu">:::</span><span class="fu">page_scoring_weights</span><span class="op">(</span>turning_before <span class="op">=</span> <span class="fl">0L</span>, turning_after <span class="op">=</span> <span class="fl">0L</span>, decline <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $pre_ignition</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $rise</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 2</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $turning</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 3</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $decline</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $turning_before</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $turning_after</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> attr(,"class")</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "page_scoring_weights"</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

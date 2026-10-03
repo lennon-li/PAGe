@@ -71,6 +71,16 @@ nested_loso_build_fold(
 
   Logical; print progress messages.
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates.
+
+- timing_truth:
+
+  Optional data frame with `season` and `ignition_target_weekF` columns
+  used when `timing_mode = "fractional"`.
+
 ## Value
 
 A named list with components:

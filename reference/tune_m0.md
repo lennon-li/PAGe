@@ -77,6 +77,16 @@ tune_m0(
   Optional prior M0 tuning result. When supplied, completed grid scores
   are reused and only appended specifications are evaluated.
 
+- timing_truth:
+
+  Optional data frame with `season` and `ignition_target_weekF` columns
+  used when `timing_mode = "fractional"`.
+
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition coordinates;
+  `"fractional"` preserves numeric (decimal) coordinates.
+
 ## Value
 
 A list with `best_params`, `tuning` (full

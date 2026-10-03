@@ -40,12 +40,12 @@ page_scoring_weights(
 - turning_before:
 
   Whole-number offset from the observed peak at which the turning window
-  begins. The default is code-1.
+  begins. The default is `-1`.
 
 - turning_after:
 
   Whole-number offset from the observed peak at which the turning window
-  ends. The default is code3.
+  ends. The default is `3`.
 
 ## Value
 
@@ -64,8 +64,46 @@ not rounded.
 ## Examples
 
 ``` r
-page_scoring_weights()
-#> Error in page_scoring_weights(): could not find function "page_scoring_weights"
-page_scoring_weights(turning_before = 0L, turning_after = 0L, decline = 0)
-#> Error in page_scoring_weights(turning_before = 0L, turning_after = 0L,     decline = 0): could not find function "page_scoring_weights"
+PAGe:::page_scoring_weights()
+#> $pre_ignition
+#> [1] 0
+#> 
+#> $rise
+#> [1] 2
+#> 
+#> $turning
+#> [1] 3
+#> 
+#> $decline
+#> [1] 1
+#> 
+#> $turning_before
+#> [1] -1
+#> 
+#> $turning_after
+#> [1] 3
+#> 
+#> attr(,"class")
+#> [1] "page_scoring_weights"
+PAGe:::page_scoring_weights(turning_before = 0L, turning_after = 0L, decline = 0)
+#> $pre_ignition
+#> [1] 0
+#> 
+#> $rise
+#> [1] 2
+#> 
+#> $turning
+#> [1] 3
+#> 
+#> $decline
+#> [1] 0
+#> 
+#> $turning_before
+#> [1] 0
+#> 
+#> $turning_after
+#> [1] 0
+#> 
+#> attr(,"class")
+#> [1] "page_scoring_weights"
 ```

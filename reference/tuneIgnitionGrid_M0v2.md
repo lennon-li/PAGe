@@ -106,6 +106,11 @@ tuneIgnitionGrid_M0v2(
   Logical. Use `truth_col` if available; otherwise infer from
   `phase_col`.
 
+- timing_mode:
+
+  Character. `"legacy"` scores integer ignition weeks; `"fractional"`
+  scores decimal ignition timing.
+
 - ncores:
 
   Integer \>= 1. Number of cores.

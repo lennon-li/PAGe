@@ -29,7 +29,7 @@ complete historical seasons rather than this tiny schema illustration.
 
 If you want PAGe to lead the workflow, omit `labels` and
 `ignition_weeks`.
-[`page_train()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
+[`page_train()`](https://lennon-li.github.io/PAGe/reference/page_train.md)
 will plot each season first, prompt for the expert decimal ignition
 week, validate the complete label set, and only then start training:
 
@@ -102,7 +102,7 @@ peak information.
 
 ## 3. Train a model
 
-[`page_train()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
+[`page_train()`](https://lennon-li.github.io/PAGe/reference/page_train.md)
 reuses the package’s governed
 [`train_pipeline()`](https://lennon-li.github.io/PAGe/reference/train_pipeline.md)
 implementation. It does not create a second training engine.
@@ -147,7 +147,7 @@ fit <- page_train(
 )
 ```
 
-[`page_train()`](https://lennon-li.github.io/PAGe/reference/PAGe-public-api.md)
+[`page_train()`](https://lennon-li.github.io/PAGe/reference/page_train.md)
 excludes unreleased holdout and explicitly excluded seasons before its
 interactive review step. If a pre-existing label set contains those
 seasons, their labels are retained in the returned provenance object but

@@ -180,6 +180,12 @@ manuscript protocol is `0`.</p></dd>
 The manuscript protocol is `1`.</p></dd>
 
 
+<dt id="arg-scoring">scoring<a class="anchor" aria-label="anchor" href="#arg-scoring"></a></dt>
+<dd><p>Scoring contract: <code>"page_v2"</code> (default) uses the
+retrospective phase weights, while <code>"legacy_0_12"</code> retains the old
+post-ignition 0:12 weighting.</p></dd>
+
+
 <dt id="arg-score-scale">score_scale<a class="anchor" aria-label="anchor" href="#arg-score-scale"></a></dt>
 <dd><p>M2 tuning scale. The manuscript primary is `equal_week`;
 `test_count` is available as a sensitivity analysis.</p></dd>
@@ -267,6 +273,11 @@ boundary reports, decisions, frozen stages, and the final kit.</p></dd>
 
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
 <dd><p>Logical progress flag.</p></dd>
+
+
+<dt id="arg-timing-mode">timing_mode<a class="anchor" aria-label="anchor" href="#arg-timing-mode"></a></dt>
+<dd><p>Character. <code>"legacy"</code> preserves integer ignition and
+aligned coordinates; <code>"fractional"</code> preserves numeric coordinates.</p></dd>
 
 
 <dt id="arg-gate-nesting">gate_nesting<a class="anchor" aria-label="anchor" href="#arg-gate-nesting"></a></dt>

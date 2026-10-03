@@ -75,6 +75,19 @@ prepare_page_data(
   Optional character scalar naming the season start-year column.
   Required for non-YYYY-YY season labels when `week_type = "mmwr"`.
 
+- date_col:
+
+  Optional character scalar naming a calendar date column. Used with
+  `week_type = "mmwr"` to derive the season and validate the mapped
+  week. Mutually informative with `mmwr_year_col`.
+
+- mmwr_year_col:
+
+  Optional character scalar naming the MMWR year column. Used with
+  `week_type = "mmwr"` to resolve the season when season labels are not
+  in `YYYY-YY` form. Supply at most one of `start_year_col` and
+  `mmwr_year_col`.
+
 - tolerance:
 
   Numeric tolerance passed to

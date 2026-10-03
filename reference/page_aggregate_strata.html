@@ -105,17 +105,21 @@
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># Mutually exclusive A/B categories from one shared denominator</span></span></span>
-<span class="r-in"><span><span class="fu">page_aggregate_strata</span><span class="op">(</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="aggregate_strata.html">aggregate_strata</a></span><span class="op">(</span></span></span>
 <span class="r-in"><span>  estimate <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>A <span class="op">=</span> <span class="fl">0.05</span>, B <span class="op">=</span> <span class="fl">0.02</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  se <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>A <span class="op">=</span> <span class="fl">0.004</span>, B <span class="op">=</span> <span class="fl">0.002</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  method <span class="op">=</span> <span class="st">"sum"</span>,</span></span>
 <span class="r-in"><span>  dependence <span class="op">=</span> <span class="st">"shared_denominator"</span>,</span></span>
 <span class="r-in"><span>  bounds <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
-<span class="r-err co"><span class="r-pr">#&gt;</span> <span class="error">Error in page_aggregate_strata(estimate = c(A = 0.05, B = 0.02), se = c(A = 0.004,     B = 0.002), method = "sum", dependence = "shared_denominator",     bounds = c(0, 1)):</span> could not find function "page_aggregate_strata"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> PAGe stratified aggregate</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   method:      sum</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   dependence:  shared_denominator</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   estimate:    0.07</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   95.0% CI:    [0.0613504, 0.0786496]</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Independent age strata, weighted by testing volume</span></span></span>
-<span class="r-in"><span><span class="fu">page_aggregate_strata</span><span class="op">(</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="aggregate_strata.html">aggregate_strata</a></span><span class="op">(</span></span></span>
 <span class="r-in"><span>  estimate <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>`0-17` <span class="op">=</span> <span class="fl">0.10</span>, `18-64` <span class="op">=</span> <span class="fl">0.20</span>, `65+` <span class="op">=</span> <span class="fl">0.30</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  se <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>`0-17` <span class="op">=</span> <span class="fl">0.01</span>, `18-64` <span class="op">=</span> <span class="fl">0.02</span>, `65+` <span class="op">=</span> <span class="fl">0.03</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  method <span class="op">=</span> <span class="st">"weighted_mean"</span>,</span></span>
@@ -123,7 +127,11 @@
 <span class="r-in"><span>  dependence <span class="op">=</span> <span class="st">"independent"</span>,</span></span>
 <span class="r-in"><span>  bounds <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
-<span class="r-err co"><span class="r-pr">#&gt;</span> <span class="error">Error in page_aggregate_strata(estimate = c(`0-17` = 0.1, `18-64` = 0.2,     `65+` = 0.3), se = c(`0-17` = 0.01, `18-64` = 0.02, `65+` = 0.03),     method = "weighted_mean", weights = c(`0-17` = 100, `18-64` = 300,         `65+` = 100), dependence = "independent", bounds = c(0,         1)):</span> could not find function "page_aggregate_strata"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> PAGe stratified aggregate</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   method:      weighted_mean</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   dependence:  independent</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   estimate:    0.2</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   95.0% CI:    [0.173414, 0.226586]</span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

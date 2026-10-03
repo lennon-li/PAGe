@@ -40,6 +40,6 @@ with conditional row highlighting.
 ``` r
 if (FALSE) { # \dontrun{
 det_all <- detect_ignition_from_tuning(tuned, alignedD)
-plot_season_detection_table(det_all, "2019-20")
+PAGe:::plot_season_detection_table(det_all, "2019-20")
 } # }
 ```

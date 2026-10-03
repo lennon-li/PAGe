@@ -85,6 +85,12 @@ nested_loso_m2_eval_weekly_refit(
 
   Logical.
 
+- timing_mode:
+
+  Character. `"legacy"` preserves integer ignition and aligned
+  coordinates; `"fractional"` preserves numeric coordinates through the
+  weekly refits.
+
 ## Value
 
 Same structure as `nested_loso_m2_eval()`: list with `scores` and

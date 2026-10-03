@@ -78,17 +78,21 @@ estimate, interval, operator weights, and dependence structure.
 
 ``` r
 # Mutually exclusive A/B categories from one shared denominator
-page_aggregate_strata(
+aggregate_strata(
   estimate = c(A = 0.05, B = 0.02),
   se = c(A = 0.004, B = 0.002),
   method = "sum",
   dependence = "shared_denominator",
   bounds = c(0, 1)
 )
-#> Error in page_aggregate_strata(estimate = c(A = 0.05, B = 0.02), se = c(A = 0.004,     B = 0.002), method = "sum", dependence = "shared_denominator",     bounds = c(0, 1)): could not find function "page_aggregate_strata"
+#> PAGe stratified aggregate
+#>   method:      sum
+#>   dependence:  shared_denominator
+#>   estimate:    0.07
+#>   95.0% CI:    [0.0613504, 0.0786496]
 
 # Independent age strata, weighted by testing volume
-page_aggregate_strata(
+aggregate_strata(
   estimate = c(`0-17` = 0.10, `18-64` = 0.20, `65+` = 0.30),
   se = c(`0-17` = 0.01, `18-64` = 0.02, `65+` = 0.03),
   method = "weighted_mean",
@@ -96,5 +100,9 @@ page_aggregate_strata(
   dependence = "independent",
   bounds = c(0, 1)
 )
-#> Error in page_aggregate_strata(estimate = c(`0-17` = 0.1, `18-64` = 0.2,     `65+` = 0.3), se = c(`0-17` = 0.01, `18-64` = 0.02, `65+` = 0.03),     method = "weighted_mean", weights = c(`0-17` = 100, `18-64` = 300,         `65+` = 100), dependence = "independent", bounds = c(0,         1)): could not find function "page_aggregate_strata"
+#> PAGe stratified aggregate
+#>   method:      weighted_mean
+#>   dependence:  independent
+#>   estimate:    0.2
+#>   95.0% CI:    [0.173414, 0.226586]
 ```
